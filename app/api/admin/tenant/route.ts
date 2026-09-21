@@ -1,8 +1,7 @@
-
 import { NextRequest, NextResponse } from "next/server";
-import { getSupabaseAdmin } from "@/lib/supabaseServer";
 import { getTenantFromRequest } from "@/lib/tenant";
 import { db } from "@/lib/dbAdapter";
+import { prisma } from "@/lib/prisma";
 
 export const dynamic = "force-dynamic";
 
@@ -69,26 +68,12 @@ export async function POST(request: NextRequest) {
 
         if (tenantId) {
             try {
-                const { prisma } = await import("@/lib/prisma");
                 await prisma.tenant.update({
                     where: { id: tenantId },
                     data: prismaData
                 });
             } catch (pErr: any) {
                 console.warn("Prisma tenant update notice:", pErr?.message);
-            }
-
-            // Also update Supabase tenants table
-            try {
-                const supabaseAdmin = getSupabaseAdmin();
-                await supabaseAdmin.from('tenants').update({
-                    name: name || tenant.name,
-                    logo_url: logo !== undefined ? logo : (tenant.logoUrl || tenant.logo),
-                    primary_color: primaryColor || tenant.primaryColor,
-                    secondary_color: secondaryColor || tenant.secondaryColor
-                }).eq('id', tenantId);
-            } catch (sErr: any) {
-                console.warn("Supabase tenant update notice:", sErr?.message);
             }
         }
 

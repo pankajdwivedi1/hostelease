@@ -1,9 +1,7 @@
 export const dynamic = "force-dynamic";
 
 import { NextRequest, NextResponse } from "next/server";
-import { getSupabaseAdmin } from "@/lib/supabaseServer";
 import { prisma } from "@/lib/prisma";
-import { db } from "@/lib/dbAdapter";
 import Razorpay from "razorpay";
 
 const DEFAULT_SETTINGS = {
@@ -26,8 +24,6 @@ export async function POST(request: NextRequest) {
             return NextResponse.json({ success: false, error: "Missing tenantId" }, { status: 400 });
         }
 
-        const activeSource = await db.getSource();
-
         let tenantName = "University";
         let studentCount = 0;
         let settings: any = DEFAULT_SETTINGS;
@@ -44,7 +40,7 @@ export async function POST(request: NextRequest) {
                 settings = { ...DEFAULT_SETTINGS, ...(settingsRow.settings as any) };
             }
         } catch (e: any) {
-            console.warn("Railway Razorpay fetch warn:", e?.message);
+            console.warn("Razorpay fetch warn:", e?.message);
         }
 
         if (!settings || !settings.enableRazorpay || !settings.razorpayKeyId || !settings.razorpayKeySecret) {
@@ -61,29 +57,26 @@ export async function POST(request: NextRequest) {
         else if (months === 6) discountPercent = settings.discount6Month !== undefined ? Number(settings.discount6Month) : 25;
         else if (months >= 12) discountPercent = settings.discount12Month !== undefined ? Number(settings.discount12Month) : 30;
 
-        const baseTotal = billableStudents * pricePerMonth * months;
-        const discountAmount = (baseTotal * discountPercent) / 100;
-        const totalAmountINR = baseTotal - discountAmount;
-        
-        if (totalAmountINR <= 0) {
-            return NextResponse.json({ success: false, error: "Calculated amount is 0. Cannot create order." }, { status: 400 });
-        }
+        const baseAmount = billableStudents * pricePerMonth * months;
+        const discountAmount = Math.round(baseAmount * (discountPercent / 100));
+        const finalAmount = Math.max(1, baseAmount - discountAmount);
 
-        // Razorpay expects amount in paise (1 INR = 100 paise)
-        const amountInPaise = Math.round(totalAmountINR * 100);
-
-        // Initialize Razorpay
         const razorpay = new Razorpay({
             key_id: String(settings.razorpayKeyId).trim(),
-            key_secret: String(settings.razorpayKeySecret).trim()
+            key_secret: String(settings.razorpayKeySecret).trim(),
         });
 
-        // Shorten tenantId and use seconds-level timestamp to stay under Razorpay's 40-character limit
-        const shortTenantId = String(tenantId).replace(/[^a-zA-Z0-9]/g, '').slice(-12);
         const options = {
-            amount: amountInPaise,
+            amount: finalAmount * 100, // Amount in paise
             currency: "INR",
-            receipt: `rcpt_${shortTenantId}_${Math.floor(Date.now() / 1000)}`
+            receipt: `rcpt_${tenantId.substring(0, 8)}_${Date.now().toString().slice(-6)}`,
+            notes: {
+                tenantId,
+                tenantName,
+                months,
+                billableStudents,
+                discountPercent
+            }
         };
 
         const order = await razorpay.orders.create(options);
@@ -94,13 +87,13 @@ export async function POST(request: NextRequest) {
             amount: order.amount,
             currency: order.currency,
             keyId: settings.razorpayKeyId,
-            collegeName: tenantName,
-            totalINR: totalAmountINR
+            tenantName,
+            finalAmount,
+            baseAmount,
+            discountPercent
         });
-
     } catch (error: any) {
-        console.error("Razorpay Order Error:", error);
-        const errorMessage = error?.error?.description || error?.message || JSON.stringify(error) || "Failed to create order";
-        return NextResponse.json({ success: false, error: `Razorpay Error: ${errorMessage}` }, { status: 500 });
+        console.error("Razorpay Order Creation Error:", error);
+        return NextResponse.json({ success: false, error: error.message || "Failed to create order" }, { status: 500 });
     }
 }

@@ -14,9 +14,7 @@ export function middleware(request: NextRequest) {
         hostNameOnly === '127.0.0.1' || 
         hostNameOnly === 'hosteleaze.com' || 
         hostNameOnly === 'www.hosteleaze.com' || 
-        hostNameOnly === 'hosteleaze.vercel.app' || 
-        hostNameOnly === 'hosteleaze-silk.vercel.app' || 
-        hostNameOnly === 'hostelease-silk.vercel.app';
+        hostNameOnly.endsWith('.railway.app');
 
     // ⚡ LANDING PAGE PRESERVATION:
     // When visiting root '/' on main domain without explicit ?tenant= parameter or existing cookie,
@@ -41,11 +39,8 @@ export function middleware(request: NextRequest) {
     } else if (hostname.includes('.hosteleaze.com')) {
         const sub = hostname.split('.hosteleaze.com')[0];
         if (sub !== 'www') tenantSlug = sub;
-    } else if (hostname.includes('.hosteleaze.vercel.app')) {
-        const sub = hostname.split('.hosteleaze.vercel.app')[0];
-        if (sub !== 'www') tenantSlug = sub;
-    } else if (hostname.includes('.vercel.app')) {
-        const sub = hostname.split('.vercel.app')[0];
+    } else if (hostname.includes('.railway.app')) {
+        const sub = hostname.split('.railway.app')[0];
         if (sub && !sub.includes('hostelease') && !sub.includes('hosteleaze')) {
             tenantSlug = sub;
         }
@@ -64,9 +59,7 @@ export function middleware(request: NextRequest) {
         tenantSlug === 'www' ||
         tenantSlug === 'localhost' ||
         tenantSlug === 'default' ||
-        tenantSlug.includes(':') ||
-        tenantSlug === 'hosteleaze-silk' ||
-        tenantSlug === 'hostelease-silk'
+        tenantSlug.includes(':')
     ) {
         tenantSlug = process.env.NEXT_PUBLIC_TENANT_SLUG || 'ogi';
     }

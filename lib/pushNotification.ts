@@ -1,6 +1,6 @@
 import webpush from "web-push";
 import { db } from "@/lib/dbAdapter";
-import { getSupabaseAdmin } from "@/lib/supabaseServer";
+import { prisma } from "@/lib/prisma";
 
 // Initialize VAPID Keys
 const publicKey = (process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY || "").replace(/^["']|["']$/g, "");
@@ -30,16 +30,13 @@ export interface PushPayload {
  */
 async function isNotificationEnabledGlobally(notificationType: string): Promise<boolean> {
   try {
-    const supabase = getSupabaseAdmin();
-    const { data } = await supabase
-      .from("platform_settings")
-      .select("settings")
-      .eq("id", "boss_payment_config")
-      .single();
+    const row = await prisma.platformSetting.findUnique({
+      where: { id: "boss_payment_config" }
+    });
 
-    if (!data || !data.settings) return true; // Default to true if settings aren't set yet
+    if (!row || !row.settings) return true; // Default to true if settings aren't set yet
 
-    const settings = data.settings;
+    const settings: any = row.settings;
     if (settings.globalPushEnabled === false) return false;
 
     const typeMapping: Record<string, string> = {

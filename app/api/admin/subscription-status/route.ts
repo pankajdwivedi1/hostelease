@@ -1,9 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSubscriptionStatus } from "@/lib/tenant";
-import { getSupabaseAdmin } from "@/lib/supabaseServer";
 import { prisma } from "@/lib/prisma";
-import { db } from "@/lib/dbAdapter";
-import { createCachedResponse } from "@/lib/cacheHelper";
 
 export const dynamic = 'force-dynamic';
 
@@ -30,7 +27,6 @@ const DEFAULT_SETTINGS = {
 export async function GET(request: NextRequest) {
     try {
         const status = await getSubscriptionStatus();
-        const activeSource = await db.getSource();
 
         let paymentSettings: any = DEFAULT_SETTINGS;
 
@@ -58,6 +54,7 @@ export async function GET(request: NextRequest) {
             headers: { "Cache-Control": "no-store, max-age=0" }
         });
     } catch (error: any) {
+        console.error("Subscription status error:", error);
         return NextResponse.json({ success: false, error: error.message }, { status: 500 });
     }
 }

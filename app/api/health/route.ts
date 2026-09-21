@@ -1,12 +1,11 @@
 export const dynamic = "force-dynamic";
 
 import { NextResponse } from "next/server";
-import mongoose from "mongoose";
-import connectDB from "@/lib/mongodb";
+import { prisma } from "@/lib/prisma";
 
 export async function GET() {
     try {
-        await connectDB();
+        await prisma.$queryRaw`SELECT 1`;
 
         // Import queue status
         const { getQueueStatus } = await import("@/lib/attendanceQueue");
@@ -15,10 +14,9 @@ export async function GET() {
         return NextResponse.json({
             status: "OK",
             timestamp: new Date().toISOString(),
-            mongodb: {
-                connected: mongoose.connection.readyState === 1,
-                poolSize: (mongoose.connection as any).base?.options?.maxPoolSize || "standard",
-                currentConnections: mongoose.connections.length
+            database: {
+                provider: "PostgreSQL (Railway)",
+                connected: true
             },
             attendanceQueue: queueStatus
         });

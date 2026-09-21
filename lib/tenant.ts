@@ -1,9 +1,6 @@
 import { headers } from 'next/headers';
 import { cache } from 'react';
 import { prisma } from './prisma';
-import { getSupabaseAdmin } from '@/lib/supabaseServer';
-
-const supabase = getSupabaseAdmin();
 
 /**
  * Resolves the current tenant from the request headers
@@ -43,7 +40,7 @@ export const getTenantFromRequest = cache(async () => {
             }
         }
 
-        // 2. ⚡ SECOND FALLBACK: Resolve from cookies if still missing (useful for free Vercel tier)
+        // 2. ⚡ SECOND FALLBACK: Resolve from cookies if still missing
         if (!slug || slug === 'default') {
             const cookiesList = headersList.get('cookie') || '';
             const match = cookiesList.match(/tenant-slug=([^;]+)/);
@@ -57,10 +54,14 @@ export const getTenantFromRequest = cache(async () => {
             const host = headersList.get('host') || '';
             if (host.includes('.localhost')) {
                 slug = host.split('.localhost')[0];
-            } else if (host.includes('.hosteleaze.vercel.app')) {
-                slug = host.split('.hosteleaze.vercel.app')[0];
-            } else if (host.includes('.vercel.app')) {
-                slug = host.split('.vercel.app')[0];
+            } else if (host.includes('.hosteleaze.com')) {
+                const sub = host.split('.hosteleaze.com')[0];
+                if (sub !== 'www') slug = sub;
+            } else if (host.includes('.railway.app')) {
+                const sub = host.split('.railway.app')[0];
+                if (sub && !sub.includes('hostelease') && !sub.includes('hosteleaze')) {
+                    slug = sub;
+                }
             }
         }
     } catch (hErr) {
@@ -69,25 +70,9 @@ export const getTenantFromRequest = cache(async () => {
 
     // 🛠️ FALLBACK: If resolving via main domain/localhost (no specific subdomain),
     // default to NEXT_PUBLIC_TENANT_SLUG or the main active tenant ("ogi") so production works seamlessly.
-    if (!slug || slug === 'default' || slug === 'www' || slug.includes(':')) {
+    if (!slug || slug === 'default' || slug === 'www' || slug === 'localhost' || slug.includes(':')) {
         const envSlug = process.env.NEXT_PUBLIC_TENANT_SLUG;
-        if (envSlug) {
-            slug = envSlug;
-        } else {
-            try {
-                const firstTenant = await prisma.tenant.findFirst({
-                    where: { isActive: true, isDeleted: false },
-                    select: { slug: true }
-                });
-                if (firstTenant) {
-                    slug = firstTenant.slug;
-                    console.log(`🛠️ [Tenant] Fallback: No subdomain found, defaulting to "${slug}"`);
-                }
-            } catch (e) {
-                slug = 'ogi';
-            }
-            if (!slug) slug = 'ogi';
-        }
+        slug = envSlug || 'ogi';
     }
 
     let normalizedSlug = (slug || 'ogi').toLowerCase();
@@ -108,38 +93,10 @@ export const getTenantFromRequest = cache(async () => {
             where: { slug: normalizedSlug, isActive: true, isDeleted: false }
         });
     } catch (prismaErr: any) {
-        console.warn(`⚠️ [Tenant] Prisma lookup failed for "${normalizedSlug}", checking Supabase fallback...`);
+        console.warn(`⚠️ [Tenant] Prisma lookup failed for "${normalizedSlug}":`, prismaErr?.message);
     }
 
-    if (!tenant) {
-        try {
-            const supabaseAdmin = getSupabaseAdmin();
-            const { data: sTenant } = await supabaseAdmin
-                .from('tenants')
-                .select('*')
-                .eq('slug', normalizedSlug)
-                .maybeSingle();
-            if (sTenant) {
-                tenant = {
-                    id: sTenant.id,
-                    name: sTenant.name,
-                    slug: sTenant.slug,
-                    logoUrl: sTenant.logo_url,
-                    primaryColor: sTenant.primary_color,
-                    secondaryColor: sTenant.secondary_color,
-                    subscriptionStatus: sTenant.subscription_status,
-                    subscriptionEndDate: sTenant.subscription_end_date,
-                    isActive: sTenant.is_active,
-                    adminEmail: sTenant.admin_email,
-                    createdAt: sTenant.created_at
-                };
-            }
-        } catch (sErr) {
-            console.error("❌ [Tenant] Supabase fallback error:", sErr);
-        }
-    }
-
-    // Default fallback for OGI / OIST tenant if database server is unreachable
+    // Default fallback for OGI / OIST tenant if database server is unreachable during startup
     if (!tenant && (normalizedSlug === 'ogi' || normalizedSlug === 'oist')) {
         tenant = {
             id: "26739d24-0214-409b-aa81-42e628e88c2b",
@@ -237,25 +194,6 @@ export async function getSubscriptionStatus() {
             select: { subscriptionStatus: true, subscriptionEndDate: true, isActive: true }
         });
     } catch (e) {}
-
-    if (!freshTenant) {
-        try {
-            const supabaseAdmin = getSupabaseAdmin();
-            const { data: sTenant } = await supabaseAdmin
-                .from('tenants')
-                .select('subscription_status, subscription_end_date, is_active')
-                .eq('id', tenantId)
-                .maybeSingle();
-
-            if (sTenant) {
-                freshTenant = {
-                    subscriptionStatus: sTenant.subscription_status,
-                    subscriptionEndDate: sTenant.subscription_end_date,
-                    isActive: sTenant.is_active
-                };
-            }
-        } catch (sErr) {}
-    }
 
     if (freshTenant) {
         tenant.subscriptionStatus = freshTenant.subscriptionStatus || tenant.subscriptionStatus;

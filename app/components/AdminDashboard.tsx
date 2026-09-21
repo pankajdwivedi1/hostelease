@@ -7410,7 +7410,9 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
 
   const filteredPermissions = useMemo(() => {
     return permissions.filter((p) => {
-      const student = typeof p.studentId === "object" ? p.studentId : null;
+      const student = (typeof p.studentId === "object" && p.studentId !== null)
+        ? p.studentId
+        : (p.student || (p as any).students || (students.find(s => (s.id || (s as any)._id) === p.studentId)) || null);
       if (!student) return false;
 
       let matchesStatus = false;
@@ -8674,7 +8676,9 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                       <p className="text-secondary text-center py-8">No permissions found</p>
                     ) : (
                       filteredPermissions.map((permission) => {
-                        const student = typeof permission.studentId === "object" ? permission.studentId : null;
+                        const student = (typeof permission.studentId === "object" && permission.studentId !== null)
+                          ? permission.studentId
+                          : (permission.student || (permission as any).students || (students.find(s => (s.id || (s as any)._id) === permission.studentId)) || null);
                         if (!student) return null;
 
                         const initials = getInitials(student.name);

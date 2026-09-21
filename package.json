@@ -4,7 +4,7 @@
   "private": true,
   "scripts": {
     "dev": "next dev --webpack -H 0.0.0.0",
-    "build": "next build --webpack",
+    "build": "prisma generate && next build --webpack",
     "start": "node --max-old-space-size=384 node_modules/next/dist/bin/next start",
     "lint": "eslint",
     "db:migrate": "node migrate-db.cjs",

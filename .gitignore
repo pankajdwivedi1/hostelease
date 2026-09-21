@@ -48,6 +48,17 @@ next-env.d.ts
 /public/workbox-*.js.map
 /public/worker-*.js.map
 
+# Flutter & Mobile builds
+hosteleaze_mobile/build/
+hosteleaze_mobile/.dart_tool/
+hosteleaze_mobile/.gradle/
+hosteleaze_mobile/.idea/
+hosteleaze_mobile/android/.gradle/
+hosteleaze_mobile/android/app/build/
+**/build/
+**/.dart_tool/
+**/.gradle/
+
 # Android build
 android/
 

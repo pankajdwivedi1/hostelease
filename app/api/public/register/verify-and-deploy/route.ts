@@ -1,9 +1,10 @@
 export const dynamic = "force-dynamic";
 
 import { NextRequest, NextResponse } from "next/server";
-import { getSupabaseAdmin } from "@/lib/supabaseServer";
 import { verifyMSG91_WidgetOTP } from "@/lib/msg91";
 import { otpCache } from "@/lib/otpCache";
+import { prisma } from "@/lib/prisma";
+import crypto from "crypto";
 
 export async function POST(request: NextRequest) {
     try {
@@ -48,8 +49,7 @@ export async function POST(request: NextRequest) {
 
         const cleanSlug = slug.toLowerCase().trim();
 
-        // 2. Check if slug exists in Prisma (Railway PostgreSQL)
-        const { prisma } = await import("@/lib/prisma");
+        // Check if slug exists in Prisma (Railway PostgreSQL)
         const existingInPrisma = await prisma.tenant.findUnique({
             where: { slug: cleanSlug }
         }).catch(() => null);
@@ -72,54 +72,28 @@ export async function POST(request: NextRequest) {
             defaultCountryCode: derivedCountryCode
         };
 
-        // 3. Deploy Tenant in Railway PostgreSQL (Prisma)
-        try {
-            await prisma.tenant.create({
-                data: {
-                    id: tenantId,
-                    name,
-                    slug: cleanSlug,
-                    adminEmail,
-                    subscriptionStatus: 'trial',
-                    primaryColor: '#3b82f6',
-                    isActive: true,
-                    subscriptionEndDate: tenantEndDate
-                }
-            });
+        // Deploy Tenant in Railway PostgreSQL (Prisma)
+        await prisma.tenant.create({
+            data: {
+                id: tenantId,
+                name,
+                slug: cleanSlug,
+                adminEmail,
+                subscriptionStatus: 'trial',
+                primaryColor: '#3b82f6',
+                isActive: true,
+                subscriptionEndDate: tenantEndDate
+            }
+        });
 
-            await prisma.adminSettings.create({
-                data: {
-                    tenantId: tenantId,
-                    universityBankDetails: bankDetails as any
-                }
-            });
-        } catch (pErr) {
-            console.warn("Prisma public deploy note:", pErr);
-        }
+        await prisma.adminSettings.create({
+            data: {
+                tenantId: tenantId,
+                universityBankDetails: bankDetails as any
+            }
+        });
 
-        // 4. Dual-sync to Supabase if connected
-        try {
-            const supabase = getSupabaseAdmin();
-            await supabase
-                .from('tenants')
-                .insert({
-                    id: tenantId,
-                    name,
-                    slug: cleanSlug,
-                    admin_email: adminEmail,
-                    subscription_status: 'trial',
-                    primary_color: '#3b82f6',
-                    is_active: true,
-                    subscription_end_date: tenantEndDate.toISOString(),
-                });
-
-            await supabase.from('admin_settings').insert({
-                tenant_id: tenantId,
-                university_bank_details: bankDetails
-            });
-        } catch (sErr) {}
-
-        // 5. Return success and default credentials
+        // Return success and default credentials
         return NextResponse.json({
             success: true,
             tenant: {
@@ -127,7 +101,7 @@ export async function POST(request: NextRequest) {
                 name: name,
                 slug: cleanSlug,
                 adminEmail: adminEmail,
-                defaultAdminPass: "pankajdwivedi81", // The system's global default auth
+                defaultAdminPass: "pankajdwivedi81",
                 defaultDevPass: "Pankaj852963"
             }
         });

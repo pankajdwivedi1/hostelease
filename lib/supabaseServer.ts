@@ -1,8 +1,4 @@
-import { createClient } from '@supabase/supabase-js';
-
-// ⚡ CACHE: Store the Supabase client in a global variable for reuse
-let cachedSupabaseAdmin: any = null;
-
+// Safe Server-side dummy client that never connects to external Supabase
 const createSafeDummyAdminClient = () => {
     const dummyProxy: any = new Proxy(() => dummyProxy, {
         get(target, prop) {
@@ -15,6 +11,8 @@ const createSafeDummyAdminClient = () => {
                         getUserById: async () => ({ data: { user: null }, error: null }),
                         deleteUser: async () => ({ data: null, error: null }),
                         updateUserById: async () => ({ data: { user: null }, error: null }),
+                        listUsers: async () => ({ data: { users: [] }, error: null }),
+                        createUser: async () => ({ data: { user: null }, error: null }),
                     },
                     getSession: async () => ({ data: { session: null }, error: null }),
                 };
@@ -28,30 +26,9 @@ const createSafeDummyAdminClient = () => {
     return dummyProxy;
 };
 
-// This client is for SERVER-SIDE use only.
-// It uses the SERVICE ROLE key to bypass RLS.
+// Returns a safe dummy client that performs no network requests
 export const getSupabaseAdmin = () => {
-    if (cachedSupabaseAdmin) return cachedSupabaseAdmin;
-
-    const supabaseUrl = (process.env.NEXT_PUBLIC_SUPABASE_URL || "").replace(/^["']|["']$/g, "");
-    const supabaseServiceKey = (process.env.SUPABASE_SERVICE_ROLE_KEY || "").replace(/^["']|["']$/g, "");
-
-    if (!supabaseUrl || !supabaseServiceKey) {
-        return createSafeDummyAdminClient();
-    }
-
-    try {
-        cachedSupabaseAdmin = createClient(supabaseUrl, supabaseServiceKey, {
-            auth: {
-                persistSession: false,
-                autoRefreshToken: false,
-            }
-        });
-        return cachedSupabaseAdmin;
-    } catch (e) {
-        console.warn("⚠️ Failed to initialize Supabase Admin client, using safe dummy fallback:", e);
-        return createSafeDummyAdminClient();
-    }
+    return createSafeDummyAdminClient();
 };
 
 export async function uploadProfilePictureToSupabase(base64Image: string, tenantId: string, studentId: string): Promise<string> {

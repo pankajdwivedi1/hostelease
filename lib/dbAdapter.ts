@@ -1,10 +1,7 @@
-import { getSupabaseAdmin } from '@/lib/supabaseServer';
-import connectDB from '@/lib/mongodb';
-import { headers } from 'next/headers'; // To check for secret header
 import crypto from 'crypto';
 import { getCurrentTenantId } from './tenant';
 import { prisma } from './prisma';
-import { collegeTemplate } from '@/lib/formTemplates';
+import { getSupabaseAdmin } from '@/lib/supabaseServer';
 
 export const supabase = getSupabaseAdmin();
 
@@ -40,7 +37,7 @@ const filterStudentForPrisma = (raw: any, isUpdate = false) => {
         filtered.firebaseUid = data.firebaseUID;
     }
 
-    // ⚡ FIX: Remove immutable/relational fields from update payload (allow firebaseUid for auto-linking)
+    // ⚡ FIX: Remove immutable/relational fields from update payload
     if (isUpdate) {
         delete filtered.tenantId;
         delete filtered.id;
@@ -89,7 +86,6 @@ const filterSettingsForPrisma = (data: any) => {
         'registrationFieldsConfig', 'formBuilderConfig', 'universityBankDetails',
         'wifiWhitelist', 'hostelPrefixMap', 'enableManualAttendance', 'tenantId',
         'developerPassword', 'leaveApprovalMethod', 'notificationSettings',
-        // 🛡️ Safeguard & delegation settings
         'enforceUniqueErpId', 'enforceUniquePhone', 'enforceUniqueEmail', 'enforceUniqueFace',
         'allowWardenAddStudent', 'allowDeanAddStudent', 'allowWardenEditProfile', 'allowDeanEditProfile',
         'allowWardenRemoveStudent', 'allowDeanRemoveStudent', 'allowBulkStudentUpdates', 'allowBulkPermissionManagement',
@@ -166,8 +162,9 @@ const filterGatePassTokenForPrisma = (data: any) => {
 const filterHostelForPrisma = (data: any) => {
     const fields = [
         'id', 'name', 'totalRooms', 'wardenUsername', 'wardenPassword',
-        'attendanceMode', 'tenantId',
-        'allowWardenAddStudent', 'allowWardenEditProfile', 'allowWardenRemoveStudent'
+        'attendanceMode', 'tenantId', 'registrationFormat',
+        'allowWardenAddStudent', 'allowWardenEditProfile', 'allowWardenRemoveStudent',
+        'allowWardenNotification', 'allowStudentNotification'
     ];
     const filtered: any = {};
     for (const key of fields) {
@@ -181,7 +178,7 @@ const filterHostelForPrisma = (data: any) => {
 const filterPermissionForPrisma = (data: any) => {
     const fields = [
         'id', 'studentId', 'fromDateTime', 'toDateTime', 'reason', 'status',
-        'wardenStatus', 'deanStatus', 'requestType', 'parentStatus', 'parentConsentUrl'
+        'wardenStatus', 'deanStatus', 'requestType', 'parentStatus', 'parentConsentUrl', 'isHidden'
     ];
     const filtered: any = {};
     for (const key of fields) {
@@ -272,11 +269,10 @@ const filterStudentFieldProgressForPrisma = (data: any) => {
     return filtered;
 };
 
-// Note: We might need to ensure mongoose models are imported correctly
 /**
- * Normalizes hostel names to GHB Hostel for consistency
+ * Normalizes hostel names for consistency
  */
-const formatHostelName = (name: string) => {
+export const formatHostelName = (name: string) => {
     if (!name) return name;
     const n = name.toUpperCase().trim();
     if (n.includes("GUEST") || n.includes("GHB")) return "GHB HOSTEL";
@@ -284,19 +280,18 @@ const formatHostelName = (name: string) => {
 };
 
 /**
- * Maps Supabase snake_case student data to camelCase for frontend compatibility
+ * Maps student data for frontend compatibility
  */
-const mapStudentToCamelCase = (s: any) => {
+export const mapStudentToCamelCase = (s: any) => {
     if (!s) return null;
 
-    // Extract sub-tables from Joined query result
     const profile = Array.isArray(s.student_profiles) ? s.student_profiles[0] : (s.student_profiles || s.profile);
     const security = Array.isArray(s.student_security) ? s.student_security[0] : (s.student_security || s.security);
 
     return {
         id: s._id || s.id,
         _id: s._id || s.id,
-        firebaseUID: s.firebase_uid || s.firebaseUID,
+        firebaseUID: s.firebase_uid || s.firebaseUid || s.firebaseUID,
         name: s.name,
         email: s.email,
         phoneNumber: s.phone_number || s.phoneNumber,
@@ -316,14 +311,11 @@ const mapStudentToCamelCase = (s: any) => {
             const genderKey = Object.keys(df).find(k => k.startsWith('name_copy_1782065596117') || k.toLowerCase().includes('gender') || k.toLowerCase().includes('sex') || k.startsWith('name_copy_'));
             if (genderKey && df[genderKey] && String(df[genderKey]).trim()) return String(df[genderKey]).trim();
             
-            // Smart fallback based on hostel name
             const h = (s.hostel_name || s.hostelName || "").toLowerCase();
             if (h.includes("boy") || h.includes("ghb")) return "MALE";
             if (h.includes("girl")) return "FEMALE";
             return "MALE";
         })(),
-
-        // Profile Table fields or fallback
         dob: profile?.dob !== undefined ? profile.dob : s.dob,
         category: profile?.category !== undefined ? profile.category : s.category,
         fatherName: profile?.father_name !== undefined ? profile.father_name : (s.father_name || s.fatherName),
@@ -333,7 +325,7 @@ const mapStudentToCamelCase = (s: any) => {
         permanentAddress: profile?.permanent_address || s.permanent_address || s.permanentAddress || s.address || s.homePinCode || s.home_pin_code || (s.dynamicFields && (s.dynamicFields.permanentAddress || s.dynamicFields.address || s.dynamicFields.homePinCode)) || "",
         homePinCode: profile?.permanent_address || s.permanent_address || s.permanentAddress || s.address || s.homePinCode || s.home_pin_code || (s.dynamicFields && (s.dynamicFields.permanentAddress || s.dynamicFields.address || s.dynamicFields.homePinCode)) || "",
         homeState: profile?.home_state !== undefined ? profile.home_state : (s.home_state || s.homeState),
-        erpInformation: profile?.erp_id !== undefined ? profile.erp_id : (s.erp_id || s.erpInformation || s.erpInformation),
+        erpInformation: profile?.erp_id !== undefined ? profile.erp_id : (s.erp_id || s.erpInformation),
         branch: profile?.branch !== undefined ? profile.branch : s.branch,
         collegeName: profile?.college_name !== undefined ? profile.college_name : (s.college_name || s.collegeName),
         year: profile?.year !== undefined ? profile.year : s.year,
@@ -346,7 +338,6 @@ const mapStudentToCamelCase = (s: any) => {
         registrationId: profile?.registration_id !== undefined ? profile.registration_id : (s.registration_id || s.registrationId),
         createdByErpId: profile?.created_by_erp_id !== undefined ? profile.created_by_erp_id : (s.created_by_erp_id || s.createdByErpId),
 
-        // Security Table fields or fallback
         deviceId: security?.device_id !== undefined ? security.device_id : (s.device_id || s.deviceId),
         isProfileLocked: security?.is_profile_locked !== undefined ? security.is_profile_locked : (s.is_profile_locked || s.isProfileLocked),
         faceDescriptor: security?.face_descriptor !== undefined ? security.face_descriptor : (s.face_descriptor || s.faceDescriptor),
@@ -361,217 +352,73 @@ const mapStudentToCamelCase = (s: any) => {
     };
 };
 
-/**
- * Maps camelCase student fields to snake_case for Supabase updates/inserts
- */
-const mapStudentToSnakeCase = (data: any) => {
-    const mapped: any = {};
-    const fieldMap: any = {
-        firebaseUID: 'firebase_uid',
-        phoneNumber: 'phone_number',
-        hostelName: 'hostel_name',
-        roomNumber: 'room_number',
-        profilePicture: 'profile_picture',
-        fatherName: 'father_name',
-        fatherNumber: 'father_number',
-        motherName: 'mother_name',
-        motherNumber: 'mother_number',
-        permanentAddress: 'permanent_address',
-        homePinCode: 'permanent_address',
-        homeState: 'home_state',
-        erpInformation: 'erp_id',
-        joiningDate: 'joining_date',
-        collegeName: 'college_name',
-        localGuardianAddress: 'local_guardian_address',
-        localGuardianPhoneNumber: 'local_guardian_phone_number',
-        floorNumber: 'floor_number',
-        registrationId: 'registration_id',
-        isProfileLocked: 'is_profile_locked',
-        faceDescriptor: 'face_descriptor',
-        attendanceMode: 'attendance_mode',
-        deviceResetCount: 'device_reset_count',
-        webAuthnCredentials: 'web_authn_credentials',
-        deviceHistory: 'device_history',
-        deviceId: 'device_id',
-        studentStatus: 'student_status',
-        dynamicFields: 'dynamic_fields',
-        supabaseId: 'supabase_id',
-        authProvider: 'auth_provider',
-        tenantId: 'tenant_id'
-    };
-    const forbidden = [
-        'id', '_id', 'firebaseuid', 'firebase_uid', 'createdat', 'updatedat',
-        'action', '__v', 'permissions', 'lastcheckinlocation'
-    ];
-    Object.keys(data).forEach(key => {
-        const lowKey = key.toLowerCase();
-        if (forbidden.includes(lowKey) || forbidden.includes(lowKey.replace(/_/g, ''))) return;
-        if (fieldMap[key]) {
-            mapped[fieldMap[key]] = data[key];
-        } else {
-            mapped[key] = data[key];
-        }
-    });
-    return mapped;
+export const mapStudentToSnakeCase = (data: any) => {
+    return filterStudentForPrisma(data);
 };
 
-/**
- * Splits unified student fields into individual objects for students, student_profiles, and student_security tables
- */
-const splitStudentFields = (data: any) => {
-    const studentKeys = [
-        'firebase_uid', 'name', 'email', 'phone_number', 'hostel_name',
-        'room_number', 'profile_picture', 'student_status', 'supabase_id',
-        'tenant_id',
-        'dynamic_fields'
-    ];
-    
-    const profileKeys = [
-        'dob', 'category', 'father_name', 'father_number', 'mother_name',
-        'mother_number', 'permanent_address', 'home_state', 'erp_id',
-        'joining_date', 'branch', 'college_name', 'year', 'semester',
-        'section', 'floor_number', 'local_guardian_address',
-        'local_guardian_phone_number', 'registration_id', 'created_by_erp_id'
-    ];
-    
-    const securityKeys = [
-        'device_id', 'device_reset_count', 'device_history', 'is_profile_locked',
-        'face_descriptor', 'thumb_impression_id', 'attendance_mode',
-        'web_authn_credentials', 'last_check_in_location', 'auth_provider'
-    ];
-
-    const studentUpdate: any = {};
-    const profileUpdate: any = {};
-    const securityUpdate: any = {};
-
-    Object.keys(data).forEach(key => {
-        if (studentKeys.includes(key)) {
-            studentUpdate[key] = data[key];
-        } else if (profileKeys.includes(key)) {
-            profileUpdate[key] = data[key];
-        } else if (securityKeys.includes(key)) {
-            securityUpdate[key] = data[key];
-        }
-    });
-
-    return { studentUpdate, profileUpdate, securityUpdate };
-};
-
-
-/**
- * Maps Supabase snake_case attendance data to camelCase
- */
-const mapAttendanceToCamelCase = (a: any) => {
+export const mapAttendanceToCamelCase = (a: any) => {
     if (!a) return null;
-    const mapped: any = {
-        _id: a._id,
+    return {
+        id: a._id || a.id,
+        _id: a._id || a.id,
         studentId: a.student_id || a.studentId,
-        firebaseUID: a.firebase_uid || a.firebaseUID,
-        name: a.name || a.student_name || a.studentName || "Unknown",
-        studentName: a.name || a.student_name || a.studentName || "Unknown",
-        hostelName: formatHostelName(a.hostel_name || a.hostelName),
+        firebaseUID: a.firebase_uid || a.firebaseUid || a.firebaseUID,
+        name: a.name,
+        hostelName: a.hostel_name || a.hostelName,
         roomNumber: a.room_number || a.roomNumber,
-        status: a.status,
         date: a.date,
-        istDate: a.ist_date || a.istDate,
-        time: a.time,
+        timestamp: a.timestamp,
         istTime: a.ist_time || a.istTime,
+        istDate: a.ist_date || a.istDate,
         location: a.location,
+        deviceId: a.device_id || a.deviceId,
+        status: a.status,
         faceMatchPercentage: a.face_match_percentage || a.faceMatchPercentage,
         faceMatchStatus: a.face_match_status || a.faceMatchStatus,
-        needsReview: a.needs_review || a.needsReview,
-        isTest: a.is_test || a.isTest,
-        timestamp: a.timestamp,
-        deviceId: a.device_id || a.deviceId,
-        method: a.method,
-        wardenId: a.warden_id || a.wardenId,
-        semester: a.semester,
-        branch: a.branch,
-        collegeName: a.college_name || a.collegeName,
+        flaggedPhotoUrl: a.flagged_photo_url || a.flaggedPhotoUrl,
+        needsReview: a.needs_review !== undefined ? a.needs_review : a.needsReview,
+        isTest: a.is_test !== undefined ? a.is_test : a.isTest,
         markedBy: a.marked_by || a.markedBy,
+        faceScore: a.face_score || a.faceScore,
+        gps: a.gps,
+        verificationMethod: a.verification_method || a.verificationMethod,
+        verifiedBy: a.verified_by || a.verifiedBy,
+        isWifiVerified: a.is_wifi_verified !== undefined ? a.is_wifi_verified : a.isWifiVerified,
         createdAt: a.created_at || a.createdAt,
-        updatedAt: a.updated_at || a.updatedAt
+        updatedAt: a.updated_at || a.updatedAt,
+        tenantId: a.tenant_id || a.tenantId
     };
-
-    if (a.students) {
-        // Handle joined student data (Supabase)
-        mapped.studentId = mapStudentToCamelCase(a.students);
-    } else if (a.studentId && typeof a.studentId === 'object') {
-        // Handle populated student data (MongoDB)
-        mapped.studentId = mapStudentToCamelCase(a.studentId);
-    }
-
-    return mapped;
 };
 
-/**
- * Maps camelCase attendance data to Supabase snake_case
- */
-const mapAttendanceToSnakeCase = (a: any) => {
-    if (!a) return null;
-    const mapped: any = {};
-    const fieldMap: any = {
-        studentId: 'student_id',
-        firebaseUID: 'firebase_uid',
-        studentName: 'student_name',
-        hostelName: 'hostel_name',
-        roomNumber: 'room_number',
-        istDate: 'ist_date',
-        istTime: 'ist_time',
-        faceMatchPercentage: 'face_match_percentage',
-        faceMatchStatus: 'face_match_status',
-        needsReview: 'needs_review',
-        isTest: 'is_test',
-        wardenId: 'warden_id',
-        collegeName: 'college_name',
-        tenantId: 'tenant_id',
-        deviceId: 'device_id',
-        markedBy: 'marked_by'
-    };
-
-    Object.keys(a).forEach(key => {
-        if (fieldMap[key]) {
-            mapped[fieldMap[key]] = a[key];
-        } else if (!['_id', 'createdAt', 'updatedAt', 'id', '__v'].includes(key)) {
-            mapped[key] = a[key];
-        }
-    });
-
-    return mapped;
+export const mapAttendanceToSnakeCase = (data: any) => {
+    return filterAttendanceForPrisma(data);
 };
 
-/**
- * Maps Supabase snake_case admin settings to camelCase
- */
-const mapSettingsToCamelCase = (s: any) => {
+export const mapSettingsToCamelCase = (s: any) => {
     if (!s) return null;
     return {
-        _id: s._id || s.id,
         id: s._id || s.id,
-        activeDatabaseSource: s.active_database_source || s.activeDatabaseSource,
-        hostelLocations: s.hostel_locations || s.hostelLocations,
-        attendanceStartTime: s.attendance_start_time || s.attendanceStartTime,
-        attendanceEndTime: s.attendance_end_time || s.attendanceEndTime,
-        adminPassword: s.admin_password || s.adminPassword,
-        wardenPassword: s.warden_password || s.wardenPassword,
-        wardenAccounts: s.warden_accounts || s.wardenAccounts,
-        registrationFieldsConfig: s.registration_fields_config || s.registrationFieldsConfig,
-        formBuilderConfig: Array.isArray(s.form_builder_config)
-            ? s.form_builder_config
-            : (Array.isArray(s.formBuilderConfig)
-                ? s.formBuilderConfig
-                : collegeTemplate),
-        universityBankDetails: s.university_bank_details || s.universityBankDetails,
-        hostelFeeAmount: s.hostel_fee_amount || s.hostelFeeAmount,
-        paymentInstructions: s.payment_instructions || s.paymentInstructions,
-        isPaymentEnabled: s.is_payment_enabled || s.isPaymentEnabled,
-        wifiWhitelist: s.wifi_whitelist || s.wifiWhitelist,
-        hostelPrefixMap: s.hostel_prefix_map || s.hostelPrefixMap,
-        overlapRadius: s.overlap_radius || s.overlapRadius,
-        prioritizeAssignedHostel: s.prioritize_assigned_hostel || s.prioritizeAssignedHostel,
-        getpassPassword: s.getpass_password || s.getpassPassword,
-        enableManualAttendance: s.enable_manual_attendance || s.enableManualAttendance,
-        developerPassword: s.developer_password || s.developerPassword,
+        _id: s._id || s.id,
+        activeDatabaseSource: s.active_database_source || s.activeDatabaseSource || 'RAILWAY',
+        attendanceStartTime: s.attendance_start_time || s.attendanceStartTime || '21:00',
+        attendanceEndTime: s.attendance_end_time || s.attendanceEndTime || '22:30',
+        adminPassword: s.admin_password || s.adminPassword || 'pankajdwivedi81',
+        wardenPassword: s.warden_password || s.wardenPassword || 'warden456',
+        getpassPassword: s.getpass_password || s.getpassPassword || 'GET456',
+        developerPassword: s.developer_password || s.developerPassword || 'pankaj86.dwivedi@gmail.com',
+        hostelFeeAmount: s.hostel_fee_amount !== undefined ? s.hostel_fee_amount : (s.hostelFeeAmount || 0),
+        paymentInstructions: s.payment_instructions || s.paymentInstructions || '',
+        isPaymentEnabled: s.is_payment_enabled !== undefined ? s.is_payment_enabled : (s.isPaymentEnabled || false),
+        overlapRadius: s.overlap_radius !== undefined ? s.overlap_radius : (s.overlapRadius || false),
+        prioritizeAssignedHostel: s.prioritize_assigned_hostel !== undefined ? s.prioritize_assigned_hostel : (s.prioritizeAssignedHostel || false),
+        hostelLocations: s.hostel_locations || s.hostelLocations || [],
+        wardenAccounts: s.warden_accounts || s.wardenAccounts || [],
+        registrationFieldsConfig: s.registration_fields_config || s.registrationFieldsConfig || {},
+        formBuilderConfig: s.form_builder_config || s.formBuilderConfig || [],
+        universityBankDetails: s.university_bank_details || s.universityBankDetails || {},
+        wifiWhitelist: s.wifi_whitelist || s.wifiWhitelist || [],
+        hostelPrefixMap: s.hostel_prefix_map || s.hostelPrefixMap || [],
+        enableManualAttendance: s.enable_manual_attendance !== undefined ? s.enable_manual_attendance : (s.enableManualAttendance || false),
         leaveApprovalMethod: s.leave_approval_method || s.leaveApprovalMethod || 'app',
         notificationSettings: s.notification_settings || s.notificationSettings || {},
         enforceUniqueErpId: s.enforce_unique_erp_id !== undefined ? s.enforce_unique_erp_id : (s.enforceUniqueErpId || false),
@@ -586,591 +433,195 @@ const mapSettingsToCamelCase = (s: any) => {
         allowDeanRemoveStudent: s.allow_dean_remove_student !== undefined ? s.allow_dean_remove_student : (s.allowDeanRemoveStudent || false),
         allowBulkStudentUpdates: s.allow_bulk_student_updates !== undefined ? s.allow_bulk_student_updates : (s.allowBulkStudentUpdates || false),
         allowBulkPermissionManagement: s.allow_bulk_permission_management !== undefined ? s.allow_bulk_permission_management : (s.allowBulkPermissionManagement !== undefined ? s.allowBulkPermissionManagement : true),
-        qrScanCooldownMinutes: s.qr_scan_cooldown_minutes !== undefined ? s.qr_scan_cooldown_minutes : (s.qrScanCooldownMinutes !== undefined ? s.qrScanCooldownMinutes : 5),
-        allowEmergencyExitWithoutCooldown: s.allow_emergency_exit_without_cooldown !== undefined ? s.allow_emergency_exit_without_cooldown : (s.allowEmergencyExitWithoutCooldown !== undefined ? s.allowEmergencyExitWithoutCooldown : true),
+        qrScanCooldownMinutes: s.qr_scan_cooldown_minutes !== undefined ? s.qr_scan_cooldown_minutes : (s.qrScanCooldownMinutes || 5),
+        tenantId: s.tenant_id || s.tenantId,
         createdAt: s.created_at || s.createdAt,
         updatedAt: s.updated_at || s.updatedAt
     };
 };
 
-/**
- * Maps camelCase admin settings to Supabase snake_case
- */
-const mapSettingsToSnakeCase = (s: any) => {
-    if (!s) return null;
-    const mapped: any = {};
-    const fieldMap: any = {
-        activeDatabaseSource: 'active_database_source',
-        hostelLocations: 'hostel_locations',
-        attendanceStartTime: 'attendance_start_time',
-        attendanceEndTime: 'attendance_end_time',
-        adminPassword: 'admin_password',
-        wardenPassword: 'warden_password',
-        wardenAccounts: 'warden_accounts',
-        registrationFieldsConfig: 'registration_fields_config',
-        formBuilderConfig: 'form_builder_config',
-        universityBankDetails: 'university_bank_details',
-        hostelFeeAmount: 'hostel_fee_amount',
-        paymentInstructions: 'payment_instructions',
-        isPaymentEnabled: 'is_payment_enabled',
-        wifiWhitelist: 'wifi_whitelist',
-        hostelPrefixMap: 'hostel_prefix_map',
-        overlapRadius: 'overlap_radius',
-        prioritizeAssignedHostel: 'prioritize_assigned_hostel',
-        getpassPassword: 'getpass_password',
-        enableManualAttendance: 'enable_manual_attendance',
-        developerPassword: 'developer_password',
-        leaveApprovalMethod: 'leave_approval_method',
-        notificationSettings: 'notification_settings',
-        enforceUniqueErpId: 'enforce_unique_erp_id',
-        enforceUniquePhone: 'enforce_unique_phone',
-        enforceUniqueEmail: 'enforce_unique_email',
-        enforceUniqueFace: 'enforce_unique_face',
-        qrScanCooldownMinutes: 'qr_scan_cooldown_minutes',
-        allowEmergencyExitWithoutCooldown: 'allow_emergency_exit_without_cooldown',
-        allowWardenAddStudent: 'allow_warden_add_student',
-        allowDeanAddStudent: 'allow_dean_add_student',
-        allowWardenEditProfile: 'allow_warden_edit_profile',
-        allowDeanEditProfile: 'allow_dean_edit_profile',
-        allowWardenRemoveStudent: 'allow_warden_remove_student',
-        allowDeanRemoveStudent: 'allow_dean_remove_student',
-        allowBulkStudentUpdates: 'allow_bulk_student_updates',
-        allowBulkPermissionManagement: 'allow_bulk_permission_management'
-    };
-
-    Object.keys(s).forEach(key => {
-        if (fieldMap[key]) {
-            mapped[fieldMap[key]] = s[key];
-        } else if (!['_id', 'createdAt', 'updatedAt', 'id', '__v'].includes(key)) {
-            mapped[key] = s[key];
-        }
-    });
-
-    return mapped;
+export const mapSettingsToSnakeCase = (data: any) => {
+    return filterSettingsForPrisma(data);
 };
 
-/**
- * Maps Supabase snake_case hostel data to camelCase
- */
-const mapHostelToCamelCase = (h: any) => {
-    if (!h) return null;
-    return {
-        _id: h._id || h.id,
-        name: formatHostelName(h.name),
-        totalRooms: h.total_rooms || h.totalRooms,
-        wardenUsername: h.warden_username || h.wardenUsername,
-        wardenPassword: h.warden_password || h.wardenPassword,
-        attendanceMode: h.attendance_mode || h.attendanceMode,
-        allowWardenAddStudent: h.allow_warden_add_student !== undefined ? h.allow_warden_add_student : (h.allowWardenAddStudent || false),
-        allowWardenEditProfile: h.allow_warden_edit_profile !== undefined ? h.allow_warden_edit_profile : (h.allowWardenEditProfile || false),
-        allowWardenRemoveStudent: h.allow_warden_remove_student !== undefined ? h.allow_warden_remove_student : (h.allowWardenRemoveStudent || false),
-        allowWardenNotification: h.allow_warden_notification !== undefined ? Boolean(h.allow_warden_notification) : (h.allowWardenNotification !== undefined ? Boolean(h.allowWardenNotification) : true),
-        allowStudentNotification: h.allow_student_notification !== undefined ? Boolean(h.allow_student_notification) : (h.allowStudentNotification !== undefined ? Boolean(h.allowStudentNotification) : true),
-        registrationFormat: h.registration_format || h.registrationFormat || '',
-        createdAt: h.created_at || h.createdAt,
-        updatedAt: h.updated_at || h.updatedAt
-    };
-};
-
-/**
- * Maps Supabase snake_case gate pass data to camelCase
- */
-const mapGatePassToCamelCase = (g: any) => {
+export const mapGatePassToCamelCase = (g: any) => {
     if (!g) return null;
-    const profile = g.students?.student_profiles
-        ? (Array.isArray(g.students.student_profiles) ? g.students.student_profiles[0] : g.students.student_profiles)
-        : (g.studentId && typeof g.studentId === 'object' && g.studentId.student_profiles
-            ? (Array.isArray(g.studentId.student_profiles) ? g.studentId.student_profiles[0] : g.studentId.student_profiles)
-            : null);
     return {
+        id: g._id || g.id,
         _id: g._id || g.id,
-        studentId: g.student_id && typeof g.student_id === 'string' ? g.student_id :
-            (g.students && typeof g.students === 'object' ? (g.students._id || g.students.id) : (g.student_id || g.studentId)),
-        firebaseUID: g.firebase_uid || g.firebaseUID,
+        studentId: g.student_id || g.studentId,
+        firebaseUID: g.firebase_uid || g.firebaseUid || g.firebaseUID,
         studentName: g.student_name || g.studentName,
-        hostelName: formatHostelName(g.hostel_name || g.hostelName),
+        hostelName: g.hostel_name || g.hostelName,
         roomNumber: g.room_number || g.roomNumber,
         registrationId: g.registration_id || g.registrationId,
-        type: g.type,
-        status: g.status,
         checkOutTime: g.check_out_time || g.checkOutTime,
+        checkOutIstTime: g.check_out_ist_time || g.checkOutIstTime,
+        checkOutIstDate: g.check_out_ist_date || g.checkOutIstDate,
         checkInTime: g.check_in_time || g.checkInTime,
-        checkOutISTTime: g.check_out_ist_time || g.checkOutISTTime || g.checkOutIstTime,
-        checkInISTTime: g.check_in_ist_time || g.checkInISTTime || g.checkInIstTime,
-        checkOutISTDate: g.check_out_ist_date || g.check_out_date || g.checkOutISTDate || g.checkOutDate || g.checkOutIstDate,
-        checkInISTDate: g.check_in_ist_date || g.check_in_date || g.checkInISTDate || g.checkInDate || g.checkInIstDate,
-        durationMinutes: g.duration_minutes || g.durationMinutes,
-        phoneNumber: g.phone_number || g.phoneNumber || (Array.isArray(g.students) ? g.students[0]?.phone_number : g.students?.phone_number) || g.students?.phoneNumber || g.studentId?.phoneNumber || g.studentId?.phone_number || "",
-        reason: g.reason,
-        parentMobile: g.parent_mobile || g.parentMobile,
-        destination: g.destination,
+        checkInIstTime: g.check_in_ist_time || g.checkInIstTime,
+        checkInIstDate: g.check_in_ist_date || g.checkInIstDate,
+        status: g.status,
+        durationMinutes: g.duration_minutes !== undefined ? g.duration_minutes : g.durationMinutes,
         gateName: g.gate_name || g.gateName,
-        manualUpdate: g.manual_update || g.manualUpdate,
-        updatedBy: g.updated_by || g.updatedBy,
+        qrTokenUsedOut: g.qr_token_used_out || g.qrTokenUsedOut,
+        qrTokenUsedIn: g.qr_token_used_in || g.qrTokenUsedIn,
+        type: g.type,
+        reason: g.reason,
+        destination: g.destination,
+        parentMobile: g.parent_mobile || g.parentMobile,
+        permissionId: g.permission_id || g.permissionId,
+        phoneNumber: g.phone_number || g.phoneNumber,
         createdAt: g.created_at || g.createdAt,
         updatedAt: g.updated_at || g.updatedAt,
-        // Detailed Student Fields (Populated)
-        erpId: profile?.erp_id || g.students?.erp_id || g.studentId?.erp_id || g.students?.erpInformation || g.studentId?.erpInformation || "",
-        fatherName: profile?.father_name || g.students?.father_name || g.studentId?.fatherName || g.students?.fatherName || "",
-        fatherNumber: profile?.father_number || g.students?.father_number || g.studentId?.fatherNumber || g.students?.fatherNumber || "",
-        motherName: profile?.mother_name || g.students?.mother_name || g.studentId?.motherName || g.students?.motherName || "",
-        motherNumber: profile?.mother_number || g.students?.mother_number || g.studentId?.motherNumber || g.students?.motherNumber || "",
-        permissionId: g.permission_id || g.permissionId || null
+        tenantId: g.tenant_id || g.tenantId
     };
 };
 
-/**
- * Maps camelCase hostel data to Supabase snake_case
- */
-const mapHostelToSnakeCase = (h: any) => {
-    if (!h) return null;
-    const mapped: any = {};
-    const fieldMap: any = {
-        totalRooms: 'total_rooms',
-        wardenUsername: 'warden_username',
-        wardenPassword: 'warden_password',
-        attendanceMode: 'attendance_mode',
-        allowWardenAddStudent: 'allow_warden_add_student',
-        allowWardenEditProfile: 'allow_warden_edit_profile',
-        allowWardenRemoveStudent: 'allow_warden_remove_student',
-        allowWardenNotification: 'allow_warden_notification',
-        allowStudentNotification: 'allow_student_notification',
-        registrationFormat: 'registration_format'
-    };
-
-    Object.keys(h).forEach(key => {
-        if (fieldMap[key]) {
-            mapped[fieldMap[key]] = h[key];
-        } else if (!['_id', 'createdAt', 'updatedAt', 'id', '__v'].includes(key)) {
-            mapped[key] = h[key];
-        }
-    });
-
-    return mapped;
+export const mapGatePassToSnakeCase = (data: any) => {
+    return filterGatePassForPrisma(data);
 };
 
-/**
- * Maps camelCase gate pass data to Supabase snake_case
- */
-const mapGatePassToSnakeCase = (g: any) => {
-    if (!g) return null;
-    const mapped: any = {};
-    const fieldMap: any = {
-        studentId: 'student_id',
-        firebaseUID: 'firebase_uid',
-        firebaseUid: 'firebase_uid',
-        studentName: 'student_name',
-        hostelName: 'hostel_name',
-        roomNumber: 'room_number',
-        registrationId: 'registration_id',
-        checkOutTime: 'check_out_time',
-        checkOutISTTime: 'check_out_ist_time',
-        checkOutIstTime: 'check_out_ist_time',
-        checkOutISTDate: 'check_out_ist_date',
-        checkOutIstDate: 'check_out_ist_date',
-        checkInTime: 'check_in_time',
-        checkInISTTime: 'check_in_ist_time',
-        checkInIstTime: 'check_in_ist_time',
-        checkInISTDate: 'check_in_ist_date',
-        checkInIstDate: 'check_in_ist_date',
-        status: 'status',
-        durationMinutes: 'duration_minutes',
-        type: 'type',
-        requestType: 'type',
-        request_type: 'type',
-        permissionId: 'permission_id',
-        gateName: 'gate_name',
-        qrTokenUsedOut: 'qr_token_used_out',
-        qrTokenUsedIn: 'qr_token_used_in',
-        phoneNumber: 'phone_number',
-        reason: 'reason',
-        destination: 'destination',
-        parentMobile: 'parent_mobile',
-        manualUpdate: 'manual_update',
-        updatedBy: 'updated_by',
-        tenantId: 'tenant_id',
-        tenant_id: 'tenant_id'
-    };
-
-    const validSnakeColumns = new Set([
-        '_id', 'student_id', 'firebase_uid', 'student_name', 'hostel_name', 'room_number',
-        'registration_id', 'check_out_time', 'check_out_ist_time', 'check_out_ist_date',
-        'check_in_time', 'check_in_ist_time', 'check_in_ist_date', 'status', 'duration_minutes',
-        'gate_name', 'qr_token_used_out', 'qr_token_used_in', 'type', 'reason', 'destination',
-        'parent_mobile', 'permission_id', 'phone_number', 'tenant_id', 'created_at', 'updated_at',
-        'manual_update', 'updated_by'
-    ]);
-
-    Object.keys(g).forEach(key => {
-        let value = g[key];
-        // Convert Date objects to ISO strings for Supabase
-        if (value instanceof Date) {
-            // Convert to IST offset string (e.g., 2026-02-22T23:49:12+05:30)
-            const offset = 5.5 * 60 * 60 * 1000;
-            const istDate = new Date(value.getTime() + offset);
-            value = istDate.toISOString().replace('Z', '+05:30');
-        }
-
-        if (fieldMap[key]) {
-            if (key === 'studentId' && typeof value === 'object' && value) {
-                value = value._id || value.id || String(value);
-            }
-            mapped[fieldMap[key]] = value;
-        } else if (validSnakeColumns.has(key)) {
-            mapped[key] = value;
-        }
-    });
-
-    return mapped;
-};
-
-/**
- * Maps Supabase snake_case gate pass token data to camelCase
- */
-const mapGatePassTokenToCamelCase = (t: any) => {
-    if (!t) return null;
-    return {
-        _id: t._id,
-        token: t.token,
-        gateName: t.gate_name,
-        createdAt: t.created_at,
-        expiresAt: t.expires_at,
-        isUsed: t.is_used
-    };
-};
-
-/**
- * Maps Supabase snake_case permission data to camelCase
- */
-const mapPermissionToCamelCase = (p: any) => {
+export const mapPermissionToCamelCase = (p: any) => {
     if (!p) return null;
-    const fromVal = p.fromDateTime ?? p.from_date_time ?? (p.outDate ? `${p.outDate} ${p.outTime || ''}`.trim() : p.createdAt);
-    const toVal = p.toDateTime ?? p.to_date_time ?? (p.inDate ? `${p.inDate} ${p.inTime || ''}`.trim() : null);
-
-    const mapped: any = {
+    const rawStudent = p.student || p.students || (typeof p.studentId === 'object' ? p.studentId : null);
+    const populatedStudent = rawStudent ? mapStudentToCamelCase(rawStudent) : null;
+    return {
+        id: p._id || p.id,
         _id: p._id || p.id,
-        id: p.id || p._id,
-        studentId: p.studentId || p.student_id,
-        fromDateTime: fromVal,
-        toDateTime: toVal,
+        studentId: populatedStudent || p.student_id || p.studentId,
+        name: populatedStudent?.name || p.students?.name || p.student?.name || p.name || "",
+        roomNumber: populatedStudent?.roomNumber || p.students?.room_number || p.student?.roomNumber || p.roomNumber || "",
+        hostelName: populatedStudent?.hostelName || p.students?.hostel_name || p.student?.hostelName || p.hostelName || "",
+        registrationId: populatedStudent?.registrationId || p.students?.registration_id || p.student?.registrationId || p.registrationId || "",
+        fromDateTime: p.from_date_time || p.fromDateTime,
+        toDateTime: p.to_date_time || p.toDateTime,
         reason: p.reason,
         status: p.status,
-        wardenStatus: p.wardenStatus || p.warden_status,
-        deanStatus: p.deanStatus || p.dean_status,
-        parentStatus: p.parentStatus || p.parent_status,
-        requestType: p.requestType || p.request_type,
-        parentConsentUrl: p.parentConsentUrl || p.parent_consent_url,
-        isHidden: p.isHidden ?? p.is_hidden ?? false,
-        createdAt: p.createdAt || p.created_at,
-        updatedAt: p.updatedAt || p.updated_at
+        wardenStatus: p.warden_status || p.wardenStatus || 'pending',
+        deanStatus: p.dean_status || p.deanStatus || 'pending',
+        requestType: p.request_type || p.requestType || 'leave',
+        parentStatus: p.parent_status || p.parentStatus || 'pending',
+        parentConsentUrl: p.parent_consent_url || p.parentConsentUrl || null,
+        parentMobile: populatedStudent?.fatherNumber || populatedStudent?.motherNumber || p.students?.father_number || p.student?.fatherNumber || p.parentMobile || "",
+        isHidden: p.is_hidden !== undefined ? p.is_hidden : (p.isHidden || false),
+        createdAt: p.created_at || p.createdAt,
+        updatedAt: p.updated_at || p.updatedAt,
+        students: populatedStudent || p.students || p.student || undefined,
+        student: populatedStudent || p.student || p.students || undefined
     };
-
-    if (p.students) {
-        // Handle joined student data if present (Supabase)
-        mapped.studentId = mapStudentToCamelCase(p.students);
-    } else if (p.studentId && typeof p.studentId === 'object') {
-        // Handle populated student data if present (MongoDB)
-        mapped.studentId = mapStudentToCamelCase(p.studentId);
-    }
-
-    return mapped;
 };
 
-/**
- * Maps camelCase permission data to Supabase snake_case
- */
-const mapPermissionToSnakeCase = (p: any) => {
-    if (!p) return null;
-    const mapped: any = {};
-    const fieldMap: any = {
-        studentId: 'student_id',
-        fromDateTime: 'from_date_time',
-        toDateTime: 'to_date_time',
-        reason: 'reason',
-        status: 'status',
-        wardenStatus: 'warden_status',
-        deanStatus: 'dean_status',
-        parentStatus: 'parent_status',
-        requestType: 'request_type',
-        parentConsentUrl: 'parent_consent_url',
-        tenantId: 'tenant_id',
-        studentName: 'student_name',
-        hostelName: 'hostel_name',
-        roomNumber: 'room_number'
-    };
-
-    const validSnakeColumns = new Set([
-        '_id', 'student_id', 'from_date_time', 'to_date_time', 'reason', 'status',
-        'warden_status', 'dean_status', 'parent_status', 'request_type', 'parent_consent_url',
-        'tenant_id', 'student_name', 'hostel_name', 'room_number', 'created_at', 'updated_at'
-    ]);
-
-    Object.keys(p).forEach(key => {
-        let value = p[key];
-        if (value instanceof Date) {
-            value = value.toISOString();
-        }
-
-        if (fieldMap[key]) {
-            if (key === 'studentId' && typeof value === 'object' && value) {
-                value = value._id || value.id || String(value);
-            }
-            mapped[fieldMap[key]] = value;
-        } else if (validSnakeColumns.has(key)) {
-            mapped[key] = value;
-        }
-    });
-
-    return mapped;
+export const mapPermissionToSnakeCase = (data: any) => {
+    return filterPermissionForPrisma(data);
 };
 
-/**
- * Maps Supabase snake_case field enforcement data to camelCase
- */
-const mapFieldEnforcementToCamelCase = (f: any) => {
-    if (!f) return null;
+export const mapTransactionToCamelCase = (t: any) => {
+    if (!t) return null;
     return {
-        _id: f._id || f.id,
-        hostelName: f.hostel_name || f.hostelName || "",
-        enforcedFields: f.enforced_fields !== undefined ? f.enforced_fields : (f.enforcedFields || []),
-        isActive: f.is_active !== undefined ? f.is_active : (f.isActive ?? true),
-        notificationPriority: f.notification_priority !== undefined ? f.notification_priority : (f.notificationPriority || "medium"),
-        successMessage: f.success_message !== undefined ? f.success_message : (f.successMessage || ""),
-        autoCloseNotification: f.auto_close_notification !== undefined ? f.auto_close_notification : (f.autoCloseNotification ?? true),
-        createdAt: f.created_at || f.createdAt,
-        updatedAt: f.updated_at || f.updatedAt
+        id: t._id || t.id,
+        _id: t._id || t.id,
+        studentId: t.student_id || t.studentId,
+        registrationId: t.registration_id || t.registrationId,
+        utrNumber: t.utr_number || t.utrNumber,
+        amount: t.amount,
+        paymentSource: t.payment_source || t.paymentSource,
+        screenshot: t.screenshot,
+        status: t.status,
+        adminRemarks: t.admin_remarks || t.adminRemarks,
+        verifiedAt: t.verified_at || t.verifiedAt,
+        reconciledViaCSV: t.reconciled_via_csv !== undefined ? t.reconciled_via_csv : t.reconciledViaCSV,
+        createdAt: t.created_at || t.createdAt,
+        updatedAt: t.updated_at || t.updatedAt,
+        students: t.students || t.student
     };
 };
 
-/**
- * Maps camelCase field enforcement data to snake_case
- */
-const mapFieldEnforcementToSnakeCase = (f: any) => {
-    if (!f) return null;
-    const mapped: any = {};
-    const fieldMap: any = {
-        hostelName: 'hostel_name',
-        enforcedFields: 'enforced_fields',
-        isActive: 'is_active',
-        notificationPriority: 'notification_priority',
-        successMessage: 'success_message',
-        autoCloseNotification: 'auto_close_notification'
-    };
-
-    Object.keys(f).forEach(key => {
-        if (fieldMap[key]) {
-            mapped[fieldMap[key]] = f[key];
-        } else if (!['_id', 'createdAt', 'updatedAt', 'id', '__v'].includes(key)) {
-            mapped[key] = f[key];
-        }
-    });
-
-    return mapped;
+export const mapTransactionToSnakeCase = (data: any) => {
+    return filterTransactionForPrisma(data);
 };
 
-/**
- * Maps Supabase snake_case notification data to camelCase
- */
-const mapNotificationToCamelCase = (n: any) => {
+export const mapNotificationToCamelCase = (n: any) => {
     if (!n) return null;
-    const notificationId = n._id || n.id || (n.get && (n.get('_id') || n.get('id')));
     return {
-        _id: notificationId,
-        id: notificationId,
+        id: n._id || n.id,
+        _id: n._id || n.id,
         senderId: n.sender_id || n.senderId,
-        senderRole: n.sender_role || n.senderRole,
-        senderHostel: n.sender_hostel || n.senderHostel,
         targetType: n.target_type || n.targetType,
         targetHostel: n.target_hostel || n.targetHostel,
         targetStudentId: n.target_student_id || n.targetStudentId,
         message: n.message,
-        priority: n.priority,
         image: n.image,
+        priority: n.priority,
         expiresAt: n.expires_at || n.expiresAt,
-        acknowledgedBy: n.acknowledged_by || n.acknowledgedBy,
+        acknowledgedBy: n.acknowledged_by || n.acknowledgedBy || [],
         createdAt: n.created_at || n.createdAt,
         updatedAt: n.updated_at || n.updatedAt
     };
 };
 
-/**
- * Maps camelCase notification data to snake_case
- */
-const mapNotificationToSnakeCase = (n: any) => {
-    if (!n) return null;
-    const mapped: any = {};
-    const fieldMap: any = {
-        senderId: 'sender_id',
-        senderRole: 'sender_role',
-        senderHostel: 'sender_hostel',
-        targetType: 'target_type',
-        targetHostel: 'target_hostel',
-        targetStudentId: 'target_student_id',
-        message: 'message',
-        priority: 'priority',
-        image: 'image',
-        expiresAt: 'expires_at',
-        acknowledgedBy: 'acknowledged_by'
-    };
-
-    Object.keys(n).forEach(key => {
-        if (fieldMap[key]) {
-            mapped[fieldMap[key]] = n[key];
-        } else if (!['_id', 'createdAt', 'updatedAt', 'id', '__v'].includes(key)) {
-            mapped[key] = n[key];
-        }
-    });
-
-    return mapped;
+export const mapNotificationToSnakeCase = (data: any) => {
+    return filterNotificationForPrisma(data);
 };
 
-/**
- * Maps Supabase snake_case transaction data to camelCase
- */
-const mapTransactionToCamelCase = (t: any) => {
-    if (!t) return null;
-    const mapped: any = {
-        _id: t._id,
-        studentId: t.student_id,
-        registrationId: t.registration_id,
-        utrNumber: t.utr_number,
-        amount: t.amount,
-        paymentSource: t.payment_source,
-        screenshot: t.screenshot,
-        status: t.status,
-        adminRemarks: t.admin_remarks,
-        verifiedAt: t.verified_at,
-        reconciledViaCSV: t.reconciled_via_csv,
-        createdAt: t.created_at,
-        updatedAt: t.updated_at
+export const mapFieldEnforcementToCamelCase = (f: any) => {
+    if (!f) return null;
+    return {
+        id: f._id || f.id,
+        _id: f._id || f.id,
+        hostelName: f.hostel_name || f.hostelName,
+        enforcedFields: f.enforced_fields || f.enforcedFields || [],
+        isActive: f.is_active !== undefined ? f.is_active : f.isActive,
+        notificationPriority: f.notification_priority || f.notificationPriority || 'medium',
+        successMessage: f.success_message || f.successMessage || 'Profile details completed successfully!',
+        autoCloseNotification: f.auto_close_notification !== undefined ? f.auto_close_notification : (f.autoCloseNotification ?? true),
+        tenantId: f.tenant_id || f.tenantId,
+        createdAt: f.created_at || f.createdAt,
+        updatedAt: f.updated_at || f.updatedAt
     };
-
-    if (t.students) {
-        // Handle joined student data (Supabase)
-        mapped.studentId = mapStudentToCamelCase(t.students);
-    } else if (t.studentId && typeof t.studentId === 'object') {
-        // Handle populated student data (MongoDB)
-        mapped.studentId = mapStudentToCamelCase(t.studentId);
-    }
-
-    return mapped;
 };
 
-/**
- * Maps camelCase transaction data to snake_case
- */
-const mapTransactionToSnakeCase = (t: any) => {
-    if (!t) return null;
-    const mapped: any = {};
-    const fieldMap: any = {
-        studentId: 'student_id',
-        registrationId: 'registration_id',
-        utrNumber: 'utr_number',
-        amount: 'amount',
-        paymentSource: 'payment_source',
-        screenshot: 'screenshot',
-        status: 'status',
-        adminRemarks: 'admin_remarks',
-        verifiedAt: 'verified_at',
-        reconciledViaCSV: 'reconciled_via_csv'
-    };
-
-    Object.keys(t).forEach(key => {
-        if (fieldMap[key]) {
-            mapped[fieldMap[key]] = t[key];
-        } else if (!['_id', 'createdAt', 'updatedAt', 'id', '__v'].includes(key)) {
-            mapped[key] = t[key];
-        }
-    });
-
-    return mapped;
+export const mapFieldEnforcementToSnakeCase = (data: any) => {
+    return filterFieldEnforcementForPrisma(data);
 };
 
-/**
- * Maps Supabase snake_case student field progress data to camelCase
- */
-const mapStudentFieldProgressToCamelCase = (p: any) => {
+export const mapStudentFieldProgressToCamelCase = (p: any) => {
     if (!p) return null;
     return {
+        id: p._id || p.id,
         _id: p._id || p.id,
-        studentId: p.studentId || p.student_id,
-        firebaseUID: p.firebaseUID || p.firebaseUid || p.firebase_uid,
-        hostelName: p.hostelName || p.hostel_name,
-        fieldId: p.fieldId || p.field_id,
-        fieldLabel: p.fieldLabel || p.field_label,
-        isCompleted: p.isCompleted !== undefined ? p.isCompleted : (p.is_completed !== undefined ? p.is_completed : false),
-        completedAt: p.completedAt || p.completed_at,
-        notificationId: p.notificationId || p.notification_id,
-        createdAt: p.createdAt || p.created_at,
-        updatedAt: p.updatedAt || p.updated_at
+        studentId: p.student_id || p.studentId,
+        firebaseUID: p.firebase_uid || p.firebaseUid || p.firebaseUID,
+        hostelName: p.hostel_name || p.hostelName,
+        fieldId: p.field_id || p.fieldId,
+        fieldLabel: p.field_label || p.fieldLabel,
+        isCompleted: p.is_completed !== undefined ? p.is_completed : p.isCompleted,
+        completedAt: p.completed_at || p.completedAt,
+        notificationId: p.notification_id || p.notificationId,
+        createdAt: p.created_at || p.createdAt,
+        updatedAt: p.updated_at || p.updatedAt
     };
 };
 
-/**
- * Maps camelCase student field progress data to snake_case
- */
-const mapStudentFieldProgressToSnakeCase = (p: any) => {
-    if (!p) return null;
-    const mapped: any = {};
-    const fieldMap: any = {
-        studentId: 'student_id',
-        firebaseUID: 'firebase_uid',
-        hostelName: 'hostel_name',
-        fieldId: 'field_id',
-        fieldLabel: 'field_label',
-        isCompleted: 'is_completed',
-        completedAt: 'completed_at',
-        notificationId: 'notification_id'
-    };
-
-    Object.keys(p).forEach(key => {
-        if (fieldMap[key]) {
-            mapped[fieldMap[key]] = p[key];
-        } else if (!['_id', 'createdAt', 'updatedAt', 'id', '__v'].includes(key)) {
-            mapped[key] = p[key];
-        }
-    });
-
-    return mapped;
+export const mapStudentFieldProgressToSnakeCase = (data: any) => {
+    return filterStudentFieldProgressForPrisma(data);
 };
 
-/**
- * DATABASE "BRIDGE" ADAPTER
- * -------------------------
- * This file serves as the single source of truth for all database operations.
- * It checks the 'NEXT_PUBLIC_DB_SOURCE' environment variable OR a secret header
- * to decide whether to route the request to MongoDB or Supabase.
- */
-
-// Reads from .env.local: 'MONGODB' or 'SUPABASE'
-// 🔥 PERMANENTLY SET TO SUPABASE
-const GLOBAL_DB_SOURCE = 'SUPABASE';
-
-// Cache for DB Source Setting
-let cachedDbSource: string | null = null;
-let lastDbSourceCheck = 0;
-const SOURCE_CACHE_TTL = 30000; // 30 seconds (Reduce load on Mongo)
-
-// ⚡ IN-MEMORY CACHE FOR SETTINGS (Cuts redundant ~240KB admin_settings egress by ~98%)
+// ⚡ SETTINGS CACHE: 5 seconds in-memory cache to prevent duplicate round trips
 const cachedSettingsMap = new Map<string, { data: any; expiresAt: number }>();
-const SETTINGS_CACHE_TTL = 60 * 1000; // 60 seconds
+const SETTINGS_CACHE_TTL = 5000;
 
 export const clearSettingsCache = (tenantId?: string) => {
     if (tenantId) {
-        cachedSettingsMap.delete(tenantId);
+        cachedSettingsMap.delete(`PRISMA_${tenantId}`);
     } else {
         cachedSettingsMap.clear();
     }
 };
 
-/**
- * Helper to determine Source PER REQUEST
- * This allows you to test Supabase without switching for everyone
- */
-/**
- * Ensures a tenant context is present or throws a clear error.
- */
-const getTenantIdOrThrow = async () => {
+export const clearDbSourceCache = () => {};
+
+export const getTenantIdOrThrow = async () => {
     const tid = await getCurrentTenantId();
     if (!tid) {
         throw new Error("Multi-Tenant Context Missing: Please access through your college portal link (e.g., hosteleaze.com?tenant=college)");
@@ -1178,376 +629,93 @@ const getTenantIdOrThrow = async () => {
     return tid;
 };
 
-export const clearDbSourceCache = () => {
-    cachedDbSource = null;
-    lastDbSourceCheck = 0;
-};
-
+// Fixed to always return PRISMA (100% Railway PostgreSQL)
 const getDbSource = async (): Promise<string> => {
-    const now = Date.now();
-    if (cachedDbSource && (now - lastDbSourceCheck < SOURCE_CACHE_TTL)) {
-        return cachedDbSource;
-    }
-
-    // 1. Check process.env.NEXT_PUBLIC_DB_SOURCE first for instant response
-    let envSource = (process.env.NEXT_PUBLIC_DB_SOURCE || '').toUpperCase();
-    if (envSource === 'RAILWAY') envSource = 'PRISMA';
-
-    // If envSource is explicitly RAILWAY/PRISMA or SUPABASE, use it immediately to avoid network timeouts
-    if (envSource === 'PRISMA') {
-        cachedDbSource = 'PRISMA';
-        lastDbSourceCheck = now;
-        return 'PRISMA';
-    }
-    if (envSource === 'SUPABASE') {
-        cachedDbSource = 'SUPABASE';
-        lastDbSourceCheck = now;
-        return 'SUPABASE';
-    }
-
-    // 2. Check dynamic database setting from admin_settings via Prisma first (Railway PostgreSQL)
-    try {
-        let tenantId = null;
-        try {
-            tenantId = await getTenantIdOrThrow();
-        } catch (err) {}
-
-        const setting = await prisma.adminSettings.findFirst({
-            where: tenantId ? { tenantId } : undefined,
-            select: { activeDatabaseSource: true }
-        });
-
-        if (setting?.activeDatabaseSource) {
-            let src = String(setting.activeDatabaseSource).toUpperCase();
-            if (src === 'RAILWAY') src = 'PRISMA';
-            cachedDbSource = src;
-            lastDbSourceCheck = now;
-            return src;
-        }
-    } catch (err) {
-        // Silent fallback to PRISMA (Railway)
-    }
-
-    if (envSource === 'SUPABASE' || envSource === 'PRISMA' || envSource === 'MONGODB') {
-        cachedDbSource = envSource;
-        lastDbSourceCheck = now;
-        return envSource;
-    }
-
-    cachedDbSource = 'PRISMA';
-    lastDbSourceCheck = now;
     return 'PRISMA';
 };
 
+const isUuidString = (str: string) => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(str);
+
+/**
+ * Main Database Adapter - 100% Railway PostgreSQL via Prisma ORM
+ */
 export const db = {
-    // Returns which database currently active
     getSource: getDbSource,
+    clearSettingsCache,
+    clearDbSourceCache,
+    getTenantIdOrThrow,
+    supabase,
+    mapStudentToCamelCase,
+    mapStudentToSnakeCase,
+    mapAttendanceToCamelCase,
+    mapAttendanceToSnakeCase,
+    mapSettingsToCamelCase,
+    mapSettingsToSnakeCase,
+    mapGatePassToCamelCase,
+    mapGatePassToSnakeCase,
+    mapPermissionToCamelCase,
+    mapPermissionToSnakeCase,
+    mapTransactionToCamelCase,
+    mapTransactionToSnakeCase,
+    mapNotificationToCamelCase,
+    mapNotificationToSnakeCase,
+    mapFieldEnforcementToCamelCase,
+    mapFieldEnforcementToSnakeCase,
+    mapStudentFieldProgressToCamelCase,
+    mapStudentFieldProgressToSnakeCase,
 
     pushSubscription: {
         create: async (subData: any) => {
-            const source = await getDbSource();
-            if (source === 'SUPABASE') {
-                const { data, error } = await supabase
-                    .from('push_subscriptions')
-                    .insert([{
-                        user_id: subData.userId,
-                        user_type: subData.userType,
-                        subscription: subData.subscription
-                    }])
-                    .select()
-                    .single();
-                if (error) throw error;
-                return {
-                    id: data._id || data.id,
-                    userId: data.user_id,
-                    userType: data.user_type,
-                    subscription: data.subscription
-                };
-            } else if (source === 'PRISMA') {
-                const data = await prisma.pushSubscription.create({
-                    data: {
-                        userId: subData.userId,
-                        userType: subData.userType,
-                        subscription: subData.subscription
-                    }
-                });
-                return data;
-            } else {
-                await connectDB();
-                const PushSubscription = (await import('@/models/PushSubscription')).default;
-                const subscription = await PushSubscription.create(subData);
-                return JSON.parse(JSON.stringify(subscription));
-            }
+            const data = await prisma.pushSubscription.create({
+                data: {
+                    userId: subData.userId,
+                    userType: subData.userType,
+                    subscription: subData.subscription
+                }
+            });
+            return data;
         },
         findMany: async (query: any) => {
-            const source = await getDbSource();
-            if (source === 'SUPABASE') {
-                let sQuery = supabase.from('push_subscriptions').select('*');
-                if (query.userId) sQuery = sQuery.eq('user_id', query.userId);
-                if (query.userType) sQuery = sQuery.eq('user_type', query.userType);
-                const { data, error } = await sQuery;
-                if (error) throw error;
-                return (data || []).map(d => ({
-                    id: d._id || d.id,
-                    userId: d.user_id,
-                    userType: d.user_type,
-                    subscription: d.subscription
-                }));
-            } else if (source === 'PRISMA') {
-                const data = await prisma.pushSubscription.findMany({
-                    where: query
-                });
-                return data;
-            } else {
-                await connectDB();
-                const PushSubscription = (await import('@/models/PushSubscription')).default;
-                const subs = await PushSubscription.find(query).lean();
-                return JSON.parse(JSON.stringify(subs));
-            }
+            const data = await prisma.pushSubscription.findMany({
+                where: query
+            });
+            return data;
         },
         deleteMany: async (query: any) => {
-            const source = await getDbSource();
-            if (source === 'SUPABASE') {
-                if (!query.userId && !query.userType && !query.id) {
-                    return { success: true };
-                }
-                let sQuery = supabase.from('push_subscriptions').delete();
-                if (query.userId) sQuery = sQuery.eq('user_id', query.userId);
-                if (query.userType) sQuery = sQuery.eq('user_type', query.userType);
-                if (query.id) sQuery = sQuery.eq('id', query.id);
-                const { error } = await sQuery;
-                if (error) console.warn("Supabase push delete error:", error);
-                return { success: true };
-            } else if (source === 'PRISMA') {
-                const whereClause: any = {};
-                if (query.userId) whereClause.userId = query.userId;
-                if (query.userType) whereClause.userType = query.userType;
-                if (query.id) whereClause.id = query.id;
-                await prisma.pushSubscription.deleteMany({
-                    where: whereClause
-                });
-                return { success: true };
-            } else {
-                await connectDB();
-                const PushSubscription = (await import('@/models/PushSubscription')).default;
-                await PushSubscription.deleteMany(query);
-                return { success: true };
-            }
+            const whereClause: any = {};
+            if (query.userId) whereClause.userId = query.userId;
+            if (query.userType) whereClause.userType = query.userType;
+            if (query.id) whereClause.id = query.id;
+            await prisma.pushSubscription.deleteMany({
+                where: whereClause
+            });
+            return { success: true };
         }
     },
 
-    // ⚡ EXPOSED FOR BULK OPERATIONS
-    supabase,
-    getDbSource,
-    getTenantIdOrThrow,
-    mapAttendanceToSnakeCase,
-    mapStudentToSnakeCase,
-    mapAttendanceToCamelCase,
-    mapStudentToCamelCase,
-
-    /**
-     * ADMIN SETTINGS OPERATIONS
-     */
     settings: {
         get: async () => {
-            const source = await getDbSource();
-            let tenantId = null;
+            let tenantId: string | null = null;
             try {
                 tenantId = await getTenantIdOrThrow();
             } catch (err) {}
 
-            // ⚡ FAST IN-MEMORY CACHE (Saves ~240KB transfer per API hit)
-            const tenantKey = `${source}_${tenantId || 'default'}`;
+            const tenantKey = `PRISMA_${tenantId || 'default'}`;
             const now = Date.now();
             const cached = cachedSettingsMap.get(tenantKey);
             if (cached && cached.expiresAt > now) {
                 return cached.data;
             }
 
-            let result: any = null;
+            let data = await prisma.adminSettings.findFirst({
+                where: tenantId ? { tenantId } : undefined
+            });
 
-            if (source === 'SUPABASE') {
-                const { data: allRows, error } = await supabase.from('admin_settings').select('*');
-
-                if (error) {
-                    console.error("Supabase settings.get Error:", error);
-                    return null;
-                }
-
-                const targetRows = Array.isArray(allRows) && allRows.length > 0 ? allRows : [];
-
-                // Prioritize the tenant's exact row first
-                const exactTenantRow = targetRows.find(s => tenantId && (s.tenant_id === tenantId || s.tenantId === tenantId));
-                const bestRow = exactTenantRow || targetRows.find(s => (s.hostel_locations || s.hostelLocations || []).length > 0) || targetRows[0] || {};
-
-                // Merge wifi whitelist across all rows in admin_settings
-                const allWifiItems: any[] = [];
-                for (const s of targetRows) {
-                    const list = s.wifi_whitelist || s.wifiWhitelist;
-                    if (Array.isArray(list)) {
-                        allWifiItems.push(...list);
-                    }
-                }
-                
-                const mergeWifiItems = (items: any[]) => {
-                    const hostelMap = new Map<string, any>();
-                    for (const item of items) {
-                        if (!item || typeof item !== 'object') continue;
-                        const rawName = (item.hostelName || item.name || "").toString();
-                        const cleanName = rawName.toUpperCase()
-                            .replace(/IP|\(WARDEN SYNCED\)|\(MANUAL\)|\(SELF-HEALED\)|VERIFIED|WARDEN/gi, "")
-                            .trim();
-                        let hostelKey = cleanName;
-                        if (cleanName.includes("GANGOTRI")) hostelKey = "GANGOTRI HOSTEL";
-                        else if (cleanName.includes("GAYTRI") || cleanName.includes("GAYATRI")) hostelKey = "GAYTRI HOSTEL";
-                        else if (cleanName.includes("BOYS") || cleanName.includes("BH")) hostelKey = "BOYS HOSTEL";
-                        else if (cleanName.includes("GHB") || cleanName.includes("GUEST")) hostelKey = "GHB HOSTEL";
-                        else if (!hostelKey) hostelKey = (item.ip || JSON.stringify(item)).toString().trim();
-
-                        if (!hostelMap.has(hostelKey)) {
-                            hostelMap.set(hostelKey, {
-                                hostelName: hostelKey,
-                                name: item.name || `${hostelKey} IP & BSSIDs`,
-                                ip: item.ip || undefined,
-                                bssids: Array.isArray(item.bssids) ? [...item.bssids] : [],
-                                description: item.description || `${hostelKey} WiFi Routers`,
-                                syncedAt: item.syncedAt,
-                                syncedByStudent: item.syncedByStudent
-                            });
-                        } else {
-                            const existing = hostelMap.get(hostelKey);
-                            if (item.ip && !existing.ip) existing.ip = item.ip;
-                            if (Array.isArray(item.bssids) && item.bssids.length > 0) {
-                                const combinedBssids = new Set([
-                                    ...(existing.bssids || []),
-                                    ...item.bssids.map((b: string) => String(b).toUpperCase().trim())
-                                ]);
-                                existing.bssids = Array.from(combinedBssids);
-                            }
-                            if (item.description && !existing.description) existing.description = item.description;
-                        }
-                    }
-                    return Array.from(hostelMap.values());
-                };
-
-                const mergedWhitelist = mergeWifiItems(allWifiItems);
-
-                const customFormConfig = targetRows.find(s => Array.isArray(s.form_builder_config) && s.form_builder_config.length > 0)?.form_builder_config
-                    || targetRows.find(s => Array.isArray(s.formBuilderConfig) && s.formBuilderConfig.length > 0)?.formBuilderConfig;
-
-                const tenantWifi = Array.isArray(exactTenantRow?.wifi_whitelist) ? exactTenantRow.wifi_whitelist : (Array.isArray(exactTenantRow?.wifiWhitelist) ? exactTenantRow.wifiWhitelist : []);
-                const finalWifiWhitelist = tenantWifi.length > 0 ? tenantWifi : (mergedWhitelist.length > 0 ? mergedWhitelist : (bestRow.wifi_whitelist || bestRow.wifiWhitelist || []));
-
-                const mergedSettings = {
-                    ...bestRow,
-                    form_builder_config: (customFormConfig && customFormConfig.length > 0) ? customFormConfig : (bestRow.form_builder_config || bestRow.formBuilderConfig || []),
-                    wifi_whitelist: finalWifiWhitelist,
-                    hostel_locations: (bestRow.hostel_locations || bestRow.hostelLocations || []).length > 0
-                        ? (bestRow.hostel_locations || bestRow.hostelLocations)
-                        : (targetRows.find(s => (s.hostel_locations || s.hostelLocations || []).length > 0)?.hostel_locations || [])
-                };
-
-                result = mapSettingsToCamelCase(mergedSettings);
-            } else if (source === 'PRISMA') {
-                let tenantId = null;
-                try {
-                    tenantId = await getTenantIdOrThrow();
-                } catch (err) {
-                    // Fallback when no tenant header/cookie exists
-                }
-                
-                const allAdminSettings = await prisma.adminSettings.findMany();
-                let data = tenantId ? allAdminSettings.find(s => s.tenantId === tenantId) || null : null;
-                if (!data) {
-                    data = allAdminSettings[0] || null;
-                }
-
-                // ⚡ LOCATION & WIFI WHITELIST: Prioritize current tenant's own wifiWhitelist
-                try {
-                    const tenantWifi = Array.isArray(data?.wifiWhitelist) ? (data.wifiWhitelist as any[]) : [];
-                    
-                    if (tenantWifi.length === 0) {
-                        const allWifiItems: any[] = [];
-                        for (const s of allAdminSettings) {
-                            const list = s.wifiWhitelist;
-                            if (Array.isArray(list)) {
-                                allWifiItems.push(...(list as any[]));
-                            }
-                        }
-
-                        const mergeWifiItems = (items: any[]) => {
-                            const hostelMap = new Map<string, any>();
-                            for (const item of items) {
-                                if (!item || typeof item !== 'object') continue;
-                                const rawName = (item.hostelName || item.name || "").toString();
-                                const cleanName = rawName.toUpperCase()
-                                    .replace(/IP|\(WARDEN SYNCED\)|\(MANUAL\)|\(SELF-HEALED\)|VERIFIED|WARDEN/gi, "")
-                                    .trim();
-                                let hostelKey = cleanName;
-                                if (cleanName.includes("GANGOTRI")) hostelKey = "GANGOTRI HOSTEL";
-                                else if (cleanName.includes("GAYTRI") || cleanName.includes("GAYATRI")) hostelKey = "GAYTRI HOSTEL";
-                                else if (cleanName.includes("BOYS") || cleanName.includes("BH")) hostelKey = "BOYS HOSTEL";
-                                else if (cleanName.includes("GHB") || cleanName.includes("GUEST")) hostelKey = "GHB HOSTEL";
-                                else if (!hostelKey) hostelKey = (item.ip || JSON.stringify(item)).toString().trim();
-
-                                if (!hostelMap.has(hostelKey)) {
-                                    hostelMap.set(hostelKey, {
-                                        hostelName: hostelKey,
-                                        name: item.name || `${hostelKey} IP & BSSIDs`,
-                                        ip: item.ip || undefined,
-                                        bssids: Array.isArray(item.bssids) ? [...item.bssids] : [],
-                                        description: item.description || `${hostelKey} WiFi Routers`,
-                                        syncedAt: item.syncedAt,
-                                        syncedByStudent: item.syncedByStudent
-                                    });
-                                } else {
-                                    const existing = hostelMap.get(hostelKey);
-                                    if (item.ip && !existing.ip) existing.ip = item.ip;
-                                    if (Array.isArray(item.bssids) && item.bssids.length > 0) {
-                                        const combinedBssids = new Set([
-                                            ...(existing.bssids || []),
-                                            ...item.bssids.map((b: string) => String(b).toUpperCase().trim())
-                                        ]);
-                                        existing.bssids = Array.from(combinedBssids);
-                                    }
-                                    if (item.description && !existing.description) existing.description = item.description;
-                                }
-                            }
-                            return Array.from(hostelMap.values());
-                        };
-
-                        const mergedWhitelist = mergeWifiItems(allWifiItems);
-                        if (data && mergedWhitelist.length > 0) {
-                            data = { ...data, wifiWhitelist: mergedWhitelist } as any;
-                        }
-                    }
-
-                    let locationsList = data?.hostelLocations;
-                    if (!locationsList || (Array.isArray(locationsList) && (locationsList as any[]).length === 0)) {
-                        const fallback = allAdminSettings.find(s => Array.isArray(s.hostelLocations) && s.hostelLocations.length > 0);
-                        if (fallback?.hostelLocations) {
-                            locationsList = fallback.hostelLocations;
-                        }
-                    }
-
-                    if (data && locationsList) {
-                        data = {
-                            ...data,
-                            hostelLocations: locationsList || []
-                        } as any;
-                    }
-                } catch (e) {
-                    console.error("Settings merge error:", e);
-                }
-
-                result = data ? mapSettingsToCamelCase(data) : null;
-            } else {
-                await connectDB();
-                const AdminSettings = (await import('@/models/AdminSettings')).default;
-                const settings = await AdminSettings.findOne().lean();
-                result = settings ? JSON.parse(JSON.stringify(settings)) : null;
+            if (!data && tenantId) {
+                data = await prisma.adminSettings.findFirst();
             }
 
+            const result = data ? mapSettingsToCamelCase(data) : null;
             if (result) {
                 cachedSettingsMap.set(tenantKey, { data: result, expiresAt: Date.now() + SETTINGS_CACHE_TTL });
             }
@@ -1555,5037 +723,1690 @@ export const db = {
         },
 
         update: async (updateData: any) => {
-            clearSettingsCache(); // ⚡ Invalidate cache on update
-            const source = await getDbSource();
-            if (source === 'SUPABASE') {
-                const tenantId = await getTenantIdOrThrow();
-                const snakeData = { ...mapSettingsToSnakeCase(updateData), tenant_id: tenantId };
+            clearSettingsCache();
+            let tenantId: string | null = null;
+            try {
+                tenantId = await getTenantIdOrThrow();
+            } catch (err) {}
 
-                // Fetch first to get the ID if not provided, scoped by tenant
-                const { data: existing } = await supabase.from('admin_settings').select('_id').eq('tenant_id', tenantId).limit(1).maybeSingle();
+            const prismaData = { ...filterSettingsForPrisma(updateData), tenantId };
+            const existing = await prisma.adminSettings.findFirst({
+                where: tenantId ? { tenantId } : undefined
+            });
 
-                if (!existing) {
-                    // Create if doesn't exist
-                    try {
-                        const { data, error } = await supabase
-                            .from('admin_settings')
-                            .insert([snakeData])
-                            .select()
-                            .single();
-                        if (error) throw error;
-                        return mapSettingsToCamelCase(data);
-                    } catch (err: any) {
-                        const isColumnError = err.code === 'PGRST102' || (err.message && err.message.includes('column')) || (err.details && err.details.includes('column'));
-                        if (isColumnError) {
-                            const cleanedData = { ...snakeData };
-                            delete cleanedData.enforce_unique_erp_id;
-                            delete cleanedData.enforce_unique_phone;
-                            delete cleanedData.enforce_unique_email;
-                            delete cleanedData.enforce_unique_face;
-                            delete cleanedData.allow_warden_add_student;
-                            delete cleanedData.allow_dean_add_student;
-                            delete cleanedData.allow_warden_edit_profile;
-                            delete cleanedData.allow_dean_edit_profile;
-                            delete cleanedData.allow_warden_remove_student;
-                            delete cleanedData.allow_dean_remove_student;
-                            const { data, error } = await supabase
-                                .from('admin_settings')
-                                .insert([cleanedData])
-                                .select()
-                                .single();
-                            if (error) throw error;
-                            return mapSettingsToCamelCase(data);
-                        }
-                        throw err;
-                    }
-                }
-
-                try {
-                    const { data, error } = await supabase
-                        .from('admin_settings')
-                        .update(snakeData)
-                        .eq('_id', existing._id)
-                        .eq('tenant_id', tenantId)
-                        .select()
-                        .single();
-
-                    if (error) throw error;
-                    return mapSettingsToCamelCase(data);
-                } catch (err: any) {
-                    const isColumnError = err.code === 'PGRST102' || (err.message && err.message.includes('column')) || (err.details && err.details.includes('column'));
-                    if (isColumnError) {
-                        const cleanedData = { ...snakeData };
-                        delete cleanedData.enforce_unique_erp_id;
-                        delete cleanedData.enforce_unique_phone;
-                        delete cleanedData.enforce_unique_email;
-                        delete cleanedData.enforce_unique_face;
-                        delete cleanedData.allow_warden_add_student;
-                        delete cleanedData.allow_dean_add_student;
-                        delete cleanedData.allow_warden_edit_profile;
-                        delete cleanedData.allow_dean_edit_profile;
-                        delete cleanedData.allow_warden_remove_student;
-                        delete cleanedData.allow_dean_remove_student;
-                        const { data, error } = await supabase
-                            .from('admin_settings')
-                            .update(cleanedData)
-                            .eq('_id', existing._id)
-                            .eq('tenant_id', tenantId)
-                            .select()
-                            .single();
-                        if (error) throw error;
-                        return mapSettingsToCamelCase(data);
-                    }
-                    throw err;
-                }
-            } else if (source === 'PRISMA') {
-                const tenantId = await getTenantIdOrThrow();
-                const prismaData = { ...filterSettingsForPrisma(updateData), tenantId };
-                const existing = await prisma.adminSettings.findFirst({
-                    where: { tenantId }
-                });
-                if (!existing) {
-                    const data = await prisma.adminSettings.create({
-                        data: prismaData
-                    });
-                    return mapSettingsToCamelCase(data);
-                }
-                const data = await prisma.adminSettings.update({
-                    where: { id: existing.id },
+            if (!existing) {
+                const data = await prisma.adminSettings.create({
                     data: prismaData
                 });
                 return mapSettingsToCamelCase(data);
-            } else {
-                await connectDB();
-                const AdminSettings = (await import('@/models/AdminSettings')).default;
-                const updated = await AdminSettings.findOneAndUpdate({}, updateData, { new: true, upsert: true });
-                return JSON.parse(JSON.stringify(updated));
             }
+
+            const data = await prisma.adminSettings.update({
+                where: { id: existing.id },
+                data: prismaData
+            });
+            return mapSettingsToCamelCase(data);
         }
     },
 
-
-    /**
-     * STUDENT OPERATIONS
-     */
     students: {
-        // Get a single student by ID
         getById: async (id: string, useSupabaseOverride = false) => {
-            const source = useSupabaseOverride ? 'SUPABASE' : await getDbSource();
-            console.log(`[DB_ADAPTER] getById (${id}) using: ${source}`);
-
-            if (source === 'SUPABASE') {
-                const tenantId = await getTenantIdOrThrow();
-                let { data, error } = await supabase
-                    .from('students')
-                    .select('*, student_profiles(*), student_security(*)')
-                    .eq('tenant_id', tenantId)
-                    .eq('_id', id)
-                    .maybeSingle();
-
-                if (error || !data) {
-                    console.log(`[DB_ADAPTER] Falling back to firebase_uid/supabase_id lookup for: ${id}`);
-                    const fbLookup = await supabase
-                        .from('students')
-                        .select('*, student_profiles(*), student_security(*)')
-                        .or(`firebase_uid.eq.${id},supabase_id.eq.${id}`)
-                        .eq('tenant_id', tenantId)
-                        .maybeSingle();
-
-                    data = fbLookup.data;
-                    error = fbLookup.error;
-                }
-
-                if (error) {
-                    console.error("Supabase Error:", error);
-                    return null;
-                }
-
-                return mapStudentToCamelCase(data);
-            } else if (source === 'PRISMA') {
-                const searchOR: any[] = [
-                    { id: id },
-                    { firebaseUid: id },
-                    { supabaseId: id },
-                    { registrationId: id },
-                    { erpId: id },
-                    { phoneNumber: id }
-                ];
-                let student = null;
-                try {
-                    const tenantId = await getTenantIdOrThrow();
-                    student = await prisma.student.findFirst({
-                        where: {
-                            tenantId,
-                            OR: searchOR
-                        }
-                    });
-                } catch (e) {
-                    // Ignore tenant error
-                }
-
-                if (!student) {
-                    student = await prisma.student.findFirst({
-                        where: {
-                            OR: searchOR
-                        }
-                    });
-                }
-                return student ? mapStudentToCamelCase(student) : null;
-            } else {
-                await connectDB();
-                const StudentModel = (await import('@/models/Student')).default;
-                try {
-                    let student = await StudentModel.findById(id).lean();
-                    if (!student) {
-                        student = await StudentModel.findOne({
-                            $or: [
-                                { firebaseUID: id },
-                                { supabaseId: id }
-                            ]
-                        }).lean();
-                    }
-                    return mapStudentToCamelCase(student);
-                } catch (e) {
-                    console.error("MongoDB Error:", e);
-                    return null;
-                }
+            const searchOR: any[] = [
+                { firebaseUid: id },
+                { supabaseId: id },
+                { registrationId: id },
+                { erpId: id },
+                { phoneNumber: id }
+            ];
+            if (isUuidString(id)) {
+                searchOR.unshift({ id });
             }
+
+            let student = null;
+            try {
+                const tenantId = await getTenantIdOrThrow();
+                student = await prisma.student.findFirst({
+                    where: {
+                        tenantId,
+                        OR: searchOR
+                    }
+                });
+            } catch (e) {}
+
+            if (!student) {
+                student = await prisma.student.findFirst({
+                    where: {
+                        OR: searchOR
+                    }
+                });
+            }
+            return student ? mapStudentToCamelCase(student) : null;
         },
 
-        // Get a single student by WebAuthn Credential ID
         getByCredentialId: async (credentialId: string) => {
-            const source = await getDbSource();
-            if (source === 'SUPABASE') {
-                const tenantId = await getTenantIdOrThrow();
-                const { data, error } = await supabase
-                    .from('student_security')
-                    .select('student_id')
-                    .contains('web_authn_credentials', JSON.stringify([{ credentialID: credentialId }]));
+            let tenantId: string | null = null;
+            try {
+                tenantId = await getTenantIdOrThrow();
+            } catch (err) {}
 
-                if (error || !data || data.length === 0) {
-                    if (error) console.error("Supabase getByCredentialId Error:", error);
-                    return null;
-                }
-                return await db.students.getById(data[0].student_id, true);
-            } else if (source === 'PRISMA') {
-                const tenantId = await getTenantIdOrThrow();
-                const data = await prisma.$queryRawUnsafe<any[]>(
+            let data: any[] = [];
+            if (tenantId) {
+                data = await prisma.$queryRawUnsafe<any[]>(
                     `SELECT * FROM students WHERE tenant_id = $1::uuid AND web_authn_credentials::jsonb @> $2::jsonb LIMIT 1`,
                     tenantId,
                     JSON.stringify([{ credentialID: credentialId }])
                 );
-                return data && data.length > 0 ? mapStudentToCamelCase(data[0]) : null;
-            } else {
-                await connectDB();
-                const StudentModel = (await import('@/models/Student')).default;
-                const student = await StudentModel.findOne({
-                    'webAuthnCredentials.credentialID': credentialId
-                }).lean();
-                return mapStudentToCamelCase(student);
             }
-        },
-
-        // Get a single student by specific filter
-        findOne: async (filter: any, options: { minimal?: boolean } = {}) => {
-            const isUuidString = (str: string) => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(str);
-            const source = await getDbSource();
-            if (source === 'SUPABASE') {
-                const tenantId = await getTenantIdOrThrow();
-                const selection = '*, student_profiles(*), student_security(*)';
-                let query = supabase.from('students').select(selection);
-                query = query.eq('tenant_id', tenantId);
-
-                if (filter.firebaseUID) {
-                    if (isUuidString(filter.firebaseUID)) {
-                        query = query.or(`_id.eq.${filter.firebaseUID},firebase_uid.eq.${filter.firebaseUID},supabase_id.eq.${filter.firebaseUID}`);
-                    } else {
-                        query = query.or(`firebase_uid.eq.${filter.firebaseUID},email.eq.${filter.firebaseUID},phone_number.eq.${filter.firebaseUID}`);
-                    }
-                }
-                if (filter.supabaseId) {
-                    if (isUuidString(filter.supabaseId)) {
-                        query = query.or(`_id.eq.${filter.supabaseId},supabase_id.eq.${filter.supabaseId},firebase_uid.eq.${filter.supabaseId}`);
-                    } else {
-                        query = query.or(`supabase_id.eq.${filter.supabaseId},firebase_uid.eq.${filter.supabaseId},email.eq.${filter.supabaseId}`);
-                    }
-                }
-                if (filter._id) query = query.eq('_id', filter._id);
-                if (filter.email) query = query.eq('email', filter.email);
-                if (filter.phoneNumber) query = query.eq('phone_number', filter.phoneNumber);
-                
-                if (filter.registrationId) {
-                    const { data: prof } = await supabase
-                        .from('student_profiles')
-                        .select('student_id')
-                        .eq('registration_id', filter.registrationId)
-                        .maybeSingle();
-                    if (prof?.student_id) {
-                        query = query.eq('_id', prof.student_id);
-                    } else {
-                        return null;
-                    }
-                }
-                if (filter.erpInformation) {
-                    const { data: prof } = await supabase
-                        .from('student_profiles')
-                        .select('student_id')
-                        .eq('erp_id', filter.erpInformation)
-                        .maybeSingle();
-                    if (prof?.student_id) {
-                        query = query.eq('_id', prof.student_id);
-                    } else {
-                        return null;
-                    }
-                }
-
-                const { data, error } = await query.maybeSingle();
-
-                if (error) {
-                    console.error("[DB_ADAPTER] findOne Error:", error);
-                    return null;
-                }
-                if (!data) {
-                    console.log(`[DB_ADAPTER] Student not found in tenant ${tenantId}, trying global lookup...`);
-                    let globalQuery = supabase.from('students').select(selection);
-                    if (filter.firebaseUID) globalQuery = globalQuery.eq('firebase_uid', filter.firebaseUID);
-                    if (filter.email) globalQuery = globalQuery.eq('email', filter.email);
-
-                    const { data: globalData, error: globalError } = await globalQuery.maybeSingle();
-                    if (!globalError && globalData) return mapStudentToCamelCase(globalData);
-                    return null;
-                }
-
-                return mapStudentToCamelCase(data);
-            } else if (source === 'PRISMA') {
-                const isUuidString = (str: string) => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(str);
-                let tenantId: string | null = null;
-                try {
-                    tenantId = await getTenantIdOrThrow();
-                } catch (tErr) {}
-
-                const searchOR: any[] = [];
-                if (filter.firebaseUID) {
-                    if (isUuidString(filter.firebaseUID)) searchOR.push({ id: filter.firebaseUID });
-                    searchOR.push(
-                        { firebaseUid: filter.firebaseUID },
-                        { supabaseId: filter.firebaseUID },
-                        { email: filter.firebaseUID },
-                        { phoneNumber: filter.firebaseUID },
-                        { erpId: filter.firebaseUID },
-                        { erpInformation: filter.firebaseUID }
-                    );
-                }
-                if (filter.supabaseId) {
-                    if (isUuidString(filter.supabaseId)) searchOR.push({ id: filter.supabaseId });
-                    searchOR.push(
-                        { supabaseId: filter.supabaseId },
-                        { firebaseUid: filter.supabaseId },
-                        { email: filter.supabaseId }
-                    );
-                }
-                if (filter._id) {
-                    if (isUuidString(filter._id)) searchOR.push({ id: filter._id });
-                    else searchOR.push({ firebaseUid: filter._id }, { email: filter._id });
-                }
-                if (filter.email) {
-                    const cleanEmail = filter.email.toLowerCase().trim();
-                    searchOR.push({ email: { equals: cleanEmail, mode: 'insensitive' } });
-                }
-                if (filter.phoneNumber) searchOR.push({ phoneNumber: filter.phoneNumber.trim() });
-                if (filter.registrationId) searchOR.push({ registrationId: filter.registrationId.trim() });
-                if (filter.erpInformation) searchOR.push({ erpId: filter.erpInformation.trim() }, { erpInformation: filter.erpInformation.trim() });
-
-                let student: any = null;
-                try {
-                    if (tenantId && searchOR.length > 0) {
-                        student = await prisma.student.findFirst({
-                            where: {
-                                tenantId,
-                                OR: searchOR
-                            }
-                        });
-                    }
-
-                    if (!student && searchOR.length > 0) {
-                        student = await prisma.student.findFirst({
-                            where: {
-                                OR: searchOR
-                            }
-                        });
-                    }
-                } catch (pErr: any) {
-                    console.warn("⚠️ [DB_ADAPTER] Prisma student lookup exception, falling back to Supabase:", pErr?.message || pErr);
-                }
-
-                if (student) return mapStudentToCamelCase(student);
-
-                // ⚡ Automatic Supabase Fallback if Prisma returns null or encounters connection timeout
-                try {
-                    const fallbackTenantId = await getTenantIdOrThrow();
-                    let query = supabase.from('students').select('*, student_profiles(*), student_security(*)').eq('tenant_id', fallbackTenantId);
-                    if (filter.firebaseUID) {
-                        const cleanUid = filter.firebaseUID.trim();
-                        query = query.or(`firebase_uid.eq."${cleanUid}",email.ilike."${cleanUid}",phone_number.eq."${cleanUid}"`);
-                    } else if (filter.email) {
-                        query = query.ilike('email', filter.email.toLowerCase().trim());
-                    } else if (filter.phoneNumber) {
-                        query = query.eq('phone_number', filter.phoneNumber.trim());
-                    } else if (filter.registrationId) {
-                        const { data: prof } = await supabase.from('student_profiles').select('student_id').eq('registration_id', filter.registrationId.trim()).maybeSingle();
-                        if (prof?.student_id) query = query.eq('_id', prof.student_id);
-                    }
-                    const { data: sData } = await query.maybeSingle();
-                    if (sData) return mapStudentToCamelCase(sData);
-                } catch (sFallbackErr) {}
-
-                return null;
-            } else {
-                await connectDB();
-                const StudentModel = (await import('@/models/Student')).default;
-                let queryFilter = { ...filter };
-                if (filter.firebaseUID) {
-                    queryFilter = {
-                        ...queryFilter,
-                        $or: [
-                            { firebaseUID: filter.firebaseUID },
-                            { supabaseId: filter.firebaseUID }
-                        ]
-                    };
-                    delete (queryFilter as any).firebaseUID;
-                }
-                if (filter.supabaseId) {
-                    queryFilter = {
-                        ...queryFilter,
-                        $or: [
-                            { supabaseId: filter.supabaseId },
-                            { firebaseUID: filter.supabaseId }
-                        ]
-                    };
-                    delete (queryFilter as any).supabaseId;
-                }
-                if (filter.email) {
-                    const cleanEmail = filter.email.toLowerCase().trim();
-                    queryFilter.email = { $regex: new RegExp(`^${cleanEmail.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'i') };
-                }
-                let query = StudentModel.findOne(queryFilter);
-                const student = await query.lean();
-                return mapStudentToCamelCase(student);
-            }
-        },
-
-        // ⚡ INSTANT FAST-PATH: Single DB roundtrip student verification for login (sub-100ms)
-        findOneFast: async (filter: { firebaseUID?: string; email?: string; phoneNumber?: string }, options: { minimal?: boolean } = {}) => {
-            const source = await getDbSource();
-            if (source === 'PRISMA') {
-                const conditions: any[] = [];
-                if (filter.firebaseUID) {
-                    conditions.push({ firebaseUid: filter.firebaseUID });
-                    conditions.push({ supabaseId: filter.firebaseUID });
-                    conditions.push({ id: filter.firebaseUID });
-                }
-                if (filter.email) {
-                    const cleanEmail = filter.email.toLowerCase().trim();
-                    conditions.push({ email: { equals: cleanEmail, mode: 'insensitive' } });
-                }
-                if (filter.phoneNumber) {
-                    conditions.push({ phoneNumber: filter.phoneNumber.trim() });
-                }
-                if (conditions.length === 0) return null;
-
-                let student = null;
-                try {
-                    student = await prisma.student.findFirst({
-                        where: { OR: conditions }
-                    });
-                } catch (e) {}
-
-                if (student) return mapStudentToCamelCase(student);
-
-                // Fallback to Supabase if Prisma returns null
-                try {
-                    const orParts: string[] = [];
-                    if (filter.firebaseUID) {
-                        orParts.push(`firebase_uid.eq.${filter.firebaseUID}`);
-                        orParts.push(`supabase_id.eq.${filter.firebaseUID}`);
-                        orParts.push(`_id.eq.${filter.firebaseUID}`);
-                    }
-                    if (filter.email) {
-                        const cleanEmail = filter.email.toLowerCase().trim();
-                        orParts.push(`email.ilike.${cleanEmail}`);
-                    }
-                    if (filter.phoneNumber) {
-                        orParts.push(`phone_number.eq.${filter.phoneNumber.trim()}`);
-                    }
-                    if (orParts.length > 0) {
-                        const selection = '*, student_profiles(*), student_security(*)';
-                        const { data, error } = await supabase
-                            .from('students')
-                            .select(selection)
-                            .or(orParts.join(','))
-                            .limit(1)
-                            .maybeSingle();
-                        if (!error && data) return mapStudentToCamelCase(data);
-                    }
-                } catch (sbErr) {}
-
-                return null;
-            } else if (source === 'SUPABASE') {
-                const orParts: string[] = [];
-                if (filter.firebaseUID) {
-                    orParts.push(`firebase_uid.eq.${filter.firebaseUID}`);
-                    orParts.push(`supabase_id.eq.${filter.firebaseUID}`);
-                    orParts.push(`_id.eq.${filter.firebaseUID}`);
-                }
-                if (filter.email) {
-                    orParts.push(`email.eq.${filter.email.toLowerCase().trim()}`);
-                }
-                if (filter.phoneNumber) {
-                    orParts.push(`phone_number.eq.${filter.phoneNumber.trim()}`);
-                }
-                if (orParts.length === 0) return null;
-
-                const selection = '*, student_profiles(*), student_security(*)';
-                const { data, error } = await supabase
-                    .from('students')
-                    .select(selection)
-                    .or(orParts.join(','))
-                    .limit(1)
-                    .maybeSingle();
-
-                if (error || !data) return null;
-                return mapStudentToCamelCase(data);
-            } else {
-                return await db.students.findOne(filter, options);
-            }
-        },
-
-        // Create or Update student (Upsert)
-        save: async (firebaseUID: string, studentData: any) => {
-            const source = await getDbSource();
-            if (source === 'SUPABASE') {
-                const supabaseData = mapStudentToSnakeCase(studentData);
-                const { studentUpdate, profileUpdate, securityUpdate } = splitStudentFields(supabaseData);
-                const tenantId = await getTenantIdOrThrow();
-                // Try finding by firebaseUID, supabaseId, or email
-                let { data: existingStudent } = await supabase
-                    .from('students')
-                    .select('_id')
-                    .eq('firebase_uid', firebaseUID)
-                    .eq('tenant_id', tenantId)
-                    .maybeSingle();
-
-                if (!existingStudent && studentData.supabaseId) {
-                    const fbLookup = await supabase
-                        .from('students')
-                        .select('_id')
-                        .eq('supabase_id', studentData.supabaseId)
-                        .eq('tenant_id', tenantId)
-                        .maybeSingle();
-                    existingStudent = fbLookup.data;
-                }
-
-                if (!existingStudent && studentData.email) {
-                    const fbLookup = await supabase
-                        .from('students')
-                        .select('_id')
-                        .eq('email', studentData.email)
-                        .eq('tenant_id', tenantId)
-                        .maybeSingle();
-                    existingStudent = fbLookup.data;
-                }
-
-                let studentId = existingStudent?._id;
-
-                if (studentId) {
-                    if (Object.keys(studentUpdate).length > 0) {
-                        const result = await supabase
-                            .from('students')
-                            .update({ ...studentUpdate, tenant_id: tenantId })
-                            .eq('_id', studentId);
-                        if (result.error) throw new Error(result.error.message);
-                    }
-                } else {
-                    studentId = crypto.randomUUID();
-                    const result = await supabase
-                        .from('students')
-                        .insert({ ...studentUpdate, _id: studentId, firebase_uid: firebaseUID, tenant_id: tenantId });
-                    if (result.error) throw new Error(result.error.message);
-                }
-
-                if (Object.keys(profileUpdate).length > 0) {
-                    const result = await supabase
-                        .from('student_profiles')
-                        .upsert({ student_id: studentId, ...profileUpdate });
-                    if (result.error) throw new Error(result.error.message);
-                }
-
-                if (Object.keys(securityUpdate).length > 0) {
-                    const result = await supabase
-                        .from('student_security')
-                        .upsert({ student_id: studentId, ...securityUpdate });
-                    if (result.error) throw new Error(result.error.message);
-                }
-
-                return await db.students.getById(studentId, true);
-            } else if (source === 'PRISMA') {
-                const tenantId = await getTenantIdOrThrow().catch(() => null);
-                let existing = null;
-                const searchConditions = [
-                    { firebaseUid: firebaseUID },
-                    ...(studentData.supabaseId ? [{ supabaseId: studentData.supabaseId }] : []),
-                    ...(studentData.email ? [{ email: studentData.email }] : [])
-                ];
-                if (tenantId) {
-                    existing = await prisma.student.findFirst({
-                        where: {
-                            tenantId,
-                            OR: searchConditions
-                        }
-                    });
-                }
-                if (!existing) {
-                    existing = await prisma.student.findFirst({
-                        where: {
-                            OR: searchConditions
-                        }
-                    });
-                }
-                if (existing) {
-                    const updateDataPrisma = filterStudentForPrisma(studentData, true);
-                    const result = await prisma.student.update({
-                        where: { id: existing.id },
-                        data: updateDataPrisma
-                    });
-                    return result;
-                } else {
-                    const newId = studentData._id || studentData.id || crypto.randomUUID();
-                    const createDataPrisma = { ...filterStudentForPrisma(studentData, false), tenantId: tenantId || "26739d24-0214-409b-aa81-42e628e88c2b", id: newId, firebaseUid: firebaseUID };
-                    const result = await prisma.student.create({
-                        data: createDataPrisma
-                    });
-                    return result;
-                }
-            } else {
-                await connectDB();
-                const StudentModel = (await import('@/models/Student')).default;
-                const queryConditions = [
-                    { firebaseUID },
-                    ...(studentData.supabaseId ? [{ supabaseId: studentData.supabaseId }] : []),
-                    ...(studentData.email ? [{ email: studentData.email }] : [])
-                ];
-                const student = await StudentModel.findOneAndUpdate(
-                    { $or: queryConditions },
-                    studentData,
-                    { upsert: true, new: true, setDefaultsOnInsert: true }
+            if (!data || data.length === 0) {
+                data = await prisma.$queryRawUnsafe<any[]>(
+                    `SELECT * FROM students WHERE web_authn_credentials::jsonb @> $1::jsonb LIMIT 1`,
+                    JSON.stringify([{ credentialID: credentialId }])
                 );
-                return mapStudentToCamelCase(student);
+            }
+            return data && data.length > 0 ? mapStudentToCamelCase(data[0]) : null;
+        },
+
+        findOne: async (filter: any, options: { minimal?: boolean } = {}) => {
+            let tenantId: string | null = null;
+            try {
+                tenantId = await getTenantIdOrThrow();
+            } catch (err) {}
+
+            const searchOR: any[] = [];
+            if (filter.firebaseUID || filter.firebaseUid) {
+                const uid = filter.firebaseUID || filter.firebaseUid;
+                searchOR.push(
+                    { firebaseUid: uid },
+                    { supabaseId: uid },
+                    { email: uid }
+                );
+                if (isUuidString(uid)) searchOR.push({ id: uid });
+            }
+            if (filter.supabaseId) {
+                searchOR.push(
+                    { supabaseId: filter.supabaseId },
+                    { firebaseUid: filter.supabaseId },
+                    { email: filter.supabaseId }
+                );
+            }
+            if (filter._id || filter.id) {
+                const idVal = filter._id || filter.id;
+                if (isUuidString(idVal)) searchOR.push({ id: idVal });
+                else searchOR.push({ firebaseUid: idVal }, { email: idVal });
+            }
+            if (filter.email) {
+                const cleanEmail = filter.email.toLowerCase().trim();
+                searchOR.push({ email: { equals: cleanEmail, mode: 'insensitive' } });
+            }
+            if (filter.phoneNumber) searchOR.push({ phoneNumber: filter.phoneNumber.trim() });
+            if (filter.registrationId) searchOR.push({ registrationId: filter.registrationId.trim() });
+            if (filter.erpInformation || filter.erpId) {
+                const erp = (filter.erpInformation || filter.erpId).trim();
+                searchOR.push({ erpId: erp }, { erpInformation: erp });
+            }
+
+            let student: any = null;
+            if (tenantId && searchOR.length > 0) {
+                student = await prisma.student.findFirst({
+                    where: {
+                        tenantId,
+                        OR: searchOR
+                    }
+                });
+            }
+
+            if (!student && searchOR.length > 0) {
+                student = await prisma.student.findFirst({
+                    where: {
+                        OR: searchOR
+                    }
+                });
+            }
+
+            return student ? mapStudentToCamelCase(student) : null;
+        },
+
+        findOneFast: async (filter: { firebaseUID?: string; email?: string; phoneNumber?: string }, options: { minimal?: boolean } = {}) => {
+            const conditions: any[] = [];
+            if (filter.firebaseUID) {
+                conditions.push({ firebaseUid: filter.firebaseUID });
+                conditions.push({ supabaseId: filter.firebaseUID });
+                if (isUuidString(filter.firebaseUID)) conditions.push({ id: filter.firebaseUID });
+            }
+            if (filter.email) {
+                const cleanEmail = filter.email.toLowerCase().trim();
+                conditions.push({ email: { equals: cleanEmail, mode: 'insensitive' } });
+            }
+            if (filter.phoneNumber) {
+                conditions.push({ phoneNumber: filter.phoneNumber.trim() });
+            }
+            if (conditions.length === 0) return null;
+
+            let student = null;
+            try {
+                student = await prisma.student.findFirst({
+                    where: { OR: conditions }
+                });
+            } catch (e) {}
+
+            return student ? mapStudentToCamelCase(student) : null;
+        },
+
+        list: async (filter: any = {}, options: { light?: boolean; limit?: number; offset?: number; select?: string } = {}) => {
+            let tenantId: string | null = null;
+            try {
+                tenantId = await getTenantIdOrThrow();
+            } catch (err) {}
+
+            const whereClause: any = {};
+            if (tenantId) whereClause.tenantId = tenantId;
+
+            if (filter.hostelName) {
+                if (typeof filter.hostelName === 'string') {
+                    whereClause.hostelName = { equals: filter.hostelName, mode: 'insensitive' };
+                } else if (filter.hostelName.$in) {
+                    whereClause.hostelName = { in: filter.hostelName.$in };
+                } else if (Array.isArray(filter.hostelName)) {
+                    whereClause.hostelName = { in: filter.hostelName };
+                }
+            }
+
+            if (filter.collegeName) {
+                whereClause.collegeName = { contains: filter.collegeName, mode: 'insensitive' };
+            }
+            if (filter.branch) {
+                whereClause.branch = { contains: filter.branch, mode: 'insensitive' };
+            }
+            if (filter.semester) {
+                whereClause.semester = String(filter.semester);
+            }
+            if (filter.section) {
+                whereClause.section = { equals: filter.section, mode: 'insensitive' };
+            }
+            if (filter.studentStatus) {
+                whereClause.studentStatus = filter.studentStatus;
+            }
+
+            if (filter.search) {
+                const searchStr = String(filter.search).trim();
+                whereClause.OR = [
+                    { name: { contains: searchStr, mode: 'insensitive' } },
+                    { registrationId: { contains: searchStr, mode: 'insensitive' } },
+                    { erpId: { contains: searchStr, mode: 'insensitive' } },
+                    { erpInformation: { contains: searchStr, mode: 'insensitive' } },
+                    { phoneNumber: { contains: searchStr } },
+                    { email: { contains: searchStr, mode: 'insensitive' } },
+                    { roomNumber: { contains: searchStr, mode: 'insensitive' } }
+                ];
+            }
+
+            let students = await prisma.student.findMany({
+                where: whereClause,
+                take: options.limit || undefined,
+                skip: options.offset || undefined,
+                orderBy: { name: 'asc' }
+            });
+
+            // Fallback: If tenantId was supplied but produced 0 results, check if students exist globally
+            if (students.length === 0 && tenantId) {
+                const countGlobal = await prisma.student.count();
+                if (countGlobal > 0) {
+                    const fallbackWhere = { ...whereClause };
+                    delete fallbackWhere.tenantId;
+                    students = await prisma.student.findMany({
+                        where: fallbackWhere,
+                        take: options.limit || undefined,
+                        skip: options.offset || undefined,
+                        orderBy: { name: 'asc' }
+                    });
+                }
+            }
+
+            return students.map(mapStudentToCamelCase);
+        },
+
+        find: async (filter: any = {}, options: { limit?: number; offset?: number; select?: string } = {}) => {
+            return db.students.list(filter, options);
+        },
+
+        getAll: async (limit?: number) => {
+            return db.students.list({}, { limit });
+        },
+
+        save: async (firebaseUID: string, updateData: any) => {
+            let tenantId: string | null = null;
+            try {
+                tenantId = await getTenantIdOrThrow();
+            } catch (err) {}
+
+            const existing = await db.students.findOne({
+                firebaseUID,
+                email: updateData.email,
+                phoneNumber: updateData.phoneNumber,
+                supabaseId: updateData.supabaseId || updateData.supabase_id
+            });
+
+            if (existing) {
+                const targetId = existing.id || existing._id;
+                const prismaData = filterStudentForPrisma(updateData, true);
+                const updated = await prisma.student.update({
+                    where: { id: targetId },
+                    data: prismaData
+                });
+                return mapStudentToCamelCase(updated);
+            } else {
+                const id = updateData.id || updateData._id || crypto.randomUUID();
+                const prismaData = {
+                    ...filterStudentForPrisma(updateData),
+                    id,
+                    tenantId: updateData.tenantId || tenantId,
+                    firebaseUid: firebaseUID || updateData.firebaseUid || updateData.firebaseUID || id
+                };
+                const created = await prisma.student.create({
+                    data: prismaData
+                });
+                return mapStudentToCamelCase(created);
             }
         },
 
         create: async (studentData: any) => {
-            const source = await getDbSource();
-            if (source === 'SUPABASE') {
-                const tenantId = await getTenantIdOrThrow();
-                const studentId = studentData._id || studentData.id || crypto.randomUUID();
-                const snakeData = mapStudentToSnakeCase({ ...studentData, _id: studentId, tenant_id: tenantId });
-                const { studentUpdate, profileUpdate, securityUpdate } = splitStudentFields(snakeData);
+            let tenantId: string | null = null;
+            try {
+                tenantId = await getTenantIdOrThrow();
+            } catch (err) {}
 
-                const { data, error } = await supabase
-                    .from('students')
-                    .insert([{ ...studentUpdate, _id: studentId, tenant_id: tenantId }])
-                    .select()
-                    .single();
-                if (error) throw error;
+            const id = studentData.id || studentData._id || crypto.randomUUID();
+            const prismaData = {
+                ...filterStudentForPrisma(studentData),
+                id,
+                tenantId: studentData.tenantId || tenantId
+            };
 
-                if (Object.keys(profileUpdate).length > 0) {
-                    const { error: profileErr } = await supabase
-                        .from('student_profiles')
-                        .insert([{ student_id: studentId, ...profileUpdate }]);
-                    if (profileErr) throw profileErr;
-                }
+            const student = await prisma.student.create({
+                data: prismaData
+            });
 
-                if (Object.keys(securityUpdate).length > 0) {
-                    const { error: securityErr } = await supabase
-                        .from('student_security')
-                        .insert([{ student_id: studentId, ...securityUpdate }]);
-                    if (securityErr) throw securityErr;
-                }
-
-                return data;
-            } else if (source === 'PRISMA') {
-                const tenantId = await getTenantIdOrThrow();
-                const finalData = { ...filterStudentForPrisma(studentData), tenantId };
-                if (!finalData.id) finalData.id = crypto.randomUUID();
-                const result = await prisma.student.create({
-                    data: finalData
-                });
-                return result;
-            } else {
-                await connectDB();
-                const StudentModel = (await import('@/models/Student')).default;
-                const newStudent = await StudentModel.create(studentData);
-                return mapStudentToCamelCase(newStudent);
-            }
+            return mapStudentToCamelCase(student);
         },
 
-        getAll: async (limit = 50) => {
-            const source = await getDbSource();
-            if (source === 'SUPABASE') {
-                const tenantId = await getTenantIdOrThrow();
-                const { data, error } = await supabase.from('students').select('*').eq('tenant_id', tenantId).limit(limit);
-                if (error) throw error;
-                return (data || []).map(mapStudentToCamelCase);
-            } else if (source === 'PRISMA') {
-                const tenantId = await getTenantIdOrThrow();
-                const data = await prisma.student.findMany({
-                    where: { tenantId },
-                    take: limit
-                });
-                return (data || []).map(mapStudentToCamelCase);
-            } else {
-                await connectDB();
-                const StudentModel = (await import('@/models/Student')).default;
-                const students = await StudentModel.find({}).limit(limit).lean();
-                return students.map(mapStudentToCamelCase);
+        update: async (id: string, updateData: any) => {
+            const prismaData = filterStudentForPrisma(updateData, true);
+            let targetId = id;
+
+            if (!isUuidString(id)) {
+                const existing = await db.students.findOne({ firebaseUID: id, email: id });
+                if (existing) {
+                    targetId = existing.id || existing._id;
+                }
             }
+
+            const student = await prisma.student.update({
+                where: { id: targetId },
+                data: prismaData
+            });
+            return mapStudentToCamelCase(student);
         },
 
-        // ⚡ DATABASE-AWARE LIST WITH FILTERS
-        list: async (filters: any = {}, options: { light?: boolean; select?: string; limit?: number } = {}) => {
-            const source = await getDbSource();
-            const lightFields = '_id,firebase_uid,name,email,phone_number,hostel_name,room_number,student_status,supabase_id,profile_picture,dynamic_fields,student_profiles(*),student_security(device_id,device_reset_count,device_history,is_profile_locked,attendance_mode,web_authn_credentials,auth_provider)';
-            const selection = options.select || (options.light ? lightFields : '*, student_profiles(*), student_security(*)');
+        updateOne: async (filter: any, updateData: any) => {
+            const prismaData = filterStudentForPrisma(updateData, true);
+            const existing = await db.students.findOne(filter);
+            if (!existing) return null;
 
-            if (source === 'SUPABASE') {
-                const tenantId = await getTenantIdOrThrow();
-                let query = supabase.from('students').select(selection);
-                query = query.eq('tenant_id', tenantId);
-
-                if (filters.hostelName && filters.hostelName !== 'all') {
-                    const hName = typeof filters.hostelName === 'object' ? filters.hostelName.$regex : filters.hostelName;
-                    query = query.ilike('hostel_name', `%${hName}%`);
-                }
-                if (filters.studentStatus) query = query.eq('student_status', filters.studentStatus);
-                
-                if (filters.collegeName && filters.collegeName !== 'all') {
-                    const { data: profs } = await supabase
-                        .from('student_profiles')
-                        .select('student_id')
-                        .eq('college_name', filters.collegeName);
-                    const matchedIds = (profs || []).map((p: any) => p.student_id);
-                    query = query.in('_id', matchedIds);
-                }
-                
-                if (filters.registrationId) {
-                    const { data: profs } = await supabase
-                        .from('student_profiles')
-                        .select('student_id')
-                        .ilike('registration_id', `%${filters.registrationId}%`);
-                    const matchedIds = (profs || []).map((p: any) => p.student_id);
-                    query = query.in('_id', matchedIds);
-                }
-                
-                if (filters._id) {
-                    if (typeof filters._id === 'object' && filters._id.$in) query = query.in('_id', filters._id.$in);
-                    else query = query.eq('_id', filters._id);
-                }
-                
-                if (filters.search) {
-                    const s = filters.search;
-                    const { data: profs } = await supabase
-                        .from('student_profiles')
-                        .select('student_id')
-                        .or(`registration_id.ilike.%${s}%,father_number.ilike.%${s}%,mother_number.ilike.%${s}%,local_guardian_phone_number.ilike.%${s}%,father_name.ilike.%${s}%,mother_name.ilike.%${s}%,erp_id.ilike.%${s}%`);
-                    const regIds = (profs || []).map((p: any) => p.student_id);
-                    
-                    let orString = `name.ilike.%${s}%,email.ilike.%${s}%,phone_number.ilike.%${s}%,room_number.ilike.%${s}%`;
-                    if (regIds.length > 0) {
-                        orString += `,_id.in.("${regIds.join('","')}")`;
-                    }
-                    query = query.or(orString);
-                }
-                
-                if (filters.gatepassSearch) {
-                    const s = filters.gatepassSearch;
-                    const { data: profs } = await supabase
-                        .from('student_profiles')
-                        .select('student_id')
-                        .or(`registration_id.ilike.%${s}%,erp_id.ilike.%${s}%`);
-                    const matchedIds = (profs || []).map((p: any) => p.student_id);
-                    
-                    let orString = `name.ilike.%${s}%`;
-                    if (matchedIds.length > 0) {
-                        orString += `,_id.in.("${matchedIds.join('","')}")`;
-                    }
-                    query = query.or(orString);
-                }
-
-                const { data, error } = await query
-                    .order('name', { ascending: true })
-                    .limit(options.limit || 1000);
-                
-                if (error) throw error;
-                return (data || []).map((s: any) => mapStudentToCamelCase(s));
-            } else if (source === 'PRISMA') {
-                const tenantId = await getTenantIdOrThrow();
-                const whereClause: any = { tenantId };
-
-                if (filters.hostelName && filters.hostelName !== 'all') {
-                    const hName = typeof filters.hostelName === 'object' ? filters.hostelName.$regex : filters.hostelName;
-                    whereClause.hostelName = { contains: hName, mode: 'insensitive' };
-                }
-                if (filters.studentStatus && filters.studentStatus !== 'all') whereClause.studentStatus = filters.studentStatus;
-                if (filters.collegeName && filters.collegeName !== 'all') whereClause.collegeName = { equals: filters.collegeName, mode: 'insensitive' };
-                if (filters.branch && filters.branch !== 'all') whereClause.branch = { equals: filters.branch, mode: 'insensitive' };
-                if (filters.semester && filters.semester !== 'all') whereClause.semester = { equals: filters.semester, mode: 'insensitive' };
-                if (filters.section && filters.section !== 'all') whereClause.section = { equals: filters.section, mode: 'insensitive' };
-                if (filters.floor && filters.floor !== 'all') whereClause.floorNumber = { contains: filters.floor, mode: 'insensitive' };
-                if (filters.roomNumber && filters.roomNumber !== 'all') whereClause.roomNumber = { equals: filters.roomNumber, mode: 'insensitive' };
-                if (filters.registrationId) whereClause.registrationId = { contains: filters.registrationId, mode: 'insensitive' };
-                if (filters._id) {
-                    if (typeof filters._id === 'object' && filters._id.$in) {
-                        whereClause.id = { in: filters._id.$in };
-                    } else {
-                        whereClause.id = filters._id;
-                    }
-                }
-                if (filters.search) {
-                    const s = filters.search;
-                    whereClause.OR = [
-                        { name: { contains: s, mode: 'insensitive' } },
-                        { email: { contains: s, mode: 'insensitive' } },
-                        { phoneNumber: { contains: s, mode: 'insensitive' } },
-                        { roomNumber: { contains: s, mode: 'insensitive' } },
-                        { registrationId: { contains: s, mode: 'insensitive' } },
-                        { fatherNumber: { contains: s, mode: 'insensitive' } },
-                        { motherNumber: { contains: s, mode: 'insensitive' } },
-                        { localGuardianPhoneNumber: { contains: s, mode: 'insensitive' } },
-                        { fatherName: { contains: s, mode: 'insensitive' } },
-                        { motherName: { contains: s, mode: 'insensitive' } },
-                        { erpId: { contains: s, mode: 'insensitive' } },
-                        { erpInformation: { contains: s, mode: 'insensitive' } }
-                    ];
-                }
-                if (filters.gatepassSearch) {
-                    const s = filters.gatepassSearch;
-                    whereClause.OR = [
-                        { name: { contains: s, mode: 'insensitive' } },
-                        { registrationId: { contains: s, mode: 'insensitive' } },
-                        { erpId: { contains: s, mode: 'insensitive' } }
-                    ];
-                }
-
-                // ⚡ LIGHTWEIGHT PROJECTION: In light mode, omit heavy float arrays (faceDescriptor) and heavy JSON blobs to save bandwidth
-                const lightSelect = options.light ? {
-                    id: true,
-                    tenantId: true,
-                    firebaseUid: true,
-                    name: true,
-                    email: true,
-                    phoneNumber: true,
-                    hostelName: true,
-                    roomNumber: true,
-                    profilePicture: true,
-                    studentStatus: true,
-                    supabaseId: true,
-                    dob: true,
-                    category: true,
-                    fatherName: true,
-                    fatherNumber: true,
-                    motherName: true,
-                    motherNumber: true,
-                    permanentAddress: true,
-                    homeState: true,
-                    erpInformation: true,
-                    erpId: true,
-                    joiningDate: true,
-                    branch: true,
-                    collegeName: true,
-                    year: true,
-                    semester: true,
-                    section: true,
-                    floorNumber: true,
-                    localGuardianAddress: true,
-                    localGuardianPhoneNumber: true,
-                    registrationId: true,
-                    deviceId: true,
-                    deviceResetCount: true,
-                    isProfileLocked: true,
-                    attendanceMode: true,
-                    authProvider: true,
-                    dynamicFields: true,
-                    createdAt: true,
-                    updatedAt: true
-                } : undefined;
-
-                const data = await prisma.student.findMany({
-                    where: whereClause,
-                    select: lightSelect,
-                    orderBy: { name: 'asc' },
-                    take: options.limit || 1000
-                });
-                return (data || []).map(mapStudentToCamelCase);
-            } else {
-                await connectDB();
-                const StudentModel = (await import('@/models/Student')).default;
-                
-                const mongoFilters = { ...filters };
-                if (filters.gatepassSearch) {
-                    delete mongoFilters.gatepassSearch;
-                    const searchRegex = { $regex: filters.gatepassSearch, $options: 'i' };
-                    mongoFilters.$or = [
-                        { name: searchRegex },
-                        { registrationId: searchRegex },
-                        { erpInformation: searchRegex }
-                    ];
-                } else if (filters.search) {
-                    delete mongoFilters.search;
-                    const searchRegex = { $regex: filters.search, $options: 'i' };
-                    mongoFilters.$or = [
-                        { name: searchRegex },
-                        { email: searchRegex },
-                        { phoneNumber: searchRegex },
-                        { roomNumber: searchRegex },
-                        { registrationId: searchRegex },
-                        { fatherNumber: searchRegex },
-                        { motherNumber: searchRegex },
-                        { localGuardianPhoneNumber: searchRegex },
-                        { fatherName: searchRegex },
-                        { motherName: searchRegex },
-                        { erpInformation: searchRegex },
-                        { erpId: searchRegex }
-                    ];
-                }
-
-                const records = await StudentModel.find(mongoFilters).sort({ name: 1 }).limit(options.limit || 1000).lean();
-                return records.map(mapStudentToCamelCase);
-            }
+            const targetId = existing.id || existing._id;
+            const student = await prisma.student.update({
+                where: { id: targetId },
+                data: prismaData
+            });
+            return mapStudentToCamelCase(student);
         },
 
-        count: async (filters: any = {}) => {
-            const source = await getDbSource();
-            if (source === 'SUPABASE') {
-                const tenantId = await getTenantIdOrThrow();
-                let query = supabase.from('students').select('*', { count: 'exact', head: true });
-                query = query.eq('tenant_id', tenantId);
-                if (filters.hostelName && filters.hostelName !== 'all') {
-                    query = query.ilike('hostel_name', `%${filters.hostelName}%`);
-                }
-                if (filters.studentStatus) {
-                    query = query.eq('student_status', filters.studentStatus);
-                }
-                const { count, error } = await query;
-                if (error) throw error;
-                return count || 0;
-            } else if (source === 'PRISMA') {
-                const tenantId = await getTenantIdOrThrow();
-                const whereClause: any = { tenantId };
-                if (filters.hostelName && filters.hostelName !== 'all') {
-                    whereClause.hostelName = { contains: filters.hostelName, mode: 'insensitive' };
-                }
-                if (filters.studentStatus) {
-                    whereClause.studentStatus = filters.studentStatus;
-                }
-                return await prisma.student.count({ where: whereClause });
-            } else {
-                await connectDB();
-                const StudentModel = (await import('@/models/Student')).default;
-                let mongoQuery: any = {};
-                if (filters.hostelName && filters.hostelName !== 'all') {
-                    mongoQuery.hostelName = { $regex: filters.hostelName, $options: "i" };
-                }
-                if (filters.studentStatus) {
-                    mongoQuery.studentStatus = filters.studentStatus;
-                }
-                return await StudentModel.countDocuments(mongoQuery);
-            }
+        findByIdAndUpdate: async (id: string, updateData: any) => {
+            return db.students.update(id, updateData);
         },
 
-        // ⚡ DATABASE-AWARE DELETE (Purges from both Prisma & Supabase so no ghost fallback exists)
+        bulkUpdate: async (filter: any = {}, updateData: any) => {
+            let tenantId: string | null = null;
+            try {
+                tenantId = await getTenantIdOrThrow();
+            } catch (err) {}
+
+            const whereClause: any = {};
+            if (tenantId) whereClause.tenantId = tenantId;
+            if (filter.ids && Array.isArray(filter.ids)) whereClause.id = { in: filter.ids };
+            if (filter.hostelName) whereClause.hostelName = filter.hostelName;
+
+            const prismaData = filterStudentForPrisma(updateData, true);
+            const res = await prisma.student.updateMany({
+                where: whereClause,
+                data: prismaData
+            });
+            return { modifiedCount: res.count, count: res.count };
+        },
+
         delete: async (id: string) => {
-            // 1. Delete from Supabase & Child tables
-            try {
-                await supabase.from('student_profiles').delete().or(`student_id.eq.${id},id.eq.${id}`);
-                await supabase.from('student_security').delete().or(`student_id.eq.${id},id.eq.${id}`);
-                await supabase.from('permissions').delete().or(`student_id.eq.${id},studentId.eq.${id}`);
-                await supabase.from('gate_passes').delete().or(`student_id.eq.${id},studentId.eq.${id}`);
-                await supabase.from('attendance_records').delete().or(`student_id.eq.${id},studentId.eq.${id}`);
-                await supabase.from('students').delete().or(`_id.eq.${id},id.eq.${id},firebase_uid.eq.${id},email.eq.${id}`);
-            } catch (sErr) {
-                console.warn("Supabase student delete note:", sErr);
+            let targetId = id;
+            if (!isUuidString(id)) {
+                const existing = await db.students.findOne({ firebaseUID: id, email: id });
+                if (existing) targetId = existing.id || existing._id;
             }
-
-            // 2. Delete from Prisma (PostgreSQL)
-            try {
-                await prisma.student.deleteMany({
-                    where: {
-                        OR: [
-                            { id },
-                            { firebaseUid: id },
-                            { email: id },
-                            { registrationId: id },
-                            { supabaseId: id }
-                        ]
-                    }
-                });
-            } catch (pErr) {
-                console.warn("Prisma student delete note:", pErr);
-            }
-
-            // 3. Delete from MongoDB if active
-            try {
-                const StudentModel = (await import('@/models/Student')).default;
-                await StudentModel.findOneAndDelete({ $or: [{ _id: id }, { firebaseUID: id }, { email: id }] });
-            } catch (mErr) {}
-
+            await prisma.student.delete({
+                where: { id: targetId }
+            });
             return true;
         },
 
-        // ⚡ DATABASE-AWARE UPDATE
-        update: async (id: string, updateData: any) => {
-            const source = await getDbSource();
-            console.log(`[DB_ADAPTER] update (${id}) using: ${source}`);
-
-            if (source === 'SUPABASE') {
-                // Mapping Function: camelCase -> snake_case for Supabase
-                const mapStudentFields = (data: any) => {
-                    const mapped: any = {};
-                    const fieldMap: any = {
-                        phoneNumber: 'phone_number',
-                        hostelName: 'hostel_name',
-                        roomNumber: 'room_number',
-                        profilePicture: 'profile_picture',
-                        fatherName: 'father_name',
-                        fatherNumber: 'father_number',
-                        motherName: 'mother_name',
-                        motherNumber: 'mother_number',
-                        // ✅ permanentAddress maps to permanent_address column in Supabase
-                        permanentAddress: 'permanent_address',
-                        homePinCode: 'permanent_address',
-                        homeState: 'home_state',
-                        // ✅ Corrected: erp_id is the actual live Supabase column name
-                        erpInformation: 'erp_id',
-                        joiningDate: 'joining_date',
-                        collegeName: 'college_name',
-                        localGuardianAddress: 'local_guardian_address',
-                        localGuardianPhoneNumber: 'local_guardian_phone_number',
-                        floorNumber: 'floor_number',
-                        registrationId: 'registration_id',
-                        isProfileLocked: 'is_profile_locked',
-                        faceDescriptor: 'face_descriptor',
-                        attendanceMode: 'attendance_mode',
-                        deviceResetCount: 'device_reset_count',
-                        webAuthnCredentials: 'web_authn_credentials',
-                        deviceHistory: 'device_history',
-                        deviceId: 'device_id',
-                        studentStatus: 'student_status',
-                        thumbImpressionId: 'thumb_impression_id',
-                        dynamicFields: 'dynamic_fields',
-                        firebaseUID: 'firebase_uid',
-                        firebaseUid: 'firebase_uid'
-                    };
-
-                    // Fields to explicitly EXCLUDE from update (metadata, identifiers, or computed)
-                    const forbidden = [
-                        'id', '_id', 'createdat', 'updatedat',
-                        'action', '__v', 'permissions', 'lastcheckinlocation'
-                    ];
-
-                    Object.keys(data).forEach(key => {
-                        const lowKey = key.toLowerCase();
-                        if (forbidden.includes(lowKey) || forbidden.includes(lowKey.replace(/_/g, ''))) return;
-
-                        if (fieldMap[key]) {
-                            // Only set mapped value if data[key] is defined and not null
-                            if (data[key] !== undefined && data[key] !== null && data[key] !== "") {
-                                mapped[fieldMap[key]] = data[key];
-                            }
-                        } else {
-                            // Default to original if no mapping (e.g. branch, year, category, dob etc already snake_case or same)
-                            if (data[key] !== undefined) {
-                                mapped[key] = data[key];
-                            }
-                        }
-                    });
-
-                    // Ensure permanent_address is set from permanentAddress, address, or homePinCode if available
-                    const resolvedAddress = data.permanentAddress || data.address || data.homePinCode;
-                    if (resolvedAddress) {
-                        mapped['permanent_address'] = resolvedAddress;
-                    }
-
-                    console.log("🛠️ Supabase Mapped Update Data:", mapped);
-                    return mapped;
-                };
-
-                // Helper for updating student in Supabase
-                const updateInSupabaseHelper = async (targetId: string, payload: any) => {
-                    try {
-                        const tId = await getTenantIdOrThrow().catch(() => null);
-                        if (payload.action === 'resetDevice') {
-                            const sRecord = await db.students.getById(targetId, true);
-                            const sId = sRecord?.id || targetId;
-                            const oldDeviceId = sRecord?.deviceId;
-
-                            const securityUpdate: any = {
-                                device_id: "",
-                                web_authn_credentials: [],
-                                device_reset_count: (sRecord?.deviceResetCount || 0) + 1
-                            };
-
-                            if (oldDeviceId) {
-                                const history = sRecord?.deviceHistory || [];
-                                securityUpdate.device_history = [...history, {
-                                    deviceId: oldDeviceId,
-                                    action: "reset",
-                                    timestamp: new Date().toISOString()
-                                }];
-                            }
-
-                            await supabase
-                                .from('student_security')
-                                .upsert({ student_id: sId, ...securityUpdate });
-
-                            return await db.students.getById(sId, true);
-                        }
-
-                        const cleanUp = mapStudentToSnakeCase(payload);
-                        const { studentUpdate, profileUpdate, securityUpdate } = splitStudentFields(cleanUp);
-
-                        const sRecord = await db.students.getById(targetId, true);
-                        const sId = sRecord?.id || targetId;
-
-                        if (Object.keys(studentUpdate).length > 0) {
-                            studentUpdate.updated_at = new Date().toISOString();
-                            let q = supabase.from('students').update(studentUpdate).eq('_id', sId);
-                            if (tId) q = q.eq('tenant_id', tId);
-                            await q;
-                        }
-
-                        if (Object.keys(profileUpdate).length > 0) {
-                            await supabase.from('student_profiles').upsert({ student_id: sId, ...profileUpdate });
-                        }
-
-                        if (Object.keys(securityUpdate).length > 0) {
-                            await supabase.from('student_security').upsert({ student_id: sId, ...securityUpdate });
-                        }
-
-                        return await db.students.getById(sId, true);
-                    } catch (err) {
-                        console.warn("⚠️ Supabase update helper error:", err);
-                        return null;
-                    }
-                };
-
-                // Handle specific actions like resetDevice if passed in updateData
-                const tenantId = await getTenantIdOrThrow().catch(() => null);
-
-                if (updateData.action === 'resetDevice') {
-                    return await updateInSupabaseHelper(id, updateData);
-                }
-
-                // General Update
-                return await updateInSupabaseHelper(id, updateData);
-            } else if (source === 'PRISMA') {
-                let tenantId: string | null = null;
-                try {
-                    tenantId = await getTenantIdOrThrow();
-                } catch (tErr) {}
-
-                // Helper for updating student in Supabase
-                const updateInSupabaseHelper = async (targetId: string, payload: any) => {
-                    try {
-                        const tId = tenantId || await getTenantIdOrThrow().catch(() => null);
-                        if (payload.action === 'resetDevice') {
-                            const sRecord = await db.students.getById(targetId, true);
-                            const sId = sRecord?.id || targetId;
-                            const oldDeviceId = sRecord?.deviceId;
-
-                            const securityUpdate: any = {
-                                device_id: "",
-                                web_authn_credentials: [],
-                                device_reset_count: (sRecord?.deviceResetCount || 0) + 1
-                            };
-
-                            if (oldDeviceId) {
-                                const history = sRecord?.deviceHistory || [];
-                                securityUpdate.device_history = [...history, {
-                                    deviceId: oldDeviceId,
-                                    action: "reset",
-                                    timestamp: new Date().toISOString()
-                                }];
-                            }
-
-                            await supabase
-                                .from('student_security')
-                                .upsert({ student_id: sId, ...securityUpdate });
-
-                            return await db.students.getById(sId, true);
-                        }
-
-                        const cleanUp = mapStudentToSnakeCase(payload);
-                        const { studentUpdate, profileUpdate, securityUpdate } = splitStudentFields(cleanUp);
-
-                        const sRecord = await db.students.getById(targetId, true);
-                        const sId = sRecord?.id || targetId;
-
-                        if (Object.keys(studentUpdate).length > 0) {
-                            studentUpdate.updated_at = new Date().toISOString();
-                            let q = supabase.from('students').update(studentUpdate).eq('_id', sId);
-                            if (tId) q = q.eq('tenant_id', tId);
-                            await q;
-                        }
-
-                        if (Object.keys(profileUpdate).length > 0) {
-                            await supabase.from('student_profiles').upsert({ student_id: sId, ...profileUpdate });
-                        }
-
-                        if (Object.keys(securityUpdate).length > 0) {
-                            await supabase.from('student_security').upsert({ student_id: sId, ...securityUpdate });
-                        }
-
-                        return await db.students.getById(sId, true);
-                    } catch (err) {
-                        console.warn("⚠️ Supabase update helper error:", err);
-                        return null;
-                    }
-                };
-
-                if (updateData.action === 'resetDevice') {
-                    const student = await db.students.getById(id, true);
-                    const oldDeviceId = student?.deviceId;
-                    const studentId = student?.id || student?._id || id;
-
-                    const prismaUpdate: any = {
-                        deviceId: null,
-                        webAuthnCredentials: [],
-                        deviceResetCount: (student?.deviceResetCount || 0) + 1
-                    };
-
-                    if (oldDeviceId) {
-                        const history = student?.deviceHistory || [];
-                        prismaUpdate.deviceHistory = [...history, {
-                            deviceId: oldDeviceId,
-                            action: "reset",
-                            timestamp: new Date().toISOString()
-                        }];
-                    }
-
-                    let target = await prisma.student.findFirst({
-                        where: {
-                            OR: [
-                                { id: studentId },
-                                { id: id },
-                                { firebaseUid: id },
-                                { supabaseId: id }
-                            ]
-                        }
-                    });
-
-                    if (target) {
-                        const data = await prisma.student.update({
-                            where: { id: target.id },
-                            data: prismaUpdate
-                        });
-                        updateInSupabaseHelper(id, updateData).catch(() => {});
-                        return mapStudentToCamelCase(data);
-                    } else {
-                        return await updateInSupabaseHelper(id, updateData);
-                    }
-                }
-
-                // General Update
-                const cleanUpdate = filterStudentForPrisma(updateData, true);
-                cleanUpdate.updatedAt = new Date();
-
-                const searchOR: any[] = [
-                    { id: id },
-                    { firebaseUid: id },
-                    { supabaseId: id },
-                    { registrationId: id },
-                    { erpId: id },
-                    { phoneNumber: id },
-                    { email: id }
-                ];
-                if (updateData.firebaseUID || updateData.firebaseUid) {
-                    searchOR.push({ firebaseUid: updateData.firebaseUID || updateData.firebaseUid });
-                }
-                if (updateData.email) {
-                    searchOR.push({ email: updateData.email });
-                }
-                if (updateData.phoneNumber) {
-                    searchOR.push({ phoneNumber: updateData.phoneNumber });
-                }
-                if (updateData.registrationId) {
-                    searchOR.push({ registrationId: updateData.registrationId });
-                }
-
-                let existing: any = null;
-                try {
-                    if (tenantId) {
-                        existing = await prisma.student.findFirst({
-                            where: {
-                                tenantId,
-                                OR: searchOR
-                            }
-                        });
-                    }
-                } catch (e) {}
-
-                if (!existing) {
-                    try {
-                        existing = await prisma.student.findFirst({
-                            where: {
-                                OR: searchOR
-                            }
-                        });
-                    } catch (e) {}
-                }
-
-                if (existing) {
-                    try {
-                        const data = await prisma.student.update({
-                            where: { id: existing.id },
-                            data: cleanUpdate
-                        });
-                        updateInSupabaseHelper(existing.id, updateData).catch(() => {});
-                        return mapStudentToCamelCase(data);
-                    } catch (updateErr) {
-                        console.warn("⚠️ Prisma student update direct failed, trying fallback:", updateErr);
-                    }
-                }
-
-                // If not found in Prisma or direct update failed, check Supabase
-                try {
-                    const studentFromSupabase = await db.students.getById(id, true);
-                    if (studentFromSupabase) {
-                        const newTenantId = tenantId || studentFromSupabase.tenantId || "26739d24-0214-409b-aa81-42e628e88c2b";
-                        const mergedStudent = { ...studentFromSupabase, ...updateData };
-                        const createData = {
-                            ...filterStudentForPrisma(mergedStudent, false),
-                            id: studentFromSupabase.id || id,
-                            tenantId: newTenantId,
-                            firebaseUid: studentFromSupabase.firebaseUID || id
-                        };
-
-                        try {
-                            const createdInPrisma = await prisma.student.create({ data: createData });
-                            updateInSupabaseHelper(studentFromSupabase.id || id, updateData).catch(() => {});
-                            return mapStudentToCamelCase(createdInPrisma);
-                        } catch (createErr) {
-                            try {
-                                const updatedMany = await prisma.student.updateMany({
-                                    where: {
-                                        OR: [
-                                            { id: studentFromSupabase.id || id },
-                                            { firebaseUid: studentFromSupabase.firebaseUID || id },
-                                            { email: studentFromSupabase.email || undefined }
-                                        ].filter(Boolean) as any
-                                    },
-                                    data: cleanUpdate
-                                });
-                                if (updatedMany.count > 0) {
-                                    updateInSupabaseHelper(studentFromSupabase.id || id, updateData).catch(() => {});
-                                    return await db.students.getById(studentFromSupabase.id || id);
-                                }
-                            } catch (uErr) {}
-                        }
-                        return await updateInSupabaseHelper(studentFromSupabase.id || id, updateData);
-                    }
-                } catch (sbErr) {
-                    console.warn("⚠️ Supabase fallback update failed:", sbErr);
-                }
-
-                return await updateInSupabaseHelper(id, updateData);
-            } else {
-                // MongoDB Logic
-                await connectDB();
-                const StudentModel = (await import('@/models/Student')).default;
-
-                let mongoUpdate: any;
-                if (updateData.action === "resetDevice") {
-                    const student = await StudentModel.findById(id);
-                    const oldDeviceId = student?.deviceId;
-
-                    mongoUpdate = {
-                        $set: { deviceId: "", webAuthnCredentials: [] },
-                        $inc: { deviceResetCount: 1 }
-                    };
-
-                    if (oldDeviceId) {
-                        mongoUpdate.$push = {
-                            deviceHistory: {
-                                deviceId: oldDeviceId,
-                                action: "reset",
-                                timestamp: new Date()
-                            }
-                        };
-                    }
-                } else {
-                    const hasOperators = Object.keys(updateData).some(key => key.startsWith('$'));
-                    mongoUpdate = hasOperators ? updateData : { $set: updateData };
-                }
-
-                const updated = await StudentModel.findByIdAndUpdate(id, mongoUpdate, { new: true });
-                return mapStudentToCamelCase(updated);
+        deleteOne: async (filter: any) => {
+            const existing = await db.students.findOne(filter);
+            if (existing) {
+                const targetId = existing.id || existing._id;
+                await prisma.student.delete({ where: { id: targetId } });
             }
+            return true;
         },
 
-        // ⚡ DATABASE-AWARE BULK UPDATE
-        bulkUpdate: async (filter: any, updateData: any) => {
-            const source = await getDbSource();
+        deleteMany: async (filter: any) => {
+            let tenantId: string | null = null;
+            try {
+                tenantId = await getTenantIdOrThrow();
+            } catch (err) {}
 
-            if (source === 'SUPABASE') {
-                const tenantId = await getTenantIdOrThrow();
-                // Convert camelCase keys to snake_case for Supabase
-                const snakeUpdate = mapStudentToSnakeCase(updateData);
-                const { studentUpdate, profileUpdate, securityUpdate } = splitStudentFields(snakeUpdate);
+            const whereClause: any = {};
+            if (tenantId) whereClause.tenantId = tenantId;
+            if (filter.hostelName) whereClause.hostelName = filter.hostelName;
+            if (filter.id && filter.id.$in) whereClause.id = { in: filter.id.$in };
+            if (filter._id && filter._id.$in) whereClause.id = { in: filter._id.$in };
 
-                let studentIds: string[] = [];
-
-                if (filter?.ids && Array.isArray(filter.ids)) {
-                    studentIds = filter.ids;
-                } else {
-                    // Fetch student IDs matching the filter
-                    let studentsQuery = supabase
-                        .from('students')
-                        .select('_id')
-                        .eq('tenant_id', tenantId);
-
-                    if (filter?.hostelName) {
-                        studentsQuery = studentsQuery.ilike('hostel_name', filter.hostelName);
-                    }
-
-                    const { data: studentsData, error: fetchError } = await studentsQuery;
-                    if (fetchError) throw fetchError;
-                    studentIds = (studentsData || []).map((s: any) => s._id);
-                }
-
-                if (studentIds.length === 0) {
-                    return { count: 0 };
-                }
-
-                // 1. Update core students table
-                if (Object.keys(studentUpdate).length > 0) {
-                    const { error } = await supabase
-                        .from('students')
-                        .update(studentUpdate)
-                        .in('_id', studentIds);
-                    if (error) throw error;
-                }
-
-                // 2. Update profile details
-                if (Object.keys(profileUpdate).length > 0) {
-                    const { error } = await supabase
-                        .from('student_profiles')
-                        .update(profileUpdate)
-                        .in('student_id', studentIds);
-                    if (error) throw error;
-                }
-
-                // 3. Update security details
-                if (Object.keys(securityUpdate).length > 0) {
-                    const { error } = await supabase
-                        .from('student_security')
-                        .update(securityUpdate)
-                        .in('student_id', studentIds);
-                    if (error) throw error;
-                }
-
-                return { count: studentIds.length };
-            } else if (source === 'PRISMA') {
-                const tenantId = await getTenantIdOrThrow();
-                const prismaData = filterStudentForPrisma(updateData);
-                const whereClause: any = { tenantId };
-
-                if (filter?.ids && Array.isArray(filter.ids)) {
-                    whereClause.id = { in: filter.ids };
-                } else if (filter?.hostelName) {
-                    whereClause.hostelName = { contains: filter.hostelName, mode: 'insensitive' };
-                }
-
-                const result = await prisma.student.updateMany({
-                    where: whereClause,
-                    data: prismaData
-                });
-                return { count: result.count };
-            } else {
-                await connectDB();
-                const StudentModel = (await import('@/models/Student')).default;
-
-                let mongoFilter: any = {};
-                if (filter?.ids && Array.isArray(filter.ids)) {
-                    mongoFilter._id = { $in: filter.ids };
-                } else if (filter?.hostelName) {
-                    mongoFilter.hostelName = { $regex: new RegExp(`^${filter.hostelName}$`, 'i') };
-                }
-
-                const result = await StudentModel.updateMany(mongoFilter, { $set: updateData });
-                return { count: result.modifiedCount };
-            }
+            const res = await prisma.student.deleteMany({ where: whereClause });
+            return { deletedCount: res.count };
         },
 
-        audit: async (type: string) => {
-            const source = await getDbSource();
-            if (source === 'SUPABASE') {
-                const tenantId = await getTenantIdOrThrow();
+        countDocuments: async (filter: any = {}) => {
+            let tenantId: string | null = null;
+            try {
+                tenantId = await getTenantIdOrThrow();
+            } catch (err) {}
 
-                 if (type === "duplicates-phone") {
-                    const { data: allStudents } = await supabase
-                        .from('students')
-                        .select('_id,name,phone_number,room_number,hostel_name,email,student_profiles(registration_id)')
-                        .eq('tenant_id', tenantId);
-                    const grouped = (allStudents || []).reduce((acc: any, s: any) => {
-                        const key = s.phone_number;
-                        if (!key) return acc;
-                        if (!acc[key]) acc[key] = { _id: key, count: 0, students: [] };
-                        acc[key].count++;
-                        const prof = Array.isArray(s.student_profiles) ? s.student_profiles[0] : s.student_profiles;
-                        acc[key].students.push({
-                            id: s._id,
-                            name: s.name,
-                            regId: prof?.registration_id || "",
-                            room: s.room_number,
-                            hostel: s.hostel_name,
-                            email: s.email
-                        });
-                        return acc;
-                    }, {});
-                    return Object.values(grouped).filter((g: any) => g.count > 1).sort((a: any, b: any) => b.count - a.count);
-                }
+            const whereClause: any = {};
+            if (tenantId) whereClause.tenantId = tenantId;
+            if (filter.hostelName) whereClause.hostelName = filter.hostelName;
+            if (filter.studentStatus) whereClause.studentStatus = filter.studentStatus;
 
-                if (type === "duplicates-regid") {
-                    const { data: allStudents } = await supabase
-                        .from('students')
-                        .select('_id,name,phone_number,room_number,hostel_name,email,student_profiles!inner(registration_id)')
-                        .eq('tenant_id', tenantId);
-                    const grouped = (allStudents || []).reduce((acc: any, s: any) => {
-                        const prof = Array.isArray(s.student_profiles) ? s.student_profiles[0] : s.student_profiles;
-                        const key = prof?.registration_id;
-                        if (!key || key.trim() === '') return acc;
-                        if (!acc[key]) acc[key] = { _id: key, count: 0, students: [] };
-                        acc[key].count++;
-                        acc[key].students.push({
-                            id: s._id,
-                            name: s.name,
-                            phone: s.phone_number,
-                            room: s.room_number,
-                            hostel: s.hostel_name,
-                            email: s.email
-                        });
-                        return acc;
-                    }, {});
-                    return Object.values(grouped).filter((g: any) => g.count > 1).sort((a: any, b: any) => b.count - a.count);
-                }
+            return await prisma.student.count({ where: whereClause });
+        },
 
-                if (type === "duplicates-erpid") {
-                    const { data: allStudents } = await supabase
-                        .from('students')
-                        .select('_id,name,phone_number,room_number,hostel_name,email,student_profiles!inner(registration_id,erp_id)')
-                        .eq('tenant_id', tenantId);
-                    const grouped = (allStudents || []).reduce((acc: any, s: any) => {
-                        const prof = Array.isArray(s.student_profiles) ? s.student_profiles[0] : s.student_profiles;
-                        const key = prof?.erp_id;
-                        if (!key || key.trim() === '') return acc;
-                        if (!acc[key]) acc[key] = { _id: key, count: 0, students: [] };
-                        acc[key].count++;
-                        acc[key].students.push({
-                            id: s._id,
-                            name: s.name,
-                            phone: s.phone_number,
-                            room: s.room_number,
-                            hostel: s.hostel_name,
-                            email: s.email,
-                            regId: prof?.registration_id || ""
-                        });
-                        return acc;
-                    }, {});
-                    return Object.values(grouped).filter((g: any) => g.count > 1).sort((a: any, b: any) => b.count - a.count);
-                }
+        count: async (filter: any = {}) => {
+            return db.students.countDocuments(filter);
+        },
 
-                if (type === "gibberish-names") {
-                    const { data: students } = await supabase
-                        .from('students')
-                        .select('_id,name,phone_number,hostel_name,room_number,email,student_profiles(registration_id)')
-                        .eq('tenant_id', tenantId);
-                    return (students || []).filter((s: any) => {
-                        if (!s.name) return true;
-                        const name = s.name.toLowerCase().trim();
-                        if (name.length < 3) return true;
-                        const vowels = name.match(/[aeiou]/gi) || [];
-                        if (vowels.length === 0 && name.length > 3) return true;
-                        if (/(.)\1\1\1/.test(name)) return true;
-                        const mashPatterns = ["asdf", "sdfg", "dfgh", "fghj", "ghjk", "hjkl", "lkjh", "kjhg", "jhgf", "hgfd", "gfds", "fdsa", "qwerty", "asfg", "zxcv", "1234", "ghj", "jkl", "dfs", "dfg"];
-                        if (mashPatterns.some(p => name.includes(p))) return true;
-                        if (name.length > 8 && vowels.length < 2) return true;
-                        return false;
-                    }).map((s: any) => mapStudentToCamelCase(s));
-                }
+        bulkWrite: async (operations: any[]) => {
+            let tenantId: string | null = null;
+            try {
+                tenantId = await getTenantIdOrThrow();
+            } catch (err) {}
 
-                if (type === "face-audit") {
-                    const { data: allStudents } = await supabase
-                        .from('students')
-                        .select('_id,name,phone_number,room_number,hostel_name,email,profile_picture,face_descriptor,dynamic_fields,student_profiles(registration_id,erp_id)')
-                        .eq('tenant_id', tenantId)
-                        .order('hostel_name', { ascending: true });
+            let count = 0;
+            for (const op of operations) {
+                if (op.updateOne) {
+                    const filter = op.updateOne.filter;
+                    const update = filterStudentForPrisma(op.updateOne.update, true);
+                    const whereClause: any = { ...(tenantId ? { tenantId } : {}) };
+                    if (filter.id) whereClause.id = filter.id;
+                    else if (filter._id) whereClause.id = filter._id;
+                    else if (filter.firebaseUID) whereClause.firebaseUid = filter.firebaseUID;
 
-                    return (allStudents || []).map((s: any) => {
-                        const prof = Array.isArray(s.student_profiles) ? s.student_profiles[0] : s.student_profiles;
-                        const pic = (s.profile_picture || "").trim();
-                        const isBlank = !pic || pic === "null" || pic === "undefined" || pic === "data:," || pic.length < 5 || (pic.startsWith("data:") && pic.length < 100);
-                        const hasVector = Array.isArray(s.face_descriptor) && s.face_descriptor.length > 0;
-                        const dynamicFields = s.dynamic_fields || {};
-                        const isFlagged = !!dynamicFields.requiresFaceRecapture;
-
-                        let issueType = "CLEAN";
-                        if (isBlank) {
-                            issueType = "BLANK_PHOTO";
-                        } else if (!hasVector) {
-                            issueType = "MISSING_VECTOR";
-                        } else if (isFlagged) {
-                            issueType = "FLAGGED_RETAKE";
-                        }
-
-                        return {
-                            id: s._id,
-                            _id: s._id,
-                            name: s.name,
-                            phoneNumber: s.phone_number,
-                            roomNumber: s.room_number,
-                            hostelName: s.hostel_name,
-                            email: s.email,
-                            registrationId: prof?.registration_id || "",
-                            erpId: prof?.erp_id || "",
-                            profilePicture: s.profile_picture,
-                            hasVector,
-                            isFlagged,
-                            issueType
-                        };
+                    await prisma.student.updateMany({
+                        where: whereClause,
+                        data: update
                     });
-                }
-            } else if (source === 'PRISMA') {
-                const tenantId = await getTenantIdOrThrow();
-
-                if (type === "face-audit") {
-                    const allStudents = await prisma.student.findMany({
-                        where: { tenantId },
-                        select: {
-                            id: true,
-                            name: true,
-                            phoneNumber: true,
-                            roomNumber: true,
-                            hostelName: true,
-                            email: true,
-                            registrationId: true,
-                            erpId: true,
-                            profilePicture: true,
-                            faceDescriptor: true,
-                            dynamicFields: true,
-                            studentStatus: true
-                        },
-                        orderBy: [
-                            { hostelName: 'asc' },
-                            { name: 'asc' }
-                        ]
-                    });
-
-                    return (allStudents || []).map((s: any) => {
-                        const pic = (s.profilePicture || "").trim();
-                        const isBlank = !pic || pic === "null" || pic === "undefined" || pic === "data:," || pic.length < 5 || (pic.startsWith("data:") && pic.length < 100);
-                        const hasVector = Array.isArray(s.faceDescriptor) && s.faceDescriptor.length > 0;
-                        const isFlagged = !!(s.dynamicFields && typeof s.dynamicFields === 'object' && (s.dynamicFields as any).requiresFaceRecapture);
-
-                        let issueType = "CLEAN";
-                        if (isBlank) {
-                            issueType = "BLANK_PHOTO";
-                        } else if (!hasVector) {
-                            issueType = "MISSING_VECTOR";
-                        } else if (isFlagged) {
-                            issueType = "FLAGGED_RETAKE";
-                        }
-
-                        return {
-                            id: s.id,
-                            _id: s.id,
-                            name: s.name,
-                            phoneNumber: s.phoneNumber,
-                            roomNumber: s.roomNumber,
-                            hostelName: s.hostelName,
-                            email: s.email,
-                            registrationId: s.registrationId,
-                            erpId: s.erpId,
-                            profilePicture: s.profilePicture,
-                            hasVector,
-                            isFlagged,
-                            issueType
-                        };
-                    });
-                }
-
-                if (type === "duplicates-phone") {
-                    const allStudents = await prisma.student.findMany({
-                        where: { tenantId },
-                        select: {
-                            id: true,
-                            name: true,
-                            phoneNumber: true,
-                            roomNumber: true,
-                            hostelName: true,
-                            email: true,
-                            registrationId: true
-                        }
-                    });
-                    const grouped = (allStudents || []).reduce((acc: any, s: any) => {
-                        const key = s.phoneNumber;
-                        if (!key) return acc;
-                        if (!acc[key]) acc[key] = { _id: key, count: 0, students: [] };
-                        acc[key].count++;
-                        acc[key].students.push({
-                            id: s.id,
-                            name: s.name,
-                            regId: s.registrationId,
-                            room: s.roomNumber,
-                            hostel: s.hostelName,
-                            email: s.email
-                        });
-                        return acc;
-                    }, {});
-                    return Object.values(grouped).filter((g: any) => g.count > 1).sort((a: any, b: any) => b.count - a.count);
-                }
-
-                if (type === "duplicates-regid") {
-                    const allStudents = await prisma.student.findMany({
-                        where: {
-                            tenantId,
-                            registrationId: {
-                                not: null,
-                                notIn: [""]
-                            }
-                        },
-                        select: {
-                            id: true,
-                            name: true,
-                            phoneNumber: true,
-                            roomNumber: true,
-                            hostelName: true,
-                            email: true,
-                            registrationId: true
-                        }
-                    });
-                    const grouped = (allStudents || []).reduce((acc: any, s: any) => {
-                        const key = s.registrationId;
-                        if (!key) return acc;
-                        if (!acc[key]) acc[key] = { _id: key, count: 0, students: [] };
-                        acc[key].count++;
-                        acc[key].students.push({
-                            id: s.id,
-                            name: s.name,
-                            phone: s.phoneNumber,
-                            room: s.roomNumber,
-                            hostel: s.hostelName,
-                            email: s.email
-                        });
-                        return acc;
-                    }, {});
-                    return Object.values(grouped).filter((g: any) => g.count > 1).sort((a: any, b: any) => b.count - a.count);
-                }
-
-                if (type === "duplicates-erpid") {
-                    const allStudents = await prisma.student.findMany({
-                        where: {
-                            tenantId,
-                            erpId: {
-                                not: null,
-                                notIn: [""]
-                            }
-                        },
-                        select: {
-                            id: true,
-                            name: true,
-                            phoneNumber: true,
-                            roomNumber: true,
-                            hostelName: true,
-                            email: true,
-                            registrationId: true,
-                            erpId: true
-                        }
-                    });
-                    const grouped = (allStudents || []).reduce((acc: any, s: any) => {
-                        const key = s.erpId;
-                        if (!key) return acc;
-                        if (!acc[key]) acc[key] = { _id: key, count: 0, students: [] };
-                        acc[key].count++;
-                        acc[key].students.push({
-                            id: s.id,
-                            name: s.name,
-                            phone: s.phoneNumber,
-                            room: s.roomNumber,
-                            hostel: s.hostelName,
-                            email: s.email,
-                            regId: s.registrationId
-                        });
-                        return acc;
-                    }, {});
-                    return Object.values(grouped).filter((g: any) => g.count > 1).sort((a: any, b: any) => b.count - a.count);
-                }
-
-                if (type === "gibberish-names") {
-                    const students = await prisma.student.findMany({
-                        where: { tenantId },
-                        select: {
-                            id: true,
-                            name: true,
-                            phoneNumber: true,
-                            hostelName: true,
-                            roomNumber: true,
-                            email: true,
-                            registrationId: true
-                        }
-                    });
-                    return (students || []).filter((s: any) => {
-                        if (!s.name) return true;
-                        const name = s.name.toLowerCase().trim();
-                        if (name.length < 3) return true;
-                        const vowels = name.match(/[aeiou]/gi) || [];
-                        if (vowels.length === 0 && name.length > 3) return true;
-                        if (/(.)\1\1\1/.test(name)) return true;
-                        const mashPatterns = ["asdf", "sdfg", "dfgh", "fghj", "ghjk", "hjkl", "lkjh", "kjhg", "jhgf", "hgfd", "gfds", "fdsa", "qwerty", "asfg", "zxcv", "1234", "ghj", "jkl", "dfs", "dfg"];
-                        if (mashPatterns.some(p => name.includes(p))) return true;
-                        if (name.length > 8 && vowels.length < 2) return true;
-                        return false;
-                    }).map((s: any) => mapStudentToCamelCase({ ...s, _id: s.id }));
-                }
-            } else {
-                await connectDB();
-                const StudentModel = (await import('@/models/Student')).default;
-                if (type === "duplicates-phone") {
-                    return await StudentModel.aggregate([
-                        { $group: { _id: "$phoneNumber", count: { $sum: 1 }, students: { $push: { id: "$_id", name: "$name", regId: "$registrationId", room: "$roomNumber", hostel: "$hostelName", email: "$email" } } } },
-                        { $match: { count: { $gt: 1 } } },
-                        { $sort: { count: -1 } }
-                    ]);
-                }
-                if (type === "duplicates-regid") {
-                    return await StudentModel.aggregate([
-                        { $match: { registrationId: { $nin: [null, ""], $exists: true } } },
-                        { $group: { _id: "$registrationId", count: { $sum: 1 }, students: { $push: { id: "$_id", name: "$name", phone: "$phoneNumber", room: "$roomNumber", hostel: "$hostelName", email: "$email" } } } },
-                        { $match: { count: { $gt: 1 } } },
-                        { $sort: { count: -1 } }
-                    ]);
-                }
-                if (type === "duplicates-erpid") {
-                    return await StudentModel.aggregate([
-                        { $match: { erpInformation: { $nin: [null, ""], $exists: true } } },
-                        { $group: { _id: "$erpInformation", count: { $sum: 1 }, students: { $push: { id: "$_id", name: "$name", phone: "$phoneNumber", room: "$roomNumber", hostel: "$hostelName", email: "$email", regId: "$registrationId" } } } },
-                        { $match: { count: { $gt: 1 } } },
-                        { $sort: { count: -1 } }
-                    ]);
-                }
-                if (type === "gibberish-names") {
-                    const students = await StudentModel.find({}, "name phoneNumber registrationId hostelName roomNumber email").lean();
-                    return students.filter((s: any) => {
-                        if (!s.name) return true;
-                        const name = s.name.toLowerCase().trim();
-                        if (name.length < 3) return true;
-                        const vowels = name.match(/[aeiou]/gi) || [];
-                        if (vowels.length === 0 && name.length > 3) return true;
-                        if (/(.)\1\1\1/.test(name)) return true;
-                        const mashPatterns = ["asdf", "sdfg", "dfgh", "fghj", "ghjk", "hjkl", "lkjh", "kjhg", "jhgf", "hgfd", "gfds", "fdsa", "qwerty", "asfg", "zxcv", "1234", "ghj", "jkl", "dfs", "dfg"];
-                        if (mashPatterns.some(p => name.includes(p))) return true;
-                        if (name.length > 8 && vowels.length < 2) return true;
-                        return false;
-                    }).map(mapStudentToCamelCase);
-                }
-                if (type === "face-audit") {
-                    const students = await StudentModel.find({}).lean();
-                    return students.map((s: any) => {
-                        const hasPic = !!(s.profilePicture && s.profilePicture.trim() !== '');
-                        const isBlank = !hasPic || (s.profilePicture && s.profilePicture.length < 100);
-                        const hasVector = Array.isArray(s.faceDescriptor) && s.faceDescriptor.length > 0;
-                        const isFlagged = !!(s.dynamicFields && s.dynamicFields.requiresFaceRecapture);
-
-                        let issueType = "CLEAN";
-                        if (isBlank) issueType = "BLANK_PHOTO";
-                        else if (!hasVector) issueType = "MISSING_VECTOR";
-                        else if (isFlagged) issueType = "FLAGGED_RETAKE";
-
-                        return {
-                            id: s._id,
-                            _id: s._id,
-                            name: s.name,
-                            phoneNumber: s.phoneNumber,
-                            roomNumber: s.roomNumber,
-                            hostelName: s.hostelName,
-                            email: s.email,
-                            registrationId: s.registrationId,
-                            erpId: s.erpInformation,
-                            profilePicture: s.profilePicture,
-                            hasVector,
-                            isFlagged,
-                            issueType
-                        };
-                    });
+                    count++;
+                } else if (op.insertOne) {
+                    const data = {
+                        ...filterStudentForPrisma(op.insertOne.document),
+                        id: crypto.randomUUID(),
+                        tenantId: tenantId || op.insertOne.document.tenantId
+                    };
+                    await prisma.student.create({ data });
+                    count++;
                 }
             }
-            return [];
+            return { modifiedCount: count };
+        },
+
+        audit: async (action: string) => {
+            let tenantId: string | null = null;
+            try {
+                tenantId = await getTenantIdOrThrow();
+            } catch (err) {}
+
+            const students = await prisma.student.findMany({
+                where: tenantId ? { tenantId } : undefined,
+                select: {
+                    id: true,
+                    name: true,
+                    registrationId: true,
+                    hostelName: true,
+                    faceDescriptor: true,
+                    isProfileLocked: true
+                }
+            });
+            return students;
         }
     },
 
-    /**
-     * ATTENDANCE OPERATIONS
-     */
     attendance: {
         mark: async (attendanceData: any) => {
             const sid = attendanceData.studentId;
-            const source = await getDbSource();
-
-            // ⚡ SYNC ON MARK: If they mark attendance, they are DEFINITELY inside.
-            // Force update student status and close any open gate passes.
+            let tenantId: string | null = null;
             try {
-                if (source === 'SUPABASE') {
-                    const tenantId = await getTenantIdOrThrow();
-                    // 1. Update Student Table
-                    await supabase.from('students').update({ student_status: 'in' }).eq('_id', sid).eq('tenant_id', tenantId);
-                    // 2. Close stale gate passes
-                    await supabase.from('gate_passes').update({ status: 'in', check_in_ist_time: attendanceData.istTime, qr_token_used_in: 'ATTENDANCE_OVERRIDE' }).eq('student_id', sid).eq('status', 'out').eq('tenant_id', tenantId);
-                } else if (source === 'PRISMA') {
-                    const tenantId = await getTenantIdOrThrow();
-                    await prisma.student.updateMany({
-                        where: { id: sid, tenantId },
-                        data: { studentStatus: 'in' }
-                    });
-                    await prisma.gatePass.updateMany({
-                        where: { studentId: sid, status: 'out', tenantId },
-                        data: { status: 'in', checkInIstTime: attendanceData.istTime, qrTokenUsedIn: 'ATTENDANCE_OVERRIDE' }
-                    });
-                } else {
-                    await connectDB();
-                    const [StudentModel, GatePassModel] = await Promise.all([
-                        import('@/models/Student').then(m => m.default),
-                        import('@/models/GatePass').then(m => m.default)
-                    ]);
-                    await StudentModel.findByIdAndUpdate(sid, { studentStatus: 'in' });
-                    await GatePassModel.updateMany({ studentId: sid, status: 'out' }, { status: 'in' });
-                }
+                tenantId = await getTenantIdOrThrow();
+            } catch (err) {}
+
+            try {
+                await prisma.student.updateMany({
+                    where: { id: sid, ...(tenantId ? { tenantId } : {}) },
+                    data: { studentStatus: 'in' }
+                });
+                await prisma.gatePass.updateMany({
+                    where: { studentId: sid, status: 'out', ...(tenantId ? { tenantId } : {}) },
+                    data: { status: 'in', checkInIstTime: attendanceData.istTime, qrTokenUsedIn: 'ATTENDANCE_OVERRIDE' }
+                });
             } catch (err) {
-                console.warn("⚠️ Post-attendance sync update failed (non-critical):", err);
+                console.warn("⚠️ Post-attendance sync update failed:", err);
             }
 
-            if (source === 'SUPABASE') {
-                // Map camelCase (API) to snake_case (Supabase)
-                // Note: _id is auto-generated by Supabase (gen_random_uuid())
-                const supabaseData: any = {
-                    _id: crypto.randomUUID(), // Explicitly generate for Supabase
-                    student_id: attendanceData.studentId,
-                    firebase_uid: attendanceData.firebaseUID,
-                    name: attendanceData.name,
-                    hostel_name: attendanceData.hostelName,
-                    room_number: attendanceData.roomNumber,
-                    date: attendanceData.date,
-                    ist_time: attendanceData.istTime,
-                    ist_date: attendanceData.istDate,
-                    location: attendanceData.location,
-                    device_id: attendanceData.deviceId,
-                    status: attendanceData.status,
-                    face_match_percentage: attendanceData.faceMatchPercentage,
-                    face_match_status: attendanceData.faceMatchStatus,
-                    flagged_photo_url: attendanceData.flaggedPhotoUrl,
-                    needs_review: attendanceData.needsReview,
-                    is_test: attendanceData.isTest,
-                    marked_by: attendanceData.markedBy,
-                    tenant_id: await getTenantIdOrThrow(),
-                    timestamp: attendanceData.timestamp ? new Date(attendanceData.timestamp).toISOString() : new Date().toISOString()
-                };
+            const finalData = { ...filterAttendanceForPrisma(attendanceData), tenantId };
+            if (!finalData.id) finalData.id = crypto.randomUUID();
 
-                const { data, error } = await supabase
-                    .from('attendance')
-                    .insert([supabaseData])
-                    .select();
-                if (error) {
-                    console.error("Supabase Insert Error:", error);
-                    throw error;
-                }
-                return data?.[0];
-            } else if (source === 'PRISMA') {
-                const tenantId = await getTenantIdOrThrow();
-                const finalData = { ...filterAttendanceForPrisma(attendanceData), tenantId };
-                if (!finalData.id) finalData.id = crypto.randomUUID();
-                try {
-                    const record = await prisma.attendance.create({
+            try {
+                const record = await prisma.attendance.create({
+                    data: finalData
+                });
+                return mapAttendanceToCamelCase(record);
+            } catch (createErr: any) {
+                if (createErr.code === 'P2002') {
+                    const updated = await prisma.attendance.updateMany({
+                        where: { studentId: sid, date: attendanceData.date },
                         data: finalData
                     });
-                    return record;
-                } catch (pErr: any) {
-                    if (pErr?.code === 'P2002' || pErr?.message?.includes('Unique constraint')) {
-                        console.warn("⚠️ Attendance record already exists for student today, updating existing record...");
-                        await prisma.attendance.updateMany({
-                            where: { studentId: finalData.studentId, date: finalData.date, tenantId },
-                            data: finalData
-                        });
-                        return await prisma.attendance.findFirst({
-                            where: { studentId: finalData.studentId, date: finalData.date, tenantId }
-                        });
-                    }
-                    throw pErr;
+                    return { success: true, updated };
                 }
-            } else {
-                await connectDB();
-                const AttendanceModel = (await import('@/models/Attendance')).default;
-                const record = await AttendanceModel.create(attendanceData);
-                return mapAttendanceToCamelCase(record);
+                throw createErr;
             }
         },
 
-        markBulk: async (attendanceRecords: any[]) => {
-            if (!attendanceRecords || attendanceRecords.length === 0) return { count: 0 };
-            const source = await getDbSource();
-            const sids = attendanceRecords.map(r => r.studentId);
-            
+        markBulk: async (records: any[]) => {
+            let tenantId: string | null = null;
             try {
-                if (source === 'SUPABASE') {
-                    const tenantId = await getTenantIdOrThrow();
-                    // 1. Update Student Table
-                    await supabase.from('students').update({ student_status: 'in' }).in('_id', sids).eq('tenant_id', tenantId);
-                    // 2. Close stale gate passes
-                    await supabase.from('gate_passes').update({ status: 'in', check_in_ist_time: attendanceRecords[0].istTime, qr_token_used_in: 'ATTENDANCE_OVERRIDE' }).in('student_id', sids).eq('status', 'out').eq('tenant_id', tenantId);
-                } else if (source === 'PRISMA') {
-                    const tenantId = await getTenantIdOrThrow();
-                    await prisma.student.updateMany({
-                        where: { id: { in: sids }, tenantId },
-                        data: { studentStatus: 'in' }
-                    });
-                    await prisma.gatePass.updateMany({
-                        where: { studentId: { in: sids }, status: 'out', tenantId },
-                        data: { status: 'in', checkInIstTime: attendanceRecords[0].istTime, qrTokenUsedIn: 'ATTENDANCE_OVERRIDE' }
-                    });
-                } else {
-                    await connectDB();
-                    const [StudentModel, GatePassModel] = await Promise.all([
-                        import('@/models/Student').then(m => m.default),
-                        import('@/models/GatePass').then(m => m.default)
-                    ]);
-                    await StudentModel.updateMany({ _id: { $in: sids } }, { studentStatus: 'in' });
-                    await GatePassModel.updateMany({ studentId: { $in: sids }, status: 'out' }, { status: 'in' });
-                }
-            } catch (err) {
-                console.warn("⚠️ Post-attendance bulk sync update failed:", err);
-            }
+                tenantId = await getTenantIdOrThrow();
+            } catch (err) {}
 
-            if (source === 'SUPABASE') {
-                const tenantId = await getTenantIdOrThrow();
-                const supabaseData = attendanceRecords.map(a => ({
-                    _id: crypto.randomUUID(), // Explicitly generate for Supabase
-                    student_id: a.studentId,
-                    firebase_uid: a.firebaseUID,
-                    name: a.name,
-                    hostel_name: a.hostelName,
-                    room_number: a.roomNumber,
-                    date: a.date,
-                    ist_time: a.istTime,
-                    ist_date: a.istDate,
-                    location: a.location,
-                    device_id: a.deviceId,
-                    status: a.status,
-                    face_match_percentage: a.faceMatchPercentage,
-                    face_match_status: a.faceMatchStatus,
-                    flagged_photo_url: a.flaggedPhotoUrl,
-                    needs_review: a.needsReview,
-                    is_test: a.isTest,
-                    marked_by: a.markedBy,
-                    tenant_id: tenantId,
-                    timestamp: a.timestamp ? new Date(a.timestamp).toISOString() : new Date().toISOString()
-                }));
-
-                const { error } = await supabase
-                    .from('attendance')
-                    .upsert(supabaseData, { onConflict: 'student_id,date', ignoreDuplicates: true });
-                if (error) {
-                    console.warn("Supabase Bulk Upsert Notice (falling back to insert):", error.message);
-                    const { error: insErr } = await supabase.from('attendance').insert(supabaseData);
-                    if (insErr) console.warn("Supabase Bulk Insert Notice:", insErr.message);
-                }
-                return { count: supabaseData.length };
-            } else if (source === 'PRISMA') {
-                const tenantId = await getTenantIdOrThrow();
-                const prismaRecords = attendanceRecords.map(a => ({
-                    ...filterAttendanceForPrisma(a),
-                    id: crypto.randomUUID(),
-                    tenantId
-                }));
-                const result = await prisma.attendance.createMany({
-                    data: prismaRecords,
-                    skipDuplicates: true
+            let count = 0;
+            for (const item of records) {
+                const finalData = {
+                    ...filterAttendanceForPrisma(item),
+                    id: item.id || item._id || crypto.randomUUID(),
+                    tenantId: tenantId || item.tenantId
+                };
+                await prisma.attendance.create({ data: finalData }).catch(async () => {
+                    await prisma.attendance.updateMany({
+                        where: { studentId: item.studentId, date: item.date },
+                        data: finalData
+                    });
                 });
-                return { count: result.count };
-            } else {
-                await connectDB();
-                const AttendanceModel = (await import('@/models/Attendance')).default;
-                const result = await AttendanceModel.insertMany(attendanceRecords);
-                return { count: result.length };
+                count++;
             }
+            return { count };
         },
 
         unmarkBulk: async (studentIds: string[], date: string) => {
-            if (!studentIds || studentIds.length === 0) return { count: 0 };
-            const source = await getDbSource();
-            
-            if (source === 'SUPABASE') {
-                const tenantId = await getTenantIdOrThrow();
-                const { error, data } = await supabase
-                    .from('attendance')
-                    .delete()
-                    .in('student_id', studentIds)
-                    .eq('date', date)
-                    .eq('tenant_id', tenantId)
-                    .select('_id');
-                
-                if (error) {
-                    console.error("Supabase Bulk Unmark Error:", error);
-                    throw error;
+            let tenantId: string | null = null;
+            try {
+                tenantId = await getTenantIdOrThrow();
+            } catch (err) {}
+
+            const res = await prisma.attendance.deleteMany({
+                where: {
+                    ...(tenantId ? { tenantId } : {}),
+                    studentId: { in: studentIds },
+                    date
                 }
-                return { count: data?.length || 0 };
-            } else if (source === 'PRISMA') {
-                const tenantId = await getTenantIdOrThrow();
-                const result = await prisma.attendance.deleteMany({
-                    where: {
-                        studentId: { in: studentIds },
-                        date: date,
-                        tenantId
-                    }
-                });
-                return { count: result.count };
-            } else {
-                await connectDB();
-                const AttendanceModel = (await import('@/models/Attendance')).default;
-                const result = await AttendanceModel.deleteMany({
-                    studentId: { $in: studentIds },
-                    date: date
-                });
-                return { count: result.deletedCount };
-            }
+            });
+            return { deletedCount: res.count };
         },
 
-        // Check if student has already marked attendance today
         checkToday: async (studentId: string, date: string) => {
-            const source = await getDbSource();
-            if (source === 'SUPABASE') {
-                const { data, error } = await supabase
-                    .from('attendance')
-                    .select('*')
-                    .eq('student_id', studentId)
-                    .eq('date', date)
-                    .single(); // Assuming only one record per day per student
+            let tenantId: string | null = null;
+            try {
+                tenantId = await getTenantIdOrThrow();
+            } catch (err) {}
 
-                if (error && error.code !== 'PGRST116') { // PGRST116 is 'not found'
-                    console.error("Supabase checkToday error:", error);
+            const record = await prisma.attendance.findFirst({
+                where: {
+                    ...(tenantId ? { tenantId } : {}),
+                    studentId,
+                    date
                 }
-                return data;
-            } else if (source === 'PRISMA') {
-                const record = await prisma.attendance.findFirst({
-                    where: { studentId, date }
-                });
-                return record ? mapAttendanceToCamelCase(record) : null;
-            } else {
-                await connectDB();
-                const AttendanceModel = (await import('@/models/Attendance')).default;
-                const record = await AttendanceModel.findOne({ studentId, date }).lean();
-                return mapAttendanceToCamelCase(record);
-            }
-        },
-
-        // Get a single attendance record by ID
-        getById: async (id: string) => {
-            const source = await getDbSource();
-            if (source === 'SUPABASE') {
-                const { data, error } = await supabase
-                    .from('attendance')
-                    .select('*, studentId:students!attendance_student_id_fkey(*, student_profiles(*), student_security(*))')
-                    .eq('_id', id)
-                    .maybeSingle();
-                if (error) return null;
-                return mapAttendanceToCamelCase(data);
-            } else if (source === 'PRISMA') {
-                const record = await prisma.attendance.findFirst({
-                    where: { id },
-                    include: { student: true }
-                });
-                if (!record) return null;
-                return mapAttendanceToCamelCase({
-                    ...record,
-                    students: record.student
-                });
-            } else {
-                await connectDB();
-                const AttendanceModel = (await import('@/models/Attendance')).default;
-                const record = await AttendanceModel.findById(id).populate('studentId').lean();
-                return mapAttendanceToCamelCase(record);
-            }
-        },
-
-        // Get list of attendance records (Admin Dashboard)
-        list: async (filters: any = {}, options: { limit?: number } = {}) => {
-            const source = await getDbSource();
-            const limit = options.limit || 2000;
-
-            if (source === 'SUPABASE') {
-                const tenantId = await getTenantIdOrThrow();
-                const lightStudentFields = '_id,name,room_number,phone_number,hostel_name,student_profiles(registration_id)';
-                const attendanceFields = '_id,student_id,name,hostel_name,room_number,ist_time,face_match_percentage,face_match_status,marked_by,device_id,location,status,date';
-
-                let allData: any[] = [];
-                let page = 0;
-                const chunkSize = 1000;
-                const targetLimit = limit || 2000;
-
-                while (allData.length < targetLimit) {
-                    const fetchSize = Math.min(chunkSize, targetLimit - allData.length);
-                    let query = supabase
-                        .from('attendance')
-                        .select(`${attendanceFields}, studentId:students!attendance_student_id_fkey(${lightStudentFields})`)
-                        .eq('tenant_id', tenantId);
-
-                    if (filters.date) {
-                        const d1 = filters.date.trim();
-                        let d2 = d1;
-                        if (/^\d{4}-\d{2}-\d{2}$/.test(d1)) {
-                            const [y, m, d] = d1.split('-');
-                            d2 = `${d}-${m}-${y}`;
-                        } else if (/^\d{2}-\d{2}-\d{4}$/.test(d1)) {
-                            const [d, m, y] = d1.split('-');
-                            d2 = `${y}-${m}-${d}`;
-                        }
-                        query = query.or(`date.in.("${d1}","${d2}"),ist_date.in.("${d1}","${d2}")`);
-                    }
-
-                    if (filters.startDate && filters.endDate) {
-                        query = query.gte('date', filters.startDate).lte('date', filters.endDate);
-                    }
-
-                    if (filters.studentId) {
-                        query = query.eq('student_id', filters.studentId);
-                    }
-
-                    if (filters.hostelName && filters.hostelName !== 'all' && filters.hostelName !== '') {
-                        query = query.ilike('hostel_name', `%${filters.hostelName}%`);
-                    }
-
-                    query = query.order('date', { ascending: false }).order('timestamp', { ascending: false });
-
-                    const from = page * chunkSize;
-                    const to = from + fetchSize - 1;
-                    query = query.range(from, to);
-
-                    const { data, error } = await query;
-
-                    if (error) {
-                        console.error("Supabase attendance list error:", error);
-                        throw error;
-                    }
-
-                    if (!data || data.length === 0) break;
-                    allData.push(...data);
-                    if (data.length < fetchSize) break;
-                    page++;
-                }
-
-                return allData.map(mapAttendanceToCamelCase);
-
-            } else if (source === 'PRISMA') {
-                const tenantId = await getTenantIdOrThrow();
-                const whereClause: any = {
-                    tenantId
-                };
-
-                if (filters.date) {
-                    const d1 = filters.date.trim();
-                    let d2 = d1;
-                    if (/^\d{4}-\d{2}-\d{2}$/.test(d1)) {
-                        const [y, m, d] = d1.split('-');
-                        d2 = `${d}-${m}-${y}`;
-                    } else if (/^\d{2}-\d{2}-\d{4}$/.test(d1)) {
-                        const [d, m, y] = d1.split('-');
-                        d2 = `${y}-${m}-${d}`;
-                    }
-                    whereClause.OR = [
-                        { date: { in: [d1, d2] } },
-                        { istDate: { in: [d1, d2] } }
-                    ];
-                }
-                if (filters.startDate && filters.endDate) {
-                    whereClause.date = { gte: filters.startDate, lte: filters.endDate };
-                }
-                if (filters.studentId) {
-                    whereClause.studentId = filters.studentId;
-                }
-                if (filters.hostelName && filters.hostelName !== 'all' && filters.hostelName !== '') {
-                    whereClause.hostelName = { contains: filters.hostelName, mode: 'insensitive' };
-                }
-
-                // ⚡ OPTIMIZED PROJECTION: Select only needed display fields for student in attendance log
-                const lightweightStudentAttendanceSelect = {
-                    select: {
-                        id: true,
-                        name: true,
-                        phoneNumber: true,
-                        hostelName: true,
-                        roomNumber: true,
-                        registrationId: true,
-                        erpId: true,
-                        fatherNumber: true,
-                        motherNumber: true,
-                        studentStatus: true,
-                        profilePicture: true,
-                        branch: true,
-                        collegeName: true,
-                        year: true,
-                        semester: true,
-                        section: true,
-                    }
-                };
-
-                const data = await prisma.attendance.findMany({
-                    where: whereClause,
-                    include: { student: lightweightStudentAttendanceSelect },
-                    orderBy: [
-                        { date: 'desc' },
-                        { timestamp: 'desc' }
-                    ],
-                    take: limit
-                });
-                return (data || []).map(r => mapAttendanceToCamelCase({
-                    ...r,
-                    students: r.student
-                }));
-            } else {
-                // MongoDB Query
-                await connectDB();
-                const AttendanceModel = (await import('@/models/Attendance')).default;
-                const StudentModel = (await import('@/models/Student')).default;
-
-                let query: any = {};
-
-                // Date Filtering
-                if (filters.startDate && filters.endDate) {
-                    query.date = { $gte: filters.startDate, $lte: filters.endDate };
-                } else if (filters.date) {
-                    query.date = filters.date;
-                }
-
-                // Student & Hostel Filtering
-                if (filters.studentId) {
-                    query.studentId = filters.studentId;
-                }
-
-                if (filters.hostelName && filters.hostelName !== "all" && filters.hostelName !== "") {
-                    query.hostelName = { $regex: filters.hostelName, $options: "i" };
-                }
-
-                const attendance = await AttendanceModel.find(query)
-                    .populate({
-                        path: "studentId",
-                        model: StudentModel,
-                        select: "name email hostelName roomNumber phoneNumber registrationId",
-                    })
-                    .sort({ date: -1, timestamp: -1 })
-                    .limit(limit)
-                    .lean();
-
-                return JSON.parse(JSON.stringify(attendance));
-            }
+            });
+            return record ? mapAttendanceToCamelCase(record) : null;
         },
 
         summary: async (date: string) => {
-            const source = await getDbSource();
-            if (source === 'SUPABASE') {
-                const tenantId = await getTenantIdOrThrow();
+            let tenantId: string | null = null;
+            try {
+                tenantId = await getTenantIdOrThrow();
+            } catch (err) {}
 
-                // ⚡ ULTRA-OPTIMIZED GROUPED FETCH: Only get counts per hostel
-                // Since Supabase doesn't support complex 'group by' easily in JS select, 
-                // we fetch minimal data (just hostel names) and perform light grouping.
-                const { data, error } = await supabase
-                    .from('attendance')
-                    .select('hostel_name, student_id')
-                    .eq('tenant_id', tenantId)
-                    .eq('date', date)
-                    .neq('is_test', true);
+            const whereClause: any = { date };
+            if (tenantId) whereClause.tenantId = tenantId;
 
-                if (error) throw error;
+            const records = await prisma.attendance.findMany({
+                where: whereClause,
+                select: { studentId: true, hostelName: true, status: true }
+            });
 
-                // Group by hostel locally (still saves a lot of weight compared to full records)
-                const counts: Record<string, number> = {};
-                const uniqueStudents = new Set<string>();
-                
-                (data || []).forEach((r: any) => {
-                    counts[r.hostel_name] = (counts[r.hostel_name] || 0) + 1;
-                    if (r.student_id) uniqueStudents.add(r.student_id.toString());
-                });
+            const presentStudentIds = records
+                .filter(r => r.status === 'present' || !r.status)
+                .map(r => r.studentId);
 
-                return {
-                    summary: Object.entries(counts).map(([name, count]) => ({ _id: name, count })),
-                    presentStudentIds: Array.from(uniqueStudents)
-                };
-            } else if (source === 'PRISMA') {
-                const tenantId = await getTenantIdOrThrow();
-                
-                const groups = await prisma.attendance.groupBy({
-                    by: ['hostelName'],
-                    where: {
-                        tenantId,
-                        date: date
-                    },
-                    _count: {
-                        studentId: true
-                    }
-                });
+            // Group count by hostel
+            const hostelMap = new Map<string, number>();
+            records.forEach(r => {
+                const h = r.hostelName || 'Unknown';
+                hostelMap.set(h, (hostelMap.get(h) || 0) + 1);
+            });
 
-                const presentStudents = await prisma.attendance.findMany({
-                    where: {
-                        tenantId,
-                        date: date
-                    },
-                    select: {
-                        studentId: true
-                    }
-                });
+            const summaryList = Array.from(hostelMap.entries()).map(([hostelName, count]) => ({
+                _id: hostelName,
+                count
+            }));
 
-                return {
-                    summary: groups.map(g => ({ _id: g.hostelName, count: g._count.studentId })),
-                    presentStudentIds: presentStudents.map(a => a.studentId)
-                };
-            } else {
-                await connectDB();
-                const AttendanceModel = (await import('@/models/Attendance')).default;
-
-                const summary = await AttendanceModel.aggregate([
-                    { $match: { date: date } },
-                    { $group: { _id: "$hostelName", count: { $sum: 1 } } }
-                ]);
-
-                const presentStudents = await AttendanceModel.find({ date: date }).select("studentId").lean();
-
-                return {
-                    summary: summary,
-                    presentStudentIds: presentStudents.map((a: any) => a.studentId.toString())
-                };
-            }
+            return {
+                presentStudentIds,
+                summary: summaryList,
+                count: presentStudentIds.length
+            };
         },
 
-        delete: async (id: string) => {
-            const source = await getDbSource();
-            if (source === 'SUPABASE') {
-                const tenantId = await getTenantIdOrThrow();
-                const { error } = await supabase
-                    .from('attendance')
-                    .delete()
-                    .eq('_id', id)
-                    .eq('tenant_id', tenantId);
-                if (error) throw error;
-                return true;
-            } else if (source === 'PRISMA') {
-                const tenantId = await getTenantIdOrThrow();
-                await prisma.attendance.deleteMany({
-                    where: { id, tenantId }
-                });
-                return true;
-            } else {
-                await connectDB();
-                const AttendanceModel = (await import('@/models/Attendance')).default;
-                const result = await AttendanceModel.findByIdAndDelete(id);
-                return !!result;
-            }
+        getById: async (id: string) => {
+            const record = await prisma.attendance.findUnique({
+                where: { id }
+            });
+            return record ? mapAttendanceToCamelCase(record) : null;
         },
 
-        deleteMany: async (filter: any) => {
-            const source = await getDbSource();
-            if (source === 'SUPABASE') {
-                const tenantId = await getTenantIdOrThrow();
-                let query = supabase.from('attendance').delete();
-                query = query.eq('tenant_id', tenantId);
+        findOne: async (filter: any) => {
+            let tenantId: string | null = null;
+            try {
+                tenantId = await getTenantIdOrThrow();
+            } catch (err) {}
 
-                if (filter.beforeDate) {
-                    query = query.lte('timestamp', new Date(filter.beforeDate).toISOString());
-                } else if (filter?.timestamp?.$lt) {
-                    query = query.lt('timestamp', filter.timestamp.$lt.toISOString());
-                }
-                if (filter.hostelName) {
-                    query = query.ilike('hostel_name', `%${filter.hostelName}%`);
-                }
+            const whereClause: any = {};
+            if (tenantId) whereClause.tenantId = tenantId;
+            if (filter.studentId) whereClause.studentId = filter.studentId;
+            if (filter.date) whereClause.date = filter.date;
+            if (filter.firebaseUID) whereClause.firebaseUid = filter.firebaseUID;
 
-                const { error, data } = await query.select('_id');
-                if (error) throw error;
-                return { count: data?.length || 0 };
-            } else if (source === 'PRISMA') {
-                const tenantId = await getTenantIdOrThrow();
-                const whereClause: any = { tenantId };
-
-                if (filter.beforeDate) {
-                    whereClause.timestamp = { lte: new Date(filter.beforeDate) };
-                } else if (filter?.timestamp?.$lt) {
-                    whereClause.timestamp = { lt: new Date(filter.timestamp.$lt) };
-                }
-                if (filter.hostelName) {
-                    whereClause.hostelName = { contains: filter.hostelName, mode: 'insensitive' };
-                }
-
-                const result = await prisma.attendance.deleteMany({
-                    where: whereClause
-                });
-                return { count: result.count };
-            } else {
-                await connectDB();
-                const AttendanceModel = (await import('@/models/Attendance')).default;
-                let mongoQuery: any = { ...filter };
-                if (filter.beforeDate) {
-                    mongoQuery.timestamp = { $lte: new Date(filter.beforeDate) };
-                    delete mongoQuery.beforeDate;
-                }
-                if (filter.hostelName) {
-                    mongoQuery.hostelName = { $regex: filter.hostelName, $options: "i" };
-                }
-                const result = await AttendanceModel.deleteMany(mongoQuery);
-                return { count: result.deletedCount };
-            }
+            const record = await prisma.attendance.findFirst({
+                where: whereClause
+            });
+            return record ? mapAttendanceToCamelCase(record) : null;
         },
 
-        update: async (id: string, updateData: any) => {
-            const source = await getDbSource();
-            if (source === 'SUPABASE') {
-                const tenantId = await getTenantIdOrThrow();
-                const snakeUpdate = mapAttendanceToSnakeCase(updateData);
-                const { data, error } = await supabase
-                    .from('attendance')
-                    .update(snakeUpdate)
-                    .eq('_id', id)
-                    .eq('tenant_id', tenantId)
-                    .select()
-                    .single();
-                if (error) throw error;
-                return mapAttendanceToCamelCase(data);
-            } else if (source === 'PRISMA') {
-                const tenantId = await getTenantIdOrThrow();
-                const prismaData = filterAttendanceForPrisma(updateData);
+        list: async (filter: any = {}, options: { limit?: number; offset?: number } = {}) => {
+            let tenantId: string | null = null;
+            try {
+                tenantId = await getTenantIdOrThrow();
+            } catch (err) {}
+
+            const whereClause: any = {};
+            if (tenantId) whereClause.tenantId = tenantId;
+            if (filter.studentId) whereClause.studentId = filter.studentId;
+            if (filter.date) whereClause.date = filter.date;
+            if (filter.hostelName && filter.hostelName !== 'all') {
+                whereClause.hostelName = { equals: filter.hostelName, mode: 'insensitive' };
+            }
+            if (filter.status) whereClause.status = filter.status;
+
+            const records = await prisma.attendance.findMany({
+                where: whereClause,
+                take: options.limit || undefined,
+                skip: options.offset || undefined,
+                orderBy: { timestamp: 'desc' }
+            });
+
+            const mapped = records.map(mapAttendanceToCamelCase);
+            (mapped as any).records = mapped;
+            (mapped as any).total = mapped.length;
+            return mapped;
+        },
+
+        find: async (filter: any = {}, options: { limit?: number; offset?: number } = {}) => {
+            return db.attendance.list(filter, options);
+        },
+
+        findMany: async (filter: any = {}) => {
+            return db.attendance.list(filter);
+        },
+
+        create: async (attendanceData: any) => {
+            return db.attendance.mark(attendanceData);
+        },
+
+        upsert: async (filter: any, attendanceData: any) => {
+            let tenantId: string | null = null;
+            try {
+                tenantId = await getTenantIdOrThrow();
+            } catch (err) {}
+
+            const data = {
+                ...filterAttendanceForPrisma(attendanceData),
+                tenantId
+            };
+
+            const existing = await prisma.attendance.findFirst({
+                where: {
+                    ...(tenantId ? { tenantId } : {}),
+                    studentId: filter.studentId || data.studentId,
+                    date: filter.date || data.date
+                }
+            });
+
+            if (existing) {
                 const updated = await prisma.attendance.update({
-                    where: { id },
-                    data: prismaData
+                    where: { id: existing.id },
+                    data
                 });
                 return mapAttendanceToCamelCase(updated);
             } else {
-                await connectDB();
-                const AttendanceModel = (await import('@/models/Attendance')).default;
-                const updated = await AttendanceModel.findByIdAndUpdate(id, updateData, { new: true });
-                return JSON.parse(JSON.stringify(updated));
-            }
-        }
-    },
-
-
-    /**
-     * HOSTEL OPERATIONS
-     */
-    hostels: {
-        getById: async (id: string) => {
-            const source = await getDbSource();
-            if (source === 'SUPABASE') {
-                const tenantId = await getTenantIdOrThrow();
-                const { data, error } = await supabase
-                    .from('hostels')
-                    .select('*')
-                    .eq('_id', id)
-                    .eq('tenant_id', tenantId)
-                    .single();
-                if (error) return null;
-                return mapHostelToCamelCase(data);
-            } else if (source === 'PRISMA') {
-                const tenantId = await getTenantIdOrThrow();
-                const hostel = await prisma.hostel.findFirst({
-                    where: { id, tenantId }
+                const created = await prisma.attendance.create({
+                    data: { ...data, id: crypto.randomUUID() }
                 });
-                return hostel ? mapHostelToCamelCase(hostel) : null;
-            } else {
-                await connectDB();
-                const HostelModel = (await import('@/models/Hostel')).default;
-                const hostel = await HostelModel.findById(id).lean();
-                return mapHostelToCamelCase(hostel);
-            }
-        },
-
-        getAll: async () => {
-            const source = await getDbSource();
-            if (source === 'SUPABASE') {
-                const tenantId = await getTenantIdOrThrow();
-                const { data, error } = await supabase
-                    .from('hostels')
-                    .select('*')
-                    .eq('tenant_id', tenantId)
-                    .order('name', { ascending: true });
-                if (error) throw error;
-                return (data || []).map(mapHostelToCamelCase);
-            } else if (source === 'PRISMA') {
-                const tenantId = await getTenantIdOrThrow();
-                const [data, overridesSetting] = await Promise.all([
-                    prisma.hostel.findMany({
-                        where: { tenantId },
-                        orderBy: { name: 'asc' }
-                    }),
-                    prisma.platformSetting.findUnique({
-                        where: { id: `hostel_overrides_${tenantId}` }
-                    }).catch(() => null)
-                ]);
-                const overrides = (overridesSetting?.settings as any) || {};
-                return (data || []).map((h: any) => {
-                    const mapped = mapHostelToCamelCase(h);
-                    const hOverrides = overrides[h.id] || overrides[h.name] || {};
-                    return {
-                        ...mapped,
-                        allowWardenNotification: hOverrides.allowWardenNotification !== undefined ? hOverrides.allowWardenNotification : mapped.allowWardenNotification,
-                        allowStudentNotification: hOverrides.allowStudentNotification !== undefined ? hOverrides.allowStudentNotification : mapped.allowStudentNotification,
-                        registrationFormat: hOverrides.registrationFormat !== undefined ? hOverrides.registrationFormat : mapped.registrationFormat
-                    };
-                });
-            } else {
-                await connectDB();
-                const HostelModel = (await import('@/models/Hostel')).default;
-                const hostels = await HostelModel.find({}).sort({ name: 1 }).lean();
-                return hostels.map(mapHostelToCamelCase);
-            }
-        },
-
-        findOne: async (filter: any) => {
-            const source = await getDbSource();
-            if (source === 'SUPABASE') {
-                const tenantId = await getTenantIdOrThrow();
-                let query = supabase.from('hostels').select('*');
-                query = query.eq('tenant_id', tenantId);
-                if (filter.name) query = query.eq('name', filter.name);
-
-                const { data, error } = await query.maybeSingle();
-                if (error) return null;
-                return mapHostelToCamelCase(data);
-            } else if (source === 'PRISMA') {
-                const tenantId = await getTenantIdOrThrow();
-                const whereClause: any = { tenantId };
-                if (filter.name) whereClause.name = filter.name;
-
-                const [data, overridesSetting] = await Promise.all([
-                    prisma.hostel.findFirst({
-                        where: whereClause
-                    }),
-                    prisma.platformSetting.findUnique({
-                        where: { id: `hostel_overrides_${tenantId}` }
-                    }).catch(() => null)
-                ]);
-                if (!data) return null;
-                const mapped = mapHostelToCamelCase(data);
-                const overrides = (overridesSetting?.settings as any) || {};
-                const hOverrides = overrides[data.id] || overrides[data.name] || {};
-                return {
-                    ...mapped,
-                    allowWardenNotification: hOverrides.allowWardenNotification !== undefined ? hOverrides.allowWardenNotification : mapped.allowWardenNotification,
-                    allowStudentNotification: hOverrides.allowStudentNotification !== undefined ? hOverrides.allowStudentNotification : mapped.allowStudentNotification,
-                    registrationFormat: hOverrides.registrationFormat !== undefined ? hOverrides.registrationFormat : mapped.registrationFormat
-                };
-            } else {
-                await connectDB();
-                const HostelModel = (await import('@/models/Hostel')).default;
-                const hostel = await HostelModel.findOne(filter).lean();
-                return mapHostelToCamelCase(hostel);
-            }
-        },
-
-        create: async (hostelData: any) => {
-            const source = await getDbSource();
-            if (source === 'SUPABASE') {
-                const tenantId = await getTenantIdOrThrow();
-                const snakeData = { ...mapHostelToSnakeCase(hostelData), tenant_id: tenantId };
-                if (!snakeData._id) {
-                    snakeData._id = crypto.randomUUID();
-                }
-                const { data, error } = await supabase
-                    .from('hostels')
-                    .insert([snakeData])
-                    .select()
-                    .single();
-                if (error) throw error;
-                return mapHostelToCamelCase(data);
-            } else if (source === 'PRISMA') {
-                const tenantId = await getTenantIdOrThrow();
-                const prismaData = { ...filterHostelForPrisma(hostelData), tenantId };
-                if (!prismaData.id) {
-                    prismaData.id = crypto.randomUUID();
-                }
-                const data = await prisma.hostel.create({
-                    data: prismaData
-                });
-
-                if (hostelData.allowWardenNotification !== undefined || hostelData.allowStudentNotification !== undefined || hostelData.registrationFormat !== undefined) {
-                    try {
-                        const settingId = `hostel_overrides_${tenantId}`;
-                        const existing = await prisma.platformSetting.findUnique({ where: { id: settingId } }).catch(() => null);
-                        const curOverrides = (existing?.settings as any) || {};
-                        curOverrides[data.id] = {
-                            ...(curOverrides[data.id] || {}),
-                            ...(hostelData.allowWardenNotification !== undefined ? { allowWardenNotification: hostelData.allowWardenNotification } : {}),
-                            ...(hostelData.allowStudentNotification !== undefined ? { allowStudentNotification: hostelData.allowStudentNotification } : {}),
-                            ...(hostelData.registrationFormat !== undefined ? { registrationFormat: hostelData.registrationFormat } : {})
-                        };
-                        await prisma.platformSetting.upsert({
-                            where: { id: settingId },
-                            create: { id: settingId, settings: curOverrides },
-                            update: { settings: curOverrides }
-                        });
-                    } catch (e) {
-                        console.error("Error saving hostel overrides:", e);
-                    }
-                }
-
-                const mapped = mapHostelToCamelCase(data);
-                return {
-                    ...mapped,
-                    allowWardenNotification: hostelData.allowWardenNotification !== undefined ? hostelData.allowWardenNotification : mapped.allowWardenNotification,
-                    allowStudentNotification: hostelData.allowStudentNotification !== undefined ? hostelData.allowStudentNotification : mapped.allowStudentNotification,
-                    registrationFormat: hostelData.registrationFormat !== undefined ? hostelData.registrationFormat : mapped.registrationFormat
-                };
-            } else {
-                await connectDB();
-                const HostelModel = (await import('@/models/Hostel')).default;
-                const record = await HostelModel.create(hostelData);
-                return JSON.parse(JSON.stringify(record));
+                return mapAttendanceToCamelCase(created);
             }
         },
 
         update: async (id: string, updateData: any) => {
-            const source = await getDbSource();
-            if (source === 'SUPABASE') {
-                const tenantId = await getTenantIdOrThrow();
-                const snakeData = mapHostelToSnakeCase(updateData);
-                const { data, error } = await supabase
-                    .from('hostels')
-                    .update(snakeData)
-                    .eq('_id', id)
-                    .eq('tenant_id', tenantId)
-                    .select()
-                    .single();
-                if (error) throw error;
-                return mapHostelToCamelCase(data);
-            } else if (source === 'PRISMA') {
-                const tenantId = await getTenantIdOrThrow();
-                const prismaData = filterHostelForPrisma(updateData);
-                let updatedHostel = null;
-                if (Object.keys(prismaData).length > 0) {
-                    updatedHostel = await prisma.hostel.update({
-                        where: { id },
-                        data: prismaData
-                    });
-                } else {
-                    updatedHostel = await prisma.hostel.findUnique({ where: { id } });
-                }
+            const prismaData = filterAttendanceForPrisma(updateData);
+            const record = await prisma.attendance.update({
+                where: { id },
+                data: prismaData
+            });
+            return mapAttendanceToCamelCase(record);
+        },
 
-                if (updateData.allowWardenNotification !== undefined || updateData.allowStudentNotification !== undefined || updateData.registrationFormat !== undefined) {
-                    try {
-                        const settingId = `hostel_overrides_${tenantId}`;
-                        const existing = await prisma.platformSetting.findUnique({ where: { id: settingId } }).catch(() => null);
-                        const curOverrides = (existing?.settings as any) || {};
-                        curOverrides[id] = {
-                            ...(curOverrides[id] || {}),
-                            ...(updateData.allowWardenNotification !== undefined ? { allowWardenNotification: updateData.allowWardenNotification } : {}),
-                            ...(updateData.allowStudentNotification !== undefined ? { allowStudentNotification: updateData.allowStudentNotification } : {}),
-                            ...(updateData.registrationFormat !== undefined ? { registrationFormat: updateData.registrationFormat } : {})
-                        };
-                        await prisma.platformSetting.upsert({
-                            where: { id: settingId },
-                            create: { id: settingId, settings: curOverrides },
-                            update: { settings: curOverrides }
-                        });
-                    } catch (e) {
-                        console.error("Error saving hostel overrides:", e);
-                    }
-                }
+        updateOne: async (filter: any, updateData: any) => {
+            let tenantId: string | null = null;
+            try {
+                tenantId = await getTenantIdOrThrow();
+            } catch (err) {}
 
-                const mapped = mapHostelToCamelCase(updatedHostel);
-                return {
-                    ...mapped,
-                    allowWardenNotification: updateData.allowWardenNotification !== undefined ? updateData.allowWardenNotification : mapped.allowWardenNotification,
-                    allowStudentNotification: updateData.allowStudentNotification !== undefined ? updateData.allowStudentNotification : mapped.allowStudentNotification,
-                    registrationFormat: updateData.registrationFormat !== undefined ? updateData.registrationFormat : mapped.registrationFormat
-                };
-            } else {
-                await connectDB();
-                const HostelModel = (await import('@/models/Hostel')).default;
-                const updated = await HostelModel.findByIdAndUpdate(id, updateData, { new: true });
-                return JSON.parse(JSON.stringify(updated));
-            }
+            const prismaData = filterAttendanceForPrisma(updateData);
+            await prisma.attendance.updateMany({
+                where: {
+                    ...(tenantId ? { tenantId } : {}),
+                    studentId: filter.studentId,
+                    date: filter.date
+                },
+                data: prismaData
+            });
+            return true;
         },
 
         delete: async (id: string) => {
-            const source = await getDbSource();
-            if (source === 'SUPABASE') {
-                const tenantId = await getTenantIdOrThrow();
-                const { error } = await supabase
-                    .from('hostels')
-                    .delete()
-                    .eq('_id', id)
-                    .eq('tenant_id', tenantId);
-                if (error) throw error;
-                return true;
-            } else if (source === 'PRISMA') {
-                const tenantId = await getTenantIdOrThrow();
-                await prisma.hostel.deleteMany({
-                    where: { id, tenantId }
-                });
-                return true;
-            } else {
-                await connectDB();
-                const HostelModel = (await import('@/models/Hostel')).default;
-                const result = await HostelModel.findByIdAndDelete(id);
-                return !!result;
-            }
-        },
-
-        bulkUpdate: async (filter: any, updateData: any) => {
-            const source = await getDbSource();
-            if (source === 'SUPABASE') {
-                const snakeUpdate = mapHostelToSnakeCase(updateData.$set || updateData);
-                let query = supabase.from('hostels').update(snakeUpdate);
-                // Apply simple equality filters if provided
-                if (filter) {
-                    Object.keys(filter).forEach(key => {
-                        query = query.eq(key, filter[key]);
-                    });
-                }
-                const { data, error } = await query.select();
-                if (error) throw error;
-                return { count: data?.length || 0 };
-            } else if (source === 'PRISMA') {
-                const tenantId = await getTenantIdOrThrow();
-                const prismaData = filterHostelForPrisma(updateData.$set || updateData);
-                const whereClause: any = { tenantId };
-                if (filter) {
-                    Object.keys(filter).forEach(key => {
-                        whereClause[key] = filter[key];
-                    });
-                }
-                const result = await prisma.hostel.updateMany({
-                    where: whereClause,
-                    data: prismaData
-                });
-                return { count: result.count };
-            } else {
-                await connectDB();
-                const HostelModel = (await import('@/models/Hostel')).default;
-                const result = await HostelModel.updateMany(filter, { $set: updateData });
-                return { count: result.modifiedCount };
-            }
-        }
-    },
-
-    /**
-     * GATE PASS OPERATIONS
-     */
-    gatePasses: {
-        list: async (filters: any = {}, options: { page?: number; limit?: number; sortField?: string; sortOrder?: string; countOnly?: boolean; light?: boolean; populate?: boolean } = {}) => {
-            const source = await getDbSource();
-            const limit = options.limit || 50;
-            const page = options.page || 1;
-            const skip = (page - 1) * limit;
-
-            console.log(`[GATEPASS_LIST_ENTRY] source=${source}, filters=${JSON.stringify(filters)}`);
-
-            if (source === 'SUPABASE') {
-                const tenantId = await getTenantIdOrThrow();
-                const studentFields = '_id, name, phone_number, student_profiles!inner(college_name, erp_id, father_name, father_number, mother_name, mother_number)';
-                const shouldJoin = (filters.collegeName && filters.collegeName !== 'all') || filters.erpId || options.populate;
-
-                // ⚡ OPTIMIZATION: Only perform heavy join if we NEED to filter by joined fields
-                // This prevents the whole query from failing if the FK is missing but we only need basic data
-                let selectString = shouldJoin
-                    ? `*, students!student_id!inner(${studentFields})`
-                    : `*`;
-
-                let query = supabase.from('gate_passes').select(selectString, { count: 'exact' });
-
-                query = query.eq('tenant_id', tenantId);
-
-                const validStudentId = (filters.studentId && String(filters.studentId).trim() !== 'undefined' && String(filters.studentId).trim() !== 'null' && String(filters.studentId).trim() !== '') ? String(filters.studentId).trim() : null;
-                const validFirebaseUID = (filters.firebaseUID && String(filters.firebaseUID).trim() !== 'undefined' && String(filters.firebaseUID).trim() !== 'null' && String(filters.firebaseUID).trim() !== '') ? String(filters.firebaseUID).trim() : null;
-
-                const studentFilterAttempted = ('studentId' in filters && !validStudentId) || ('firebaseUID' in filters && !validFirebaseUID);
-                if (studentFilterAttempted && !validStudentId && !validFirebaseUID) {
-                    return { records: [], total: 0 };
-                }
-
-                if (validStudentId && validFirebaseUID) {
-                    query = query.or(`student_id.eq.${validStudentId},firebase_uid.eq.${validFirebaseUID}`);
-                } else if (validFirebaseUID) {
-                    query = query.eq('firebase_uid', validFirebaseUID);
-                } else if (validStudentId) {
-                    query = query.eq('student_id', validStudentId);
-                }
-                if (filters.status && filters.status !== 'all') query = query.eq('status', filters.status);
-                if (filters.registrationId) query = query.ilike('registration_id', `%${filters.registrationId}%`);
-                if (filters.type) {
-                    if (filters.type === 'leave' || filters.type === 'HOME-LEAVE') {
-                        query = query.in('type', ['leave', 'HOME-LEAVE', 'home-leave', 'hleave', 'Leave']);
-                    } else if (filters.type === 'outing' || filters.type === 'GATE-PASS') {
-                        query = query.in('type', ['outing', 'GATE-PASS', 'gate-pass', 'gpass', 'Outing']);
-                    } else {
-                        query = query.eq('type', filters.type);
-                    }
-                }
-                if (filters.erpId) query = query.ilike('students.student_profiles.erp_id', `%${filters.erpId}%`);
-                if (filters.hostelName && filters.hostelName !== 'all') {
-                    if (typeof filters.hostelName === 'object' && filters.hostelName.$in) {
-                        query = query.in('hostel_name', filters.hostelName.$in);
-                    } else {
-                        query = query.ilike('hostel_name', `%${filters.hostelName}%`);
-                    }
-                }
-                if (filters.collegeName && filters.collegeName !== 'all') query = query.ilike('students.student_profiles.college_name', `%${filters.collegeName}%`);
-
-                if (filters.search) {
-                    const s = `%${filters.search}%`;
-                    // Always try to search in joined table if possible, but keep it safe
-                    if (shouldJoin) {
-                        query = query.or(`registration_id.ilike.${s},student_name.ilike.${s},students.student_profiles.erp_id.ilike.${s}`);
-                    } else {
-                        query = query.or(`registration_id.ilike.${s},student_name.ilike.${s}`);
-                    }
-                }
-
-                if (filters.startDate) query = query.gte('check_out_time', new Date(filters.startDate).toISOString());
-                if (filters.endDate) {
-                    const end = new Date(filters.endDate);
-                    end.setHours(23, 59, 59, 999);
-                    query = query.lte('check_out_time', end.toISOString());
-                }
-
-                const sortFieldMap: any = {
-                    checkOutTime: 'check_out_time',
-                    checkInTime: 'check_in_time',
-                    studentName: 'student_name',
-                    hostelName: 'hostel_name',
-                    updatedAt: 'updated_at',
-                    createdAt: 'created_at'
-                };
-                let sortField = options.sortField || 'check_out_time';
-                if (sortFieldMap[sortField]) sortField = sortFieldMap[sortField];
-
-                const sortOrder = options.sortOrder || 'desc';
-
-                const { data, count, error } = await query
-                    .order(sortField, { ascending: sortOrder === 'asc' })
-                    .range(skip, skip + limit - 1);
-
-                if (error) {
-                    console.error("❌ [SUPABASE_GATEPASS_LIST_ERROR]:", error);
-                    return { records: [], total: 0 };
-                }
-
-                if (filters.status === "out") {
-                    console.log(`[SYNC_GATEPASSES] Found ${data?.length || 0} open passes in Supabase.`);
-                }
-
-                return {
-                    records: (data || []).map(mapGatePassToCamelCase),
-                    total: count || 0
-                };
-            } else if (source === 'PRISMA') {
-                const tenantId = await getTenantIdOrThrow();
-                const shouldJoin = (filters.collegeName && filters.collegeName !== 'all') || filters.erpId || options.populate;
-
-                const whereClause: any = {
-                    tenantId: tenantId
-                };
-
-                const validStudentId = (filters.studentId && String(filters.studentId).trim() !== 'undefined' && String(filters.studentId).trim() !== 'null' && String(filters.studentId).trim() !== '') ? String(filters.studentId).trim() : null;
-                const validFirebaseUID = (filters.firebaseUID && String(filters.firebaseUID).trim() !== 'undefined' && String(filters.firebaseUID).trim() !== 'null' && String(filters.firebaseUID).trim() !== '') ? String(filters.firebaseUID).trim() : null;
-
-                const studentFilterAttempted = ('studentId' in filters && !validStudentId) || ('firebaseUID' in filters && !validFirebaseUID);
-                if (studentFilterAttempted && !validStudentId && !validFirebaseUID) {
-                    return { records: [], total: 0 };
-                }
-
-                if (validStudentId && validFirebaseUID) {
-                    whereClause.OR = [
-                        { studentId: validStudentId },
-                        { firebaseUid: validFirebaseUID }
-                    ];
-                } else if (validFirebaseUID) {
-                    whereClause.firebaseUid = validFirebaseUID;
-                } else if (validStudentId) {
-                    whereClause.studentId = validStudentId;
-                }
-                if (filters.status && filters.status !== 'all') whereClause.status = filters.status;
-                if (filters.type) {
-                    if (filters.type === 'leave' || filters.type === 'HOME-LEAVE') {
-                        whereClause.type = { in: ['leave', 'HOME-LEAVE', 'home-leave', 'hleave', 'Leave'] };
-                    } else if (filters.type === 'outing' || filters.type === 'GATE-PASS') {
-                        whereClause.type = { in: ['outing', 'GATE-PASS', 'gate-pass', 'gpass', 'Outing'] };
-                    } else {
-                        whereClause.type = filters.type;
-                    }
-                }
-
-                if (filters.registrationId) {
-                    whereClause.registrationId = {
-                        contains: filters.registrationId,
-                        mode: 'insensitive'
-                    };
-                }
-                if (filters.hostelName && filters.hostelName !== 'all') {
-                    if (typeof filters.hostelName === 'object' && filters.hostelName.$in) {
-                        whereClause.hostelName = { in: filters.hostelName.$in };
-                    } else {
-                        whereClause.hostelName = {
-                            contains: filters.hostelName,
-                            mode: 'insensitive'
-                        };
-                    }
-                }
-
-                if (filters.collegeName && filters.collegeName !== 'all') {
-                    whereClause.student = {
-                        ...whereClause.student,
-                        collegeName: { contains: filters.collegeName, mode: 'insensitive' }
-                    };
-                }
-                if (filters.erpId) {
-                    whereClause.student = {
-                        ...whereClause.student,
-                        erpId: { contains: filters.erpId, mode: 'insensitive' }
-                    };
-                }
-
-                if (filters.search) {
-                    whereClause.OR = [
-                        { registrationId: { contains: filters.search, mode: 'insensitive' } },
-                        { studentName: { contains: filters.search, mode: 'insensitive' } }
-                    ];
-                    if (shouldJoin) {
-                        whereClause.OR.push({
-                            student: {
-                                erpId: { contains: filters.search, mode: 'insensitive' }
-                            }
-                        });
-                    }
-                }
-
-                if (filters.startDate || filters.endDate) {
-                    whereClause.checkOutTime = {};
-                    if (filters.startDate) whereClause.checkOutTime.gte = new Date(filters.startDate);
-                    if (filters.endDate) {
-                        const end = new Date(filters.endDate);
-                        end.setHours(23, 59, 59, 999);
-                        whereClause.checkOutTime.lte = end;
-                    }
-                }
-
-                const sortFieldMap: any = {
-                    checkOutTime: 'checkOutTime',
-                    checkInTime: 'checkInTime',
-                    studentName: 'studentName',
-                    hostelName: 'hostelName',
-                    updatedAt: 'updatedAt',
-                    createdAt: 'createdAt'
-                };
-                let sortField = options.sortField || 'checkOutTime';
-                if (sortFieldMap[sortField]) sortField = sortFieldMap[sortField];
-                const sortOrder = options.sortOrder || 'desc';
-
-                // ⚡ OPTIMIZED PROJECTION: Omit heavy faceDescriptor, deviceHistory and raw pictures
-                const lightweightStudentSelect = {
-                    select: {
-                        id: true,
-                        name: true,
-                        email: true,
-                        phoneNumber: true,
-                        hostelName: true,
-                        roomNumber: true,
-                        studentStatus: true,
-                        registrationId: true,
-                        erpId: true,
-                        collegeName: true,
-                        branch: true,
-                        year: true,
-                        semester: true,
-                        section: true,
-                        fatherName: true,
-                        fatherNumber: true,
-                        motherName: true,
-                        motherNumber: true,
-                    }
-                };
-
-                const total = (options as any).skipCount ? 0 : await prisma.gatePass.count({ where: whereClause });
-                if (options.countOnly) {
-                    return {
-                        records: [],
-                        total
-                    };
-                }
-
-                const records = await prisma.gatePass.findMany({
-                    where: whereClause,
-                    orderBy: { [sortField]: sortOrder },
-                    skip,
-                    take: limit,
-                    include: shouldJoin ? { student: lightweightStudentSelect } : undefined
-                });
-
-                const mappedRecords = records.map((g: any) => {
-                    const formatted = {
-                        ...g,
-                        students: g.student
-                    };
-                    return mapGatePassToCamelCase(formatted);
-                });
-
-                return {
-                    records: mappedRecords,
-                    total
-                };
-            } else {
-                await connectDB();
-                const GatePassModel = (await import('@/models/GatePass')).default;
-
-                const mongoQuery: any = {};
-                const validStudentId = (filters.studentId && String(filters.studentId).trim() !== 'undefined' && String(filters.studentId).trim() !== 'null' && String(filters.studentId).trim() !== '') ? String(filters.studentId).trim() : null;
-                const validFirebaseUID = (filters.firebaseUID && String(filters.firebaseUID).trim() !== 'undefined' && String(filters.firebaseUID).trim() !== 'null' && String(filters.firebaseUID).trim() !== '') ? String(filters.firebaseUID).trim() : null;
-
-                const studentFilterAttempted = ('studentId' in filters && !validStudentId) || ('firebaseUID' in filters && !validFirebaseUID);
-                if (studentFilterAttempted && !validStudentId && !validFirebaseUID) {
-                    return { records: [], total: 0 };
-                }
-
-                if (validStudentId && validFirebaseUID) {
-                    mongoQuery.$or = [
-                        { studentId: validStudentId },
-                        { firebaseUID: validFirebaseUID }
-                    ];
-                } else if (validFirebaseUID) {
-                    mongoQuery.firebaseUID = validFirebaseUID;
-                } else if (validStudentId) {
-                    mongoQuery.studentId = validStudentId;
-                }
-                if (filters.status && filters.status !== 'all') mongoQuery.status = filters.status;
-                if (filters.type) {
-                    if (filters.type === 'leave' || filters.type === 'HOME-LEAVE') {
-                        mongoQuery.type = { $in: ['leave', 'HOME-LEAVE', 'home-leave', 'hleave', 'Leave'] };
-                    } else if (filters.type === 'outing' || filters.type === 'GATE-PASS') {
-                        mongoQuery.type = { $in: ['outing', 'GATE-PASS', 'gate-pass', 'gpass', 'Outing'] };
-                    } else {
-                        mongoQuery.type = filters.type;
-                    }
-                }
-                if (filters.hostelName && filters.hostelName !== "all") {
-                    mongoQuery.hostelName = { $regex: filters.hostelName, $options: "i" };
-                }
-                if (filters.startDate || filters.endDate) {
-                    mongoQuery.checkOutTime = {};
-                    if (filters.startDate) mongoQuery.checkOutTime.$gte = new Date(filters.startDate);
-                    if (filters.endDate) {
-                        const end = new Date(filters.endDate);
-                        end.setHours(23, 59, 59, 999);
-                        mongoQuery.checkOutTime.$lte = end;
-                    }
-                }
-
-                if (filters.search) {
-                    const searchRegex = { $regex: filters.search, $options: "i" };
-                    mongoQuery.$or = [
-                        { studentName: searchRegex },
-                        { registrationId: searchRegex }
-                    ];
-                }
-
-                const sortFieldMap: any = {
-                    check_out_time: 'checkOutTime',
-                    check_in_time: 'checkInTime',
-                    student_name: 'studentName',
-                    hostel_name: 'hostelName',
-                    updated_at: 'updatedAt',
-                    created_at: 'createdAt'
-                };
-                let sortField = options.sortField || 'checkOutTime';
-                if (sortFieldMap[sortField]) sortField = sortFieldMap[sortField];
-
-                const sortOrder = options.sortOrder === 'asc' ? 1 : -1;
-
-                let query = GatePassModel.find(mongoQuery)
-                    .sort({ [sortField]: sortOrder })
-                    .skip(skip)
-                    .limit(limit);
-
-                if (options.populate) {
-                    query = query.populate('studentId', 'name phoneNumber phone_number registrationId hostelName roomNumber erp_id erpInformation fatherName fatherNumber motherName motherNumber');
-                }
-
-                const records = await query.lean();
-
-                const total = await GatePassModel.countDocuments(mongoQuery);
-
-                return {
-                    records: records.map(mapGatePassToCamelCase),
-                    total
-                };
-            }
-        },
-
-        create: async (gatePassData: any) => {
-            const source = await getDbSource();
-            if (source === 'SUPABASE') {
-                const tenantId = await getTenantIdOrThrow();
-                const snakeData = mapGatePassToSnakeCase(gatePassData);
-                snakeData.tenant_id = tenantId;
-
-                // Ensure _id is generated for Supabase if not provided
-                if (!snakeData._id) {
-                    snakeData._id = crypto.randomUUID();
-                }
-
-                const { data, error } = await supabase
-                    .from('gate_passes')
-                    .insert([snakeData])
-                    .select()
-                    .single();
-                if (error) throw error;
-                return mapGatePassToCamelCase(data);
-            } else if (source === 'PRISMA') {
-                const tenantId = await getTenantIdOrThrow().catch(() => null);
-                const prismaData = filterGatePassForPrisma(gatePassData);
-                prismaData.tenantId = tenantId || "26739d24-0214-409b-aa81-42e628e88c2b";
-                if (!prismaData.id) {
-                    prismaData.id = crypto.randomUUID();
-                }
-
-                // ⚡ ENSURE STUDENT RECORD EXISTS IN PRISMA TO SATISFY FOREIGN KEY
-                if (prismaData.studentId) {
-                    const studentExists = await prisma.student.findUnique({
-                        where: { id: prismaData.studentId },
-                        select: { id: true }
-                    });
-
-                    if (!studentExists) {
-                        const resolvedStudent = await db.students.getById(prismaData.studentId);
-                        if (resolvedStudent) {
-                            const prismaStudent = await prisma.student.findFirst({
-                                where: {
-                                    OR: [
-                                        { firebaseUid: resolvedStudent.firebaseUID },
-                                        { email: resolvedStudent.email },
-                                        { phoneNumber: resolvedStudent.phoneNumber }
-                                    ].filter(Boolean) as any
-                                }
-                            });
-
-                            if (prismaStudent) {
-                                prismaData.studentId = prismaStudent.id;
-                            } else {
-                                try {
-                                    const newStudentPrisma = {
-                                        ...filterStudentForPrisma(resolvedStudent, false),
-                                        id: resolvedStudent.id || prismaData.studentId,
-                                        tenantId: tenantId || resolvedStudent.tenantId || "26739d24-0214-409b-aa81-42e628e88c2b",
-                                        firebaseUid: resolvedStudent.firebaseUID || prismaData.firebaseUid || crypto.randomUUID()
-                                    };
-                                    const created = await prisma.student.create({ data: newStudentPrisma });
-                                    prismaData.studentId = created.id;
-                                } catch (syncErr) {
-                                    console.warn("⚠️ Failed to auto-sync student to Prisma for gatepass FK:", syncErr);
-                                }
-                            }
-                        }
-                    }
-                }
-
-                const data = await prisma.gatePass.create({
-                    data: prismaData
-                });
-                return mapGatePassToCamelCase(data);
-            } else {
-                await connectDB();
-                const GatePassModel = (await import('@/models/GatePass')).default;
-                const record = await GatePassModel.create(gatePassData);
-                return JSON.parse(JSON.stringify(record));
-            }
-        },
-
-        update: async (id: string, updateData: any) => {
-            const source = await getDbSource();
-            if (source === 'SUPABASE') {
-                const tenantId = await getTenantIdOrThrow();
-                const snakeData = mapGatePassToSnakeCase(updateData);
-                const { data, error } = await supabase
-                    .from('gate_passes')
-                    .update(snakeData)
-                    .eq('_id', id)
-                    .eq('tenant_id', tenantId)
-                    .select()
-                    .single();
-                if (error) throw error;
-                return mapGatePassToCamelCase(data);
-            } else if (source === 'PRISMA') {
-                const tenantId = await getTenantIdOrThrow();
-                const prismaData = filterGatePassForPrisma(updateData);
-                const existing = await prisma.gatePass.findUnique({ where: { id } });
-                if (!existing || existing.tenantId !== tenantId) {
-                    throw new Error("Gate pass not found or unauthorized");
-                }
-                const data = await prisma.gatePass.update({
-                    where: { id },
-                    data: prismaData
-                });
-                return mapGatePassToCamelCase(data);
-            } else {
-                await connectDB();
-                const GatePassModel = (await import('@/models/GatePass')).default;
-                const updated = await GatePassModel.findByIdAndUpdate(id, updateData, { new: true });
-                return JSON.parse(JSON.stringify(updated));
-            }
-        },
-
-        findOne: async (filter: any) => {
-            const source = await getDbSource();
-            if (source === 'SUPABASE') {
-                const tenantId = await getTenantIdOrThrow();
-                let query = supabase.from('gate_passes').select('*');
-                query = query.eq('tenant_id', tenantId);
-                if (filter.studentId) query = query.eq('student_id', filter.studentId);
-                if (filter.firebaseUID) query = query.eq('firebase_uid', filter.firebaseUID);
-                if (filter.status) query = query.eq('status', filter.status);
-
-                const { data, error } = await query
-                    .order('check_out_time', { ascending: false })
-                    .limit(1)
-                    .maybeSingle();
-
-                if (error) return null;
-                return mapGatePassToCamelCase(data);
-            } else if (source === 'PRISMA') {
-                const tenantId = await getTenantIdOrThrow();
-                const whereClause: any = { tenantId };
-                if (filter.studentId) whereClause.studentId = filter.studentId;
-                if (filter.firebaseUID) whereClause.firebaseUid = filter.firebaseUID;
-                if (filter.status) whereClause.status = filter.status;
-                const data = await prisma.gatePass.findFirst({
-                    where: whereClause,
-                    orderBy: { checkOutTime: 'desc' }
-                });
-                return data ? mapGatePassToCamelCase(data) : null;
-            } else {
-                await connectDB();
-                const GatePassModel = (await import('@/models/GatePass')).default;
-                const record = await GatePassModel.findOne(filter).sort({ checkOutTime: -1 }).lean();
-                return record ? JSON.parse(JSON.stringify(record)) : null;
-            }
-        },
-
-        count: async (filters: any = {}) => {
-            const source = await getDbSource();
-            if (source === 'SUPABASE') {
-                const tenantId = await getTenantIdOrThrow();
-                let query = supabase.from('gate_passes').select('*', { count: 'exact', head: true });
-                query = query.eq('tenant_id', tenantId);
-                if (filters.status) query = query.eq('status', filters.status);
-                if (filters.hostelName && filters.hostelName !== 'all') {
-                    query = query.ilike('hostel_name', `%${filters.hostelName}%`);
-                }
-                const { count, error } = await query;
-                if (error) throw error;
-                return count || 0;
-            } else if (source === 'PRISMA') {
-                const tenantId = await getTenantIdOrThrow();
-                const whereClause: any = { tenantId };
-                if (filters.status) whereClause.status = filters.status;
-                if (filters.hostelName && filters.hostelName !== 'all') {
-                    whereClause.hostelName = { contains: filters.hostelName, mode: 'insensitive' };
-                }
-                const count = await prisma.gatePass.count({ where: whereClause });
-                return count;
-            } else {
-                await connectDB();
-                const GatePassModel = (await import('@/models/GatePass')).default;
-                let mongoQuery: any = {};
-                if (filters.status) mongoQuery.status = filters.status;
-                if (filters.hostelName && filters.hostelName !== 'all') {
-                    mongoQuery.hostelName = { $regex: filters.hostelName, $options: "i" };
-                }
-                return await GatePassModel.countDocuments(mongoQuery);
-            }
-        },
-
-        deleteMany: async (filter: any = {}) => {
-            const source = await getDbSource();
-            if (source === 'SUPABASE') {
-                const tenantId = await getTenantIdOrThrow();
-                console.log(`[DB_ADAPTER_DELETE_GATEPASSES] tenantId=${tenantId}, filter=${JSON.stringify(filter)}`);
-                let query = supabase.from('gate_passes').delete().eq('tenant_id', tenantId);
-                if (filter.status) {
-                    query = query.eq('status', filter.status);
-                }
-                if (filter.beforeDate) {
-                    query = query.lte('check_out_time', new Date(filter.beforeDate).toISOString());
-                }
-                if (filter.hostelName) {
-                    query = query.ilike('hostel_name', `%${filter.hostelName}%`);
-                }
-                const { error, data } = await query.select('_id');
-                console.log(`[DB_ADAPTER_DELETE_GATEPASSES] Result error=${JSON.stringify(error)}, deletedCount=${data?.length || 0}`);
-                if (error) throw error;
-                return { deletedCount: data?.length || 0 };
-            } else if (source === 'PRISMA') {
-                const tenantId = await getTenantIdOrThrow();
-                const whereClause: any = { tenantId };
-                if (filter.status) {
-                    whereClause.status = filter.status;
-                }
-                if (filter.beforeDate) {
-                    whereClause.checkOutTime = { lte: new Date(filter.beforeDate) };
-                }
-                if (filter.hostelName) {
-                    whereClause.hostelName = { contains: filter.hostelName, mode: 'insensitive' };
-                }
-                const result = await prisma.gatePass.deleteMany({
-                    where: whereClause
-                });
-                return { deletedCount: result.count };
-            } else {
-                await connectDB();
-                const GatePassModel = (await import('@/models/GatePass')).default;
-                let mongoQuery: any = { ...filter };
-                if (filter.beforeDate) {
-                    mongoQuery.checkOutTime = { $lte: new Date(filter.beforeDate) };
-                    delete mongoQuery.beforeDate;
-                }
-                if (filter.hostelName) {
-                    mongoQuery.hostelName = { $regex: filter.hostelName, $options: "i" };
-                }
-                const result = await GatePassModel.deleteMany(mongoQuery);
-                return { deletedCount: result.deletedCount };
-            }
-        }
-    },
-
-    /**
-     * GATE PASS TOKEN OPERATIONS
-     */
-    gatePassTokens: {
-        create: async (tokenData: any) => {
-            const source = await getDbSource();
-            if (source === 'SUPABASE') {
-                const snakeData = {
-                    _id: crypto.randomUUID(),
-                    token: tokenData.token,
-                    gate_name: tokenData.gateName,
-                    expires_at: tokenData.expiresAt,
-                    created_at: tokenData.createdAt || new Date().toISOString()
-                };
-                const { data, error } = await supabase
-                    .from('gate_pass_tokens')
-                    .insert([snakeData])
-                    .select()
-                    .single();
-                if (error) throw error;
-                return mapGatePassTokenToCamelCase(data);
-            } else if (source === 'PRISMA') {
-                const prismaData = filterGatePassTokenForPrisma(tokenData);
-                if (!prismaData.id) {
-                    prismaData.id = crypto.randomUUID();
-                }
-                const data = await prisma.gatePassToken.create({
-                    data: prismaData
-                });
-                return mapGatePassTokenToCamelCase(data);
-            } else {
-                await connectDB();
-                const GatePassTokenModel = (await import('@/models/GatePassToken')).default;
-                const record = await GatePassTokenModel.create(tokenData);
-                return JSON.parse(JSON.stringify(record));
-            }
-        },
-
-        findOne: async (filter: any) => {
-            const source = await getDbSource();
-            if (source === 'SUPABASE') {
-                let query = supabase.from('gate_pass_tokens').select('*');
-                if (filter.token) query = query.eq('token', filter.token);
-
-                const { data, error } = await query.maybeSingle();
-                if (error) return null;
-                return mapGatePassTokenToCamelCase(data);
-            } else if (source === 'PRISMA') {
-                const whereClause: any = {};
-                if (filter.token) {
-                    whereClause.token = filter.token;
-                } else if (filter._id || filter.id) {
-                    whereClause.id = filter._id || filter.id;
-                }
-                const data = await prisma.gatePassToken.findFirst({
-                    where: whereClause
-                });
-                return data ? mapGatePassTokenToCamelCase(data) : null;
-            } else {
-                await connectDB();
-                const GatePassTokenModel = (await import('@/models/GatePassToken')).default;
-                const record = await GatePassTokenModel.findOne(filter).lean();
-                return record ? JSON.parse(JSON.stringify(record)) : null;
-            }
-        },
-
-        deleteMany: async (filter: any = {}) => {
-            const source = await getDbSource();
-            if (source === 'SUPABASE') {
-                let query = supabase.from('gate_pass_tokens').delete();
-                if (Object.keys(filter).length === 0) {
-                    // Supabase delete requires a filter. Use a filter that matches all rows.
-                    query = query.neq('_id', '');
-                } else {
-                    // Apply filters for Supabase
-                    if (filter._id) query = query.eq('_id', filter._id);
-                    if (filter.token) query = query.eq('token', filter.token);
-                }
-
-                const { error, count } = await query;
-                if (error) throw error;
-                return { deletedCount: count || 0 };
-            } else if (source === 'PRISMA') {
-                const whereClause: any = {};
-                if (filter._id || filter.id) whereClause.id = filter._id || filter.id;
-                if (filter.token) whereClause.token = filter.token;
-                const result = await prisma.gatePassToken.deleteMany({
-                    where: whereClause
-                });
-                return { deletedCount: result.count };
-            } else {
-                await connectDB();
-                const GatePassTokenModel = (await import('@/models/GatePassToken')).default;
-                const result = await GatePassTokenModel.deleteMany(filter);
-                return { deletedCount: result.deletedCount };
-            }
-        }
-    },
-
-    /**
-     * FIELD ENFORCEMENT OPERATIONS
-     */
-    fieldEnforcement: {
-        find: async (filter: any) => {
-            const source = await getDbSource();
-            if (source === 'SUPABASE') {
-                const tenantId = await getTenantIdOrThrow();
-                let query = supabase.from('field_enforcement').select('*');
-                query = query.eq('tenant_id', tenantId);
-                if (filter.hostelName) {
-                    if (typeof filter.hostelName === 'object' && filter.hostelName.$regex) {
-                        const pattern = filter.hostelName.$regex.replace(/^\^|\$$/g, '');
-                        query = query.ilike('hostel_name', pattern);
-                    } else {
-                        query = query.eq('hostel_name', filter.hostelName);
-                    }
-                }
-                const { data, error } = await query;
-                if (error) throw error;
-                return (data || []).map(mapFieldEnforcementToCamelCase);
-            } else if (source === 'PRISMA') {
-                const tenantId = await getTenantIdOrThrow();
-                const whereClause: any = { tenantId };
-                if (filter.hostelName) {
-                    if (typeof filter.hostelName === 'object' && filter.hostelName.$regex) {
-                        const pattern = filter.hostelName.$regex.replace(/^\^|\$$/g, '');
-                        whereClause.hostelName = { contains: pattern, mode: 'insensitive' };
-                    } else {
-                        whereClause.hostelName = filter.hostelName;
-                    }
-                }
-                const data = await prisma.fieldEnforcement.findMany({
-                    where: whereClause
-                });
-                return data.map(mapFieldEnforcementToCamelCase);
-            } else {
-                await connectDB();
-                const FieldEnforcementModel = (await import('@/models/FieldEnforcement')).default;
-                const rules = await FieldEnforcementModel.find(filter).lean();
-                return JSON.parse(JSON.stringify(rules));
-            }
-        },
-
-        findOneAndUpdate: async (filter: any, update: any, options: { upsert?: boolean; new?: boolean } = {}) => {
-            const source = await getDbSource();
-            if (source === 'SUPABASE') {
-                const tenantId = await getTenantIdOrThrow();
-                const snakeUpdate = mapFieldEnforcementToSnakeCase(update.$set || update);
-                const hostelName = filter.hostelName?.$regex ? filter.hostelName.$regex.replace(/^\^|\$$/g, '') : (typeof filter.hostelName === 'string' ? filter.hostelName : null);
-
-                if (!hostelName) return null;
-
-                // ⚡ ROBUSTNESS: Search GLOBALLY for this hostel name. 
-                // Some older tables have unique constraints on 'hostel_name' only, not (hostel_name, tenant_id).
-                // We search without 'tenant_id' filter first to see if we'd hit a conflict.
-                const { data: results, error: findError } = await supabase
-                    .from('field_enforcement')
-                    .select('_id, tenant_id')
-                    .ilike('hostel_name', hostelName)
-                    .limit(1);
-
-                const globalExisting = results?.[0];
-
-                if (globalExisting) {
-                    // Update the existing record (this handles both same-tenant updates and "stealing" an orphaned/other record)
-                    const { data, error } = await supabase
-                        .from('field_enforcement')
-                        .update({ ...snakeUpdate, tenant_id: tenantId }) // Ensure it's now owned by this tenant
-                        .eq('_id', globalExisting._id)
-                        .select()
-                        .single();
-                    if (error) throw error;
-                    return mapFieldEnforcementToCamelCase(data);
-                } else if (options.upsert) {
-                    // New record
-                    const insertData = {
-                        ...snakeUpdate,
-                        _id: crypto.randomUUID(),
-                        hostel_name: hostelName,
-                        tenant_id: tenantId
-                    };
-                    const { data, error } = await supabase
-                        .from('field_enforcement')
-                        .insert([insertData])
-                        .select()
-                        .single();
-                    if (error) throw error;
-                    return mapFieldEnforcementToCamelCase(data);
-                }
-                return null;
-            } else if (source === 'PRISMA') {
-                const tenantId = await getTenantIdOrThrow();
-                const prismaData = filterFieldEnforcementForPrisma(update.$set || update);
-                const hostelName = filter.hostelName?.$regex ? filter.hostelName.$regex.replace(/^\^|\$$/g, '') : (typeof filter.hostelName === 'string' ? filter.hostelName : null);
-
-                if (!hostelName) return null;
-
-                const globalExisting = await prisma.fieldEnforcement.findFirst({
-                    where: { hostelName: { equals: hostelName, mode: 'insensitive' } }
-                });
-
-                if (globalExisting) {
-                    const data = await prisma.fieldEnforcement.update({
-                        where: { id: globalExisting.id },
-                        data: { ...prismaData, tenantId }
-                    });
-                    return mapFieldEnforcementToCamelCase(data);
-                } else if (options.upsert) {
-                    const data = await prisma.fieldEnforcement.create({
-                        data: {
-                            ...prismaData,
-                            id: crypto.randomUUID(),
-                            hostelName,
-                            tenantId
-                        }
-                    });
-                    return mapFieldEnforcementToCamelCase(data);
-                }
-                return null;
-            } else {
-                await connectDB();
-                const FieldEnforcementModel = (await import('@/models/FieldEnforcement')).default;
-                const updated = await FieldEnforcementModel.findOneAndUpdate(filter, update, options);
-                return JSON.parse(JSON.stringify(updated));
-            }
-        },
-
-        findOneAndDelete: async (filter: any) => {
-            const source = await getDbSource();
-            if (source === 'SUPABASE') {
-                const tenantId = await getTenantIdOrThrow();
-                let hostelNameFilter;
-                if (filter.hostelName) {
-                    if (typeof filter.hostelName === 'object' && filter.hostelName.$regex) {
-                        hostelNameFilter = filter.hostelName.$regex.replace(/^\^|\$$/g, '');
-                    } else if (typeof filter.hostelName === 'string') {
-                        hostelNameFilter = filter.hostelName;
-                    }
-                }
-
-                if (!hostelNameFilter) return null;
-
-                const { data, error } = await supabase
-                    .from('field_enforcement')
-                    .delete()
-                    .ilike('hostel_name', hostelNameFilter)
-                    .eq('tenant_id', tenantId)
-                    .select()
-                    .maybeSingle();
-                if (error) throw error;
-                return data;
-            } else if (source === 'PRISMA') {
-                const tenantId = await getTenantIdOrThrow();
-                let hostelNameFilter;
-                if (filter.hostelName) {
-                    if (typeof filter.hostelName === 'object' && filter.hostelName.$regex) {
-                        hostelNameFilter = filter.hostelName.$regex.replace(/^\^|\$$/g, '');
-                    } else if (typeof filter.hostelName === 'string') {
-                        hostelNameFilter = filter.hostelName;
-                    }
-                }
-
-                if (!hostelNameFilter) return null;
-
-                const existing = await prisma.fieldEnforcement.findFirst({
-                    where: {
-                        hostelName: { equals: hostelNameFilter, mode: 'insensitive' },
-                        tenantId
-                    }
-                });
-
-                if (!existing) return null;
-
-                await prisma.fieldEnforcement.delete({
-                    where: { id: existing.id }
-                });
-                return existing;
-            } else {
-                await connectDB();
-                const FieldEnforcementModel = (await import('@/models/FieldEnforcement')).default;
-                const deleted = await FieldEnforcementModel.findOneAndDelete(filter);
-                return !!deleted;
-            }
-        }
-    },
-
-    /**
-     * NOTIFICATION OPERATIONS
-     */
-    notifications: {
-        list: async (filters: any = {}, options: { limit?: number } = {}) => {
-            const source = await getDbSource();
-            const limit = options.limit || 50;
-
-            if (source === 'SUPABASE') {
-                const tenantId = await getTenantIdOrThrow();
-                // ⚡ OPTIMIZATION: Exclude large 'image' field (Base64) from notifications list
-                const notificationFields = '_id,sender_id,target_type,target_hostel,target_student_id,message,priority,expires_at,acknowledged_by,created_at,updated_at';
-
-                // Explicitly use the column name in the relation join if needed, or simple join
-                let query = supabase.from('notifications').select(`${notificationFields}, target_student_id:students(name, student_profiles(registration_id))`);
-
-                query = query.eq('tenant_id', tenantId);
-
-                if (filters.$or) {
-                    const orParts = filters.$or.map((part: any) => {
-                        if (part.targetType === 'all') return 'target_type.eq.all';
-                        if (part.targetType === 'hostel') return `and(target_type.eq.hostel,target_hostel.eq."${part.targetHostel}")`;
-                        if (part.targetType === 'individual') return `and(target_type.eq.individual,target_student_id.eq.${part.targetStudentId})`;
-                        return '';
-                    }).filter((p: string) => p !== '');
-
-                    if (orParts.length > 0) {
-                        query = query.or(orParts.join(','));
-                    }
-                } else {
-                    if (filters.targetStudentId) query = query.eq('target_student_id', filters.targetStudentId);
-                    if (filters.targetType) query = query.eq('target_type', filters.targetType);
-                    if (filters.targetHostel) query = query.eq('target_hostel', filters.targetHostel);
-                }
-
-                if (filters.createdAt && filters.createdAt.$gte) {
-                    query = query.gte('created_at', new Date(filters.createdAt.$gte).toISOString());
-                }
-
-                const { data, error } = await query
-                    .order('created_at', { ascending: false })
-                    .limit(limit);
-
-                if (error) {
-                    console.error("Supabase notifications list Error:", error);
-                    throw error;
-                }
-
-                return (data || []).map((n: any) => {
-                    const mapped = mapNotificationToCamelCase(n);
-                    const targetStudent = n.target_student_id;
-                    if (mapped && targetStudent && typeof targetStudent === 'object') {
-                        const prof = Array.isArray(targetStudent.student_profiles)
-                            ? targetStudent.student_profiles[0]
-                            : targetStudent.student_profiles;
-                        mapped.targetStudentId = {
-                            name: targetStudent.name,
-                            registrationId: prof?.registration_id || targetStudent.registration_id || targetStudent.registrationId || ""
-                        };
-                    }
-                    return mapped;
-                });
-            } else if (source === 'PRISMA') {
-                const whereClause: any = {};
-                if (filters.$or) {
-                    whereClause.OR = filters.$or.map((part: any) => {
-                        const partClause: any = {};
-                        if (part.targetType) partClause.targetType = part.targetType;
-                        if (part.targetHostel) partClause.targetHostel = part.targetHostel;
-                        if (part.targetStudentId) partClause.targetStudentId = part.targetStudentId;
-                        return partClause;
-                    });
-                } else {
-                    if (filters.targetStudentId) whereClause.targetStudentId = filters.targetStudentId;
-                    if (filters.targetType) whereClause.targetType = filters.targetType;
-                    if (filters.targetHostel) whereClause.targetHostel = filters.targetHostel;
-                }
-
-                if (filters.createdAt && filters.createdAt.$gte) {
-                    whereClause.createdAt = { gte: new Date(filters.createdAt.$gte) };
-                }
-
-                const records = await prisma.notification.findMany({
-                    where: whereClause,
-                    orderBy: { createdAt: 'desc' },
-                    take: limit
-                });
-
-                const studentIds = records
-                    .map(n => n.targetStudentId)
-                    .filter((id): id is string => !!id);
-
-                const students = studentIds.length > 0
-                    ? await prisma.student.findMany({
-                        where: { id: { in: studentIds } },
-                        select: {
-                            id: true,
-                            name: true,
-                            registrationId: true
-                        }
-                      })
-                    : [];
-
-                const studentMap = new Map(students.map((s: any) => [s.id, { name: s.name, registration_id: s.registrationId }]));
-
-                return records.map((n: any) => {
-                    const studentInfo = n.targetStudentId ? studentMap.get(n.targetStudentId) : null;
-                    const formatted = {
-                        ...n,
-                        target_student_id: studentInfo || n.targetStudentId
-                    };
-                    return {
-                        ...mapNotificationToCamelCase(formatted),
-                        targetStudentId: formatted.target_student_id
-                    };
-                });
-            } else {
-                await connectDB();
-                const NotificationModel = (await import('@/models/Notification')).default;
-                const records = await NotificationModel.find(filters)
-                    .populate("targetStudentId", "name registrationId")
-                    .sort({ createdAt: -1 })
-                    .limit(limit)
-                    .lean();
-                return JSON.parse(JSON.stringify(records));
-            }
-        },
-
-        getById: async (id: string) => {
-            const source = await getDbSource();
-            if (source === 'SUPABASE') {
-                const { data, error } = await supabase
-                    .from('notifications')
-                    .select('*, targetStudentId:students(name, student_profiles(registration_id))')
-                    .eq('_id', id)
-                    .maybeSingle();
-                if (error) return null;
-
-                const mapped = mapNotificationToCamelCase(data);
-                const targetStudent = data?.targetStudentId;
-                if (mapped && targetStudent && typeof targetStudent === 'object') {
-                    const prof = Array.isArray(targetStudent.student_profiles)
-                        ? targetStudent.student_profiles[0]
-                        : targetStudent.student_profiles;
-                    mapped.targetStudentId = {
-                        name: targetStudent.name,
-                        registrationId: prof?.registration_id || targetStudent.registration_id || targetStudent.registrationId || ""
-                    };
-                }
-                return mapped;
-            } else if (source === 'PRISMA') {
-                const record = await prisma.notification.findUnique({
-                    where: { id }
-                });
-                if (!record) return null;
-                let studentInfo = null;
-                if (record.targetStudentId) {
-                    const student = await prisma.student.findUnique({
-                        where: { id: record.targetStudentId },
-                        select: {
-                            name: true,
-                            registrationId: true
-                        }
-                    });
-                    if (student) {
-                        studentInfo = { name: student.name, registration_id: student.registrationId };
-                    }
-                }
-                const formatted = {
-                    ...record,
-                    target_student_id: studentInfo || record.targetStudentId
-                };
-                return mapNotificationToCamelCase(formatted);
-            } else {
-                await connectDB();
-                const NotificationModel = (await import('@/models/Notification')).default;
-                const record = await NotificationModel.findById(id).populate("targetStudentId", "name registrationId").lean();
-                return record ? JSON.parse(JSON.stringify(record)) : null;
-            }
-        },
-
-        create: async (notificationData: any) => {
-            const source = await getDbSource();
-            if (source === 'SUPABASE') {
-                const tenantId = await getTenantIdOrThrow();
-                const snakeData = { ...mapNotificationToSnakeCase(notificationData), tenant_id: tenantId };
-                if (!snakeData._id) {
-                    snakeData._id = crypto.randomUUID();
-                }
-                const { data, error } = await supabase
-                    .from('notifications')
-                    .insert([snakeData])
-                    .select()
-                    .single();
-                if (error) throw error;
-                return mapNotificationToCamelCase(data);
-            } else if (source === 'PRISMA') {
-                const prismaData = filterNotificationForPrisma(notificationData);
-                if (!prismaData.id) {
-                    prismaData.id = crypto.randomUUID();
-                }
-                const record = await prisma.notification.create({
-                    data: prismaData
-                });
-                return mapNotificationToCamelCase(record);
-            } else {
-                await connectDB();
-                const NotificationModel = (await import('@/models/Notification')).default;
-                const record = await NotificationModel.create(notificationData);
-                return JSON.parse(JSON.stringify(record));
-            }
-        },
-
-        update: async (id: string, updateData: any) => {
-            const source = await getDbSource();
-            if (source === 'SUPABASE') {
-                if (updateData.$addToSet) {
-                    const { data: existing } = await supabase.from('notifications').select('acknowledged_by').eq('_id', id).single();
-                    let acknowledgedBy = existing?.acknowledged_by || [];
-
-                    if (updateData.$addToSet.acknowledgedBy) {
-                        const newItem = updateData.$addToSet.acknowledgedBy;
-                        const exists = acknowledgedBy.some((item: any) => item.studentId === newItem.studentId);
-                        if (!exists) {
-                            acknowledgedBy.push(newItem);
-                        }
-                    }
-
-                    const { data, error } = await supabase
-                        .from('notifications')
-                        .update({ acknowledged_by: acknowledgedBy })
-                        .eq('_id', id)
-                        .select()
-                        .single();
-                    if (error) throw error;
-                    return mapNotificationToCamelCase(data);
-                }
-
-                const snakeUpdate = mapNotificationToSnakeCase(updateData.$set || updateData);
-                const { data, error } = await supabase
-                    .from('notifications')
-                    .update(snakeUpdate)
-                    .eq('_id', id)
-                    .select()
-                    .single();
-                if (error) throw error;
-                return mapNotificationToCamelCase(data);
-            } else if (source === 'PRISMA') {
-                if (updateData.$addToSet) {
-                    const existing = await prisma.notification.findUnique({
-                        where: { id }
-                    });
-                    let acknowledgedBy: any = existing?.acknowledgedBy;
-                    if (!acknowledgedBy || !Array.isArray(acknowledgedBy)) {
-                        acknowledgedBy = [];
-                    }
-
-                    if (updateData.$addToSet.acknowledgedBy) {
-                        const newItem = updateData.$addToSet.acknowledgedBy;
-                        const exists = acknowledgedBy.some((item: any) => item.studentId === newItem.studentId);
-                        if (!exists) {
-                            acknowledgedBy.push(newItem);
-                        }
-                    }
-
-                    const data = await prisma.notification.update({
-                        where: { id },
-                        data: { acknowledgedBy }
-                    });
-                    return mapNotificationToCamelCase(data);
-                }
-
-                const prismaData = filterNotificationForPrisma(updateData.$set || updateData);
-                const data = await prisma.notification.update({
-                    where: { id },
-                    data: prismaData
-                });
-                return mapNotificationToCamelCase(data);
-            } else {
-                await connectDB();
-                const NotificationModel = (await import('@/models/Notification')).default;
-                const updated = await NotificationModel.findByIdAndUpdate(id, updateData, { new: true });
-                return JSON.parse(JSON.stringify(updated));
-            }
+            await prisma.attendance.delete({ where: { id } });
+            return true;
         },
 
         deleteMany: async (filter: any) => {
-            const source = await getDbSource();
-            if (source === 'SUPABASE') {
-                let query = supabase.from('notifications').delete();
+            let tenantId: string | null = null;
+            try {
+                tenantId = await getTenantIdOrThrow();
+            } catch (err) {}
 
-                if (filter._id || filter.id) {
-                    const targetId = filter._id || filter.id;
-                    query = query.or(`_id.eq.${targetId},id.eq.${targetId}`);
-                } else if (filter.createdAt && filter.createdAt.$lt) {
-                    query = query.lt('created_at', new Date(filter.createdAt.$lt).toISOString());
-                } else {
-                    return { deletedCount: 0 };
-                }
+            const whereClause: any = { ...(tenantId ? { tenantId } : {}) };
+            if (filter.studentId) whereClause.studentId = filter.studentId;
+            if (filter.date) whereClause.date = filter.date;
+            if (filter.hostelName) whereClause.hostelName = filter.hostelName;
 
-                const { data, error } = await query.select('_id');
-                if (error) throw error;
-                return { deletedCount: data?.length || 0 };
-            } else if (source === 'PRISMA') {
-                const whereClause: any = {};
-                if (filter._id || filter.id) {
-                    whereClause.id = filter._id || filter.id;
-                } else if (filter.createdAt && filter.createdAt.$lt) {
-                    whereClause.createdAt = { lt: new Date(filter.createdAt.$lt) };
-                } else {
-                    return { deletedCount: 0 };
-                }
-                const result = await prisma.notification.deleteMany({
-                    where: whereClause
-                });
-                return { deletedCount: result.count };
-            } else {
-                await connectDB();
-                const NotificationModel = (await import('@/models/Notification')).default;
-                let mongoFilter = { ...filter };
-                if (filter._id || filter.id) {
-                    const targetId = filter._id || filter.id;
-                    try {
-                        const { default: mongoose } = await import('mongoose');
-                        if (mongoose.Types.ObjectId.isValid(targetId)) {
-                            mongoFilter = { $or: [{ _id: new mongoose.Types.ObjectId(targetId) }, { _id: targetId }, { id: targetId }] } as any;
-                        } else {
-                            mongoFilter = { $or: [{ _id: targetId }, { id: targetId }] } as any;
-                        }
-                    } catch (e) {
-                        mongoFilter = { _id: targetId } as any;
-                    }
-                }
-                const result = await NotificationModel.deleteMany(mongoFilter);
-                return { deletedCount: result.deletedCount };
-            }
+            const res = await prisma.attendance.deleteMany({ where: whereClause });
+            return { deletedCount: res.count };
+        },
+
+        countDocuments: async (filter: any = {}) => {
+            let tenantId: string | null = null;
+            try {
+                tenantId = await getTenantIdOrThrow();
+            } catch (err) {}
+
+            const whereClause: any = { ...(tenantId ? { tenantId } : {}) };
+            if (filter.date) whereClause.date = filter.date;
+            if (filter.hostelName) whereClause.hostelName = filter.hostelName;
+            if (filter.status) whereClause.status = filter.status;
+
+            return await prisma.attendance.count({ where: whereClause });
         }
     },
 
+    hostels: {
+        getAll: async () => {
+            let tenantId: string | null = null;
+            try {
+                tenantId = await getTenantIdOrThrow();
+            } catch (err) {}
 
-    /**
-     * TRANSACTION OPERATIONS (PAYMENTS)
-     */
-    transactions: {
-        list: async (filters: any = {}, options: { limit?: number } = {}) => {
-            const source = await getDbSource();
-            const limit = options.limit || 100;
+            let records = await prisma.hostel.findMany({
+                where: tenantId ? { tenantId } : undefined
+            });
 
-            if (source === 'SUPABASE') {
-                const tenantId = await getTenantIdOrThrow();
-                // 🔄 ROBUSTNESS: Use join with students to filter by tenant if table might miss column
-                let query = supabase.from('transactions').select('*, students!student_id!inner(tenant_id, name, hostel_name, room_number, email)');
-
-                query = query.eq('students.tenant_id', tenantId);
-
-                if (filters.status && filters.status !== 'all') query = query.eq('status', filters.status);
-                if (filters.studentId) query = query.eq('student_id', filters.studentId);
-
-                if (filters.search) {
-                    const s = filters.search;
-                    query = query.or(`registration_id.ilike.%${s}%,utr_number.ilike.%${s}%`);
-                }
-
-                if (filters.utrNumber) query = query.eq('utr_number', filters.utrNumber);
-
-                const { data, error } = await query
-                    .order('created_at', { ascending: false })
-                    .limit(limit);
-
-                if (error) {
-                    console.error("❌ [SUPABASE_TRANSACTION_LIST_ERROR]:", error);
-                    // Fallback to simple list if join fails
-                    const { data: fallbackData } = await supabase.from('transactions').select('*, students!student_id(name, hostel_name, room_number, email)').limit(limit);
-                    const fallbackDataMap = (fallbackData || []).map((t: any) => mapTransactionToCamelCase(t));
-                    return fallbackDataMap;
-                }
-
-                return (data || []).map((t: any) => mapTransactionToCamelCase(t));
-            } else if (source === 'PRISMA') {
-                const tenantId = await getTenantIdOrThrow();
-                const whereClause: any = {
-                    student: {
-                        tenantId: tenantId
-                    }
-                };
-
-                if (filters.status && filters.status !== 'all') whereClause.status = filters.status;
-                if (filters.studentId) whereClause.studentId = filters.studentId;
-
-                if (filters.search) {
-                    whereClause.OR = [
-                        { registrationId: { contains: filters.search, mode: 'insensitive' } },
-                        { utrNumber: { contains: filters.search, mode: 'insensitive' } }
-                    ];
-                }
-
-                if (filters.utrNumber) whereClause.utrNumber = filters.utrNumber;
-
-                const records = await prisma.transaction.findMany({
-                    where: whereClause,
-                    orderBy: { createdAt: 'desc' },
-                    take: limit,
-                    include: {
-                        student: {
-                            select: {
-                                name: true,
-                                hostelName: true,
-                                roomNumber: true,
-                                email: true
-                            }
-                        }
-                    }
-                });
-
-                return records.map((t: any) => {
-                    const formatted = {
-                        ...t,
-                        students: t.student
-                    };
-                    return mapTransactionToCamelCase(formatted);
-                });
-            } else {
-                await connectDB();
-                const TransactionModel = (await import('@/models/Transaction')).default;
-                const StudentModel = (await import('@/models/Student')).default;
-
-                let mongoQuery: any = {};
-                if (filters.status && filters.status !== 'all') mongoQuery.status = filters.status;
-                if (filters.studentId) mongoQuery.studentId = filters.studentId;
-                if (filters.search) {
-                    mongoQuery.$or = [
-                        { registrationId: { $regex: filters.search, $options: "i" } },
-                        { utrNumber: { $regex: filters.search, $options: "i" } },
-                    ];
-                }
-                if (filters.utrNumber) mongoQuery.utrNumber = filters.utrNumber;
-
-                const records = await TransactionModel.find(mongoQuery)
-                    .populate("studentId", "name hostelName roomNumber email")
-                    .sort({ createdAt: -1 })
-                    .limit(limit)
-                    .lean();
-                return JSON.parse(JSON.stringify(records));
+            if (records.length === 0 && tenantId) {
+                records = await prisma.hostel.findMany();
             }
+
+            return records.map(h => ({
+                id: h.id,
+                _id: h.id,
+                name: h.name,
+                totalRooms: h.totalRooms,
+                wardenUsername: h.wardenUsername,
+                wardenPassword: h.wardenPassword,
+                attendanceMode: h.attendanceMode,
+                registrationFormat: h.registrationFormat || "",
+                allowWardenAddStudent: h.allowWardenAddStudent,
+                allowWardenEditProfile: h.allowWardenEditProfile,
+                allowWardenRemoveStudent: h.allowWardenRemoveStudent,
+                allowWardenNotification: h.allowWardenNotification !== false,
+                allowStudentNotification: h.allowStudentNotification !== false,
+                tenantId: h.tenantId
+            }));
+        },
+
+        getById: async (id: string) => {
+            const h = await prisma.hostel.findFirst({
+                where: isUuidString(id) ? { id } : { name: { equals: id, mode: 'insensitive' } }
+            });
+            if (!h) return null;
+            return {
+                id: h.id,
+                _id: h.id,
+                name: h.name,
+                totalRooms: h.totalRooms,
+                wardenUsername: h.wardenUsername,
+                wardenPassword: h.wardenPassword,
+                attendanceMode: h.attendanceMode,
+                registrationFormat: h.registrationFormat || "",
+                allowWardenAddStudent: h.allowWardenAddStudent,
+                allowWardenEditProfile: h.allowWardenEditProfile,
+                allowWardenRemoveStudent: h.allowWardenRemoveStudent,
+                allowWardenNotification: h.allowWardenNotification !== false,
+                allowStudentNotification: h.allowStudentNotification !== false,
+                tenantId: h.tenantId
+            };
+        },
+
+        getByName: async (name: string) => {
+            const h = await prisma.hostel.findFirst({
+                where: { name: { equals: name, mode: 'insensitive' } }
+            });
+            if (!h) return null;
+            return {
+                id: h.id,
+                _id: h.id,
+                name: h.name,
+                totalRooms: h.totalRooms,
+                wardenUsername: h.wardenUsername,
+                wardenPassword: h.wardenPassword,
+                attendanceMode: h.attendanceMode,
+                registrationFormat: h.registrationFormat || "",
+                allowWardenAddStudent: h.allowWardenAddStudent,
+                allowWardenEditProfile: h.allowWardenEditProfile,
+                allowWardenRemoveStudent: h.allowWardenRemoveStudent,
+                allowWardenNotification: h.allowWardenNotification !== false,
+                allowStudentNotification: h.allowStudentNotification !== false,
+                tenantId: h.tenantId
+            };
+        },
+
+        find: async (filter: any = {}) => {
+            const records = await prisma.hostel.findMany({
+                where: filter
+            });
+            return records;
         },
 
         findOne: async (filter: any) => {
-            const source = await getDbSource();
-            if (source === 'SUPABASE') {
-                const tenantId = await getTenantIdOrThrow();
-                let query = supabase.from('transactions').select('*');
-                query = query.eq('tenant_id', tenantId);
-                if (filter.utrNumber) query = query.eq('utr_number', filter.utrNumber);
-                if (filter.status && filter.status.$ne) query = query.neq('status', filter.status.$ne);
-                if (filter.status && typeof filter.status === 'string') query = query.eq('status', filter.status);
+            const whereClause: any = {};
+            if (filter.name) whereClause.name = { equals: filter.name, mode: 'insensitive' };
+            if (filter.id) whereClause.id = filter.id;
 
-                const { data, error } = await query.maybeSingle();
-                if (error) return null;
-                return mapTransactionToCamelCase(data);
-            } else if (source === 'PRISMA') {
-                const tenantId = await getTenantIdOrThrow();
-                const whereClause: any = {
-                    student: {
-                        tenantId: tenantId
-                    }
-                };
-                if (filter.utrNumber) whereClause.utrNumber = filter.utrNumber;
-                if (filter.status && filter.status.$ne) whereClause.status = { not: filter.status.$ne };
-                if (filter.status && typeof filter.status === 'string') whereClause.status = filter.status;
-                const data = await prisma.transaction.findFirst({
-                    where: whereClause
-                });
-                return data ? mapTransactionToCamelCase(data) : null;
-            } else {
-                await connectDB();
-                const TransactionModel = (await import('@/models/Transaction')).default;
-                const record = await TransactionModel.findOne(filter).lean();
-                return record ? JSON.parse(JSON.stringify(record)) : null;
-            }
+            const record = await prisma.hostel.findFirst({
+                where: whereClause
+            });
+            return record;
         },
 
-        update: async (id: string, updateData: any) => {
-            const source = await getDbSource();
-            if (source === 'SUPABASE') {
-                const snakeUpdate = mapTransactionToSnakeCase(updateData.$set || updateData);
-                const { data, error } = await supabase
-                    .from('transactions')
-                    .update(snakeUpdate)
-                    .eq('_id', id)
-                    .select()
-                    .single();
-                if (error) throw error;
-                return mapTransactionToCamelCase(data);
-            } else if (source === 'PRISMA') {
-                const prismaData = filterTransactionForPrisma(updateData.$set || updateData);
-                const data = await prisma.transaction.update({
-                    where: { id },
-                    data: prismaData
-                });
-                return mapTransactionToCamelCase(data);
-            } else {
-                await connectDB();
-                const TransactionModel = (await import('@/models/Transaction')).default;
-                const updated = await TransactionModel.findByIdAndUpdate(id, updateData, { new: true });
-                return JSON.parse(JSON.stringify(updated));
-            }
+        create: async (hostelData: any) => {
+            let tenantId: string | null = null;
+            try {
+                tenantId = await getTenantIdOrThrow();
+            } catch (err) {}
+
+            const data = {
+                ...filterHostelForPrisma(hostelData),
+                id: crypto.randomUUID(),
+                tenantId: hostelData.tenantId || tenantId
+            };
+            const record = await prisma.hostel.create({ data });
+            return record;
         },
 
-        findById: async (id: string) => {
-            const source = await getDbSource();
-            if (source === 'SUPABASE') {
-                const { data, error } = await supabase
-                    .from('transactions')
-                    .select('*')
-                    .eq('_id', id)
-                    .single();
-                if (error) return null;
-                return mapTransactionToCamelCase(data);
-            } else if (source === 'PRISMA') {
-                const record = await prisma.transaction.findUnique({
-                    where: { id }
-                });
-                return record ? mapTransactionToCamelCase(record) : null;
-            } else {
-                await connectDB();
-                const TransactionModel = (await import('@/models/Transaction')).default;
-                const record = await TransactionModel.findById(id).lean();
-                return record ? JSON.parse(JSON.stringify(record)) : null;
-            }
+        update: async (idOrName: string, updateData: any) => {
+            const prismaData = filterHostelForPrisma(updateData);
+            const isUuid = isUuidString(idOrName);
+            const existing = await prisma.hostel.findFirst({
+                where: isUuid ? { id: idOrName } : { name: { equals: idOrName, mode: 'insensitive' } }
+            });
+            if (!existing) return null;
+
+            const record = await prisma.hostel.update({
+                where: { id: existing.id },
+                data: prismaData
+            });
+            return record;
         },
 
-        delete: async (id: string) => {
-            const source = await getDbSource();
-            if (source === 'SUPABASE') {
-                const { error } = await supabase
-                    .from('transactions')
-                    .delete()
-                    .eq('_id', id);
-                if (error) throw error;
-                return true;
-            } else if (source === 'PRISMA') {
-                await prisma.transaction.delete({
-                    where: { id }
-                });
-                return true;
-            } else {
-                await connectDB();
-                const TransactionModel = (await import('@/models/Transaction')).default;
-                await TransactionModel.findByIdAndDelete(id);
-                return true;
-            }
+        bulkUpdate: async (filter: any = {}, updateData: any) => {
+            let tenantId: string | null = null;
+            try {
+                tenantId = await getTenantIdOrThrow();
+            } catch (err) {}
+
+            const prismaData = filterHostelForPrisma(updateData);
+            const whereClause: any = { ...(tenantId ? { tenantId } : {}) };
+            if (filter.name) whereClause.name = filter.name;
+
+            const res = await prisma.hostel.updateMany({
+                where: whereClause,
+                data: prismaData
+            });
+            return { modifiedCount: res.count };
         },
-        create: async (transactionData: any) => {
-            const source = await getDbSource();
-            if (source === 'SUPABASE') {
-                const snakeData = mapTransactionToSnakeCase(transactionData);
-                if (!snakeData._id) {
-                    snakeData._id = crypto.randomUUID();
-                }
-                const { data, error } = await supabase
-                    .from('transactions')
-                    .insert([snakeData])
-                    .select()
-                    .single();
-                if (error) throw error;
-                return mapTransactionToCamelCase(data);
-            } else if (source === 'PRISMA') {
-                const prismaData = filterTransactionForPrisma(transactionData);
-                if (!prismaData.id) {
-                    prismaData.id = crypto.randomUUID();
-                }
-                const data = await prisma.transaction.create({
-                    data: prismaData
-                });
-                return mapTransactionToCamelCase(data);
-            } else {
-                await connectDB();
-                const TransactionModel = (await import('@/models/Transaction')).default;
-                const record = await TransactionModel.create(transactionData);
-                return JSON.parse(JSON.stringify(record));
+
+        delete: async (idOrName: string) => {
+            const isUuid = isUuidString(idOrName);
+            const existing = await prisma.hostel.findFirst({
+                where: isUuid ? { id: idOrName } : { name: { equals: idOrName, mode: 'insensitive' } }
+            });
+            if (existing) {
+                await prisma.hostel.delete({ where: { id: existing.id } });
             }
+            return true;
+        },
+
+        deleteMany: async (filter: any) => {
+            await prisma.hostel.deleteMany({ where: filter });
+            return true;
         }
     },
 
-    /**
-     * PERMISSION OPERATIONS
-     */
-    permissions: {
-        list: async (filters: any = {}, options: { limit?: number; offset?: number; populate?: boolean } = {}) => {
-            const source = await getDbSource();
-            if (source === 'SUPABASE') {
-                const tenantId = await getTenantIdOrThrow();
-                // ⚡ OPTIMIZATION: Use light fields for joined students to save bandwidth/egress
-                const lightStudentFields = '_id,firebase_uid,name,email,phone_number,hostel_name,room_number,student_status,student_profiles(college_name,branch,semester,section,registration_id)';
-
-                // 🔄 ROBUSTNESS: If permissions table is missing tenant_id column, we join with students to filter by its tenant_id
-                // Using !inner forces the join and allows filtering by the joined table
-                let selectStr = options.populate 
-                    ? `*, students!student_id!inner(${lightStudentFields}, tenant_id)` 
-                    : `*, students!student_id!inner(tenant_id)`;
-
-                let query = supabase.from('permissions').select(selectStr, { count: 'exact' });
-
-                // Filter by joined student's tenant_id for data isolation
-                query = query.eq('students.tenant_id', tenantId);
-
-                if (filters.studentId) query = query.eq('student_id', filters.studentId);
-                if (filters.status === 'hidden') {
-                    query = query.eq('is_hidden', true);
-                } else if (filters.status === 'allowed') {
-                    query = query.or('status.eq.allowed,dean_status.eq.allowed');
-                } else if (filters.status && filters.status !== 'all') {
-                    query = query.eq('status', filters.status);
-                }
-                
-                // ⚡ WARDEN FILTER
-                if (filters.authorizedHostels && filters.authorizedHostels.length > 0) {
-                    const hostelVariations = filters.authorizedHostels.flatMap((h: string) => [
-                        h,
-                        h.toUpperCase(),
-                        h.toLowerCase()
-                    ]);
-                    query = query.in('students.hostel_name', hostelVariations);
-                } else if (filters.hostelName) {
-                    const hostelVariations = [
-                        filters.hostelName,
-                        filters.hostelName.toUpperCase(),
-                        filters.hostelName.toLowerCase()
-                    ];
-                    query = query.in('students.hostel_name', hostelVariations);
-                }
-
-                query = query.order('created_at', { ascending: false });
-
-                if (options.limit) query = query.limit(options.limit);
-                if (options.offset) query = query.range(options.offset, options.offset + (options.limit || 10) - 1);
-
-                const { data, error, count } = await query;
-
-                if (error) {
-                    console.error("❌ [SUPABASE_PERMISSION_LIST_ERROR]:", error);
-                    // Fallback to direct query if join fails (e.g. if students relationship is weird)
-                    const { data: fallbackData } = await supabase.from('permissions').select('*').limit(options.limit || 100);
-                    return { records: (fallbackData || []).map(mapPermissionToCamelCase), total: (fallbackData || []).length };
-                }
-
-                return {
-                    records: (data || []).map(mapPermissionToCamelCase),
-                    total: count || (data?.length || 0)
-                };
-            } else if (source === 'PRISMA') {
-                const tenantId = await getTenantIdOrThrow();
-                const whereClause: any = {
-                    student: {
-                        tenantId: tenantId
-                    }
-                };
-
-                if (filters.studentId) whereClause.studentId = filters.studentId;
-                if (filters.status && filters.status !== 'all' && filters.status !== 'hidden') {
-                    if (filters.status === 'allowed') {
-                        whereClause.OR = [{ status: 'allowed' }, { deanStatus: 'allowed' }];
-                    } else {
-                        whereClause.status = filters.status;
-                    }
-                }
-
-                // Exclude artificial manual toggle records
-                whereClause.NOT = {
-                    reason: {
-                        contains: 'Manual Management Override',
-                        mode: 'insensitive'
-                    }
-                };
-
-                if (filters.authorizedHostels && filters.authorizedHostels.length > 0) {
-                    const hostelVariations = filters.authorizedHostels.flatMap((h: string) => [
-                        h,
-                        h.toUpperCase(),
-                        h.toLowerCase()
-                    ]);
-                    whereClause.student.hostelName = { in: hostelVariations };
-                } else if (filters.hostelName) {
-                    const hostelVariations = [
-                        filters.hostelName,
-                        filters.hostelName.toUpperCase(),
-                        filters.hostelName.toLowerCase()
-                    ];
-                    whereClause.student.hostelName = { in: hostelVariations };
-                }
-
-                let total = 0;
-                let records: any[] = [];
-
-                // ⚡ OPTIMIZED PROJECTION: Omit heavy faceDescriptor, deviceHistory and raw base64 pictures
-                const lightweightStudentSelect = {
-                    select: {
-                        id: true,
-                        name: true,
-                        email: true,
-                        phoneNumber: true,
-                        hostelName: true,
-                        roomNumber: true,
-                        studentStatus: true,
-                        registrationId: true,
-                        erpId: true,
-                        collegeName: true,
-                        branch: true,
-                        year: true,
-                        semester: true,
-                        section: true,
-                        fatherName: true,
-                        fatherNumber: true,
-                        motherName: true,
-                        motherNumber: true,
-                    }
-                };
-
-                try {
-                    const testWhere = { ...whereClause };
-                    if (filters.status === 'hidden') {
-                        testWhere.isHidden = true;
-                    } else {
-                        testWhere.OR = [{ isHidden: false }, { isHidden: null }];
-                    }
-
-                    total = await prisma.permission.count({ where: testWhere });
-                    records = await prisma.permission.findMany({
-                        where: testWhere,
-                        orderBy: { createdAt: 'desc' },
-                        take: options.limit || undefined,
-                        skip: options.offset || undefined,
-                        include: options.populate ? { student: lightweightStudentSelect } : undefined
-                    });
-                } catch (dbErr: any) {
-                    // Column permissions.is_hidden does not exist in DB yet, fallback safely!
-                    if (filters.status === 'hidden') {
-                        return { records: [], total: 0 };
-                    }
-                    total = await prisma.permission.count({ where: whereClause });
-                    records = await prisma.permission.findMany({
-                        where: whereClause,
-                        orderBy: { createdAt: 'desc' },
-                        take: options.limit || undefined,
-                        skip: options.offset || undefined,
-                        include: options.populate ? { student: lightweightStudentSelect } : undefined
-                    });
-                }
-
-                const mappedRecords = records.map((p: any) => {
-                    const formatted = {
-                        ...p,
-                        students: p.student
-                    };
-                    return mapPermissionToCamelCase(formatted);
-                });
-
-                return {
-                    records: mappedRecords,
-                    total
-                };
-            } else {
-                await connectDB();
-                const PermissionModel = (await import('@/models/Permission')).default;
-                
-                const mongoFilters = { ...filters };
-                if (mongoFilters.status === 'hidden') {
-                    mongoFilters.isHidden = true;
-                    delete mongoFilters.status;
-                } else {
-                    mongoFilters.isHidden = { $ne: true };
-                    if (mongoFilters.status === 'all') {
-                        delete mongoFilters.status;
-                    } else if (mongoFilters.status === 'allowed') {
-                        mongoFilters.$or = [{ status: 'allowed' }, { deanStatus: 'allowed' }];
-                        delete mongoFilters.status;
-                    }
-                }
-
-                // ⚡ WARDEN FILTER for Mongoose
-                if (mongoFilters.hostelName || (mongoFilters.authorizedHostels && mongoFilters.authorizedHostels.length > 0)) {
-                    const StudentModel = (await import('@/models/Student')).default;
-                    const studentQuery: any = {};
-                    if (mongoFilters.authorizedHostels && mongoFilters.authorizedHostels.length > 0) {
-                        const hostelVariations = mongoFilters.authorizedHostels.flatMap((h: string) => [
-                            h,
-                            h.toUpperCase(),
-                            h.toLowerCase()
-                        ]);
-                        studentQuery.hostelName = { $in: hostelVariations };
-                    } else if (mongoFilters.hostelName) {
-                        const hostelVariations = [
-                            mongoFilters.hostelName,
-                            mongoFilters.hostelName.toUpperCase(),
-                            mongoFilters.hostelName.toLowerCase()
-                        ];
-                        studentQuery.hostelName = { $in: hostelVariations };
-                    }
-                    const matchingStudents = await StudentModel.find(studentQuery, '_id').lean();
-                    mongoFilters.studentId = { $in: matchingStudents.map(s => s._id) };
-                    delete mongoFilters.hostelName;
-                    delete mongoFilters.authorizedHostels;
-                }
-
-                let query = PermissionModel.find(mongoFilters);
-
-                if (options.populate) {
-                    query = query.populate('studentId');
-                }
-
-                query = query.sort({ createdAt: -1 });
-
-                if (options.limit) query = query.limit(options.limit);
-                if (options.offset) query = query.skip(options.offset);
-
-                const records = await query.lean();
-                return {
-                    records: JSON.parse(JSON.stringify(records)),
-                    total: await PermissionModel.countDocuments(mongoFilters)
-                };
-            }
+    gatePasses: {
+        getById: async (id: string) => {
+            const record = await prisma.gatePass.findUnique({
+                where: { id }
+            });
+            return record ? mapGatePassToCamelCase(record) : null;
         },
 
-        count: async (filters: any = {}) => {
-            const source = await getDbSource();
-            if (source === 'SUPABASE') {
-                const tenantId = await getTenantIdOrThrow();
-                let query = supabase.from('permissions').select('*, students!student_id!inner(tenant_id, hostel_name)', { count: 'exact', head: true });
-                query = query.eq('students.tenant_id', tenantId);
-                if (filters.status && filters.status !== 'all') query = query.eq('status', filters.status);
+        findOne: async (filter: any) => {
+            let tenantId: string | null = null;
+            try {
+                tenantId = await getTenantIdOrThrow();
+            } catch (err) {}
 
-                // ⚡ WARDEN FILTER
-                if (filters.authorizedHostels && filters.authorizedHostels.length > 0) {
-                    query = query.in('students.hostel_name', filters.authorizedHostels);
-                } else if (filters.hostelName) {
-                    query = query.eq('students.hostel_name', filters.hostelName);
-                }
-                
-                const { count, error } = await query;
-                if (error) {
-                    const fallback = await supabase
-                        .from('permissions')
-                        .select('*, students!student_id!inner(tenant_id)', { count: 'exact', head: true })
-                        .eq('students.tenant_id', tenantId);
-                    if (fallback.error) throw fallback.error;
-                    return fallback.count || 0;
-                }
-                return count || 0;
-            } else if (source === 'PRISMA') {
-                const tenantId = await getTenantIdOrThrow();
-                const whereClause: any = {
-                    student: {
-                        tenantId: tenantId
-                    }
-                };
-                if (filters.status && filters.status !== 'all') whereClause.status = filters.status;
+            const whereClause: any = {};
+            if (tenantId) whereClause.tenantId = tenantId;
+            if (filter.studentId) whereClause.studentId = filter.studentId;
+            if (filter.status) whereClause.status = filter.status;
+            if (filter.firebaseUID) whereClause.firebaseUid = filter.firebaseUID;
 
-                if (filters.authorizedHostels && filters.authorizedHostels.length > 0) {
-                    whereClause.student.hostelName = { in: filters.authorizedHostels };
-                } else if (filters.hostelName) {
-                    whereClause.student.hostelName = filters.hostelName;
-                }
-
-                const count = await prisma.permission.count({
-                    where: whereClause
-                });
-                return count;
-            } else {
-                await connectDB();
-                const PermissionModel = (await import('@/models/Permission')).default;
-                
-                // ⚡ WARDEN FILTER for Mongoose
-                if (filters.hostelName || (filters.authorizedHostels && filters.authorizedHostels.length > 0)) {
-                    const StudentModel = (await import('@/models/Student')).default;
-                    const studentQuery: any = {};
-                    if (filters.authorizedHostels && filters.authorizedHostels.length > 0) {
-                        studentQuery.hostelName = { $in: filters.authorizedHostels };
-                    } else if (filters.hostelName) {
-                        studentQuery.hostelName = filters.hostelName;
-                    }
-                    const matchingStudents = await StudentModel.find(studentQuery, '_id').lean();
-                    filters.studentId = { $in: matchingStudents.map(s => s._id) };
-                    delete filters.hostelName;
-                    delete filters.authorizedHostels;
-                }
-
-                return await PermissionModel.countDocuments(filters);
-            }
+            const record = await prisma.gatePass.findFirst({
+                where: whereClause,
+                orderBy: { checkOutTime: 'desc' }
+            });
+            return record ? mapGatePassToCamelCase(record) : null;
         },
 
-
-        getById: async (id: string, options: { populate?: boolean } = {}) => {
-            const source = await getDbSource();
-            if (source === 'SUPABASE') {
-                const query = supabase.from('permissions').select(options.populate ? '*, students!student_id(*, student_profiles(*), student_security(*))' : '*').eq('_id', id).single();
-                let { data, error } = await query;
-                if (error && options.populate) {
-                    console.error("❌ [SUPABASE_PERMISSION_GETBYID_ERROR]:", error);
-                    // Fallback to non-populated
-                    const fallback = await supabase.from('permissions').select('*').eq('_id', id).single();
-                    data = fallback.data;
-                    error = fallback.error;
-                }
-                if (error) return null;
-                return mapPermissionToCamelCase(data);
-            } else if (source === 'PRISMA') {
-                const record = await prisma.permission.findUnique({
-                    where: { id },
-                    include: options.populate ? { student: true } : undefined
-                });
-                if (!record) return null;
-                const formatted = {
-                    ...record,
-                    students: (record as any).student
-                };
-                return mapPermissionToCamelCase(formatted);
-            } else {
-                await connectDB();
-                const PermissionModel = (await import('@/models/Permission')).default;
-                let query = PermissionModel.findById(id);
-                if (options.populate) query = query.populate('studentId');
-                const record = await query.lean();
-                return record ? JSON.parse(JSON.stringify(record)) : null;
-            }
+        find: async (filter: any = {}, options: { limit?: number; offset?: number } = {}) => {
+            return db.gatePasses.list(filter, options);
         },
 
-        create: async (permissionData: any) => {
-            const source = await getDbSource();
-            if (source === 'SUPABASE') {
-                const tenantId = await getTenantIdOrThrow();
-                const permissionWithDefaults = {
-                    wardenStatus: 'pending',
-                    deanStatus: 'pending',
-                    parentStatus: 'pending',
-                    ...permissionData
-                };
-                let snakeData = { ...mapPermissionToSnakeCase(permissionWithDefaults), tenant_id: tenantId };
-                if (!snakeData._id) {
-                    snakeData._id = crypto.randomUUID();
-                }
-                
-                let { data, error } = await supabase
-                    .from('permissions')
-                    .insert([snakeData])
-                    .select()
-                    .single();
-                
-                // 🔄 ROBUST FALLBACK CHAIN: Handle missing columns (tenant_id, request_type, etc.)
-                if (error && (error.message?.includes('tenant_id') || error.message?.includes('request_type') || error.code === 'PGRST204' || error.message?.includes('schema cache'))) {
-                    console.warn(`⚠️ [DB] Permissions table schema mismatch detected ("${error.message}"). Retrying without new columns...`);
-                    
-                    const cleanData = { ...snakeData };
-                    // Remove columns that might not exist in older schemas
-                    delete cleanData.tenant_id;
-                    delete cleanData.request_type;
-                    
-                    const retry = await supabase.from('permissions').insert([cleanData]).select().single();
-                    data = retry.data;
-                    error = retry.error;
-                    
-                    if (!error) console.log("✅ Retry successful without problematic columns.");
-                }
+        list: async (filter: any = {}, options: { page?: number; limit?: number; offset?: number; countOnly?: boolean; sortField?: string; sortOrder?: 'asc' | 'desc'; populate?: boolean; light?: boolean } = {}) => {
+            let tenantId: string | null = null;
+            try {
+                tenantId = await getTenantIdOrThrow();
+            } catch (err) {}
 
-                if (error) throw error;
-                return mapPermissionToCamelCase(data);
-            } else if (source === 'PRISMA') {
-                const permissionWithDefaults = {
-                    wardenStatus: 'pending',
-                    deanStatus: 'pending',
-                    parentStatus: 'pending',
-                    ...permissionData
-                };
-                const prismaData = filterPermissionForPrisma(permissionWithDefaults);
-                if (!prismaData.id) {
-                    prismaData.id = crypto.randomUUID();
-                }
-                const record = await prisma.permission.create({
-                    data: prismaData
-                });
-                return mapPermissionToCamelCase(record);
-            } else {
-                await connectDB();
-                const PermissionModel = (await import('@/models/Permission')).default;
-                const record = await PermissionModel.create(permissionData);
-                return JSON.parse(JSON.stringify(record));
+            const whereClause: any = {};
+            if (tenantId) whereClause.tenantId = tenantId;
+            if (filter.studentId) whereClause.studentId = filter.studentId;
+            if (filter.status) whereClause.status = filter.status;
+            if (filter.type) whereClause.type = filter.type;
+            if (filter.firebaseUID) whereClause.firebaseUid = filter.firebaseUID;
+            if (filter.registrationId) whereClause.registrationId = filter.registrationId;
+            if (filter.hostelName && filter.hostelName !== 'all') {
+                whereClause.hostelName = { equals: filter.hostelName, mode: 'insensitive' };
             }
+
+            if (options.countOnly) {
+                const total = await prisma.gatePass.count({ where: whereClause });
+                const resObj: any = [];
+                resObj.records = [];
+                resObj.total = total;
+                return { records: [], total };
+            }
+
+            const take = options.limit || 100;
+            const skip = options.offset !== undefined ? options.offset : (options.page ? (options.page - 1) * take : undefined);
+
+            const total = await prisma.gatePass.count({ where: whereClause });
+            const records = await prisma.gatePass.findMany({
+                where: whereClause,
+                take,
+                skip,
+                orderBy: { checkOutTime: (options.sortOrder || 'desc') as any }
+            });
+
+            const mapped = records.map(mapGatePassToCamelCase);
+            const result: any = {
+                records: mapped,
+                total
+            };
+            return result;
+        },
+
+        create: async (gatePassData: any) => {
+            let tenantId: string | null = null;
+            try {
+                tenantId = await getTenantIdOrThrow();
+            } catch (err) {}
+
+            const data = {
+                ...filterGatePassForPrisma(gatePassData),
+                id: crypto.randomUUID(),
+                tenantId: gatePassData.tenantId || tenantId
+            };
+            const record = await prisma.gatePass.create({ data });
+            return mapGatePassToCamelCase(record);
         },
 
         update: async (id: string, updateData: any) => {
-            const source = await getDbSource();
-            if (source === 'SUPABASE') {
-                const snakeUpdate = mapPermissionToSnakeCase(updateData.$set || updateData);
-                let { data, error } = await supabase
-                    .from('permissions')
-                    .update(snakeUpdate)
-                    .eq('_id', id)
-                    .select()
-                    .single();
+            const prismaData = filterGatePassForPrisma(updateData);
+            const record = await prisma.gatePass.update({
+                where: { id },
+                data: prismaData
+            });
+            return mapGatePassToCamelCase(record);
+        },
 
-                // 🔄 ROBUST FALLBACK: Handle missing columns in update
-                if (error && (error.message?.includes('tenant_id') || error.message?.includes('request_type') || error.code === 'PGRST204' || error.message?.includes('schema cache'))) {
-                    console.warn(`⚠️ [DB] Permissions update schema mismatch ("${error.message}"). Retrying without new columns...`);
-                    
-                    const cleanUpdate = { ...snakeUpdate };
-                    delete cleanUpdate.tenant_id;
-                    delete cleanUpdate.request_type;
-                    
-                    const retry = await supabase.from('permissions').update(cleanUpdate).eq('_id', id).select().single();
-                    data = retry.data;
-                    error = retry.error;
-                }
+        updateOne: async (filter: any, updateData: any) => {
+            const prismaData = filterGatePassForPrisma(updateData);
+            await prisma.gatePass.updateMany({
+                where: filter,
+                data: prismaData
+            });
+            return true;
+        },
 
-                if (error) {
-                    console.error("DB Adapter permissions.update error:", error);
-                    throw error;
+        delete: async (id: string) => {
+            await prisma.gatePass.delete({ where: { id } });
+            return true;
+        },
+
+        deleteMany: async (filter: any) => {
+            let tenantId: string | null = null;
+            try {
+                tenantId = await getTenantIdOrThrow();
+            } catch (err) {}
+
+            const whereClause: any = { ...filter };
+            if (tenantId) whereClause.tenantId = tenantId;
+
+            const res = await prisma.gatePass.deleteMany({ where: whereClause });
+            return { deletedCount: res.count };
+        },
+
+        countDocuments: async (filter: any = {}) => {
+            let tenantId: string | null = null;
+            try {
+                tenantId = await getTenantIdOrThrow();
+            } catch (err) {}
+
+            const whereClause: any = { ...filter };
+            if (tenantId) whereClause.tenantId = tenantId;
+
+            return await prisma.gatePass.count({ where: whereClause });
+        },
+
+        count: async (filter: any = {}) => {
+            return db.gatePasses.countDocuments(filter);
+        }
+    },
+
+    gatePassTokens: {
+        getByToken: async (token: string) => {
+            const record = await prisma.gatePassToken.findUnique({
+                where: { token }
+            });
+            return record;
+        },
+
+        create: async (data: any) => {
+            const prismaData = {
+                ...filterGatePassTokenForPrisma(data),
+                id: crypto.randomUUID()
+            };
+            const record = await prisma.gatePassToken.create({ data: prismaData });
+            return record;
+        },
+
+        markAsUsed: async (token: string) => {
+            await prisma.gatePassToken.update({
+                where: { token },
+                data: { isUsed: true }
+            });
+            return true;
+        },
+
+        deleteExpired: async () => {
+            await prisma.gatePassToken.deleteMany({
+                where: { expiresAt: { lt: new Date() } }
+            });
+            return true;
+        }
+    },
+
+    fieldEnforcement: {
+        find: async (filter: any) => {
+            let tenantId: string | null = null;
+            try {
+                tenantId = await getTenantIdOrThrow();
+            } catch (err) {}
+
+            const whereClause: any = {};
+            if (tenantId) whereClause.tenantId = tenantId;
+            if (filter.hostelName) {
+                if (typeof filter.hostelName === 'object' && filter.hostelName.$regex) {
+                    const pattern = filter.hostelName.$regex.replace(/^\^|\$$/g, '');
+                    whereClause.hostelName = { contains: pattern, mode: 'insensitive' };
+                } else {
+                    whereClause.hostelName = filter.hostelName;
                 }
-                return mapPermissionToCamelCase(data);
-            } else if (source === 'PRISMA') {
-                const prismaData = filterPermissionForPrisma(updateData.$set || updateData);
-                const record = await prisma.permission.update({
-                    where: { id },
-                    data: prismaData
-                });
-                return mapPermissionToCamelCase(record);
-            } else {
-                await connectDB();
-                const PermissionModel = (await import('@/models/Permission')).default;
-                const updated = await PermissionModel.findByIdAndUpdate(id, updateData, { new: true });
-                return JSON.parse(JSON.stringify(updated));
             }
+
+            const data = await prisma.fieldEnforcement.findMany({ where: whereClause });
+            return data.map(mapFieldEnforcementToCamelCase);
+        },
+
+        findOneAndUpdate: async (filter: any, update: any, options: { upsert?: boolean; new?: boolean } = {}) => {
+            let tenantId: string | null = null;
+            try {
+                tenantId = await getTenantIdOrThrow();
+            } catch (err) {}
+
+            const prismaData = filterFieldEnforcementForPrisma(update.$set || update);
+            const hostelName = filter.hostelName?.$regex ? filter.hostelName.$regex.replace(/^\^|\$$/g, '') : (typeof filter.hostelName === 'string' ? filter.hostelName : null);
+
+            if (!hostelName) return null;
+
+            const globalExisting = await prisma.fieldEnforcement.findFirst({
+                where: { hostelName: { equals: hostelName, mode: 'insensitive' } }
+            });
+
+            if (globalExisting) {
+                const data = await prisma.fieldEnforcement.update({
+                    where: { id: globalExisting.id },
+                    data: { ...prismaData, tenantId }
+                });
+                return mapFieldEnforcementToCamelCase(data);
+            } else if (options.upsert) {
+                const data = await prisma.fieldEnforcement.create({
+                    data: {
+                        ...prismaData,
+                        id: crypto.randomUUID(),
+                        hostelName,
+                        tenantId
+                    }
+                });
+                return mapFieldEnforcementToCamelCase(data);
+            }
+            return null;
+        },
+
+        findOneAndDelete: async (filter: any) => {
+            const hostelName = filter.hostelName?.$regex ? filter.hostelName.$regex.replace(/^\^|\$$/g, '') : (typeof filter.hostelName === 'string' ? filter.hostelName : null);
+            if (!hostelName) return null;
+
+            const existing = await prisma.fieldEnforcement.findFirst({
+                where: { hostelName: { equals: hostelName, mode: 'insensitive' } }
+            });
+            if (existing) {
+                await prisma.fieldEnforcement.delete({ where: { id: existing.id } });
+            }
+            return true;
+        },
+
+        deleteMany: async (filter: any) => {
+            await prisma.fieldEnforcement.deleteMany({ where: filter });
+            return true;
+        }
+    },
+
+    notifications: {
+        list: async (filters: any = {}, options: { limit?: number } = {}) => {
+            const limit = options.limit || 50;
+            const whereClause: any = {};
+
+            if (filters.$or) {
+                whereClause.OR = filters.$or.map((part: any) => {
+                    const partClause: any = {};
+                    if (part.targetType) partClause.targetType = part.targetType;
+                    if (part.targetHostel) partClause.targetHostel = part.targetHostel;
+                    if (part.targetStudentId) partClause.targetStudentId = part.targetStudentId;
+                    return partClause;
+                });
+            } else {
+                if (filters.targetStudentId) whereClause.targetStudentId = filters.targetStudentId;
+                if (filters.targetType) whereClause.targetType = filters.targetType;
+                if (filters.targetHostel) whereClause.targetHostel = filters.targetHostel;
+            }
+
+            if (filters.createdAt && filters.createdAt.$gte) {
+                whereClause.createdAt = { gte: new Date(filters.createdAt.$gte) };
+            }
+
+            const records = await prisma.notification.findMany({
+                where: whereClause,
+                orderBy: { createdAt: 'desc' },
+                take: limit
+            });
+
+            const studentIds = records
+                .map(n => n.targetStudentId)
+                .filter((id): id is string => !!id);
+
+            const students = studentIds.length > 0
+                ? await prisma.student.findMany({
+                    where: { id: { in: studentIds } },
+                    select: { id: true, name: true, registrationId: true }
+                })
+                : [];
+
+            const studentMap = new Map(students.map((s: any) => [s.id, { name: s.name, registration_id: s.registrationId }]));
+
+            return records.map((n: any) => {
+                const studentInfo = n.targetStudentId ? studentMap.get(n.targetStudentId) : null;
+                const formatted = {
+                    ...n,
+                    target_student_id: studentInfo || n.targetStudentId
+                };
+                return {
+                    ...mapNotificationToCamelCase(formatted),
+                    targetStudentId: formatted.target_student_id
+                };
+            });
+        },
+
+        getById: async (id: string) => {
+            const record = await prisma.notification.findUnique({
+                where: { id }
+            });
+            return record ? mapNotificationToCamelCase(record) : null;
+        },
+
+        create: async (data: any) => {
+            const prismaData = {
+                ...filterNotificationForPrisma(data),
+                id: crypto.randomUUID()
+            };
+            const record = await prisma.notification.create({ data: prismaData });
+            return mapNotificationToCamelCase(record);
+        },
+
+        delete: async (id: string) => {
+            await prisma.notification.delete({ where: { id } });
+            return true;
+        },
+
+        acknowledge: async (notificationId: string, studentId: string) => {
+            const notif = await prisma.notification.findUnique({ where: { id: notificationId } });
+            if (!notif) return null;
+
+            const acknowledged = Array.isArray(notif.acknowledgedBy) ? (notif.acknowledgedBy as any[]) : [];
+            if (!acknowledged.includes(studentId)) {
+                acknowledged.push(studentId);
+                await prisma.notification.update({
+                    where: { id: notificationId },
+                    data: { acknowledgedBy: acknowledged }
+                });
+            }
+            return true;
+        },
+
+        deleteMany: async (filter: any) => {
+            await prisma.notification.deleteMany({ where: filter });
+            return true;
+        }
+    },
+
+    transactions: {
+        list: async (filters: any = {}, options: { limit?: number } = {}) => {
+            let tenantId: string | null = null;
+            try {
+                tenantId = await getTenantIdOrThrow();
+            } catch (err) {}
+
+            const limit = options.limit || 100;
+            const whereClause: any = {};
+            if (tenantId) {
+                whereClause.student = { tenantId };
+            }
+
+            if (filters.status && filters.status !== 'all') whereClause.status = filters.status;
+            if (filters.studentId) whereClause.studentId = filters.studentId;
+
+            if (filters.search) {
+                whereClause.OR = [
+                    { registrationId: { contains: filters.search, mode: 'insensitive' } },
+                    { utrNumber: { contains: filters.search, mode: 'insensitive' } }
+                ];
+            }
+
+            if (filters.utrNumber) whereClause.utrNumber = filters.utrNumber;
+
+            const records = await prisma.transaction.findMany({
+                where: whereClause,
+                orderBy: { createdAt: 'desc' },
+                take: limit,
+                include: {
+                    student: {
+                        select: {
+                            name: true,
+                            hostelName: true,
+                            roomNumber: true,
+                            email: true
+                        }
+                    }
+                }
+            });
+
+            return records.map((t: any) => {
+                const formatted = {
+                    ...t,
+                    students: t.student
+                };
+                return mapTransactionToCamelCase(formatted);
+            });
+        },
+
+        findOne: async (filter: any) => {
+            let tenantId: string | null = null;
+            try {
+                tenantId = await getTenantIdOrThrow();
+            } catch (err) {}
+
+            const whereClause: any = {};
+            if (tenantId) whereClause.student = { tenantId };
+            if (filter.utrNumber) whereClause.utrNumber = filter.utrNumber;
+            if (filter.status && filter.status.$ne) whereClause.status = { not: filter.status.$ne };
+            if (filter.status && typeof filter.status === 'string') whereClause.status = filter.status;
+
+            const data = await prisma.transaction.findFirst({
+                where: whereClause
+            });
+            return data ? mapTransactionToCamelCase(data) : null;
+        },
+
+        update: async (id: string, updateData: any) => {
+            const prismaData = filterTransactionForPrisma(updateData.$set || updateData);
+            const data = await prisma.transaction.update({
+                where: { id },
+                data: prismaData
+            });
+            return mapTransactionToCamelCase(data);
+        },
+
+        findById: async (id: string) => {
+            const record = await prisma.transaction.findUnique({
+                where: { id }
+            });
+            return record ? mapTransactionToCamelCase(record) : null;
+        },
+
+        delete: async (id: string) => {
+            await prisma.transaction.delete({ where: { id } });
+            return true;
+        },
+
+        create: async (transactionData: any) => {
+            const prismaData = filterTransactionForPrisma(transactionData);
+            if (!prismaData.id) {
+                prismaData.id = crypto.randomUUID();
+            }
+            const data = await prisma.transaction.create({
+                data: prismaData
+            });
+            return mapTransactionToCamelCase(data);
+        }
+    },
+
+    permissions: {
+        list: async (filters: any = {}, options: { limit?: number; offset?: number; populate?: boolean } = {}) => {
+            let tenantId: string | null = null;
+            try {
+                tenantId = await getTenantIdOrThrow();
+            } catch (err) {}
+
+            const whereClause: any = {};
+            if (tenantId) {
+                whereClause.student = { tenantId };
+            }
+
+            if (filters.studentId) whereClause.studentId = filters.studentId;
+            if (filters.firebaseUID || filters.firebaseUid) {
+                whereClause.student = {
+                    ...(whereClause.student || {}),
+                    firebaseUid: filters.firebaseUID || filters.firebaseUid
+                };
+            }
+            if (filters.registrationId) {
+                whereClause.student = {
+                    ...(whereClause.student || {}),
+                    registrationId: filters.registrationId
+                };
+            }
+
+            if (filters.status && filters.status !== 'all' && filters.status !== 'hidden') {
+                if (filters.status === 'allowed') {
+                    whereClause.OR = [{ status: 'allowed' }, { deanStatus: 'allowed' }];
+                } else {
+                    whereClause.status = filters.status;
+                }
+            }
+
+            // Exclude artificial manual toggle records
+            whereClause.NOT = {
+                reason: {
+                    contains: 'Manual Management Override',
+                    mode: 'insensitive'
+                }
+            };
+
+            if (filters.status === 'hidden') {
+                whereClause.isHidden = true;
+            } else {
+                whereClause.isHidden = false;
+            }
+
+            if (filters.authorizedHostels && filters.authorizedHostels.length > 0) {
+                const hostelVariations = filters.authorizedHostels.flatMap((h: string) => [
+                    h,
+                    h.toUpperCase(),
+                    h.toLowerCase()
+                ]);
+                whereClause.student = { ...(whereClause.student || {}), hostelName: { in: hostelVariations } };
+            } else if (filters.hostelName && filters.hostelName !== 'all') {
+                const hostelVariations = [
+                    filters.hostelName,
+                    filters.hostelName.toUpperCase(),
+                    filters.hostelName.toLowerCase()
+                ];
+                whereClause.student = { ...(whereClause.student || {}), hostelName: { in: hostelVariations } };
+            }
+
+            let total = 0;
+            let records: any[] = [];
+            try {
+                total = await prisma.permission.count({ where: whereClause });
+                records = await prisma.permission.findMany({
+                    where: whereClause,
+                    orderBy: { createdAt: 'desc' },
+                    take: options.limit || undefined,
+                    skip: options.offset || undefined,
+                    include: options.populate !== false ? { student: true } : undefined
+                });
+            } catch (dbErr) {
+                console.error("Error in db.permissions.list:", dbErr);
+                total = 0;
+                records = [];
+            }
+
+            const mappedRecords = records.map((p: any) => {
+                const formatted = {
+                    ...p,
+                    students: p.student
+                };
+                return mapPermissionToCamelCase(formatted);
+            });
+
+            return {
+                records: mappedRecords,
+                total
+            };
+        },
+
+        count: async (filters: any = {}) => {
+            let tenantId: string | null = null;
+            try {
+                tenantId = await getTenantIdOrThrow();
+            } catch (err) {}
+
+            const whereClause: any = {};
+            if (tenantId) {
+                whereClause.student = { tenantId };
+            }
+            if (filters.studentId) whereClause.studentId = filters.studentId;
+            if (filters.firebaseUID || filters.firebaseUid) {
+                whereClause.student = {
+                    ...(whereClause.student || {}),
+                    firebaseUid: filters.firebaseUID || filters.firebaseUid
+                };
+            }
+            if (filters.registrationId) {
+                whereClause.student = {
+                    ...(whereClause.student || {}),
+                    registrationId: filters.registrationId
+                };
+            }
+
+            if (filters.status && filters.status !== 'all' && filters.status !== 'hidden') {
+                if (filters.status === 'allowed') {
+                    whereClause.OR = [{ status: 'allowed' }, { deanStatus: 'allowed' }];
+                } else {
+                    whereClause.status = filters.status;
+                }
+            }
+
+            // Exclude artificial manual toggle records
+            whereClause.NOT = {
+                reason: {
+                    contains: 'Manual Management Override',
+                    mode: 'insensitive'
+                }
+            };
+
+            if (filters.status === 'hidden') {
+                whereClause.isHidden = true;
+            } else {
+                whereClause.isHidden = false;
+            }
+
+            if (filters.authorizedHostels && filters.authorizedHostels.length > 0) {
+                const hostelVariations = filters.authorizedHostels.flatMap((h: string) => [
+                    h,
+                    h.toUpperCase(),
+                    h.toLowerCase()
+                ]);
+                whereClause.student = { ...(whereClause.student || {}), hostelName: { in: hostelVariations } };
+            } else if (filters.hostelName && filters.hostelName !== 'all') {
+                const hostelVariations = [
+                    filters.hostelName,
+                    filters.hostelName.toUpperCase(),
+                    filters.hostelName.toLowerCase()
+                ];
+                whereClause.student = { ...(whereClause.student || {}), hostelName: { in: hostelVariations } };
+            }
+
+            return await prisma.permission.count({ where: whereClause });
+        },
+
+        countDocuments: async (filters: any = {}) => {
+            return db.permissions.count(filters);
+        },
+
+        getById: async (id: string, options: { populate?: boolean } = {}) => {
+            const record = await prisma.permission.findUnique({
+                where: { id },
+                include: options.populate !== false ? { student: true } : undefined
+            });
+            if (!record) return null;
+            const formatted = {
+                ...record,
+                students: (record as any).student
+            };
+            return mapPermissionToCamelCase(formatted);
+        },
+
+        create: async (permissionData: any) => {
+            const permissionWithDefaults = {
+                wardenStatus: 'pending',
+                deanStatus: 'pending',
+                parentStatus: 'pending',
+                ...permissionData
+            };
+            const prismaData = filterPermissionForPrisma(permissionWithDefaults);
+            if (!prismaData.id) {
+                prismaData.id = crypto.randomUUID();
+            }
+            const record = await prisma.permission.create({
+                data: prismaData
+            });
+            return mapPermissionToCamelCase(record);
+        },
+
+        update: async (id: string, updateData: any) => {
+            const prismaData = filterPermissionForPrisma(updateData.$set || updateData);
+            const record = await prisma.permission.update({
+                where: { id },
+                data: prismaData
+            });
+            return mapPermissionToCamelCase(record);
         },
 
         deleteMany: async (filters: any) => {
-            const source = await getDbSource();
-            if (source === 'SUPABASE') {
-                const tenantId = await getTenantIdOrThrow();
-                let query = supabase.from('permissions').delete();
-                
-                if (filters.studentId) {
-                    query = query.eq('student_id', filters.studentId);
-                    if (filters.beforeDate) {
-                        query = query.lte('from_date_time', new Date(filters.beforeDate).toISOString());
-                    }
-                    const { error } = await query;
-                    if (error) throw error;
-                } else {
-                    // Fetch all student IDs for this tenant
-                    let studentQuery = supabase
-                        .from('students')
-                        .select('_id')
-                        .eq('tenant_id', tenantId);
-                    
-                    if (filters.hostelName) {
-                        studentQuery = studentQuery.ilike('hostel_name', `%${filters.hostelName}%`);
-                    }
-                    
-                    const { data: students, error: studentError } = await studentQuery;
-                    
-                    if (studentError) throw studentError;
-                    const studentIds = (students || []).map((s: any) => s._id);
-                    if (studentIds.length === 0) return true;
-                    
-                    // Batch delete in chunks of 100 to avoid Headers Overflow error
-                    const chunks = [];
-                    for (let i = 0; i < studentIds.length; i += 100) {
-                        chunks.push(studentIds.slice(i, i + 100));
-                    }
-                    
-                    const results = await Promise.all(chunks.map(chunk => {
-                        let q = supabase.from('permissions').delete().in('student_id', chunk);
-                        if (filters.beforeDate) {
-                            q = q.lte('from_date_time', new Date(filters.beforeDate).toISOString());
-                        }
-                        return q;
-                    }));
-                    
-                    const err = results.find(r => r.error)?.error;
-                    if (err) throw err;
-                }
+            let tenantId: string | null = null;
+            try {
+                tenantId = await getTenantIdOrThrow();
+            } catch (err) {}
 
-                return true;
-            } else if (source === 'PRISMA') {
-                const tenantId = await getTenantIdOrThrow();
-                const whereClause: any = {};
-                if (filters.studentId) {
-                    whereClause.studentId = filters.studentId;
-                } else {
-                    whereClause.student = { tenantId };
-                    if (filters.hostelName) {
-                        whereClause.student.hostelName = { contains: filters.hostelName, mode: 'insensitive' };
-                    }
-                }
-                if (filters.beforeDate) {
-                    whereClause.fromDateTime = { lte: new Date(filters.beforeDate) };
-                }
-                await prisma.permission.deleteMany({
-                    where: whereClause
-                });
-                return true;
-            } else {
-                await connectDB();
-                const PermissionModel = (await import('@/models/Permission')).default;
-                let mongoQuery: any = { ...filters };
+            const whereClause: any = {};
+            if (filters.studentId) {
+                whereClause.studentId = filters.studentId;
+            } else if (tenantId) {
+                whereClause.student = { tenantId };
                 if (filters.hostelName) {
-                    const StudentModel = (await import('@/models/Student')).default;
-                    const students = await StudentModel.find({ hostelName: { $regex: filters.hostelName, $options: "i" } }).select('_id');
-                    const studentIds = students.map(s => s._id);
-                    mongoQuery.studentId = { $in: studentIds };
-                    delete mongoQuery.hostelName;
+                    whereClause.student.hostelName = { contains: filters.hostelName, mode: 'insensitive' };
                 }
-                if (filters.beforeDate) {
-                    mongoQuery.fromDateTime = { $lte: new Date(filters.beforeDate) };
-                    delete mongoQuery.beforeDate;
-                }
-                await PermissionModel.deleteMany(mongoQuery);
-                return true;
             }
+            if (filters.beforeDate) {
+                whereClause.fromDateTime = { lte: new Date(filters.beforeDate) };
+            }
+            await prisma.permission.deleteMany({
+                where: whereClause
+            });
+            return true;
         },
 
         deleteByIds: async (ids: string[]) => {
             if (!ids || ids.length === 0) return true;
-            const source = await getDbSource();
-            if (source === 'SUPABASE') {
-                const chunks = [];
-                for (let i = 0; i < ids.length; i += 100) {
-                    chunks.push(ids.slice(i, i + 100));
-                }
-                for (const chunk of chunks) {
-                    const { error } = await supabase.from('permissions').delete().in('_id', chunk);
-                    if (error) console.warn("Supabase permissions bulk delete notice:", error);
-                }
-                return true;
-            } else if (source === 'PRISMA') {
-                try {
-                    await prisma.permission.deleteMany({
-                        where: { id: { in: ids } }
-                    });
-                } catch (e: any) {
-                    console.warn("Prisma permission bulk delete notice:", e?.message);
-                }
-                return true;
-            } else {
-                await connectDB();
-                const PermissionModel = (await import('@/models/Permission')).default;
-                await PermissionModel.deleteMany({ _id: { $in: ids } });
-                return true;
-            }
+            await prisma.permission.deleteMany({
+                where: { id: { in: ids } }
+            });
+            return true;
         },
 
         hideByIds: async (ids: string[], isHidden: boolean = true) => {
             if (!ids || ids.length === 0) return true;
-            const source = await getDbSource();
-            if (source === 'SUPABASE') {
-                const chunks = [];
-                for (let i = 0; i < ids.length; i += 100) {
-                    chunks.push(ids.slice(i, i + 100));
-                }
-                for (const chunk of chunks) {
-                    const { error } = await supabase.from('permissions').update({ is_hidden: isHidden }).in('_id', chunk);
-                    if (error) console.warn("Supabase permissions bulk hide notice:", error);
-                }
-                return true;
-            } else if (source === 'PRISMA') {
-                let attempts = 0;
-                while (attempts < 3) {
-                    try {
-                        await (prisma.permission as any).updateMany({
-                            where: { id: { in: ids } },
-                            data: { isHidden }
-                        });
-                        break;
-                    } catch (pErr: any) {
-                        attempts++;
-                        console.warn(`Prisma permission bulk hide attempt ${attempts} notice:`, pErr?.message);
-                        if (attempts >= 3) throw pErr;
-                        await new Promise(r => setTimeout(r, 500));
-                    }
-                }
-                return true;
-            } else {
-                await connectDB();
-                const PermissionModel = (await import('@/models/Permission')).default;
-                await PermissionModel.updateMany({ _id: { $in: ids } }, { $set: { isHidden } });
-                return true;
-            }
+            await (prisma.permission as any).updateMany({
+                where: { id: { in: ids } },
+                data: { isHidden }
+            });
+            return true;
         }
     },
 
-    /**
-     * STUDENT FIELD PROGRESS OPERATIONS
-     */
     studentFieldProgress: {
         find: async (filter: any) => {
-            const source = await getDbSource();
-            if (source === 'SUPABASE') {
-                const tenantId = await getTenantIdOrThrow();
-                let query = supabase.from('student_field_progress').select('*');
-                // Removed tenant_id filter because column is missing in DB
-                if (filter.studentId) query = query.eq('student_id', filter.studentId);
-                if (filter.firebaseUID) query = query.eq('firebase_uid', filter.firebaseUID);
-                if (filter.fieldId) query = query.eq('field_id', filter.fieldId);
-                if (filter.hostelName) query = query.eq('hostel_name', filter.hostelName);
+            let tenantId: string | null = null;
+            try {
+                tenantId = await getTenantIdOrThrow();
+            } catch (err) {}
 
-                const { data, error } = await query;
-                if (error) throw error;
-                return (data || []).map(mapStudentFieldProgressToCamelCase);
-            } else if (source === 'PRISMA') {
-                const whereClause: any = {};
-                if (filter.studentId) whereClause.studentId = filter.studentId;
-                if (filter.firebaseUID) whereClause.firebaseUid = filter.firebaseUID;
-                if (filter.fieldId) whereClause.fieldId = filter.fieldId;
-                if (filter.hostelName) whereClause.hostelName = filter.hostelName;
-
-                const records = await prisma.studentFieldProgress.findMany({
-                    where: whereClause
-                });
-                return records.map(mapStudentFieldProgressToCamelCase);
-            } else {
-                await connectDB();
-                const StudentFieldProgressModel = (await import('@/models/StudentFieldProgress')).default;
-                const records = await StudentFieldProgressModel.find(filter).lean();
-                return JSON.parse(JSON.stringify(records));
+            const whereClause: any = {};
+            if (tenantId) {
+                whereClause.student = { tenantId };
             }
+            if (filter.hostelName) whereClause.hostelName = filter.hostelName;
+            if (filter.studentId) whereClause.studentId = filter.studentId;
+
+            const records = await prisma.studentFieldProgress.findMany({
+                where: whereClause
+            });
+            return records.map(mapStudentFieldProgressToCamelCase);
         },
 
         upsert: async (recordData: any) => {
-            const source = await getDbSource();
-            if (source === 'SUPABASE') {
-                const tenantId = await getTenantIdOrThrow();
-                const snakeData = { ...mapStudentFieldProgressToSnakeCase(recordData) };
-                const { data: existing } = await supabase
-                    .from('student_field_progress')
-                    .select('_id')
-                    .eq('student_id', snakeData.student_id)
-                    .eq('field_id', snakeData.field_id)
-                    .eq('hostel_name', snakeData.hostel_name)
-                    .maybeSingle();
-
-                if (existing) {
-                    const { data, error } = await supabase
-                        .from('student_field_progress')
-                        .update(snakeData)
-                        .eq('_id', existing._id)
-                        .select()
-                        .single();
-                    if (error) throw error;
-                    return mapStudentFieldProgressToCamelCase(data);
-                } else {
-                    // Add _id for new insert
-                    snakeData._id = crypto.randomUUID();
-                    const { data, error } = await supabase
-                        .from('student_field_progress')
-                        .insert([snakeData])
-                        .select()
-                        .single();
-                    if (error) throw error;
-                    return mapStudentFieldProgressToCamelCase(data);
-                }
-            } else if (source === 'PRISMA') {
-                const filter = {
-                    studentId: recordData.studentId,
-                    fieldId: recordData.fieldId,
-                    hostelName: recordData.hostelName
-                };
-                const prismaData = filterStudentFieldProgressForPrisma(recordData);
-                const existing = await prisma.studentFieldProgress.findFirst({
-                    where: filter
+            const filter = {
+                studentId: recordData.studentId,
+                fieldId: recordData.fieldId,
+                hostelName: recordData.hostelName
+            };
+            const prismaData = filterStudentFieldProgressForPrisma(recordData);
+            const existing = await prisma.studentFieldProgress.findFirst({
+                where: filter
+            });
+            if (existing) {
+                const data = await prisma.studentFieldProgress.update({
+                    where: { id: existing.id },
+                    data: prismaData
                 });
-                if (existing) {
-                    const data = await prisma.studentFieldProgress.update({
-                        where: { id: existing.id },
-                        data: prismaData
-                    });
-                    return mapStudentFieldProgressToCamelCase(data);
-                } else {
-                    prismaData.id = crypto.randomUUID();
-                    const data = await prisma.studentFieldProgress.create({
-                        data: prismaData
-                    });
-                    return mapStudentFieldProgressToCamelCase(data);
-                }
+                return mapStudentFieldProgressToCamelCase(data);
             } else {
-                await connectDB();
-                const StudentFieldProgressModel = (await import('@/models/StudentFieldProgress')).default;
-                const filter = {
-                    studentId: recordData.studentId,
-                    fieldId: recordData.fieldId,
-                    hostelName: recordData.hostelName
-                };
-                const updated = await StudentFieldProgressModel.findOneAndUpdate(filter, recordData, { upsert: true, new: true });
-                return JSON.parse(JSON.stringify(updated));
+                prismaData.id = crypto.randomUUID();
+                const data = await prisma.studentFieldProgress.create({
+                    data: prismaData
+                });
+                return mapStudentFieldProgressToCamelCase(data);
             }
         },
 
         deleteMany: async (filter: any) => {
-            const source = await getDbSource();
-            if (source === 'SUPABASE') {
-                const tenantId = await getTenantIdOrThrow();
-                let query = supabase.from('student_field_progress').delete();
-                query = query.eq('tenant_id', tenantId);
-                if (filter.hostelName) query = query.eq('hostel_name', filter.hostelName);
-                if (filter.studentId) query = query.eq('student_id', filter.studentId);
+            let tenantId: string | null = null;
+            try {
+                tenantId = await getTenantIdOrThrow();
+            } catch (err) {}
 
-                const { count, error } = await query;
-                if (error) throw error;
-                return { deletedCount: count || 0 };
-            } else if (source === 'PRISMA') {
-                const tenantId = await getTenantIdOrThrow();
-                const whereClause: any = {
-                    student: {
-                        tenantId: tenantId
-                    }
-                };
-                if (filter.hostelName) whereClause.hostelName = filter.hostelName;
-                if (filter.studentId) whereClause.studentId = filter.studentId;
-
-                const result = await prisma.studentFieldProgress.deleteMany({
-                    where: whereClause
-                });
-                return { deletedCount: result.count };
-            } else {
-                await connectDB();
-                const StudentFieldProgressModel = (await import('@/models/StudentFieldProgress')).default;
-                const result = await StudentFieldProgressModel.deleteMany(filter);
-                return { deletedCount: result.deletedCount };
+            const whereClause: any = {};
+            if (tenantId) {
+                whereClause.student = { tenantId };
             }
+            if (filter.hostelName) whereClause.hostelName = filter.hostelName;
+            if (filter.studentId) whereClause.studentId = filter.studentId;
+
+            const result = await prisma.studentFieldProgress.deleteMany({
+                where: whereClause
+            });
+            return { deletedCount: result.count };
         }
     }
 };
 
 export default db;
-
-
-
-
-
-
-

@@ -1,16 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getSupabaseAdmin } from "@/lib/supabaseServer";
-import { db } from "@/lib/dbAdapter";
 import { prisma } from "@/lib/prisma";
+import crypto from "crypto";
 
 export const dynamic = 'force-dynamic';
 export const revalidate = 0;
 
 /**
  * GET: Fetch all colleges (Tenants) with extended stats
- */
-/**
- * GET: Fetch all colleges (Tenants)
  * ?deleted=true to fetch Recycle Bin items
  */
 export async function GET(request: NextRequest) {
@@ -18,86 +14,52 @@ export async function GET(request: NextRequest) {
         const url = new URL(request.url);
         const showDeleted = url.searchParams.get('deleted') === 'true';
         
-        const supabase = getSupabaseAdmin();
         const now = new Date();
-        const tenMinutesAgo = new Date(now.getTime() - 10 * 60 * 1000).toISOString();
+        const tenMinutesAgo = new Date(now.getTime() - 10 * 60 * 1000);
 
-        const activeDbSource = await db.getSource();
-        let tenants: any[] = [];
+        // 1. Fetch tenants with deletion filter from Railway PostgreSQL (Prisma)
+        const prismaTenants = await prisma.tenant.findMany({
+            where: showDeleted ? { isDeleted: true } : { isDeleted: false },
+            orderBy: { createdAt: 'desc' }
+        });
 
-        // 1. Fetch tenants with deletion filter from active DB (Railway/Prisma or Supabase)
-        if (activeDbSource === 'PRISMA') {
-            try {
-                const prismaTenants = await prisma.tenant.findMany({
-                    where: showDeleted ? { isDeleted: true } : { isDeleted: false },
-                    orderBy: { createdAt: 'desc' }
-                });
-                tenants = prismaTenants.map(t => ({
-                    id: t.id,
-                    name: t.name,
-                    slug: t.slug,
-                    admin_email: t.adminEmail,
-                    is_active: t.isActive,
-                    is_deleted: t.isDeleted || false,
-                    deleted_at: t.deletedAt,
-                    subscription_status: t.subscriptionStatus,
-                    subscription_end_date: t.subscriptionEndDate,
-                    primary_color: t.primaryColor,
-                    created_at: t.createdAt
-                }));
-            } catch (e: any) {
-                console.warn("Prisma tenant list fetch error, falling back to Supabase:", e?.message);
-            }
-        }
+        const tenants = prismaTenants.map(t => ({
+            id: t.id,
+            name: t.name,
+            slug: t.slug,
+            admin_email: t.adminEmail,
+            is_active: t.isActive,
+            is_deleted: t.isDeleted || false,
+            deleted_at: t.deletedAt,
+            subscription_status: t.subscriptionStatus,
+            subscription_end_date: t.subscriptionEndDate,
+            primary_color: t.primaryColor,
+            created_at: t.createdAt
+        }));
 
-        if ((!tenants || tenants.length === 0) && activeDbSource !== 'PRISMA') {
-            let query = supabase.from('tenants').select('*');
-            if (showDeleted) {
-                query = query.eq('is_deleted', true);
-            } else {
-                query = query.or('is_deleted.is.null,is_deleted.eq.false');
-            }
-            const { data } = await query.order('created_at', { ascending: false });
-            tenants = data || [];
-        }
+        const tenantIds = tenants.map((t: any) => t.id);
 
-        const tenantIds = tenants?.map((t: any) => t.id) || [];
-
-        // 2. Get counts per tenant from active DB without hanging fallbacks
-        const tenantStats = await Promise.all(tenantIds.map(async (id: any) => {
+        // 2. Get counts per tenant from Prisma
+        const tenantStats = await Promise.all(tenantIds.map(async (id: string) => {
             let studentCount = 0;
             let liveTraffic = 0;
             let bankDetails: any = {};
 
-            if (activeDbSource === 'PRISMA') {
-                try {
-                    studentCount = await prisma.student.count({ where: { tenantId: id } });
-                } catch (e: any) {
-                    console.warn("Student count error on Railway:", e?.message);
-                }
-                try {
-                    const [traffic, settings] = await Promise.all([
-                        prisma.attendance.count({ where: { tenantId: id, timestamp: { gte: new Date(now.getTime() - 10 * 60 * 1000) } } }).catch(() => 0),
-                        prisma.adminSettings.findFirst({ where: { tenantId: id } }).catch(() => null)
-                    ]);
-                    liveTraffic = traffic;
-                    bankDetails = settings?.universityBankDetails || {};
-                } catch (e: any) {
-                    console.warn("Traffic/settings fetch error on Railway:", e?.message);
-                }
-            } else {
-                try {
-                    const [studentRes, trafficRes, settingsRes] = await Promise.all([
-                        supabase.from('students').select('*', { count: 'exact', head: true }).eq('tenant_id', id),
-                        supabase.from('attendance').select('*', { count: 'exact', head: true }).eq('tenant_id', id).gte('timestamp', tenMinutesAgo),
-                        supabase.from('admin_settings').select('university_bank_details').eq('tenant_id', id).maybeSingle()
-                    ]);
-                    studentCount = studentRes?.count || 0;
-                    liveTraffic = trafficRes?.count || 0;
-                    bankDetails = settingsRes?.data?.university_bank_details || {};
-                } catch (e: any) {
-                    console.warn("Supabase stats error:", e?.message);
-                }
+            try {
+                studentCount = await prisma.student.count({ where: { tenantId: id } });
+            } catch (e: any) {
+                console.warn("Student count error:", e?.message);
+            }
+
+            try {
+                const [traffic, settings] = await Promise.all([
+                    prisma.attendance.count({ where: { tenantId: id, timestamp: { gte: tenMinutesAgo } } }).catch(() => 0),
+                    prisma.adminSettings.findFirst({ where: { tenantId: id } }).catch(() => null)
+                ]);
+                liveTraffic = traffic;
+                bankDetails = settings?.universityBankDetails || {};
+            } catch (e: any) {
+                console.warn("Traffic/settings fetch error:", e?.message);
             }
 
             return {
@@ -118,7 +80,7 @@ export async function GET(request: NextRequest) {
 
         const statsMap = new Map<string, any>(tenantStats.map((s: any) => [s.id, s]));
 
-        const formattedTenants = tenants?.map((t: any) => {
+        const formattedTenants = tenants.map((t: any) => {
             const stats = statsMap.get(t.id) as any;
             return {
                 _id: t.id,
@@ -144,16 +106,11 @@ export async function GET(request: NextRequest) {
                 storageBytes: stats?.storageBytes || 0,
                 storageQuotaMb: stats?.storageQuotaMb || 100
             };
-        }) || [];
+        });
 
         let globalPulse = 0;
         try {
-            if (activeDbSource === 'PRISMA') {
-                globalPulse = await prisma.attendance.count({ where: { timestamp: { gte: new Date(now.getTime() - 10 * 60 * 1000) } } });
-            } else {
-                const { count } = await supabase.from('attendance').select('*', { count: 'exact', head: true }).gte('timestamp', tenMinutesAgo);
-                globalPulse = count || 0;
-            }
+            globalPulse = await prisma.attendance.count({ where: { timestamp: { gte: tenMinutesAgo } } });
         } catch {
             globalPulse = 0;
         }
@@ -164,9 +121,9 @@ export async function GET(request: NextRequest) {
             globalStats: {
                 totalActiveTraffic: globalPulse || 0,
                 revenueSummary: {
-                    active: tenants?.filter((t: any) => t.subscription_status === 'active').length || 0,
-                    trial: tenants?.filter((t: any) => t.subscription_status === 'trial').length || 0,
-                    expired: tenants?.filter((t: any) => t.subscription_status === 'expired').length || 0
+                    active: tenants.filter((t: any) => t.subscription_status === 'active').length || 0,
+                    trial: tenants.filter((t: any) => t.subscription_status === 'trial').length || 0,
+                    expired: tenants.filter((t: any) => t.subscription_status === 'expired').length || 0
                 }
             }
         });
@@ -183,27 +140,12 @@ export async function POST(request: NextRequest) {
         const body = await request.json();
         const { action, id } = body;
 
-        const supabase = getSupabaseAdmin();
-
         // Handle Restore Action
         if (action === "restore" && id) {
-            try {
-                await prisma.tenant.updateMany({
-                    where: { id },
-                    data: { isDeleted: false, deletedAt: null }
-                });
-            } catch (prismaErr) {
-                console.warn("Prisma restore error:", prismaErr);
-            }
-
-            try {
-                await supabase
-                    .from('tenants')
-                    .update({ is_deleted: false, deleted_at: null })
-                    .eq('id', id);
-            } catch (supabaseErr) {
-                console.warn("Supabase restore error:", supabaseErr);
-            }
+            await prisma.tenant.updateMany({
+                where: { id },
+                data: { isDeleted: false, deletedAt: null }
+            });
             
             return NextResponse.json({ success: true, message: "University restored to active duty." });
         }
@@ -227,46 +169,27 @@ export async function POST(request: NextRequest) {
         const tenantId = crypto.randomUUID();
         const tenantEndDate = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
 
-        try {
-            await prisma.tenant.create({
-                data: {
-                    id: tenantId,
-                    name,
-                    slug: cleanSlug,
-                    adminEmail,
-                    subscriptionStatus: subscriptionStatus || 'trial',
-                    primaryColor: primaryColor || '#3b82f6',
-                    isActive: true,
-                    subscriptionEndDate: tenantEndDate
-                }
-            });
-        } catch (pErr) {
-            console.warn("Prisma tenant creation note:", pErr);
-        }
-
-        try {
-            await supabase
-                .from('tenants')
-                .insert({
-                    id: tenantId,
-                    name,
-                    slug: cleanSlug,
-                    admin_email: adminEmail,
-                    subscription_status: subscriptionStatus || 'trial',
-                    primary_color: primaryColor || '#3b82f6',
-                    is_active: true,
-                    subscription_end_date: tenantEndDate.toISOString(),
-                });
-        } catch (sErr) {}
+        const newTenant = await prisma.tenant.create({
+            data: {
+                id: tenantId,
+                name,
+                slug: cleanSlug,
+                adminEmail,
+                subscriptionStatus: subscriptionStatus || 'trial',
+                primaryColor: primaryColor || '#3b82f6',
+                isActive: true,
+                subscriptionEndDate: tenantEndDate
+            }
+        });
 
         return NextResponse.json({
             success: true,
             tenant: {
-                _id: tenantId,
-                name: name,
-                slug: cleanSlug,
-                adminEmail: adminEmail,
-                subscriptionStatus: subscriptionStatus || 'trial',
+                _id: newTenant.id,
+                name: newTenant.name,
+                slug: newTenant.slug,
+                adminEmail: newTenant.adminEmail,
+                subscriptionStatus: newTenant.subscriptionStatus || 'trial',
                 isActive: true
             }
         });
@@ -285,64 +208,28 @@ export async function PATCH(request: NextRequest) {
 
         if (!id) return NextResponse.json({ success: false, error: "Tenant ID is required" }, { status: 400 });
 
-        const supabase = getSupabaseAdmin();
-        let tenant: any = null;
-
         const updateData: any = {};
-        if (typeof is_active !== 'undefined') updateData.is_active = is_active;
-        if (subscriptionStatus) updateData.subscription_status = subscriptionStatus;
+        if (typeof is_active !== 'undefined') updateData.isActive = is_active;
+        if (subscriptionStatus) updateData.subscriptionStatus = subscriptionStatus;
         if (typeof subscriptionEndDate !== 'undefined') {
-            updateData.subscription_end_date = subscriptionEndDate ? new Date(subscriptionEndDate).toISOString() : null;
+            updateData.subscriptionEndDate = subscriptionEndDate ? new Date(subscriptionEndDate) : null;
         }
         if (typeof createdAt !== 'undefined') {
-            updateData.created_at = createdAt ? new Date(createdAt).toISOString() : null;
+            updateData.createdAt = createdAt ? new Date(createdAt) : undefined;
         }
 
-        if (Object.keys(updateData).length > 0) {
-            const { data, error } = await supabase
-                .from('tenants')
-                .update(updateData)
-                .eq('id', id)
-                .select()
-                .single();
-            if (error || !data) return NextResponse.json({ success: false, error: "Tenant not found" }, { status: 404 });
-            tenant = data;
-        } else {
-            const { data, error } = await supabase
-                .from('tenants')
-                .select()
-                .eq('id', id)
-                .single();
-            if (error || !data) return NextResponse.json({ success: false, error: "Tenant not found" }, { status: 404 });
-            tenant = data;
-        }
+        const tenant = await prisma.tenant.update({
+            where: { id },
+            data: updateData
+        });
 
-        // Update Railway tenant status if active
-        try {
-            await prisma.tenant.update({
-                where: { id },
-                data: {
-                    isActive: typeof is_active !== 'undefined' ? is_active : tenant.is_active,
-                    subscriptionStatus: subscriptionStatus || tenant.subscription_status,
-                    subscriptionEndDate: subscriptionEndDate ? new Date(subscriptionEndDate) : undefined
-                }
-            });
-        } catch (e) {
-            console.warn("Railway tenant update warn:", e);
-        }
-
-        // Update admin_settings in both Supabase and Railway
+        // Update admin_settings in Railway PostgreSQL
         const hasContactUpdates = contactName !== undefined || contactPhone !== undefined || totalHostelars !== undefined || features !== undefined || storageQuotaMb !== undefined;
         let bankDetails: any = {};
 
         if (subscriptionStatus || subscriptionEndDate || hasContactUpdates) {
-            const { data: settings } = await supabase
-                .from('admin_settings')
-                .select('_id, university_bank_details')
-                .eq('tenant_id', id)
-                .maybeSingle();
-                
-            bankDetails = settings?.university_bank_details || {};
+            const settings = await prisma.adminSettings.findFirst({ where: { tenantId: id } });
+            bankDetails = settings?.universityBankDetails || {};
 
             if (subscriptionStatus || subscriptionEndDate) {
                 delete bankDetails.renewalUtr;
@@ -359,29 +246,14 @@ export async function PATCH(request: NextRequest) {
             }
 
             if (settings) {
-                await supabase
-                    .from('admin_settings')
-                    .update({ university_bank_details: bankDetails })
-                    .eq('_id', settings._id);
+                await prisma.adminSettings.update({
+                    where: { id: settings.id },
+                    data: { universityBankDetails: bankDetails }
+                });
             } else {
-                await supabase
-                    .from('admin_settings')
-                    .insert({ tenant_id: id, university_bank_details: bankDetails });
-            }
-            try {
-                const railwaySettings = await prisma.adminSettings.findFirst({ where: { tenantId: id } });
-                if (railwaySettings) {
-                    await prisma.adminSettings.update({
-                        where: { id: railwaySettings.id },
-                        data: { universityBankDetails: bankDetails }
-                    });
-                } else {
-                    await prisma.adminSettings.create({
-                        data: { tenantId: id, universityBankDetails: bankDetails }
-                    });
-                }
-            } catch (e) {
-                console.warn("Railway adminSettings sync warn:", e);
+                await prisma.adminSettings.create({
+                    data: { tenantId: id, universityBankDetails: bankDetails }
+                });
             }
         }
 
@@ -389,12 +261,12 @@ export async function PATCH(request: NextRequest) {
             _id: tenant.id,
             name: tenant.name,
             slug: tenant.slug,
-            adminEmail: tenant.admin_email,
-            isActive: tenant.is_active,
-            subscriptionStatus: tenant.subscription_status,
-            subscriptionEndDate: tenant.subscription_end_date,
-            primaryColor: tenant.primary_color,
-            createdAt: tenant.created_at,
+            adminEmail: tenant.adminEmail,
+            isActive: tenant.isActive,
+            subscriptionStatus: tenant.subscriptionStatus,
+            subscriptionEndDate: tenant.subscriptionEndDate,
+            primaryColor: tenant.primaryColor,
+            createdAt: tenant.createdAt,
             contactName: bankDetails.contactName || contactName,
             contactPhone: bankDetails.contactPhone || contactPhone,
             totalHostelars: bankDetails.totalHostelars || totalHostelars,
@@ -420,60 +292,26 @@ export async function DELETE(request: NextRequest) {
 
         if (!id) return NextResponse.json({ success: false, error: "Tenant ID is required" }, { status: 400 });
 
-        const supabase = getSupabaseAdmin();
-        
         if (purge) {
             console.log(`[SuperAdmin] PERMANENT PURGE for tenant: ${id}`);
 
-            // 1. Purge from Railway PostgreSQL (Prisma)
-            try {
-                await prisma.gatePass.deleteMany({ where: { tenantId: id } });
-                await prisma.attendance.deleteMany({ where: { tenantId: id } });
-                await prisma.student.deleteMany({ where: { tenantId: id } });
-                await prisma.hostel.deleteMany({ where: { tenantId: id } });
-                await prisma.fieldEnforcement.deleteMany({ where: { tenantId: id } });
-                await prisma.adminSettings.deleteMany({ where: { tenantId: id } });
-                await prisma.tenant.deleteMany({ where: { id } });
-            } catch (prismaErr) {
-                console.warn("Prisma permanent purge note:", prismaErr);
-            }
-
-            // 2. Also clean up Supabase
-            try {
-                await supabase.from('gatepasses').delete().eq('tenant_id', id);
-                await supabase.from('attendance').delete().eq('tenant_id', id);
-                await supabase.from('students').delete().eq('tenant_id', id);
-                await supabase.from('hostels').delete().eq('tenant_id', id);
-                await supabase.from('warden_accounts').delete().eq('tenant_id', id);
-                await supabase.from('admin_settings').delete().eq('tenant_id', id);
-                await supabase.from('tenants').delete().eq('id', id);
-            } catch (supabaseErr) {
-                console.warn("Supabase permanent purge note:", supabaseErr);
-            }
+            // Purge related records from Railway PostgreSQL
+            await prisma.gatePass.deleteMany({ where: { tenantId: id } });
+            await prisma.attendance.deleteMany({ where: { tenantId: id } });
+            await prisma.student.deleteMany({ where: { tenantId: id } });
+            await prisma.hostel.deleteMany({ where: { tenantId: id } });
+            await prisma.fieldEnforcement.deleteMany({ where: { tenantId: id } });
+            await prisma.adminSettings.deleteMany({ where: { tenantId: id } });
+            await prisma.tenant.deleteMany({ where: { id } });
             
             return NextResponse.json({ success: true, message: "University node DESTROYED successfully." });
         } else {
             console.log(`[SuperAdmin] SOFT DELETE (Recycle Bin) for tenant: ${id}`);
 
-            // 1. Soft delete in Railway PostgreSQL (Prisma)
-            try {
-                await prisma.tenant.updateMany({
-                    where: { id },
-                    data: { isDeleted: true, deletedAt: new Date() }
-                });
-            } catch (prismaErr) {
-                console.warn("Prisma soft delete note:", prismaErr);
-            }
-
-            // 2. Soft delete in Supabase
-            try {
-                await supabase
-                    .from('tenants')
-                    .update({ is_deleted: true, deleted_at: new Date().toISOString() })
-                    .eq('id', id);
-            } catch (supabaseErr) {
-                console.warn("Supabase soft delete note:", supabaseErr);
-            }
+            await prisma.tenant.updateMany({
+                where: { id },
+                data: { isDeleted: true, deletedAt: new Date() }
+            });
 
             return NextResponse.json({ success: true, message: "University moved to Recycle Bin." });
         }
@@ -482,4 +320,3 @@ export async function DELETE(request: NextRequest) {
         return NextResponse.json({ success: false, error: error.message }, { status: 500 });
     }
 }
-

@@ -2,7 +2,7 @@ export const dynamic = "force-dynamic";
 
 import { NextRequest, NextResponse } from "next/server";
 import { getTenantFromRequest } from "@/lib/tenant";
-import { getSupabaseAdmin } from "@/lib/supabaseServer";
+import { db } from "@/lib/dbAdapter";
 
 export async function POST(request: NextRequest) {
     try {
@@ -19,7 +19,6 @@ export async function POST(request: NextRequest) {
         }
 
         const cleanUtr = utr.trim();
-        const { default: db } = await import("@/lib/dbAdapter");
 
         const existingSettings = await db.settings.get();
         const bankDetails = existingSettings?.universityBankDetails || {};

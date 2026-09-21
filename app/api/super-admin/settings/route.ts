@@ -1,9 +1,7 @@
 export const dynamic = "force-dynamic";
 
 import { NextRequest, NextResponse } from "next/server";
-import { getSupabaseAdmin } from "@/lib/supabaseServer";
 import { prisma } from "@/lib/prisma";
-import { db } from "@/lib/dbAdapter";
 
 const DEFAULT_SETTINGS = {
     bankName: "PNB Bank",
@@ -42,8 +40,6 @@ const DEFAULT_SETTINGS = {
 
 export async function GET(request: NextRequest) {
     try {
-        const activeSource = await db.getSource();
-        
         try {
             const row = await prisma.platformSetting.findUnique({
                 where: { id: 'boss_payment_config' }
@@ -52,7 +48,7 @@ export async function GET(request: NextRequest) {
                 return NextResponse.json({ success: true, settings: { ...DEFAULT_SETTINGS, ...(row.settings as any) } });
             }
         } catch (e: any) {
-            console.warn("Railway platformSettings GET error, checking default:", e?.message);
+            console.warn("Railway platformSettings GET error, using default:", e?.message);
         }
 
         return NextResponse.json({ success: true, settings: DEFAULT_SETTINGS });
