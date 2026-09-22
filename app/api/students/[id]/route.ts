@@ -294,8 +294,22 @@ export async function GET(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const { id: studentId } = await params;
-    const student = await db.students.getById(studentId);
+    const resolvedParams = await (params as any);
+    const rawId = resolvedParams.id;
+    const studentId = decodeURIComponent(rawId || '').trim();
+    let student = await db.students.getById(studentId);
+
+    if (!student) {
+      student = await db.students.findOne({
+        _id: studentId,
+        firebaseUID: studentId,
+        registrationId: studentId,
+        erpId: studentId,
+        phoneNumber: studentId,
+        email: studentId,
+        name: studentId
+      });
+    }
 
     if (!student) {
       return NextResponse.json(
@@ -308,7 +322,7 @@ export async function GET(
     let lastOuting = null;
     try {
       const historyRes = await db.gatePasses.list(
-        { studentId },
+        { studentId: student.id || student._id || student.firebaseUID },
         { limit: 1, sortField: 'createdAt', sortOrder: 'desc', skipCount: true }
       );
       if (historyRes.records && historyRes.records.length > 0) {

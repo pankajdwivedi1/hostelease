@@ -99,7 +99,7 @@ export async function GET(request: NextRequest) {
         // 2. Full Mode (Heavier Data - Runs Infrequently)
         // ⚡ SPEED FIX: Fetch all data elements in parallel
         const [allOutPassesRes, totalStudents, recentActivityRes] = await Promise.all([
-            db.gatePasses.list(filters, { limit: 1000 }),
+            db.gatePasses.list(filters, { limit: 1000, populate: true }),
             db.students.count(countFilters),
             db.gatePasses.list({
                 status: "in",
@@ -108,7 +108,8 @@ export async function GET(request: NextRequest) {
             }, {
                 limit: 20,
                 sortField: source === 'SUPABASE' ? 'check_in_time' : 'checkInTime',
-                sortOrder: 'desc'
+                sortOrder: 'desc',
+                populate: true
             })
         ]);
 

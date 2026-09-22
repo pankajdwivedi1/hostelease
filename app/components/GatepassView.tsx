@@ -381,28 +381,42 @@ export default function GatepassView({ onClose }: { onClose?: () => void }) {
         }
 
         // ⚡ INSTANT DISPLAY (0ms):
-        // Immediately render modal with all available record fields (Name, Hostel, Room, Reg ID, Status, etc.)
+        // Immediately render modal with all available record fields (Name, Hostel, Room, Reg ID, Photo, Parents, College, etc.)
+        const s = fallbackRecord?.student || {};
         const initialStudent: any = {
             _id: studentId,
             id: studentId,
-            name: fallbackRecord?.studentName || fallbackRecord?.name || selectedStudent?.name || "Student",
-            hostelName: fallbackRecord?.hostelName || "",
-            roomNumber: fallbackRecord?.roomNumber || "",
-            registrationId: fallbackRecord?.registrationId || "",
-            phoneNumber: fallbackRecord?.phoneNumber || "",
-            fatherName: fallbackRecord?.fatherName || "",
-            fatherNumber: fallbackRecord?.fatherNumber || "",
-            motherName: fallbackRecord?.motherName || "",
-            motherNumber: fallbackRecord?.motherNumber || "",
-            erpInformation: fallbackRecord?.erpId || fallbackRecord?.erpInformation || "",
+            name: fallbackRecord?.studentName || s?.name || fallbackRecord?.name || selectedStudent?.name || "Student",
+            hostelName: fallbackRecord?.hostelName || s?.hostelName || "",
+            roomNumber: fallbackRecord?.roomNumber || s?.roomNumber || "",
+            registrationId: fallbackRecord?.registrationId || s?.registrationId || "",
+            phoneNumber: fallbackRecord?.phoneNumber || s?.phoneNumber || "",
+            fatherName: fallbackRecord?.fatherName || s?.fatherName || "",
+            fatherNumber: fallbackRecord?.fatherNumber || s?.fatherNumber || "",
+            motherName: fallbackRecord?.motherName || s?.motherName || "",
+            motherNumber: fallbackRecord?.motherNumber || s?.motherNumber || "",
+            erpInformation: fallbackRecord?.erpInformation || fallbackRecord?.erpId || s?.erpInformation || s?.erpId || "",
+            erpId: fallbackRecord?.erpId || s?.erpId || fallbackRecord?.erpInformation || "",
             studentStatus: currentRealStatus,
-            collegeName: fallbackRecord?.collegeName || "",
-            branch: fallbackRecord?.branch || "",
-            year: fallbackRecord?.year || "",
-            semester: fallbackRecord?.semester || "",
-            homePinCode: fallbackRecord?.homePinCode || fallbackRecord?.permanentAddress || "",
-            profilePicture: fallbackRecord?.profilePicture || fallbackRecord?.photo || "",
+            collegeName: fallbackRecord?.collegeName || s?.collegeName || "",
+            branch: fallbackRecord?.branch || s?.branch || "",
+            year: fallbackRecord?.year || s?.year || "",
+            semester: fallbackRecord?.semester || s?.semester || "",
+            permanentAddress: fallbackRecord?.permanentAddress || s?.permanentAddress || "",
+            homeState: fallbackRecord?.homeState || s?.homeState || "",
+            homePinCode: fallbackRecord?.homePinCode || s?.homePinCode || "",
+            email: fallbackRecord?.email || s?.email || "",
+            profilePicture: fallbackRecord?.profilePicture || s?.profilePicture || fallbackRecord?.photo || s?.photo || "",
+            photo: fallbackRecord?.photo || s?.photo || fallbackRecord?.profilePicture || s?.profilePicture || "",
         };
+
+        if (initialStudent.fatherName || initialStudent.collegeName || initialStudent.profilePicture) {
+            profileCache.current.set(studentId, {
+                student: initialStudent,
+                lastOuting: fallbackRecord,
+                ts: Date.now(),
+            });
+        }
 
         setSelectedStudent(initialStudent);
         if (fallbackRecord && (fallbackRecord.checkOutTime || fallbackRecord.checkInTime)) {
@@ -414,15 +428,20 @@ export default function GatepassView({ onClose }: { onClose?: () => void }) {
 
         // Asynchronous background fetch for full detailed fields
         try {
-            const res = await fetch(`/api/students/${studentId}`);
+            const lookupId = studentId || fallbackRecord?.registrationId || fallbackRecord?.studentName;
+            const res = await fetch(`/api/students/${encodeURIComponent(lookupId)}`);
 
             if (res.ok) {
                 const data = await res.json();
                 if (data.student) {
-                    const freshStudent = { ...data.student, studentStatus: currentRealStatus };
+                    const freshStudent = {
+                        ...initialStudent,
+                        ...data.student,
+                        studentStatus: currentRealStatus
+                    };
                     profileCache.current.set(studentId, {
                         student: freshStudent,
-                        lastOuting: data.lastOuting || null,
+                        lastOuting: data.lastOuting || fallbackRecord || null,
                         ts: Date.now(),
                     });
                     setSelectedStudent(freshStudent);
@@ -437,11 +456,11 @@ export default function GatepassView({ onClose }: { onClose?: () => void }) {
 
     const handleStudentClick = (rawId: any, fallbackRecord?: any) => {
         let studentId = typeof rawId === 'object' 
-            ? (rawId?._id || rawId?.id || rawId?.studentId) 
+            ? (rawId?._id || rawId?.id || rawId?.studentId || rawId?.registrationId) 
             : rawId;
 
         if ((!studentId || studentId === "[object Object]") && fallbackRecord) {
-            studentId = fallbackRecord.studentId || (fallbackRecord as any).student_id || fallbackRecord._id || fallbackRecord.id;
+            studentId = fallbackRecord.studentId || (fallbackRecord as any).student_id || fallbackRecord._id || fallbackRecord.id || fallbackRecord.registrationId;
         }
 
         if (!studentId || studentId === "[object Object]") return;

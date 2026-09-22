@@ -14,7 +14,12 @@ import { registerPushNotifications } from "@/lib/pushRegister";
 
 const LocationPickerMap = dynamic(() => import("./LocationPickerMap"), {
   ssr: false,
-  loading: () => <div className="h-64 w-full bg-gray-100 animate-pulse rounded-xl flex items-center justify-center text-gray-400 text-xs">Loading Map...</div>
+  loading: () => (
+    <div className="w-full h-full min-h-[220px] bg-[#0f172a] rounded-xl flex flex-col items-center justify-center gap-2 text-slate-400">
+      <div className="w-8 h-8 border-2 border-amber-400/20 border-t-amber-400 rounded-full animate-spin" />
+      <span className="text-[10px] font-black uppercase tracking-widest text-slate-300 animate-pulse">Loading HD Map...</span>
+    </div>
+  )
 });
 
 const GatepassView = dynamic(() => import("./GatepassView"), {
@@ -919,6 +924,38 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
   const [studentGatePasses, setStudentGatePasses] = useState<any[]>([]);
   const [isLoadingStudentHistory, setIsLoadingStudentHistory] = useState<boolean>(false);
 
+  // ⚡ Preload Map Chunk & Tile CDN Connections in Background for Instant Opening
+  useEffect(() => {
+    import("./LocationPickerMap").catch(() => {});
+
+    const tileHosts = [
+      "https://server.arcgisonline.com",
+      "https://services.arcgisonline.com",
+      "https://mt0.google.com",
+      "https://mt1.google.com",
+      "https://mt2.google.com",
+      "https://mt3.google.com",
+      "https://cdnjs.cloudflare.com"
+    ];
+
+    tileHosts.forEach(href => {
+      try {
+        if (!document.querySelector(`link[href="${href}"]`)) {
+          const link = document.createElement("link");
+          link.rel = "preconnect";
+          link.href = href;
+          link.crossOrigin = "anonymous";
+          document.head.appendChild(link);
+
+          const dnsLink = document.createElement("link");
+          dnsLink.rel = "dns-prefetch";
+          dnsLink.href = href;
+          document.head.appendChild(dnsLink);
+        }
+      } catch (e) {}
+    });
+  }, []);
+
   const fetchStudentProfileHistory = useCallback(async (student: StudentDetails) => {
     setIsLoadingStudentHistory(true);
     try {
@@ -1499,6 +1536,36 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
   const [measurePoints, setMeasurePoints] = useState<[number, number][]>([]);
   const [measureDistance, setMeasureDistance] = useState<number | null>(null);
   const [isLocationModalMaximized, setIsLocationModalMaximized] = useState(false);
+  const [mapType, setMapType] = useState<string>('crystal');
+  const [showMapSwitcher, setShowMapSwitcher] = useState(false);
+  const mapSwitcherRef = useRef<HTMLDivElement>(null);
+
+  // Load map type preference from localStorage
+  useEffect(() => {
+    try {
+      const savedMapType = localStorage.getItem('hosteleaze_map_type');
+      if (savedMapType && (savedMapType === 'crystal' || savedMapType === 'google_hybrid')) {
+        setMapType(savedMapType);
+      } else {
+        setMapType('crystal');
+      }
+    } catch (e) { }
+  }, []);
+
+  // Map view switcher outside click handler
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (mapSwitcherRef.current && !mapSwitcherRef.current.contains(event.target as Node)) {
+        setShowMapSwitcher(false);
+      }
+    };
+    if (showMapSwitcher) {
+      document.addEventListener("mousedown", handleClickOutside);
+    }
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+    };
+  }, [showMapSwitcher]);
   // Initialize warden status directly from localStorage to prevent "Flash of 772"
   const getInitialWardenData = () => {
     if (typeof window === "undefined") return { isWarden: false, hostelName: null, authorized: [] };
@@ -14208,78 +14275,84 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
       {/* Location Mapping Modal */}
       {
         showLocationModal && (
-          <div className={`fixed inset-0 z-[60] flex items-center justify-center ${isLocationModalMaximized ? 'p-0' : 'p-4'} bg-black/60 backdrop-blur-sm animate-in fade-in duration-200`}>
+          <div className={`fixed inset-0 z-[60] flex items-center justify-center ${isLocationModalMaximized ? 'p-0' : 'p-3 sm:p-4'} bg-black/60 backdrop-blur-sm animate-in fade-in duration-200`}>
             <div className={`bg-white w-full shadow-2xl overflow-hidden animate-in zoom-in-95 duration-200 flex flex-col transition-all duration-300 ${isLocationModalMaximized
               ? 'max-w-none h-screen rounded-none'
-              : 'max-w-lg rounded-3xl max-h-[95vh]'
+              : 'max-w-lg sm:max-w-xl rounded-2xl sm:rounded-3xl h-[83vh] sm:h-[620px] sm:max-h-[90vh]'
               }`}>
-              <div className={`p-4 md:p-6 overflow-y-auto custom-scrollbar flex-1 flex flex-col ${isLocationModalMaximized ? 'p-0 md:p-0' : ''}`}>
-                <div className={`flex items-center justify-between mb-2 md:mb-3 ${isLocationModalMaximized ? 'p-4 pb-2' : ''}`}>
-                  <h3 className="text-lg md:text-xl font-black text-gray-900 tracking-tight">
+              <div className={`p-3 sm:p-5 overflow-hidden flex-1 flex flex-col ${isLocationModalMaximized ? 'p-0 sm:p-0' : ''}`}>
+                
+                {/* Header Row: Title on Left, Get Location & Close on Right */}
+                <div className={`flex items-center justify-between mb-1.5 sm:mb-2.5 flex-shrink-0 ${isLocationModalMaximized ? 'p-3 sm:p-4 pb-1 sm:pb-2' : ''}`}>
+                  <h3 className="text-sm sm:text-lg font-black text-gray-900 tracking-tight">
                     {editingLocationIndex !== null ? "EDIT LOCATION" : "ADD NEW LOCATION"}
                   </h3>
-                  <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-1.5 sm:gap-2">
+                    {isLocationChecking && (
+                      <div className="flex flex-col items-end gap-0.5 animate-in fade-in slide-in-from-right-2">
+                        <span className="text-[8px] sm:text-[9px] font-black text-blue-600 uppercase tracking-tighter">
+                          Signal: {gpsAccuracy ? `${gpsAccuracy}m` : '--'}
+                        </span>
+                        <div className="w-10 sm:w-14 h-0.5 sm:h-1 bg-gray-100 rounded-full overflow-hidden">
+                          <div className="h-full bg-blue-500 transition-all duration-500" style={{ width: `${lockProgress}%` }} />
+                        </div>
+                      </div>
+                    )}
+                    <button
+                      type="button"
+                      onClick={() => getAccurateLocation('form')}
+                      disabled={isLocationChecking}
+                      className="h-6 sm:h-8 px-2 sm:px-2.5 rounded-lg bg-blue-50 border border-blue-100 text-blue-600 hover:bg-blue-100 transition-all flex items-center gap-1 sm:gap-1.5 disabled:opacity-70 group"
+                    >
+                      {isLocationChecking ? (
+                        <div className="w-3 h-3 sm:w-3.5 sm:h-3.5 border-2 border-blue-600/30 border-t-blue-600 rounded-full animate-spin" />
+                      ) : (
+                        <svg className="w-3 h-3 sm:w-3.5 sm:h-3.5 group-hover:scale-110 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M12 8c-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4-1.79-4-4-4zm8.94 3A8.994 8.994 0 0013 3.06V1h-2v2.06A8.994 8.994 0 0011 20.94V23h2v-2.06A8.994 8.994 0 0011 20.94V23h2v-2.06A8.994 8.994 0 0020.94 13H23v-2h-2.06zM12 19c-3.87 0-7-3.13-7-7s3.13-7 7-7 7 3.13 7 7-3.13 7-7 7z" />
+                        </svg>
+                      )}
+                      <span className="text-[8px] sm:text-[10px] font-black uppercase tracking-wider">{isLocationChecking ? "Locking..." : "Get Location"}</span>
+                    </button>
                     <button
                       onClick={() => {
                         setShowLocationModal(false);
                         setIsLocationModalMaximized(false);
                       }}
-                      className="p-2 hover:bg-gray-100 rounded-full transition-colors flex-shrink-0"
+                      className="p-1 sm:p-1.5 hover:bg-gray-100 rounded-full transition-colors flex-shrink-0"
                     >
-                      <svg className="w-6 h-6 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M6 18L18 6M6 6l12 12" /></svg>
+                      <svg className="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M6 18L18 6M6 6l12 12" /></svg>
                     </button>
                   </div>
                 </div>
 
+                {/* Location Name Row: Inline Label and Input */}
                 {!isLocationModalMaximized && (
-                  <div className="mb-4">
-                    <div className="flex items-center justify-between mb-0.5 px-1">
-                      <label className="block text-[10px] font-black text-gray-500 uppercase tracking-widest">Location Name</label>
-                      <div className="flex items-center gap-3">
-                        {isLocationChecking && (
-                          <div className="flex flex-col items-end gap-1 animate-in fade-in slide-in-from-right-2">
-                            <span className="text-[9px] font-black text-blue-600 uppercase tracking-tighter">
-                              Signal: {gpsAccuracy ? `${gpsAccuracy}m` : '--'}
-                            </span>
-                            <div className="w-16 h-1 bg-gray-100 rounded-full overflow-hidden">
-                              <div className="h-full bg-blue-500 transition-all duration-500" style={{ width: `${lockProgress}%` }} />
-                            </div>
-                          </div>
-                        )}
-                        <button
-                          type="button"
-                          onClick={() => getAccurateLocation('form')}
-                          disabled={isLocationChecking}
-                          className="h-8 md:h-9 px-3 rounded-lg bg-blue-50 border border-blue-100 text-blue-600 hover:bg-blue-100 transition-all flex items-center gap-2 disabled:opacity-70 group"
-                        >
-                          {isLocationChecking ? (
-                            <div className="w-4 h-4 border-2 border-blue-600/30 border-t-blue-600 rounded-full animate-spin" />
-                          ) : (
-                            <svg className="w-4 h-4 group-hover:scale-110 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M12 8c-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4-1.79-4-4-4zm8.94 3A8.994 8.994 0 0013 3.06V1h-2v2.06A8.994 8.994 0 0011 20.94V23h2v-2.06A8.994 8.994 0 0011 20.94V23h2v-2.06A8.994 8.994 0 0020.94 13H23v-2h-2.06zM12 19c-3.87 0-7-3.13-7-7s3.13-7 7-7 7 3.13 7 7-3.13 7-7 7z" />
-                            </svg>
-                          )}
-                          <span className="text-[10px] font-black uppercase tracking-wider">{isLocationChecking ? "Locking..." : "Get Location"}</span>
-                        </button>
-                      </div>
-                    </div>
+                  <div className="mb-2 sm:mb-2.5 flex-shrink-0 flex items-center gap-2">
+                    <label className="text-[9px] sm:text-[10px] font-black text-gray-500 uppercase tracking-widest whitespace-nowrap px-0.5">
+                      Location Name:
+                    </label>
                     <input
                       type="text"
                       value={locationForm.name}
                       onChange={(e) => setLocationForm({ ...locationForm, name: e.target.value })}
                       placeholder="e.g. Gangotri Hostel"
-                      className="w-full h-10 md:h-12 px-4 rounded-xl border border-gray-200 focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 transition-all font-bold text-gray-800 text-sm"
+                      className="flex-1 h-7 sm:h-9 px-2.5 sm:px-3 rounded-lg sm:rounded-xl border border-gray-200 focus:ring-2 focus:ring-blue-500/10 focus:border-blue-500 transition-all font-bold text-gray-800 text-xs sm:text-sm"
                     />
                   </div>
                 )}
 
-                <div className={`w-full rounded-xl overflow-hidden border border-gray-200 relative z-0 flex-shrink-0 shadow-inner transition-all duration-300 ${isLocationModalMaximized ? 'flex-1 mb-0 h-auto rounded-none border-0' : 'h-[43vh] min-h-[300px]'
+                {/* Map Container - Expands smoothly on both Mobile & Desktop */}
+                <div className={`w-full overflow-hidden relative z-0 flex-1 shadow-inner transition-all duration-300 min-h-[260px] sm:min-h-[360px] ${isLocationModalMaximized
+                  ? 'h-full rounded-none border-0 mb-0'
+                  : 'rounded-xl border border-gray-200'
                   }`}>
                   <LocationPickerMap
                     lat={locationForm.lat}
                     lng={locationForm.lng}
                     radius={locationForm.radius}
                     zoom={mapZoom}
+                    onZoom={(newZoom) => setMapZoom(newZoom)}
+                    mapType={mapType}
                     onMove={(lat, lng) => {
                       const roundedLat = parseFloat(lat.toFixed(8));
                       const roundedLng = parseFloat(lng.toFixed(8));
@@ -14295,23 +14368,113 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                   />
 
                   {/* Maximize/Minimize Toggle - Bottom Right Overlay */}
-                  <div className="absolute bottom-3 right-3 z-[1000]">
+                  <div className="absolute bottom-2 right-2 sm:bottom-3 sm:right-3 z-[1000]">
                     <button
                       type="button"
                       onClick={() => setIsLocationModalMaximized(!isLocationModalMaximized)}
-                      className="p-1.5 sm:p-3 bg-white/90 backdrop-blur-sm rounded-lg sm:rounded-2xl shadow-xl border border-blue-100 text-blue-600 hover:bg-blue-600 hover:text-white hover:scale-110 transition-all active:scale-95 flex items-center justify-center group"
+                      className="p-1 sm:p-3 bg-white/90 backdrop-blur-sm rounded-md sm:rounded-2xl shadow-xl border border-blue-100 text-blue-600 hover:bg-blue-600 hover:text-white hover:scale-110 transition-all active:scale-95 flex items-center justify-center group"
                       title={isLocationModalMaximized ? "Minimize View" : "Full Screen Map"}
                     >
                       {isLocationModalMaximized ? (
-                        <svg className="w-[14px] h-[14px] sm:w-5 sm:h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M6 18L18 6M6 6l12 12" /></svg>
+                        <svg className="w-3.5 h-3.5 sm:w-5 sm:h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M6 18L18 6M6 6l12 12" /></svg>
                       ) : (
-                        <svg className="w-[14px] h-[14px] sm:w-5 sm:h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4" /></svg>
+                        <svg className="w-3.5 h-3.5 sm:w-5 sm:h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4" /></svg>
                       )}
                     </button>
                   </div>
 
-                  {/* Measurement Controls Overlay */}
-                  <div className="absolute top-3 right-3 z-[1000] flex flex-col gap-2">
+                  {/* Top-Right Map Controls (Views Switcher + Measurement Tool) */}
+                  <div className="absolute top-2 right-2 sm:top-3 sm:right-3 z-[1000] flex items-center gap-1.5 sm:gap-2">
+                    {/* Map View Switcher */}
+                    <div className="relative" ref={mapSwitcherRef}>
+                      <button
+                        type="button"
+                        onClick={() => setShowMapSwitcher(prev => !prev)}
+                        className="px-2 py-1 sm:px-3.5 sm:py-2 bg-amber-400 hover:bg-amber-300 active:scale-95 text-black font-extrabold text-[10px] sm:text-sm rounded-lg sm:rounded-xl shadow-lg transition-all flex items-center gap-1 sm:gap-2 border border-amber-300 group"
+                        title="Select Map View"
+                      >
+                        <svg className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-black flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2.5}>
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5" />
+                        </svg>
+                        <span>Views</span>
+                      </button>
+
+                      {/* Crystal Clear Map Switcher Popover - EXACT MATCH to Screenshots */}
+                      {showMapSwitcher && (
+                        <div className="absolute top-full right-0 mt-1.5 sm:mt-2 w-64 sm:w-80 bg-[#0c1322] border border-slate-700/90 rounded-xl sm:rounded-2xl shadow-2xl p-2.5 sm:p-3.5 z-[1050] animate-in fade-in zoom-in-95 duration-150 flex flex-col gap-1.5 sm:gap-2">
+                          <div className="text-[9px] sm:text-[11px] font-bold text-slate-400 uppercase tracking-wider px-1">
+                            SELECT MAP VIEW
+                          </div>
+
+                          {/* Option 1: Crystal HD Satellite */}
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setMapType('crystal');
+                              setShowMapSwitcher(false);
+                              try {
+                                localStorage.setItem('hosteleaze_map_type', 'crystal');
+                              } catch (e) { }
+                            }}
+                            className={`w-full flex items-center justify-between p-2 sm:p-3 rounded-lg sm:rounded-2xl text-left transition-all ${mapType === 'crystal'
+                              ? 'border-2 border-amber-400 bg-amber-400/10 shadow-lg shadow-amber-500/10'
+                              : 'border-2 border-transparent hover:bg-slate-800/60'
+                              }`}
+                          >
+                            <div className="flex items-center gap-2 sm:gap-3">
+                              <svg className="w-4 h-4 sm:w-6 sm:h-6 text-amber-400 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}>
+                                <path strokeLinecap="round" strokeLinejoin="round" d="M9.813 15.904L9 18.75l-.813-2.846a4.5 4.5 0 00-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 003.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 003.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 00-3.09 3.09z" />
+                                <circle cx="18" cy="6" r="1.5" fill="currentColor" />
+                              </svg>
+                              <div>
+                                <div className="text-white font-bold text-xs sm:text-sm leading-tight">Crystal HD Satellite</div>
+                                <div className="text-slate-400 text-[10px] sm:text-xs mt-0.5">ArcGIS World Imagery</div>
+                              </div>
+                            </div>
+                            {mapType === 'crystal' && (
+                              <svg className="w-4 h-4 sm:w-5 sm:h-5 text-amber-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2.5}>
+                                <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                              </svg>
+                            )}
+                          </button>
+
+                          {/* Option 2: Google Hybrid */}
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setMapType('google_hybrid');
+                              setShowMapSwitcher(false);
+                              try {
+                                localStorage.setItem('hosteleaze_map_type', 'google_hybrid');
+                              } catch (e) { }
+                            }}
+                            className={`w-full flex items-center justify-between p-2 sm:p-3 rounded-lg sm:rounded-2xl text-left transition-all ${mapType === 'google_hybrid'
+                              ? 'border-2 border-amber-400 bg-amber-400/10 shadow-lg shadow-amber-500/10'
+                              : 'border-2 border-transparent hover:bg-slate-800/60'
+                              }`}
+                          >
+                            <div className="flex items-center gap-2 sm:gap-3">
+                              <svg className="w-4 h-4 sm:w-6 sm:h-6 text-teal-400 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}>
+                                <path strokeLinecap="round" strokeLinejoin="round" d="M9.75 3.104v5.714a2.25 2.25 0 01-.659 1.591L5 14.5m4.75-11.396A24.962 24.962 0 0112 3c3.42 0 6.643.682 9.57 1.92l-4.82 4.82a2.25 2.25 0 00-.659 1.59V15.5" />
+                                <circle cx="12" cy="12" r="3" strokeWidth={2} />
+                                <path strokeLinecap="round" strokeLinejoin="round" d="M3 21l4-4M17 7l4-4" />
+                              </svg>
+                              <div>
+                                <div className="text-white font-bold text-xs sm:text-sm leading-tight">Google Hybrid</div>
+                                <div className="text-slate-400 text-[10px] sm:text-xs mt-0.5">Satellite + Hindi/Eng Names</div>
+                              </div>
+                            </div>
+                            {mapType === 'google_hybrid' && (
+                              <svg className="w-4 h-4 sm:w-5 sm:h-5 text-amber-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2.5}>
+                                <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                              </svg>
+                            )}
+                          </button>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Measurement Controls Overlay */}
                     <button
                       type="button"
                       onClick={() => {
@@ -14322,18 +14485,18 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                           setMeasureDistance(null);
                         }
                       }}
-                      className={`p-1.5 sm:p-2.5 rounded-lg sm:rounded-xl shadow-lg border transition-all flex items-center justify-center ${isMeasuring
+                      className={`p-1 sm:p-2.5 rounded-lg sm:rounded-xl shadow-lg border transition-all flex items-center justify-center ${isMeasuring
                         ? "bg-red-600 border-red-500 text-white scale-110"
-                        : "bg-white border-gray-200 text-gray-700 hover:bg-gray-50"
+                        : "bg-white/95 backdrop-blur-sm border-gray-200 text-gray-700 hover:bg-white hover:text-blue-600 hover:border-blue-300"
                         }`}
                       title={isMeasuring ? "Stop Measuring" : "Measure Distance"}
                     >
                       {isMeasuring ? (
-                        <svg className="w-[14px] h-[14px] sm:w-5 sm:h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <svg className="w-3.5 h-3.5 sm:w-5 sm:h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M6 18L18 6M6 6l12 12" />
                         </svg>
                       ) : (
-                        <svg className="w-[14px] h-[14px] sm:w-5 sm:h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <svg className="w-3.5 h-3.5 sm:w-5 sm:h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
                         </svg>
                       )}
@@ -14341,7 +14504,7 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                   </div>
 
                   {isMeasuring && measureDistance !== null && (
-                    <div className="absolute bottom-3 left-3 z-[1000] bg-white/95 backdrop-blur-sm px-2 py-1 sm:px-4 sm:py-2 rounded-[14px] sm:rounded-2xl shadow-xl border border-blue-100 flex items-center gap-1.5 sm:gap-3 animate-in slide-in-from-bottom-2 duration-300 max-w-[calc(100%-60px)] sm:max-w-none">
+                    <div className="absolute bottom-2 left-2 sm:bottom-3 sm:left-3 z-[1000] bg-white/95 backdrop-blur-sm px-2 py-1 sm:px-4 sm:py-2 rounded-[10px] sm:rounded-2xl shadow-xl border border-blue-100 flex items-center gap-1.5 sm:gap-3 animate-in slide-in-from-bottom-2 duration-300 max-w-[calc(100%-60px)] sm:max-w-none">
                       <div className="flex flex-col">
                         <span className="text-[7px] sm:text-[10px] font-black text-blue-500 uppercase tracking-widest leading-none">Measured Distance</span>
                         <span className="text-[10px] sm:text-sm font-black text-gray-900 leading-tight">
@@ -14350,7 +14513,7 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                             : `${Math.round(measureDistance)} meters`}
                         </span>
                       </div>
-                      <div className="w-px h-6 sm:h-8 bg-gray-100" />
+                      <div className="w-px h-5 sm:h-8 bg-gray-100" />
                       <button
                         type="button"
                         onClick={() => {
@@ -14359,7 +14522,7 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                           setMeasurePoints([]);
                           setMeasureDistance(null);
                         }}
-                        className="bg-blue-600 text-white px-2 py-1 sm:px-3 sm:py-1.5 rounded-lg text-[8px] sm:text-xs font-black uppercase tracking-tight hover:bg-blue-700 transition-colors whitespace-nowrap"
+                        className="bg-blue-600 text-white px-2 py-0.5 sm:px-3 sm:py-1.5 rounded-md sm:rounded-lg text-[8px] sm:text-xs font-black uppercase tracking-tight hover:bg-blue-700 transition-colors whitespace-nowrap"
                       >
                         Use as Radius
                       </button>
@@ -14367,17 +14530,18 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                   )}
 
                   {isMeasuring && measurePoints.length > 0 && measurePoints.length < 2 && (
-                    <div className="absolute bottom-16 left-1/2 -translate-x-1/2 z-[1000] bg-black/70 backdrop-blur-md px-4 py-2 rounded-xl text-white text-[10px] font-bold uppercase tracking-widest animate-pulse">
+                    <div className="absolute bottom-12 sm:bottom-16 left-1/2 -translate-x-1/2 z-[1000] bg-black/70 backdrop-blur-md px-3 py-1.5 sm:px-4 sm:py-2 rounded-lg sm:rounded-xl text-white text-[9px] sm:text-[10px] font-bold uppercase tracking-widest animate-pulse whitespace-nowrap">
                       Click another point to measure
                     </div>
                   )}
                 </div>
 
+                {/* Bottom Row: Latitude, Longitude, and Radius all 3 in a Single Row */}
                 {!isLocationModalMaximized && (
-                  <>
-                    <div className="grid grid-cols-2 gap-3 md:gap-4 mt-4">
+                  <div className="flex-shrink-0 mt-1.5 sm:mt-2.5">
+                    <div className="grid grid-cols-3 gap-1.5 sm:gap-3">
                       <div>
-                        <label className="block text-[10px] font-black text-gray-500 uppercase tracking-widest mb-0.5 px-1">Latitude</label>
+                        <label className="block text-[8px] sm:text-[9px] font-black text-gray-500 uppercase tracking-widest mb-0.5 px-0.5">Latitude</label>
                         <input
                           type="number"
                           step="any"
@@ -14393,11 +14557,11 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                               }
                             }
                           }}
-                          className="w-full h-10 md:h-12 px-3 md:px-4 rounded-xl border border-gray-200 focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 transition-all font-bold text-gray-800 text-sm"
+                          className="w-full h-7 sm:h-9 px-2 sm:px-3 rounded-lg sm:rounded-xl border border-gray-200 focus:ring-2 focus:ring-blue-500/10 focus:border-blue-500 transition-all font-bold text-gray-800 text-xs sm:text-sm"
                         />
                       </div>
                       <div>
-                        <label className="block text-[10px] font-black text-gray-500 uppercase tracking-widest mb-0.5 px-1">Longitude</label>
+                        <label className="block text-[8px] sm:text-[9px] font-black text-gray-500 uppercase tracking-widest mb-0.5 px-0.5">Longitude</label>
                         <input
                           type="number"
                           step="any"
@@ -14413,37 +14577,36 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                               }
                             }
                           }}
-                          className="w-full h-10 md:h-12 px-3 md:px-4 rounded-xl border border-gray-200 focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 transition-all font-bold text-gray-800 text-sm"
+                          className="w-full h-7 sm:h-9 px-2 sm:px-3 rounded-lg sm:rounded-xl border border-gray-200 focus:ring-2 focus:ring-blue-500/10 focus:border-blue-500 transition-all font-bold text-gray-800 text-xs sm:text-sm"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-[8px] sm:text-[9px] font-black text-gray-500 uppercase tracking-widest mb-0.5 px-0.5">Radius (m)</label>
+                        <input
+                          type="number"
+                          value={locationForm.radius}
+                          onChange={(e) => setLocationForm({ ...locationForm, radius: parseInt(e.target.value) || 0 })}
+                          className="w-full h-7 sm:h-9 px-2 sm:px-3 rounded-lg sm:rounded-xl border border-gray-200 focus:ring-2 focus:ring-blue-500/10 focus:border-blue-500 transition-all font-bold text-gray-800 text-xs sm:text-sm"
                         />
                       </div>
                     </div>
-
-                    <div className="mt-4">
-                      <label className="block text-[10px] font-black text-gray-500 uppercase tracking-widest mb-0.5 px-1">Radius (meters)</label>
-                      <input
-                        type="number"
-                        value={locationForm.radius}
-                        onChange={(e) => setLocationForm({ ...locationForm, radius: parseInt(e.target.value) })}
-                        className="w-full h-10 md:h-12 px-4 rounded-xl border border-gray-200 focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 transition-all font-bold text-gray-800 text-sm"
-                      />
-                    </div>
-                  </>
+                  </div>
                 )}
 
-                <div className={`pt-4 flex gap-3 pb-safe ${isLocationModalMaximized ? 'mt-auto' : ''}`}>
+                <div className={`pt-2 sm:pt-3 flex gap-2 sm:gap-3 flex-shrink-0 pb-safe ${isLocationModalMaximized ? 'mt-auto' : ''}`}>
                   <button
                     onClick={() => {
                       setShowLocationModal(false);
                       setIsLocationModalMaximized(false);
                     }}
-                    className="flex-1 h-10 md:h-12 rounded-xl border border-gray-200 text-gray-600 font-black text-[10px] uppercase tracking-widest hover:bg-gray-50 transition-all"
+                    className="flex-1 h-8 sm:h-11 rounded-lg sm:rounded-xl border border-gray-200 text-gray-600 font-black text-[9px] sm:text-[10px] uppercase tracking-widest hover:bg-gray-50 transition-all"
                   >
                     Cancel
                   </button>
                   <button
                     onClick={handleSaveLocation}
                     disabled={isUpdatingSettings}
-                    className="flex-[2] h-10 md:h-12 rounded-xl bg-blue-600 text-white font-black text-[10px] uppercase tracking-widest shadow-lg shadow-blue-200 hover:bg-blue-700 hover:shadow-xl transition-all disabled:opacity-50"
+                    className="flex-[2] h-8 sm:h-11 rounded-lg sm:rounded-xl bg-blue-600 text-white font-black text-[9px] sm:text-[10px] uppercase tracking-widest shadow-lg shadow-blue-200 hover:bg-blue-700 hover:shadow-xl transition-all disabled:opacity-50"
                   >
                     {isUpdatingSettings ? "SAVING..." : "SAVE MAPPING"}
                   </button>

@@ -451,10 +451,25 @@ export const mapGatePassToCamelCase = (g: any) => {
         _id: g._id || g.id,
         studentId: g.student_id || g.studentId,
         firebaseUID: g.firebase_uid || g.firebaseUid || g.firebaseUID,
-        studentName: g.student_name || g.studentName,
-        hostelName: g.hostel_name || g.hostelName,
-        roomNumber: g.room_number || g.roomNumber,
-        registrationId: g.registration_id || g.registrationId,
+        studentName: g.student_name || g.studentName || g.student?.name,
+        hostelName: g.hostel_name || g.hostelName || g.student?.hostelName,
+        roomNumber: g.room_number || g.roomNumber || g.student?.roomNumber,
+        registrationId: g.registration_id || g.registrationId || g.student?.registrationId,
+        erpId: g.erp_id || g.erpId || g.student?.erpInformation || g.student?.erpId,
+        erpInformation: g.erp_information || g.student?.erpInformation || g.student?.erpId,
+        fatherName: g.father_name || g.fatherName || g.student?.fatherName,
+        fatherNumber: g.father_number || g.fatherNumber || g.student?.fatherNumber,
+        motherName: g.mother_name || g.motherName || g.student?.motherName,
+        motherNumber: g.mother_number || g.motherNumber || g.student?.motherNumber,
+        collegeName: g.college_name || g.collegeName || g.student?.collegeName,
+        branch: g.branch || g.student?.branch,
+        year: g.year || g.student?.year,
+        semester: g.semester || g.student?.semester,
+        email: g.email || g.student?.email,
+        permanentAddress: g.permanent_address || g.permanentAddress || g.student?.permanentAddress,
+        homeState: g.home_state || g.homeState || g.student?.homeState,
+        profilePicture: g.profile_picture || g.profilePicture || g.student?.profilePicture,
+        photo: g.photo || g.student?.profilePicture,
         checkOutTime: g.check_out_time || g.checkOutTime,
         checkOutIstTime: g.check_out_ist_time || g.checkOutIstTime,
         checkOutIstDate: g.check_out_ist_date || g.checkOutIstDate,
@@ -469,12 +484,13 @@ export const mapGatePassToCamelCase = (g: any) => {
         type: g.type,
         reason: g.reason,
         destination: g.destination,
-        parentMobile: g.parent_mobile || g.parentMobile,
+        parentMobile: g.parent_mobile || g.parentMobile || g.student?.fatherNumber || g.student?.motherNumber,
         permissionId: g.permission_id || g.permissionId,
-        phoneNumber: g.phone_number || g.phoneNumber,
+        phoneNumber: g.phone_number || g.phoneNumber || g.student?.phoneNumber,
         createdAt: g.created_at || g.createdAt,
         updatedAt: g.updated_at || g.updatedAt,
-        tenantId: g.tenant_id || g.tenantId
+        tenantId: g.tenant_id || g.tenantId,
+        student: g.student || undefined
     };
 };
 
@@ -751,16 +767,19 @@ export const db = {
 
     students: {
         getById: async (id: string, useSupabaseOverride = false) => {
+            if (!id || typeof id !== 'string') return null;
+            const cleanId = id.trim();
             const searchOR: any[] = [
-                { firebaseUid: id },
-                { supabaseId: id },
-                { registrationId: id },
-                { erpId: id },
-                { phoneNumber: id }
+                { id: cleanId },
+                { firebaseUid: cleanId },
+                { supabaseId: cleanId },
+                { registrationId: { equals: cleanId, mode: 'insensitive' } },
+                { erpId: { equals: cleanId, mode: 'insensitive' } },
+                { erpInformation: { equals: cleanId, mode: 'insensitive' } },
+                { phoneNumber: cleanId },
+                { email: { equals: cleanId, mode: 'insensitive' } },
+                { name: { equals: cleanId, mode: 'insensitive' } }
             ];
-            if (isUuidString(id)) {
-                searchOR.unshift({ id });
-            }
 
             let student = null;
             try {
@@ -814,35 +833,44 @@ export const db = {
 
             const searchOR: any[] = [];
             if (filter.firebaseUID || filter.firebaseUid) {
-                const uid = filter.firebaseUID || filter.firebaseUid;
+                const uid = String(filter.firebaseUID || filter.firebaseUid).trim();
                 searchOR.push(
+                    { id: uid },
                     { firebaseUid: uid },
                     { supabaseId: uid },
-                    { email: uid }
+                    { email: { equals: uid, mode: 'insensitive' } }
                 );
-                if (isUuidString(uid)) searchOR.push({ id: uid });
             }
             if (filter.supabaseId) {
+                const sid = String(filter.supabaseId).trim();
                 searchOR.push(
-                    { supabaseId: filter.supabaseId },
-                    { firebaseUid: filter.supabaseId },
-                    { email: filter.supabaseId }
+                    { id: sid },
+                    { supabaseId: sid },
+                    { firebaseUid: sid },
+                    { email: { equals: sid, mode: 'insensitive' } }
                 );
             }
             if (filter._id || filter.id) {
-                const idVal = filter._id || filter.id;
-                if (isUuidString(idVal)) searchOR.push({ id: idVal });
-                else searchOR.push({ firebaseUid: idVal }, { email: idVal });
+                const idVal = String(filter._id || filter.id).trim();
+                searchOR.push(
+                    { id: idVal },
+                    { firebaseUid: idVal },
+                    { email: { equals: idVal, mode: 'insensitive' } },
+                    { registrationId: { equals: idVal, mode: 'insensitive' } }
+                );
+            }
+            if (filter.name) {
+                searchOR.push({ name: { equals: String(filter.name).trim(), mode: 'insensitive' } });
             }
             if (filter.email) {
-                const cleanEmail = filter.email.toLowerCase().trim();
+                const cleanEmail = String(filter.email).toLowerCase().trim();
                 searchOR.push({ email: { equals: cleanEmail, mode: 'insensitive' } });
             }
-            if (filter.phoneNumber) searchOR.push({ phoneNumber: filter.phoneNumber.trim() });
-            if (filter.registrationId) searchOR.push({ registrationId: filter.registrationId.trim() });
+            if (filter.phoneNumber) searchOR.push({ phoneNumber: String(filter.phoneNumber).trim() });
+            if (filter.registrationId) searchOR.push({ registrationId: { equals: String(filter.registrationId).trim(), mode: 'insensitive' } });
             if (filter.erpInformation || filter.erpId) {
-                const erp = (filter.erpInformation || filter.erpId).trim();
-                searchOR.push({ erpId: erp }, { erpInformation: erp });
+                const erp = String(filter.erpInformation || filter.erpId).trim();
+                searchOR.push({ erpId: { equals: erp, mode: 'insensitive' } }, { erpInformation: { equals: erp, mode: 'insensitive' } });
             }
 
             let student: any = null;
@@ -869,16 +897,15 @@ export const db = {
         findOneFast: async (filter: { firebaseUID?: string; email?: string; phoneNumber?: string }, options: { minimal?: boolean } = {}) => {
             const conditions: any[] = [];
             if (filter.firebaseUID) {
-                conditions.push({ firebaseUid: filter.firebaseUID });
-                conditions.push({ supabaseId: filter.firebaseUID });
-                if (isUuidString(filter.firebaseUID)) conditions.push({ id: filter.firebaseUID });
+                const uid = String(filter.firebaseUID).trim();
+                conditions.push({ id: uid }, { firebaseUid: uid }, { supabaseId: uid });
             }
             if (filter.email) {
-                const cleanEmail = filter.email.toLowerCase().trim();
+                const cleanEmail = String(filter.email).toLowerCase().trim();
                 conditions.push({ email: { equals: cleanEmail, mode: 'insensitive' } });
             }
             if (filter.phoneNumber) {
-                conditions.push({ phoneNumber: filter.phoneNumber.trim() });
+                conditions.push({ phoneNumber: String(filter.phoneNumber).trim() });
             }
             if (conditions.length === 0) return null;
 
@@ -927,9 +954,15 @@ export const db = {
                 whereClause.studentStatus = filter.studentStatus;
             }
 
-            if (filter.search) {
-                const searchStr = String(filter.search).trim();
+            if (filter.gatepassSearch || filter.search) {
+                const searchStr = String(filter.gatepassSearch || filter.search).trim();
                 whereClause.OR = [
+                    { registrationId: { equals: searchStr, mode: 'insensitive' } },
+                    { erpId: { equals: searchStr, mode: 'insensitive' } },
+                    { erpInformation: { equals: searchStr, mode: 'insensitive' } },
+                    { name: { equals: searchStr, mode: 'insensitive' } },
+                    { id: searchStr },
+                    { firebaseUid: searchStr },
                     { name: { contains: searchStr, mode: 'insensitive' } },
                     { registrationId: { contains: searchStr, mode: 'insensitive' } },
                     { erpId: { contains: searchStr, mode: 'insensitive' } },
@@ -1033,10 +1066,11 @@ export const db = {
             const prismaData = filterStudentForPrisma(updateData, true);
             let targetId = id;
 
-            if (!isUuidString(id)) {
-                const existing = await db.students.findOne({ firebaseUID: id, email: id });
-                if (existing) {
-                    targetId = existing.id || existing._id;
+            const existing = await prisma.student.findUnique({ where: { id } }).catch(() => null);
+            if (!existing) {
+                const found = await db.students.getById(id);
+                if (found) {
+                    targetId = found.id || found._id;
                 }
             }
 
@@ -1085,9 +1119,10 @@ export const db = {
 
         delete: async (id: string) => {
             let targetId = id;
-            if (!isUuidString(id)) {
-                const existing = await db.students.findOne({ firebaseUID: id, email: id });
-                if (existing) targetId = existing.id || existing._id;
+            const existing = await prisma.student.findUnique({ where: { id } }).catch(() => null);
+            if (!existing) {
+                const found = await db.students.getById(id);
+                if (found) targetId = found.id || found._id;
             }
             await prisma.student.delete({
                 where: { id: targetId }
@@ -1696,6 +1731,47 @@ export const db = {
                 whereClause.hostelName = { equals: filter.hostelName, mode: 'insensitive' };
             }
 
+            if (filter.startDate || filter.endDate) {
+                const dateCondition: any = {};
+                if (filter.startDate) {
+                    const s = filter.startDate.includes('T') 
+                        ? new Date(filter.startDate) 
+                        : new Date(`${filter.startDate}T00:00:00+05:30`);
+                    if (!isNaN(s.getTime())) {
+                        dateCondition.gte = s;
+                    }
+                }
+                if (filter.endDate) {
+                    const e = filter.endDate.includes('T') 
+                        ? new Date(filter.endDate) 
+                        : new Date(`${filter.endDate}T23:59:59.999+05:30`);
+                    if (!isNaN(e.getTime())) {
+                        dateCondition.lte = e;
+                    }
+                }
+                if (dateCondition.gte || dateCondition.lte) {
+                    whereClause.checkOutTime = dateCondition;
+                }
+            }
+
+            if (filter.collegeName && filter.collegeName !== 'all') {
+                whereClause.student = {
+                    ...(whereClause.student || {}),
+                    collegeName: { equals: filter.collegeName, mode: 'insensitive' }
+                };
+            }
+
+            if (filter.search && filter.search.trim()) {
+                const term = filter.search.trim();
+                whereClause.OR = [
+                    { studentName: { contains: term, mode: 'insensitive' } },
+                    { registrationId: { contains: term, mode: 'insensitive' } },
+                    { student: { erpInformation: { contains: term, mode: 'insensitive' } } },
+                    { student: { phoneNumber: { contains: term, mode: 'insensitive' } } },
+                    { student: { name: { contains: term, mode: 'insensitive' } } }
+                ];
+            }
+
             if (options.countOnly) {
                 const total = await prisma.gatePass.count({ where: whereClause });
                 const resObj: any = [];
@@ -1706,13 +1782,42 @@ export const db = {
 
             const take = options.limit || 100;
             const skip = options.offset !== undefined ? options.offset : (options.page ? (options.page - 1) * take : undefined);
+            const sortField = options.sortField || 'checkOutTime';
 
-            const total = await prisma.gatePass.count({ where: whereClause });
+            const total = options.skipCount ? 0 : await prisma.gatePass.count({ where: whereClause });
             const records = await prisma.gatePass.findMany({
                 where: whereClause,
                 take,
                 skip,
-                orderBy: { checkOutTime: (options.sortOrder || 'desc') as any }
+                orderBy: { [sortField]: (options.sortOrder || 'desc') as any },
+                ...(options.populate ? {
+                    include: {
+                        student: {
+                            select: {
+                                id: true,
+                                name: true,
+                                registrationId: true,
+                                erpInformation: true,
+                                erpId: true,
+                                phoneNumber: true,
+                                email: true,
+                                fatherName: true,
+                                fatherNumber: true,
+                                motherName: true,
+                                motherNumber: true,
+                                hostelName: true,
+                                roomNumber: true,
+                                collegeName: true,
+                                branch: true,
+                                year: true,
+                                semester: true,
+                                permanentAddress: true,
+                                homeState: true,
+                                profilePicture: true
+                            }
+                        }
+                    }
+                } : {})
             });
 
             const mapped = records.map(mapGatePassToCamelCase);

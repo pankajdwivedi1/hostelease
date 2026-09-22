@@ -4,21 +4,44 @@ import React, { useState, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import ExcelJS from "exceljs";
 
+const formatYMD = (d: Date) => {
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, "0");
+    const day = String(d.getDate()).padStart(2, "0");
+    return `${y}-${m}-${day}`;
+};
+
+const getDaysAgoYMD = (daysAgo: number) => {
+    const d = new Date();
+    d.setDate(d.getDate() - daysAgo);
+    return formatYMD(d);
+};
+
+const getInitialDateFilters = () => {
+    return {
+        startDate: getDaysAgoYMD(7),
+        endDate: getDaysAgoYMD(0)
+    };
+};
+
 export default function OutingHistoryPage() {
     const router = useRouter();
     const [isLoading, setIsLoading] = useState(true);
     const [records, setRecords] = useState<any[]>([]);
     const [pagination, setPagination] = useState({ page: 1, limit: 50, total: 0, totalPages: 1, leaveCount: 0, passCount: 0 });
 
-    // Filters State
-    const [filters, setFilters] = useState({
-        collegeName: "all",
-        hostelName: "all",
-        status: "all",
-        type: "all",
-        startDate: "",
-        endDate: "",
-        search: ""
+    // Filters State - Default to last 7 days for bandwidth and performance optimization
+    const [filters, setFilters] = useState(() => {
+        const { startDate, endDate } = getInitialDateFilters();
+        return {
+            collegeName: "all",
+            hostelName: "all",
+            status: "all",
+            type: "all",
+            startDate,
+            endDate,
+            search: ""
+        };
     });
 
     const [hostelsList, setHostelsList] = useState<any[]>([]);
@@ -211,6 +234,21 @@ export default function OutingHistoryPage() {
         setFilters(prev => ({ ...prev, [name]: value }));
     };
 
+    const setPresetRange = (preset: 'today' | '7days' | 'month' | 'all') => {
+        const today = formatYMD(new Date());
+        if (preset === 'today') {
+            setFilters(prev => ({ ...prev, startDate: today, endDate: today }));
+        } else if (preset === '7days') {
+            setFilters(prev => ({ ...prev, startDate: getDaysAgoYMD(7), endDate: today }));
+        } else if (preset === 'month') {
+            const firstDay = new Date();
+            firstDay.setDate(1);
+            setFilters(prev => ({ ...prev, startDate: formatYMD(firstDay), endDate: today }));
+        } else if (preset === 'all') {
+            setFilters(prev => ({ ...prev, startDate: "", endDate: "" }));
+        }
+    };
+
     const fetchStudentProfile = async (idOrObject: any, fallbackRecord?: any) => {
         const studentId = typeof idOrObject === 'object' ? idOrObject._id || idOrObject.id : idOrObject;
         if (!studentId || studentId === "[object Object]") return;
@@ -219,20 +257,32 @@ export default function OutingHistoryPage() {
 
         let initialStudent: any = null;
         if (fallbackRecord) {
+            const s = fallbackRecord.student || {};
             initialStudent = {
                 _id: studentId,
                 id: studentId,
-                name: fallbackRecord.studentName || fallbackRecord.name || "Student",
-                hostelName: fallbackRecord.hostelName || "",
-                roomNumber: fallbackRecord.roomNumber || "",
-                registrationId: fallbackRecord.registrationId || "",
-                phoneNumber: fallbackRecord.phoneNumber || "",
-                fatherName: fallbackRecord.fatherName || "",
-                fatherNumber: fallbackRecord.fatherNumber || "",
-                motherName: fallbackRecord.motherName || "",
-                motherNumber: fallbackRecord.motherNumber || "",
-                erpInformation: fallbackRecord.erpId || fallbackRecord.erpInformation || "",
+                name: fallbackRecord.studentName || s.name || fallbackRecord.name || "Student",
+                hostelName: fallbackRecord.hostelName || s.hostelName || "",
+                roomNumber: fallbackRecord.roomNumber || s.roomNumber || "",
+                registrationId: fallbackRecord.registrationId || s.registrationId || "",
+                phoneNumber: fallbackRecord.phoneNumber || s.phoneNumber || "",
+                fatherName: fallbackRecord.fatherName || s.fatherName || "",
+                fatherNumber: fallbackRecord.fatherNumber || s.fatherNumber || "",
+                motherName: fallbackRecord.motherName || s.motherName || "",
+                motherNumber: fallbackRecord.motherNumber || s.motherNumber || "",
+                erpInformation: fallbackRecord.erpInformation || fallbackRecord.erpId || s.erpInformation || s.erpId || "",
+                erpId: fallbackRecord.erpId || s.erpId || fallbackRecord.erpInformation || "",
                 studentStatus: fallbackRecord.status === "out" ? "out" : "in",
+                collegeName: fallbackRecord.collegeName || s.collegeName || "",
+                branch: fallbackRecord.branch || s.branch || "",
+                year: fallbackRecord.year || s.year || "",
+                semester: fallbackRecord.semester || s.semester || "",
+                permanentAddress: fallbackRecord.permanentAddress || s.permanentAddress || "",
+                homeState: fallbackRecord.homeState || s.homeState || "",
+                homePinCode: fallbackRecord.homePinCode || s.homePinCode || "",
+                email: fallbackRecord.email || s.email || "",
+                profilePicture: fallbackRecord.profilePicture || s.profilePicture || fallbackRecord.photo || s.photo || "",
+                photo: fallbackRecord.photo || s.photo || fallbackRecord.profilePicture || s.profilePicture || "",
             };
             setSelectedStudent(initialStudent);
             if (fallbackRecord.checkOutISTDate || fallbackRecord.checkOutTime) {
@@ -579,6 +629,70 @@ export default function OutingHistoryPage() {
                             <option value="in">Returned Back</option>
                         </select>
                     </div>
+
+                    {/* Quick Date Presets & Filter Reset */}
+                    <div className="col-span-2 lg:col-span-6 flex flex-wrap items-center justify-between gap-2 pt-3 border-t border-white/5">
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                            <span className="text-[10px] text-white/40 font-bold uppercase tracking-wider mr-1">Quick Range:</span>
+                            <button
+                                type="button"
+                                onClick={() => setPresetRange('7days')}
+                                className={`px-2.5 py-1 rounded-lg text-[10px] font-bold tracking-wider uppercase transition-all ${
+                                    filters.startDate === getDaysAgoYMD(7) && filters.endDate === formatYMD(new Date())
+                                        ? 'bg-blue-600 text-white shadow-sm'
+                                        : 'bg-white/5 hover:bg-white/10 text-white/60 hover:text-white'
+                                }`}
+                            >
+                                Last 7 Days
+                            </button>
+                            <button
+                                type="button"
+                                onClick={() => setPresetRange('today')}
+                                className={`px-2.5 py-1 rounded-lg text-[10px] font-bold tracking-wider uppercase transition-all ${
+                                    filters.startDate === formatYMD(new Date()) && filters.endDate === formatYMD(new Date())
+                                        ? 'bg-blue-600 text-white shadow-sm'
+                                        : 'bg-white/5 hover:bg-white/10 text-white/60 hover:text-white'
+                                }`}
+                            >
+                                Today
+                            </button>
+                            <button
+                                type="button"
+                                onClick={() => setPresetRange('month')}
+                                className={`px-2.5 py-1 rounded-lg text-[10px] font-bold tracking-wider uppercase transition-all ${
+                                    filters.startDate === formatYMD(new Date(new Date().getFullYear(), new Date().getMonth(), 1)) && filters.endDate === formatYMD(new Date())
+                                        ? 'bg-blue-600 text-white shadow-sm'
+                                        : 'bg-white/5 hover:bg-white/10 text-white/60 hover:text-white'
+                                }`}
+                            >
+                                This Month
+                            </button>
+                            <button
+                                type="button"
+                                onClick={() => setPresetRange('all')}
+                                className={`px-2.5 py-1 rounded-lg text-[10px] font-bold tracking-wider uppercase transition-all ${
+                                    !filters.startDate && !filters.endDate
+                                        ? 'bg-amber-600 text-white shadow-sm'
+                                        : 'bg-white/5 hover:bg-white/10 text-white/60 hover:text-white'
+                                }`}
+                            >
+                                All Time
+                            </button>
+                        </div>
+
+                        {(filters.startDate || filters.endDate || filters.collegeName !== "all" || filters.hostelName !== "all" || filters.status !== "all" || filters.type !== "all" || filters.search) && (
+                            <button
+                                type="button"
+                                onClick={() => {
+                                    const { startDate, endDate } = getInitialDateFilters();
+                                    setFilters({ collegeName: "all", hostelName: "all", status: "all", type: "all", startDate, endDate, search: "" });
+                                }}
+                                className="text-[10px] text-red-400 hover:text-red-300 font-bold uppercase tracking-wider flex items-center gap-1 transition-colors px-2 py-1 bg-red-500/10 hover:bg-red-500/20 rounded-lg border border-red-500/20"
+                            >
+                                <span>✕</span> Reset Filters
+                            </button>
+                        )}
+                    </div>
                 </div>
 
                 {/* History List */}
@@ -672,7 +786,10 @@ export default function OutingHistoryPage() {
                             <h3 className="text-xl font-bold text-white/80 m-0">No records found</h3>
                             <p className="text-white/40 mt-2">Adjust your filters to search deeper into the archives.</p>
                             <button
-                                onClick={() => setFilters({ collegeName: "all", hostelName: "all", status: "all", type: "all", startDate: "", endDate: "", search: "" })}
+                                onClick={() => {
+                                    const { startDate, endDate } = getInitialDateFilters();
+                                    setFilters({ collegeName: "all", hostelName: "all", status: "all", type: "all", startDate, endDate, search: "" });
+                                }}
                                 className="mt-6 px-6 py-2.5 rounded-xl bg-blue-600 font-bold text-sm transition-all hover:bg-blue-500 active:scale-95"
                             >
                                 Reset All Filters

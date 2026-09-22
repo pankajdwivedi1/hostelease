@@ -63,19 +63,66 @@ export async function POST(request: NextRequest) {
                 return NextResponse.json({ error: "Enter only Name, Registration or ERP ID" }, { status: 400 });
             }
 
-            const results = await db.students.list({ gatepassSearch: s }, { light: false });
-            if (!results || results.length === 0) {
-                return NextResponse.json({ error: "No information exists in the database for the entered details." }, { status: 404 });
+            // 1. First priority: Exact match on Registration ID, ERP ID, ID, or Firebase UID
+            let student = await db.students.findOne({
+                registrationId: s,
+                erpId: s,
+                erpInformation: s,
+                _id: s,
+                id: s,
+                firebaseUID: s
+            });
+
+            // 2. Second priority: Exact Name match
+            if (!student) {
+                student = await db.students.findOne({ name: s });
             }
-            return NextResponse.json({ success: true, student: results[0] });
+
+            // 3. Third priority: Case-insensitive / partial match
+            if (!student) {
+                const results = await db.students.list({ gatepassSearch: s }, { limit: 10, light: false });
+                if (results && results.length > 0) {
+                    const exactMatch = results.find((st: any) =>
+                        st.registrationId?.toLowerCase() === s.toLowerCase() ||
+                        st.erpInformation?.toLowerCase() === s.toLowerCase() ||
+                        st.erpId?.toLowerCase() === s.toLowerCase() ||
+                        st.name?.toLowerCase() === s.toLowerCase()
+                    );
+                    student = exactMatch || results[0];
+                }
+            }
+
+            if (!student) {
+                return NextResponse.json({ error: "No student exists in the database for the entered details." }, { status: 404 });
+            }
+            return NextResponse.json({ success: true, student });
         }
 
         if (targetIds.length === 0 && searchId) {
-            // Find student by registration or ERP ID
+            // Find student by registration or ERP ID or Name
             const s = searchId.trim();
-            let student = await db.students.findOne({ registrationId: s });
-            if (!student) student = await db.students.findOne({ erpInformation: s });
-            if (student) targetIds.push(student._id.toString());
+            let student = await db.students.findOne({
+                registrationId: s,
+                erpId: s,
+                erpInformation: s,
+                _id: s,
+                id: s,
+                firebaseUID: s,
+                name: s
+            });
+            if (!student) {
+                const results = await db.students.list({ gatepassSearch: s }, { limit: 5 });
+                if (results && results.length > 0) {
+                    const exactMatch = results.find((st: any) =>
+                        st.registrationId?.toLowerCase() === s.toLowerCase() ||
+                        st.erpInformation?.toLowerCase() === s.toLowerCase() ||
+                        st.erpId?.toLowerCase() === s.toLowerCase() ||
+                        st.name?.toLowerCase() === s.toLowerCase()
+                    );
+                    student = exactMatch || results[0];
+                }
+            }
+            if (student) targetIds.push((student.id || student._id).toString());
         }
 
         if (targetIds.length === 0) {
