@@ -207,7 +207,7 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
     const [isAttendanceMarked, setIsAttendanceMarked] = useState(false);
     const [isMarkingAttendance, setIsMarkingAttendance] = useState(false);
     const [isOnCampusWifi, setIsOnCampusWifi] = useState<boolean | null>(null); // null = checking, true = on campus wifi, false = not on wifi
-    const [attendanceWindow, setAttendanceWindow] = useState({ start: "21:00", end: "23:00" });
+    const [attendanceWindow, setAttendanceWindow] = useState({ start: "21:00", end: "22:00" });
 
     // ⚡ REQUEST DEDUPLICATION & FOCUS THROTTLE REFS
     const settingsCacheRef = useRef<{ data: any; ts: number } | null>(null);
@@ -1012,8 +1012,8 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
 
     const fetchSystemSettings = async () => {
         try {
-            // ⚡ 5-MINUTE CLIENT CACHE: Skip redundant network fetches
-            const CACHE_TTL = 5 * 60 * 1000;
+            // ⚡ 10-SECOND CLIENT CACHE: Fast synchronization with admin changes
+            const CACHE_TTL = 10 * 1000;
             if (settingsCacheRef.current && Date.now() - settingsCacheRef.current.ts < CACHE_TTL) {
                 const data = settingsCacheRef.current.data;
                 setFormBuilderConfig(data.formBuilderConfig || []);
@@ -1026,7 +1026,7 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
                 return;
             }
 
-            const res = await fetch(`/api/admin/settings${getTenantParam()}`);
+            const res = await fetch(`/api/admin/settings${getTenantParam()}`, { cache: "no-store" });
             if (!res.ok) return;
             const data = await res.json();
             if (data.success) {

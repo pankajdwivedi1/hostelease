@@ -535,12 +535,19 @@ export async function detectFace(
 
         const mainFace = detections[0];
 
+        const validFaces = detections.filter((d: any) => {
+            const box = d?.detection?.box;
+            const score = d?.detection?.score !== undefined ? d.detection.score : 1;
+            return box && box.width >= 16 && box.height >= 16 && score >= 0.15;
+        });
+
         return {
             descriptor: withDescriptor ? (mainFace.descriptor || null) : null,
             detection: mainFace.detection,
             landmarks: mainFace.landmarks,
             accurate: accurate,
-            multipleFacesDetected: detections.length > 1
+            multipleFacesDetected: validFaces.length > 1,
+            faceCount: validFaces.length
         };
     } catch (error) {
         console.error('❌ Face detection failed:', error);

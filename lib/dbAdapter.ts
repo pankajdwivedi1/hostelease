@@ -401,7 +401,7 @@ export const mapSettingsToCamelCase = (s: any) => {
         _id: s._id || s.id,
         activeDatabaseSource: s.active_database_source || s.activeDatabaseSource || 'RAILWAY',
         attendanceStartTime: s.attendance_start_time || s.attendanceStartTime || '21:00',
-        attendanceEndTime: s.attendance_end_time || s.attendanceEndTime || '22:30',
+        attendanceEndTime: s.attendance_end_time || s.attendanceEndTime || '22:00',
         adminPassword: s.admin_password || s.adminPassword || 'pankajdwivedi81',
         wardenPassword: s.warden_password || s.wardenPassword || 'warden456',
         getpassPassword: s.getpass_password || s.getpassPassword || 'GET456',
@@ -761,6 +761,17 @@ export const db = {
                 where: { id: existing.id },
                 data: prismaData
             });
+
+            // If updating attendance times, sync all adminSettings records to maintain global attendance schedule consistency
+            if (updateData.attendanceStartTime || updateData.attendanceEndTime) {
+                const syncData: any = {};
+                if (updateData.attendanceStartTime) syncData.attendanceStartTime = updateData.attendanceStartTime;
+                if (updateData.attendanceEndTime) syncData.attendanceEndTime = updateData.attendanceEndTime;
+                await prisma.adminSettings.updateMany({
+                    data: syncData
+                });
+            }
+
             return mapSettingsToCamelCase(data);
         }
     },
@@ -1213,13 +1224,178 @@ export const db = {
                 tenantId = await getTenantIdOrThrow();
             } catch (err) {}
 
+            const whereClause: any = tenantId ? { tenantId } : {};
+
+            if (action === "face-audit") {
+                const totalCount = await prisma.student.count({ where: whereClause });
+                if (totalCount === 0) return [];
+
+                const chunkSize = 150;
+                const numChunks = Math.ceil(totalCount / chunkSize);
+                const chunkPromises = [];
+
+                for (let i = 0; i < numChunks; i++) {
+                    chunkPromises.push(
+                        prisma.student.findMany({
+                            where: whereClause,
+                            skip: i * chunkSize,
+                            take: chunkSize,
+                            orderBy: { name: "asc" },
+                            select: {
+                                id: true,
+                                name: true,
+                                registrationId: true,
+                                hostelName: true,
+                                roomNumber: true,
+                                profilePicture: true,
+                                faceDescriptor: true,
+                                isProfileLocked: true,
+                                email: true,
+                                phoneNumber: true,
+                                studentStatus: true,
+                                dynamicFields: true
+                            }
+                        })
+                    );
+                }
+
+                const chunkResults = await Promise.all(chunkPromises);
+                const students = chunkResults.flat();
+
+                return students.map((s: any) => {
+                    const dyn = typeof s.dynamicFields === 'object' && s.dynamicFields !== null ? s.dynamicFields : {};
+                    const isRetakeFlagged = Boolean(dyn.requiresFaceRecapture || s.requiresFaceRecapture);
+                    return {
+                        ...s,
+                        _id: s.id,
+                        hasVector: Array.isArray(s.faceDescriptor) && s.faceDescriptor.length > 0,
+                        isFlagged: isRetakeFlagged
+                    };
+                });
+            }
+
+            if (action === "duplicates-phone") {
+                const students = await prisma.student.findMany({
+                    where: whereClause,
+                    select: { id: true, name: true, phoneNumber: true, hostelName: true, roomNumber: true, registrationId: true }
+                });
+                const phoneMap = new Map<string, any[]>();
+                students.forEach(s => {
+                    const phone = (s.phoneNumber || "").trim();
+                    if (phone && phone !== "N/A") {
+                        if (!phoneMap.has(phone)) phoneMap.set(phone, []);
+                        phoneMap.get(phone)!.push({
+                            id: s.id,
+                            name: s.name,
+                            hostel: s.hostelName,
+                            room: s.roomNumber,
+                            regId: s.registrationId,
+                            phone: s.phoneNumber
+                        });
+                    }
+                });
+                const duplicates: any[] = [];
+                phoneMap.forEach((group, phone) => {
+                    if (group.length > 1) {
+                        duplicates.push({ _id: phone, count: group.length, students: group });
+                    }
+                });
+                return duplicates;
+            }
+
+            if (action === "duplicates-regid") {
+                const students = await prisma.student.findMany({
+                    where: whereClause,
+                    select: { id: true, name: true, registrationId: true, hostelName: true, roomNumber: true, phoneNumber: true }
+                });
+                const regMap = new Map<string, any[]>();
+                students.forEach(s => {
+                    const regId = (s.registrationId || "").trim();
+                    if (regId && regId !== "N/A") {
+                        const key = regId.toUpperCase();
+                        if (!regMap.has(key)) regMap.set(key, []);
+                        regMap.get(key)!.push({
+                            id: s.id,
+                            name: s.name,
+                            hostel: s.hostelName,
+                            room: s.roomNumber,
+                            regId: s.registrationId,
+                            phone: s.phoneNumber
+                        });
+                    }
+                });
+                const duplicates: any[] = [];
+                regMap.forEach((group, regId) => {
+                    if (group.length > 1) {
+                        duplicates.push({ _id: regId, count: group.length, students: group });
+                    }
+                });
+                return duplicates;
+            }
+
+            if (action === "duplicates-erpid") {
+                const students = await prisma.student.findMany({
+                    where: whereClause,
+                    select: { id: true, name: true, erpInformation: true, erpId: true, hostelName: true, roomNumber: true, registrationId: true, phoneNumber: true }
+                });
+                const erpMap = new Map<string, any[]>();
+                students.forEach(s => {
+                    const erp = (s.erpInformation || s.erpId || "").trim();
+                    if (erp && erp !== "N/A") {
+                        const key = erp.toUpperCase();
+                        if (!erpMap.has(key)) erpMap.set(key, []);
+                        erpMap.get(key)!.push({
+                            id: s.id,
+                            name: s.name,
+                            hostel: s.hostelName,
+                            room: s.roomNumber,
+                            regId: s.registrationId,
+                            phone: s.phoneNumber,
+                            erp: erp
+                        });
+                    }
+                });
+                const duplicates: any[] = [];
+                erpMap.forEach((group, erp) => {
+                    if (group.length > 1) {
+                        duplicates.push({ _id: erp, count: group.length, students: group });
+                    }
+                });
+                return duplicates;
+            }
+
+            if (action === "gibberish-names") {
+                const students = await prisma.student.findMany({
+                    where: whereClause,
+                    select: { id: true, name: true, hostelName: true, roomNumber: true, phoneNumber: true, registrationId: true }
+                });
+                const invalid: any[] = [];
+                const isGibberish = (name: string) => {
+                    const clean = (name || "").trim();
+                    if (!clean || clean.length < 3) return true;
+                    if (/\d/.test(clean)) return true;
+                    if (/[^a-zA-Z\s\.]/.test(clean)) return true;
+                    if (!/[aeiouAEIOU]/.test(clean)) return true;
+                    if (/(.)\1{3,}/.test(clean)) return true;
+                    return false;
+                };
+                students.forEach(s => {
+                    if (isGibberish(s.name)) {
+                        invalid.push(mapStudentToCamelCase(s));
+                    }
+                });
+                return invalid;
+            }
+
             const students = await prisma.student.findMany({
-                where: tenantId ? { tenantId } : undefined,
+                where: whereClause,
                 select: {
                     id: true,
                     name: true,
                     registrationId: true,
                     hostelName: true,
+                    roomNumber: true,
+                    profilePicture: true,
                     faceDescriptor: true,
                     isProfileLocked: true
                 }

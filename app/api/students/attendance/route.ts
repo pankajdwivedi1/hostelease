@@ -7,7 +7,7 @@ import { checkRateLimit } from "@/lib/requestLimiter";
 // Cache for AdminSettings to reduce DB load during peak times
 let cachedAdminSettings: any = null;
 let lastCacheUpdate = 0;
-const CACHE_DURATION = 60000; // 1 minute
+const CACHE_DURATION = 5000; // 5 seconds
 
 // Haversine formula to calculate distance between two coordinates
 function calculateDistance(
@@ -274,7 +274,7 @@ export async function POST(request: NextRequest) {
         const istTime = istTimeStr.split(":").slice(0, 2).join(":"); // "HH:mm"
 
         const startTime = adminSettings?.attendanceStartTime || "21:00";
-        const endTime = adminSettings?.attendanceEndTime || "23:00";
+        const endTime = adminSettings?.attendanceEndTime || "22:00";
 
         if (!isTester && (istTime < startTime || istTime > endTime)) {
             return NextResponse.json(
@@ -532,14 +532,14 @@ export async function GET(request: NextRequest) {
         return NextResponse.json({
             marked: !!attendance,
             startTime: adminSettings?.attendanceStartTime || "21:00",
-            endTime: adminSettings?.attendanceEndTime || "23:00"
+            endTime: adminSettings?.attendanceEndTime || "22:00"
         });
     } catch (e: any) {
         console.error("GET attendance endpoint error:", e?.message);
         return NextResponse.json({
             marked: false,
             startTime: "21:00",
-            endTime: "23:00"
+            endTime: "22:00"
         });
     }
 }

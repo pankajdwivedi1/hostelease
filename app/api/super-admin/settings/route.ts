@@ -72,6 +72,19 @@ export async function POST(request: NextRequest) {
                 settings: settings as any
             }
         });
+
+        // ⚡ If curfewStart or curfewEnd is updated from Super Admin, also sync adminSettings attendance times across all tenants
+        if (settings.curfewStart || settings.curfewEnd) {
+            const syncData: any = {};
+            if (settings.curfewStart) syncData.attendanceStartTime = settings.curfewStart;
+            if (settings.curfewEnd) syncData.attendanceEndTime = settings.curfewEnd;
+            await prisma.adminSettings.updateMany({
+                data: syncData
+            });
+            const { clearSettingsCache } = await import("@/lib/dbAdapter");
+            clearSettingsCache();
+        }
+
         return NextResponse.json({ success: true });
     } catch (error: any) {
         console.error("Save platform settings error:", error);

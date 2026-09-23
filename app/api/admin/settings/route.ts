@@ -48,7 +48,7 @@ export async function GET(request: NextRequest) {
             hostelAlertsMap,
             locations: settings?.hostelLocations || [],
             startTime: settings?.attendanceStartTime || "21:00",
-            endTime: settings?.attendanceEndTime || "22:30",
+            endTime: settings?.attendanceEndTime || "22:00",
             registrationFieldsConfig: settings?.registrationFieldsConfig || {},
             formBuilderConfig: settings?.formBuilderConfig || [],
             formBuilderVersions: settings?.formBuilderVersions || [],

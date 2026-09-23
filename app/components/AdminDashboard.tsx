@@ -878,7 +878,18 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
   const [isLoadingAllPermissions, setIsLoadingAllPermissions] = useState(false);
   const [isPermissionsLoading, setIsPermissionsLoading] = useState(false);
   const [totalPermissionsCount, setTotalPermissionsCount] = useState(0);
-  const [students, setStudents] = useState<StudentDetails[]>([]);
+  const [students, setStudents] = useState<StudentDetails[]>(() => {
+    if (typeof window !== "undefined") {
+      try {
+        const cached = localStorage.getItem(CACHE_KEYS.STUDENTS);
+        if (cached) {
+          const parsed = JSON.parse(cached);
+          if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+        }
+      } catch (e) {}
+    }
+    return [];
+  });
   const [loading, setLoading] = useState(true);
   const [selectedStudent, setSelectedStudent] = useState<StudentDetails | null>(null);
   const [showAllStudents, setShowAllStudents] = useState(false);
@@ -898,7 +909,18 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
   const [sectionFilter, setSectionFilter] = useState<string>("all");
   const [floorFilter, setFloorFilter] = useState<string>("all");
   const [roomFilter, setRoomFilter] = useState<string>("all");
-  const [hostels, setHostels] = useState<Array<{ _id: string; name: string; attendanceMode?: 'strict' | 'gps-only' | 'biometric' }>>([]);
+  const [hostels, setHostels] = useState<Array<{ _id: string; name: string; attendanceMode?: 'strict' | 'gps-only' | 'biometric' }>>(() => {
+    if (typeof window !== "undefined") {
+      try {
+        const cached = localStorage.getItem(CACHE_KEYS.HOSTELS);
+        if (cached) {
+          const parsed = JSON.parse(cached);
+          if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+        }
+      } catch (e) {}
+    }
+    return [];
+  });
   const [showHostelSettingsModal, setShowHostelSettingsModal] = useState(false);
   const [updatingHostelId, setUpdatingHostelId] = useState<string | null>(null);
   const [studentsLoading, setStudentsLoading] = useState(false);
@@ -1207,7 +1229,22 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
   const [currentTab, setCurrentTab] = useState<"permissions" | "attendance" | "messaging" | "payments" | "settings" | "rooms" | "alerts" | "wifi_sync" | "add_student">("permissions");
   const [selectedRoom, setSelectedRoom] = useState<string | null>(null);
   const [selectedRoomStudents, setSelectedRoomStudents] = useState<StudentDetails[]>([]);
-  const [activeVisualHostel, setActiveVisualHostel] = useState<string>("");
+  const [activeVisualHostel, setActiveVisualHostel] = useState<string>(() => {
+    if (typeof window !== "undefined") {
+      const saved = localStorage.getItem("hosteleaze_active_visual_hostel");
+      if (saved) return saved.toUpperCase();
+      const auth = localStorage.getItem("authorizedHostels");
+      if (auth) {
+        try {
+          const parsed = JSON.parse(auth);
+          if (Array.isArray(parsed) && parsed.length > 0 && parsed[0]) return parsed[0].toUpperCase();
+        } catch (e) {}
+      }
+      const wHostel = localStorage.getItem("wardenHostelName");
+      if (wHostel) return wHostel.toUpperCase();
+    }
+    return "BOYS HOSTEL";
+  });
   const [alertsConsoleFilter, setAlertsConsoleFilter] = useState<"all" | "face" | "gps" | "device" | "curfew">("all");
   const [reviewingLog, setReviewingLog] = useState<AttendanceLog | null>(null);
   const [isEditCameraOpen, setIsEditCameraOpen] = useState(false);
@@ -1346,7 +1383,7 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
   // Attendance Time Settings
   const [attendanceTimeSettings, setAttendanceTimeSettings] = useState({
     startTime: "21:00",
-    endTime: "22:30"
+    endTime: "22:00"
   });
   const [showAttendanceTimeModal, setShowAttendanceTimeModal] = useState(false);
   const [isUpdatingAttendanceTime, setIsUpdatingAttendanceTime] = useState(false);
@@ -2915,7 +2952,7 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
       if (data && data.success) {
         setAttendanceTimeSettings({
           startTime: data.startTime || "21:00",
-          endTime: data.endTime || "22:30"
+          endTime: data.endTime || "22:00"
         });
       }
     } catch (error) {
@@ -4365,8 +4402,8 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
       img.onload = () => {
         try {
           const canvas = document.createElement("canvas");
-          const w = 240;
-          const h = 240;
+          const w = 160;
+          const h = 160;
           canvas.width = w;
           canvas.height = h;
           const ctx = canvas.getContext("2d", { willReadFrequently: true });
@@ -4378,7 +4415,8 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
               sharpnessScore: 85,
               borderScore: 0,
               isPhotoOfPhoto: false,
-              isBlurry: false
+              isBlurry: false,
+              imgElement: img
             });
           }
 
@@ -4398,7 +4436,7 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
             const g = data[i + 1];
             const b = data[i + 2];
             const luma = 0.299 * r + 0.587 * g + 0.114 * b;
-            const idx = i / 4;
+            const idx = i >> 2;
             gray[idx] = luma;
             sumLuma += luma;
             sumSqLuma += luma * luma;
@@ -4420,13 +4458,13 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
               sharpnessScore: 0,
               borderScore: 0,
               isPhotoOfPhoto: false,
-              isBlurry: false
+              isBlurry: false,
+              imgElement: img
             });
           }
 
-          // 2. Outer Border & Framed Card/Screen Recapture Detection (Anshika case)
-          // Checks if outer margins (top, bottom, left, right) form a dark bezel/pillarbox around an inner photo
-          const margin = 18;
+          // 2. Outer Border & Framed Card/Screen Recapture Detection
+          const margin = 12;
           let topLuma = 0, bottomLuma = 0, leftLuma = 0, rightLuma = 0;
           let topCount = 0, bottomCount = 0, leftCount = 0, rightCount = 0;
 
@@ -4448,7 +4486,6 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
           const avgLeft = leftLuma / leftCount;
           const avgRight = rightLuma / rightCount;
 
-          // Core center luminance
           let centerLuma = 0, centerCount = 0;
           for (let y = Math.floor(h * 0.25); y < Math.floor(h * 0.75); y++) {
             for (let x = Math.floor(w * 0.25); x < Math.floor(w * 0.75); x++) {
@@ -4458,14 +4495,13 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
           }
           const avgCenter = centerLuma / centerCount;
 
-          // Screen Moire Pattern & Specular Glass Reflection Hotspots
           let highFreqGridDiffs = 0;
           let specularHotspots = 0;
-          for (let y = 15; y < h - 15; y++) {
-            for (let x = 15; x < w - 15; x++) {
+          for (let y = 10; y < h - 10; y++) {
+            for (let x = 10; x < w - 10; x++) {
               const val = gray[y * w + x];
               if (val > 250) {
-                const surround = (gray[(y - 6) * w + x] + gray[(y + 6) * w + x] + gray[y * w + (x - 6)] + gray[y * w + (x + 6)]) / 4;
+                const surround = (gray[(y - 4) * w + x] + gray[(y + 4) * w + x] + gray[y * w + (x - 4)] + gray[y * w + (x + 4)]) / 4;
                 if (val - surround > 75) specularHotspots++;
               }
               const diffX = Math.abs(val - gray[y * w + x - 1]);
@@ -4475,16 +4511,13 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
           }
           const moireRatio = highFreqGridDiffs / totalPixels;
 
-          // True Photo of Photo criteria:
-          // A) Dark Letterbox/Pillarbox Frame (outer bezel dark < 40 on 3+ sides while inner card is bright > 90)
           const isOuterFramedBezel = ((avgTop < 40 ? 1 : 0) + (avgBottom < 40 ? 1 : 0) + (avgLeft < 40 ? 1 : 0) + (avgRight < 40 ? 1 : 0) >= 3) && (avgCenter - Math.min(avgTop, avgLeft, avgRight) > 60);
-          // B) Screen Display with Moire Grid & Specular Glare
-          const isDigitalScreenMoire = moireRatio > 0.08 && specularHotspots > 15;
+          const isDigitalScreenMoire = moireRatio > 0.08 && specularHotspots > 12;
 
           const isPhotoOfPhoto = isOuterFramedBezel || isDigitalScreenMoire;
           const borderScore = isPhotoOfPhoto ? 95 : 0;
 
-          // 3. High-Precision Facial Core Micro-Sharpness (Eyes, Nose, Lips)
+          // 3. High-Precision Facial Core Micro-Sharpness
           const startY = Math.floor(h * 0.22);
           const endY = Math.floor(h * 0.65);
           const startX = Math.floor(w * 0.22);
@@ -4493,13 +4526,13 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
           let lapSum = 0;
           let lapSumSq = 0;
           let lapCount = 0;
-          const sobelEdges: number[] = [];
+          const edgeHist = new Uint16Array(512);
+          let totalEdgeCount = 0;
 
           for (let y = startY; y < endY; y++) {
             const yw = y * w;
             for (let x = startX; x < endX; x++) {
               const idx = yw + x;
-              // 8-neighbor Discrete Laplacian Operator for micro-detail focus
               const lap = (
                 8 * gray[idx] -
                 gray[idx - w - 1] - gray[idx - w] - gray[idx - w + 1] -
@@ -4510,7 +4543,6 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
               lapSumSq += lap * lap;
               lapCount++;
 
-              // Sobel edge magnitude for facial feature definition
               const gx = (
                 gray[idx - w + 1] + 2 * gray[idx + 1] + gray[idx + w + 1] -
                 (gray[idx - w - 1] + 2 * gray[idx - 1] + gray[idx + w - 1])
@@ -4519,15 +4551,26 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                 gray[idx + w - 1] + 2 * gray[idx + w] + gray[idx + w + 1] -
                 (gray[idx - w - 1] + 2 * gray[idx - w] + gray[idx - w + 1])
               );
-              sobelEdges.push(Math.sqrt(gx * gx + gy * gy));
+              const edgeMag = Math.min(511, Math.round(Math.sqrt(gx * gx + gy * gy)));
+              edgeHist[edgeMag]++;
+              totalEdgeCount++;
             }
           }
 
           const lapMean = lapSum / Math.max(1, lapCount);
           const lapVariance = Math.max(0, (lapSumSq / Math.max(1, lapCount)) - (lapMean * lapMean));
 
-          sobelEdges.sort((a, b) => a - b);
-          const p95 = sobelEdges[Math.floor(sobelEdges.length * 0.95)] || 0;
+          // Constant time O(1) p95 lookup via histogram
+          let cumulative = 0;
+          const p95Threshold = totalEdgeCount * 0.95;
+          let p95 = 0;
+          for (let k = 0; k < 512; k++) {
+            cumulative += edgeHist[k];
+            if (cumulative >= p95Threshold) {
+              p95 = k;
+              break;
+            }
+          }
 
           // Calibrated Sharpness Score (0-100%)
           let sharpnessScore = 0;
@@ -4541,7 +4584,6 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
 
           const isBlurry = sharpnessScore < 40 || (lapVariance < 1000 && p95 < 135);
 
-          // 4. Final Classification Assignment
           let issueType: "BLANK_PHOTO" | "MISSING_VECTOR" | "PHOTO_OF_PHOTO" | "BLURRY_PHOTO" | "CLEAN" = "CLEAN";
           let issueLabel = `✓ Sharp (${sharpnessScore}%)`;
           let isPoorQuality = false;
@@ -4567,7 +4609,8 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
             sharpnessScore,
             borderScore,
             isPhotoOfPhoto,
-            isBlurry
+            isBlurry,
+            imgElement: img
           });
         } catch (e) {
           resolve({
@@ -4577,7 +4620,8 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
             sharpnessScore: 85,
             borderScore: 0,
             isPhotoOfPhoto: false,
-            isBlurry: false
+            isBlurry: false,
+            imgElement: img
           });
         }
       };
@@ -4590,7 +4634,8 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
           sharpnessScore: 0,
           borderScore: 0,
           isPhotoOfPhoto: false,
-          isBlurry: false
+          isBlurry: false,
+          imgElement: null
         });
       };
 
@@ -4604,25 +4649,22 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
     const updated = [...studentList];
     const total = updated.length;
 
-    // ✅ FIX: Detect mobile to reduce workload — mobile CPUs cannot handle heavy parallel processing
+    // Detect mobile to tune batch size
     const isMobileDevice = typeof navigator !== 'undefined' && /Mobi|Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
 
-    // Load face-api module for Face Presence, Multiple Faces & Vector Extraction
-    // ✅ FIX: Skip face-api entirely on mobile — TensorFlow.js saturates mobile CPU → page freeze
+    // Load fast face-api module for Face Presence, Multiple Faces & Vector Extraction
     let faceApiModule: any = null;
     if (!isMobileDevice) {
       try {
         faceApiModule = await import("@/lib/faceMatching");
-        await faceApiModule.loadFaceApiModels(true); // Load SSD models for 128-D vector extraction
+        await faceApiModule.loadFaceApiModels(false);
       } catch (err) {
         console.warn("Face-API loader warning in audit:", err);
       }
-    } else {
-      console.log("📱 Mobile detected — skipping TensorFlow face detection to prevent freeze");
     }
 
-    // ✅ FIX: Smaller batch size: 3 on mobile, 8 on desktop (was 15 — caused UI starvation)
-    const batchSize = isMobileDevice ? 3 : 8;
+    // Process in smooth parallel batches: 4 on mobile, 8 on desktop with UI yielding
+    const batchSize = isMobileDevice ? 4 : 8;
     for (let i = 0; i < total; i += batchSize) {
       const batch = updated.slice(i, i + batchSize);
       await Promise.all(batch.map(async (s) => {
@@ -4647,37 +4689,27 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
           s.multipleFaces = false;
 
           // AI Face Presence, Multiple Faces & Vector Extraction via face-api
-          // ✅ FIX: Only run on desktop where CPU can handle TensorFlow.js
-          if (!isMobileDevice && faceApiModule && res.issueType !== "BLANK_PHOTO") {
+          if (!isMobileDevice && faceApiModule && res.imgElement && res.issueType !== "BLANK_PHOTO") {
             try {
-              const imgElem = new Image();
-              imgElem.crossOrigin = "anonymous";
-              await new Promise<void>((resolve) => {
-                imgElem.onload = () => resolve();
-                imgElem.onerror = () => resolve();
-                imgElem.src = pic;
-              });
-
-              if (imgElem.width > 0 && imgElem.height > 0) {
-                const faceRes = await faceApiModule.detectFace(imgElem, false, true);
-                if (!faceRes) {
-                  s.faceMissing = true;
-                  s.multipleFaces = false;
-                  if (!res.isPhotoOfPhoto && !res.isBlurry) {
-                    s.issueType = "NO_FACE";
-                    s.qualityIssueLabel = "⚠️ No Face Detected";
-                  }
+              // Pass the already loaded and decoded image element directly (0 redundant network/decoding load!)
+              const faceRes = await faceApiModule.detectFace(res.imgElement, false, !s.hasVector);
+              if (!faceRes) {
+                s.faceMissing = true;
+                s.multipleFaces = false;
+                if (!res.isPhotoOfPhoto && !res.isBlurry) {
+                  s.issueType = "NO_FACE";
+                  s.qualityIssueLabel = "⚠️ No Face Detected";
+                }
+              } else {
+                s.faceMissing = false;
+                if (faceRes.multipleFacesDetected) {
+                  s.multipleFaces = true;
+                  s.issueType = "MULTIPLE_FACES";
+                  s.qualityIssueLabel = `👥 Multiple Faces (${faceRes.faceCount || '2+'} detected)`;
                 } else {
-                  s.faceMissing = false;
-                  if (faceRes.multipleFacesDetected) {
-                    s.multipleFaces = true;
-                    s.issueType = "MULTIPLE_FACES";
-                    s.qualityIssueLabel = "👥 Multiple Faces Detected";
-                  } else {
-                    s.multipleFaces = false;
-                    if (faceRes.descriptor) {
-                      s.extractedDescriptor = Array.from(faceRes.descriptor);
-                    }
+                  s.multipleFaces = false;
+                  if (faceRes.descriptor) {
+                    s.extractedDescriptor = Array.from(faceRes.descriptor);
                   }
                 }
               }
@@ -4686,8 +4718,10 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
             }
           }
 
-          if (s.issueType === "NO_FACE" || s.issueType === "MULTIPLE_FACES") {
-            // keep AI presence issue type
+          if (s.multipleFaces || s.issueType === "MULTIPLE_FACES") {
+            s.issueType = "MULTIPLE_FACES";
+          } else if (s.faceMissing || s.issueType === "NO_FACE") {
+            s.issueType = "NO_FACE";
           } else if (res.issueType === "BLANK_PHOTO") {
             s.issueType = "BLANK_PHOTO";
           } else if (res.isPhotoOfPhoto) {
@@ -4705,8 +4739,8 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
       }));
       setBlurScanProgress(Math.min(100, Math.round(((i + batch.length) / total) * 100)));
       setAuditResults([...updated]);
-      // ✅ FIX: Yield to the browser UI thread between batches to prevent "Page Unresponsive"
-      await new Promise(r => setTimeout(r, isMobileDevice ? 80 : 20));
+      // Yield to browser UI thread between batches for 60 FPS fluidity
+      await new Promise(r => setTimeout(r, 0));
     }
     setIsScanningBlur(false);
   };
@@ -4714,14 +4748,15 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
 
   const handleAudit = async (type: "duplicates-phone" | "duplicates-regid" | "duplicates-erpid" | "gibberish-names" | "face-audit") => {
     try {
-      setIsAuditing(true);
-      setAuditResults([]);
       setSelectedFaceAuditIds([]);
-      // Extract middle part or whole for type
       const typeLabel = type === 'face-audit' ? 'face' : (type.includes('phone') ? 'phone' : (type.includes('regid') ? 'regid' : (type.includes('erpid') ? 'erpid' : 'gibberish')));
       setActiveAuditType(typeLabel as any);
 
       if (type === "face-audit") {
+        setIsAuditing(false);
+        setIsScanningBlur(true);
+        setBlurScanProgress(0);
+
         const response = await fetch('/api/admin/face-audit');
         const data = await response.json();
         if (data.success) {
@@ -4730,9 +4765,12 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
           // Run AI quality, blur & printed-photo scan in background
           runQualityScanOnStudents(list);
         } else {
+          setIsScanningBlur(false);
           alert(data.error || "Face Audit failed");
         }
       } else {
+        setIsAuditing(true);
+        setAuditResults([]);
         const response = await fetch(`/api/developer/audit?type=${type}`);
         const data = await response.json();
 
@@ -4745,6 +4783,7 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
     } catch (e) {
       console.error(e);
       alert("Error performing audit");
+      setIsScanningBlur(false);
     } finally {
       setIsAuditing(false);
     }
@@ -4769,9 +4808,30 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
       });
       const data = await res.json();
       if (data.success) {
+        // Fast in-memory state update without 686-photo re-scan lag
+        setAuditResults(prev => prev.map(s => {
+          const sid = s.id || s._id;
+          if (targetIds.includes(sid)) {
+            let newIssueType = s.issueType;
+            if (requiresFaceRecapture) {
+              if (newIssueType === "CLEAN") newIssueType = "FLAGGED_RETAKE";
+            } else {
+              if (newIssueType === "FLAGGED_RETAKE") {
+                newIssueType = (!s.hasVector && s.issueType !== "BLANK_PHOTO" && s.issueType !== "NO_FACE") 
+                  ? "MISSING_VECTOR" 
+                  : (s.isBlurry ? "BLURRY_PHOTO" : (s.isPhotoOfPhoto ? "PHOTO_OF_PHOTO" : "CLEAN"));
+              }
+            }
+            return {
+              ...s,
+              isFlagged: requiresFaceRecapture,
+              issueType: newIssueType
+            };
+          }
+          return s;
+        }));
+        setSelectedFaceAuditIds(prev => prev.filter(id => !targetIds.includes(id)));
         alert(data.message);
-        // Refresh audit list
-        await handleAudit("face-audit");
       } else {
         alert("Failed: " + (data.error || "Unknown error"));
       }
@@ -4804,8 +4864,21 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
       });
       const data = await res.json();
       if (data.success) {
+        // Fast in-memory state update
+        setAuditResults(prev => prev.map(s => {
+          const sid = s.id || s._id;
+          if (targetIds.includes(sid) && Array.isArray(s.extractedDescriptor) && s.extractedDescriptor.length > 0) {
+            return {
+              ...s,
+              hasVector: true,
+              faceDescriptor: s.extractedDescriptor,
+              issueType: s.isFlagged ? "FLAGGED_RETAKE" : (s.isBlurry ? "BLURRY_PHOTO" : (s.isPhotoOfPhoto ? "PHOTO_OF_PHOTO" : "CLEAN"))
+            };
+          }
+          return s;
+        }));
+        setSelectedFaceAuditIds(prev => prev.filter(id => !targetIds.includes(id)));
         alert(data.message || `Successfully backfilled vectors for ${updates.length} student(s).`);
-        await handleAudit("face-audit");
       } else {
         alert("Failed: " + (data.error || "Unknown error"));
       }
@@ -5450,11 +5523,7 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
         if (cached) {
           try {
             const parsed = JSON.parse(cached);
-            const hasMixedCase = parsed.some((h: any) => h.name && /[a-z]/.test(h.name));
-            if (hasMixedCase) {
-              console.log("Invalidating hostels cache due to mixed-case names");
-              localStorage.removeItem(CACHE_KEYS.HOSTELS);
-            } else {
+            if (Array.isArray(parsed) && parsed.length > 0) {
               setHostels(parsed);
               return;
             }
@@ -5500,16 +5569,9 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
       if (cached) {
         try {
           const parsed = JSON.parse(cached);
-          if (parsed && parsed.length > 0) {
-            // Invalidate cache if it contains mixed-case hostel names
-            const hasMixedCase = parsed.some((s: any) => s.hostelName && /[a-z]/.test(s.hostelName));
-            if (hasMixedCase) {
-              localStorage.removeItem(CACHE_KEYS.STUDENTS);
-              localStorage.removeItem(CACHE_KEYS.TIMESTAMP);
-            } else {
-              setStudents(parsed);
-              hasCache = true;
-            }
+          if (Array.isArray(parsed) && parsed.length > 0) {
+            setStudents(parsed);
+            hasCache = true;
           }
         } catch (e) {
           console.warn("Error parsing student cache", e);
@@ -7745,10 +7807,10 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
     return ids;
   }, [attendanceLogs]);
 
-  // Attendance timing window check
+  // Attendance timing window check (for marking / active window checks)
   const isWithinAttendanceTime = useMemo(() => {
     const start = attendanceTimeSettings.startTime || "21:00";
-    const end = attendanceTimeSettings.endTime || "22:30";
+    const end = attendanceTimeSettings.endTime || "22:00";
     
     const now = new Date();
     // Accurate current time in Indian Standard Time (IST) "HH:MM"
@@ -7762,17 +7824,37 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
     }
   }, [attendanceTimeSettings]);
 
-  // Matches the exact admin-configured attendance time window
-  const showFlashingBlueDot = isWithinAttendanceTime;
+  // Attendance status visibility until midnight (12:00 AM) regardless of configured window duration
+  const showAttendanceStatusUntilMidnight = useMemo(() => {
+    const start = attendanceTimeSettings.startTime || "21:00";
+    const end = attendanceTimeSettings.endTime || "22:00";
+    
+    const now = new Date();
+    // Accurate current time in Indian Standard Time (IST) "HH:MM"
+    const istTimeStr = now.toLocaleTimeString("en-GB", { timeZone: "Asia/Kolkata", hour12: false }).substring(0, 5);
+    
+    if (start <= end) {
+      // Visible from start time until midnight (23:59:59 IST)
+      return istTimeStr >= start && istTimeStr <= "23:59";
+    } else {
+      // Handles overnight windows (e.g., 21:00 to 02:00)
+      return (istTimeStr >= start && istTimeStr <= "23:59") || (istTimeStr >= "00:00" && istTimeStr <= end);
+    }
+  }, [attendanceTimeSettings.startTime, attendanceTimeSettings.endTime]);
+
+  // Matches visual attendance indicators until midnight
+  const showFlashingBlueDot = showAttendanceStatusUntilMidnight;
 
   // 4. Room Data Grouping
   const visualRoomsData = useMemo(() => {
     if (!activeVisualHostel) return [];
     
+    const targetName = (getHostelCategory(activeVisualHostel) || activeVisualHostel).trim().toLowerCase();
+
     const hostelStudents = students.filter(s => {
-      const hName = (s.hostelName || "").toLowerCase().trim();
-      const targetName = activeVisualHostel.toLowerCase().trim();
-      return hName === targetName;
+      const rawHostel = s.hostelName || "";
+      const sHostel = (getHostelCategory(rawHostel) || rawHostel).trim().toLowerCase();
+      return sHostel === targetName || rawHostel.trim().toLowerCase() === targetName;
     });
 
     const roomGroups: Record<string, StudentDetails[]> = {};
@@ -11021,7 +11103,7 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                     <div>
                       <div className="flex items-center gap-2">
                         <h2 className="text-lg font-bold text-foreground">Warden Visual Room Grid</h2>
-                        {isWithinAttendanceTime && (
+                        {showAttendanceStatusUntilMidnight && (
                           <span className="flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-blue-50 text-blue-600 border border-blue-100 text-[10px] font-bold animate-pulse">
                             <span className="w-1.5 h-1.5 rounded-full bg-blue-600" />
                             Live Night Attendance
@@ -11035,7 +11117,13 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                       <label className="text-xs font-bold text-slate-500 uppercase">Select Hostel:</label>
                       <select
                         value={activeVisualHostel}
-                        onChange={e => setActiveVisualHostel(e.target.value)}
+                        onChange={e => {
+                          const val = e.target.value;
+                          setActiveVisualHostel(val);
+                          if (typeof window !== "undefined") {
+                            localStorage.setItem("hosteleaze_active_visual_hostel", val);
+                          }
+                        }}
                         className="h-9 px-3 rounded-lg border border-solid border-[#9CA3AF] bg-white text-foreground text-xs focus:outline-none focus:border-blue-500 font-bold"
                       >
                         {isWarden ? (
@@ -11047,7 +11135,14 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                     </div>
                   </div>
 
-                  {visualRoomsData.length === 0 ? (
+                  {studentsLoading && students.length === 0 ? (
+                    <div className="text-center py-16 bg-slate-50/80 rounded-2xl border border-slate-200/80 space-y-3">
+                      <div className="inline-block w-7 h-7 border-3 border-blue-600 border-t-transparent rounded-full animate-spin" />
+                      <p className="text-xs font-bold text-slate-500 uppercase tracking-wider">
+                        Loading visual rooms & students for {activeVisualHostel || "hostel"}...
+                      </p>
+                    </div>
+                  ) : visualRoomsData.length === 0 ? (
                     <div className="text-center py-12 bg-slate-50 rounded-2xl border border-slate-100 font-bold text-slate-400">
                       No rooms found for {activeVisualHostel}. Make sure students are registered in this hostel.
                     </div>
@@ -11055,61 +11150,62 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                     <div className="space-y-8">
                       {visualRoomsData.map(({ floorName, rooms }) => {
                         const totalStudentsOnFloor = rooms.reduce((acc, r) => acc + r.roommates.length, 0);
-                        const hasOverdueOnFloor = rooms.some(r => r.roommates.some(s => getRoommateStatus(s) === 'overdue'));
+                        const overdueStudentsOnFloor = rooms.reduce((acc, r) => acc + r.roommates.filter(s => getRoommateStatus(s) === 'overdue').length, 0);
+                        const hasOverdueOnFloor = overdueStudentsOnFloor > 0;
                         return (
                           <div key={floorName} className="space-y-3">
-                            <h3 className="text-sm font-black text-slate-400 uppercase tracking-widest border-b border-slate-100 pb-2 flex items-center gap-2">
-                              <span>🏢 {floorName}</span>
-                              <span className="text-[10px] bg-slate-100 text-slate-500 px-2 py-0.5 rounded-full font-bold">
+                            <h3 className="text-xs md:text-sm font-black text-slate-500 uppercase tracking-wider border-b border-slate-100 pb-2 flex items-center gap-1.5 md:gap-2.5 flex-nowrap overflow-x-auto">
+                              <span className="shrink-0 whitespace-nowrap">🏢 {floorName}</span>
+                              <span className="text-[8.5px] md:text-xs bg-slate-100 text-slate-600 px-1.5 py-0.5 md:px-2.5 md:py-1 rounded md:rounded-md font-bold border border-slate-200 shrink-0 whitespace-nowrap">
                                 {rooms.length} {rooms.length === 1 ? 'Room' : 'Rooms'}
                               </span>
-                              <span className="text-[10px] bg-blue-50 text-blue-600 px-2 py-0.5 rounded-full font-bold">
+                              <span className="text-[8.5px] md:text-xs bg-blue-50 text-blue-700 px-1.5 py-0.5 md:px-2.5 md:py-1 rounded md:rounded-md font-bold border border-blue-200 shrink-0 whitespace-nowrap">
                                 {totalStudentsOnFloor} {totalStudentsOnFloor === 1 ? 'Student' : 'Students'}
                               </span>
+                              {hasOverdueOnFloor && (
+                                <span className="text-[8.5px] md:text-xs bg-red-50 text-red-700 border border-red-200 px-1.5 py-0.5 md:px-2.5 md:py-1 rounded md:rounded-md font-black flex items-center gap-1 md:gap-1.5 shrink-0 whitespace-nowrap animate-in fade-in shadow-2xs">
+                                  <span className="w-1.5 h-1.5 md:w-2 md:h-2 rounded-full bg-red-600 animate-fast-blink shrink-0 ring-1 ring-red-400" />
+                                  <span>{overdueStudentsOnFloor > 0 ? `${overdueStudentsOnFloor} ` : ''}Overdue (🚨)</span>
+                                </span>
+                              )}
                             </h3>
 
                             {/* 🏷️ Visual Floor Legend Bar */}
-                            <div className="bg-slate-50/90 border border-slate-200/80 rounded-xl px-2.5 py-1.5 md:px-3.5 md:py-2 flex flex-wrap items-center justify-between gap-y-1.5 gap-x-3 text-[10px] sm:text-[11px] text-slate-600 shadow-2xs">
+                            <div className="bg-slate-50/90 border border-slate-200/80 rounded-xl px-2.5 py-1.5 md:px-4 md:py-2.5 flex flex-wrap items-center justify-between gap-y-1.5 gap-x-3 text-[10px] md:text-xs text-slate-600 shadow-2xs">
                               {/* Left: Location Indicators */}
-                              <div className="flex flex-wrap items-center gap-2 sm:gap-3.5">
-                                <span className="font-extrabold text-slate-400 uppercase tracking-wider text-[8.5px] sm:text-[9.5px]">Movement:</span>
-                                <div className="flex items-center gap-1.5">
-                                  <span className="w-2.5 h-2.5 sm:w-3 sm:h-3 rounded-full bg-green-500 shrink-0 shadow-2xs border border-white" />
-                                  <span className="font-bold text-slate-700">Inside (IN)</span>
+                              <div className="flex flex-wrap items-center gap-2 md:gap-4">
+                                <span className="font-extrabold text-slate-400 uppercase tracking-wider text-[8.5px] md:text-[11px]">Movement:</span>
+                                <div className="flex items-center gap-1.5 md:gap-2">
+                                  <span className="w-2.5 h-2.5 md:w-3.5 md:h-3.5 rounded-full bg-green-500 shrink-0 shadow-2xs border border-white" />
+                                  <span className="font-bold text-slate-700 text-[10px] md:text-xs">Inside (IN)</span>
                                 </div>
-                                <div className="flex items-center gap-1.5">
-                                  <span className="w-2.5 h-2.5 sm:w-3 sm:h-3 rounded-full bg-purple-600 shrink-0 shadow-2xs border border-white" />
-                                  <span className="font-bold text-purple-700">Home Leave</span>
+                                <div className="flex items-center gap-1.5 md:gap-2">
+                                  <span className="w-2.5 h-2.5 md:w-3.5 md:h-3.5 rounded-full bg-purple-600 shrink-0 shadow-2xs border border-white" />
+                                  <span className="font-bold text-purple-700 text-[10px] md:text-xs">Home Leave</span>
                                 </div>
-                                <div className="flex items-center gap-1.5">
-                                  <span className="w-2.5 h-2.5 sm:w-3 sm:h-3 rounded-full bg-yellow-500 shrink-0 shadow-2xs border border-white" />
-                                  <span className="font-bold text-yellow-800">Gate-Pass</span>
+                                <div className="flex items-center gap-1.5 md:gap-2">
+                                  <span className="w-2.5 h-2.5 md:w-3.5 md:h-3.5 rounded-full bg-yellow-500 shrink-0 shadow-2xs border border-white" />
+                                  <span className="font-bold text-yellow-800 text-[10px] md:text-xs">Gate-Pass</span>
                                 </div>
-                                {hasOverdueOnFloor && (
-                                  <div className="flex items-center gap-1.5 animate-in fade-in">
-                                    <span className="w-2.5 h-2.5 sm:w-3 sm:h-3 rounded-full bg-red-600 animate-fast-blink ring-1 ring-red-400 shrink-0 shadow-2xs border border-white" />
-                                    <span className="font-extrabold text-red-600">Overdue (🚨)</span>
-                                  </div>
-                                )}
                               </div>
 
-                              {/* Right: Attendance Indicators - Visible only during active attendance window */}
-                              {isWithinAttendanceTime ? (
-                                <div className="flex items-center gap-2 sm:gap-3 border-t sm:border-t-0 sm:border-l border-slate-200 sm:pl-3 pt-1 sm:pt-0 animate-in fade-in">
-                                  <span className="font-extrabold text-slate-400 uppercase tracking-wider text-[8.5px] sm:text-[9.5px]">Attendance (Live):</span>
-                                  <div className="flex items-center gap-1.5">
-                                    <span className="w-2.5 h-2.5 sm:w-3 sm:h-3 rounded-full border-2 border-blue-600 bg-blue-500 shrink-0 shadow-2xs" />
-                                    <span className="font-bold text-blue-700">Marked</span>
+                              {/* Right: Attendance Indicators - Visible from start time until midnight */}
+                              {showAttendanceStatusUntilMidnight ? (
+                                <div className="flex items-center gap-2 md:gap-3 border-t md:border-t-0 md:border-l border-slate-200 md:pl-3 pt-1 md:pt-0 animate-in fade-in">
+                                  <span className="font-extrabold text-slate-400 uppercase tracking-wider text-[8.5px] md:text-[11px]">Attendance (Live):</span>
+                                  <div className="flex items-center gap-1.5 md:gap-2">
+                                    <span className="w-2.5 h-2.5 md:w-3.5 md:h-3.5 rounded-full border-2 border-blue-600 bg-blue-500 shrink-0 shadow-2xs" />
+                                    <span className="font-bold text-blue-700 text-[10px] md:text-xs">Marked</span>
                                   </div>
-                                  <div className="flex items-center gap-1.5">
-                                    <span className="w-2.5 h-2.5 sm:w-3 sm:h-3 rounded-full border-2 border-red-500 bg-red-50/40 shrink-0 shadow-2xs" />
-                                    <span className="font-bold text-red-600">Pending</span>
+                                  <div className="flex items-center gap-1.5 md:gap-2">
+                                    <span className="w-2.5 h-2.5 md:w-3.5 md:h-3.5 rounded-full border-2 border-red-500 bg-red-50/40 shrink-0 shadow-2xs" />
+                                    <span className="font-bold text-red-600 text-[10px] md:text-xs">Pending</span>
                                   </div>
                                 </div>
                               ) : (
-                                <div className="flex items-center gap-1.5 border-t sm:border-t-0 sm:border-l border-slate-200 sm:pl-3 pt-1 sm:pt-0 text-slate-400">
-                                  <span className="text-[9.5px] sm:text-[10.5px] font-semibold">
-                                    🌙 Attendance Window: <strong className="text-slate-600 font-bold">{attendanceTimeSettings.startTime || "21:00"} – {attendanceTimeSettings.endTime || "22:30"}</strong>
+                                <div className="flex items-center gap-1.5 border-t md:border-t-0 md:border-l border-slate-200 md:pl-3 pt-1 md:pt-0 text-slate-500 text-[10px] md:text-xs">
+                                  <span className="font-semibold">
+                                    🌙 Attendance Window: <strong className="text-slate-700 font-bold">{attendanceTimeSettings.startTime || "21:00"} – {attendanceTimeSettings.endTime || "22:00"}</strong>
                                   </span>
                                 </div>
                               )}
@@ -11177,8 +11273,8 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                                             >
                                               {r.name.slice(0, 1).toUpperCase()}
                                             </div>
-                                            {/* Attendance Indicator: ONLY visible during active attendance window */}
-                                            {isWithinAttendanceTime && (
+                                            {/* Attendance Indicator: Visible from start time until midnight (12:00 AM) */}
+                                            {showAttendanceStatusUntilMidnight && (
                                               hasMarkedAttendance ? (
                                                 <span 
                                                   className="w-2 h-2 md:w-2.5 md:h-2.5 rounded-full border-2 border-blue-600 bg-blue-500 shrink-0 shadow-2xs animate-pulse"
@@ -17707,25 +17803,33 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                       </button>
                     </div>
 
-                    {isAuditing && (
+                    {isAuditing && activeAuditType !== "face" && (
                       <div className="py-12 flex flex-col items-center justify-center gap-4">
                         <div className="w-12 h-12 border-4 border-indigo-600 border-t-transparent rounded-full animate-spin"></div>
                         <p className="text-xs font-black text-slate-400 uppercase tracking-widest animate-pulse">Running Deep Scan...</p>
                       </div>
                     )}
 
-                    {!isAuditing && activeAuditType === "face" && (
+                    {activeAuditType === "face" && (
                       <div className="mt-8 space-y-4">
                         {/* Blur Scan Progress Banner */}
                         {isScanningBlur && (
-                          <div className="bg-amber-50 border border-amber-200 rounded-2xl p-3 flex items-center justify-between gap-3 text-xs text-amber-900 font-bold animate-in fade-in">
-                            <div className="flex items-center gap-2.5">
-                              <div className="w-4 h-4 border-2 border-amber-600 border-t-transparent rounded-full animate-spin"></div>
-                              <span>AI Deep Scanning photos for blur & low quality ({blurScanProgress}%)...</span>
+                          <div className="bg-amber-50 border border-amber-200 rounded-2xl p-3 flex flex-col gap-2 text-xs text-amber-900 font-bold animate-in fade-in">
+                            <div className="flex items-center justify-between gap-3">
+                              <div className="flex items-center gap-2.5">
+                                <div className="w-4 h-4 border-2 border-amber-600 border-t-transparent rounded-full animate-spin"></div>
+                                <span>{auditResults.length === 0 ? "⚡ Fetching student photo records from database..." : "AI Deep Scanning photos for quality & biometric compliance..."}</span>
+                              </div>
+                              <span className="text-[10px] uppercase tracking-wider bg-amber-200/60 px-2.5 py-0.5 rounded-full font-black text-amber-800">
+                                {blurScanProgress}% Complete
+                              </span>
                             </div>
-                            <span className="text-[10px] uppercase tracking-wider bg-amber-200/60 px-2 py-0.5 rounded-full font-black text-amber-800">
-                              Analyzing
-                            </span>
+                            <div className="w-full bg-amber-200/70 h-2 rounded-full overflow-hidden">
+                              <div 
+                                className="bg-amber-600 h-full transition-all duration-200 rounded-full" 
+                                style={{ width: `${Math.max(4, blurScanProgress)}%` }} 
+                              />
+                            </div>
                           </div>
                         )}
 
@@ -17963,9 +18067,19 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                             if (faceAuditFilter === "flagged") return s.isFlagged;
                             return s.issueType !== "CLEAN" || s.isFlagged || s.isBlurry || s.isPhotoOfPhoto || s.faceMissing || s.multipleFaces || (!s.hasVector && s.issueType !== "BLANK_PHOTO");
                           }).length === 0 && (
-                            <div className="py-8 text-center bg-slate-50 border border-slate-100 rounded-2xl">
-                              <p className="text-xs font-black text-slate-700 uppercase tracking-wider">No issues found in this category!</p>
-                            </div>
+                            isScanningBlur ? (
+                              <div className="py-12 text-center bg-amber-50/50 border border-amber-200/80 rounded-2xl flex flex-col items-center justify-center gap-3">
+                                <div className="w-8 h-8 border-2 border-amber-600 border-t-transparent rounded-full animate-spin"></div>
+                                <div>
+                                  <p className="text-xs font-black text-amber-900 uppercase tracking-wider">AI Deep Scanning Photos ({blurScanProgress}% Complete)...</p>
+                                  <p className="text-[10px] text-amber-700 font-medium mt-0.5">Analyzing facial clarity, multi-face presence, and biometric vectors</p>
+                                </div>
+                              </div>
+                            ) : (
+                              <div className="py-8 text-center bg-slate-50 border border-slate-100 rounded-2xl">
+                                <p className="text-xs font-black text-slate-700 uppercase tracking-wider">No issues found in this category!</p>
+                              </div>
+                            )
                           )}
                         </div>
                       </div>
@@ -18039,7 +18153,7 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                       </div>
                     )}
 
-                    {!isAuditing && auditResults.length === 0 && activeAuditType && (
+                    {!isAuditing && !isScanningBlur && activeAuditType && activeAuditType !== "face" && auditResults.length === 0 && (
                       <div className="py-12 text-center">
                         <div className="w-16 h-16 bg-green-50 text-green-500 rounded-full flex items-center justify-center mx-auto mb-4">
                           <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" /></svg>
