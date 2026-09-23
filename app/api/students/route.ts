@@ -191,20 +191,22 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // ✅ OPTION 1: Store base64 image permanently in PostgreSQL database (and cache to disk)
+    // ✅ Save profile picture directly to Cloudflare R2 CDN ($0 Railway egress)
     let finalProfilePicture = profilePicture;
-    if (profilePicture && profilePicture.startsWith("data:image/")) {
+    if (profilePicture && (profilePicture.startsWith("data:image/") || profilePicture.startsWith("data:"))) {
       try {
         const { saveFileToRailway } = await import("@/lib/fileStorage");
         const filename = `${firebaseUID || 'student'}_${Date.now()}`;
-        await saveFileToRailway(profilePicture, `profile-pictures/${tenantId}`, filename);
-        console.log(`[Storage] Cached profile picture to disk for ${filename}`);
+        const savedUrl = await saveFileToRailway(profilePicture, `profile-pictures/${tenantId}`, filename);
+        if (savedUrl) {
+          finalProfilePicture = savedUrl;
+        }
+        console.log(`[Storage] Saved profile picture to R2/Storage for ${filename} -> ${finalProfilePicture}`);
       } catch (err: any) {
-        console.warn("❌ Failed to cache profile picture to disk, preserved in DB:", err.message);
+        console.warn("❌ Failed to save profile picture to R2:", err.message);
       }
-      // Preserve permanent base64 data in PostgreSQL so Railway redeployments never wipe it!
-      finalProfilePicture = profilePicture;
     }
+
 
     // ✅ NEW: Sanitize inputs before storing
     const updateData: any = {
@@ -589,7 +591,9 @@ export async function GET(request: NextRequest) {
     const branch = searchParams.get("branch");
     const section = searchParams.get("section");
 
-    const light = searchParams.get("light") === "true";
+    // ⚡ BANDWIDTH FIX: Default to lightweight metadata for student lists to eliminate massive Base64 transfer
+    const isFullRequested = searchParams.get("full") === "true";
+    const light = !isFullRequested;
 
     const students = await db.students.list(
       { search, hostelName, collegeName, semester, branch, section },
@@ -601,27 +605,10 @@ export async function GET(request: NextRequest) {
     let activeOutings = new Map<string, string>();
     let syncCount = 0;
 
-    // ⚡ ALWAYS SYNC: We now sync even in light mode because status is critical for Warden Dashboard accuracy
     try {
-      // 1. Fetch Open Passes
-      const gatePassResult = await db.gatePasses.list({ status: "out" }, { limit: 1000 });
+      // 1. Fetch Open Passes (lean, no relation overhead)
+      const gatePassResult = await db.gatePasses.list({ status: "out" }, { limit: 500, populate: false });
       openPasses = gatePassResult.records || [];
-
-      // 2. Fetch Present IDs for Today (to detect stale gate passes)
-      const now = new Date();
-      // ⚡ Robust Date Parsing (Sync with attendance-summary API)
-      const istDateStr = now.toLocaleDateString("en-IN", { timeZone: "Asia/Kolkata", year: "numeric", month: "2-digit", day: "2-digit" });
-      const dateParts = istDateStr.split(/[^0-9]/).filter(p => p.length > 0);
-      let today = "";
-      if (dateParts.length >= 3) {
-        if (dateParts[0].length === 4) today = `${dateParts[0]}-${dateParts[1]}-${dateParts[2]}`; // YYYY-MM-DD
-        else today = `${dateParts[2]}-${dateParts[1]}-${dateParts[0]}`; // DD-MM-YYYY -> YYYY-MM-DD
-      } else {
-        today = now.toISOString().split('T')[0];
-      }
-
-      const attendanceSummary = await db.attendance.summary(today);
-      const presentIdsSet = new Set((attendanceSummary?.presentStudentIds || []).map((id: any) => id?.toString()));
 
       // Create a map of studentId -> outing details for efficient lookup
       const activeOutingMap = new Map<string, any>();
@@ -660,18 +647,28 @@ export async function GET(request: NextRequest) {
           s.checkOutIstTime = passInfo.checkOutIstTime;
           syncCount++;
         } else {
-          // If no open pass, they are 'in'
           s.studentStatus = "in";
           s.outingType = undefined;
           s.leaveReason = undefined;
           s.leaveFrom = undefined;
           s.leaveTo = undefined;
         }
+
+        // ⚡ BANDWIDTH PROTECTION: Only delete raw Base64 data (if any), keep lightweight Cloudflare R2 CDN URLs
+        if (s.profilePicture && typeof s.profilePicture === 'string' && s.profilePicture.startsWith('data:')) {
+          delete s.profilePicture;
+        }
+        if (light) {
+          delete s.faceDescriptor;
+          delete s.webAuthnCredentials;
+          delete s.deviceHistory;
+        }
+
       });
 
-      // 3. Fetch Recent/Active Permissions to enrich student leave information (dates & reasons)
+      // 2. Fetch Active Permissions to enrich student leave information (lean, no relation overhead)
       try {
-        const permsResult = await db.permissions.list({}, { limit: 1000 });
+        const permsResult = await db.permissions.list({ status: "allowed" }, { limit: 100, populate: false });
         const permsList = Array.isArray(permsResult) ? permsResult : (permsResult?.records || permsResult?.permissions || []);
         const permsById = new Map<string, any>();
         const permsByReg = new Map<string, any>();

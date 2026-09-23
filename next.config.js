@@ -76,8 +76,9 @@ const nextConfig = {
         ignoreBuildErrors: true,
     },
     experimental: {
-        optimizePackageImports: ['firebase', 'firebase-admin', 'mongoose'],
+        optimizePackageImports: ['firebase', 'firebase-admin', 'mongoose', 'lucide-react', '@radix-ui/react-slider'],
     },
+
     reactStrictMode: true,
     async headers() {
         return [

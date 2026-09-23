@@ -158,8 +158,8 @@ export async function PATCH(
       }
     }
 
-    // ✅ OPTION 1: Store base64 image permanently in PostgreSQL database (and cache to disk)
-    if (body.profilePicture && body.profilePicture.startsWith("data:image/")) {
+    // ✅ Save updated profile picture directly to Cloudflare R2 CDN ($0 Railway egress)
+    if (body.profilePicture && (body.profilePicture.startsWith("data:image/") || body.profilePicture.startsWith("data:"))) {
       try {
         const student = await db.students.getById(studentId);
         const firebaseUID = student?.firebaseUID || studentId;
@@ -167,13 +167,16 @@ export async function PATCH(
         
         const { saveFileToRailway } = await import("@/lib/fileStorage");
         const filename = `${firebaseUID}_${Date.now()}`;
-        await saveFileToRailway(body.profilePicture, `profile-pictures/${tenantId}`, filename);
-        console.log(`[Storage] Cached updated profile picture to disk for ${filename}`);
+        const savedUrl = await saveFileToRailway(body.profilePicture, `profile-pictures/${tenantId}`, filename);
+        if (savedUrl) {
+          body.profilePicture = savedUrl;
+        }
+        console.log(`[Storage] Saved updated profile picture to R2 for ${filename} -> ${body.profilePicture}`);
       } catch (err: any) {
-        console.warn("❌ Failed to cache profile picture to disk, preserved in DB:", err.message);
+        console.warn("❌ Failed to save updated profile picture to R2:", err.message);
       }
-      // Preserve direct base64 image in PostgreSQL so Railway redeployments never wipe it!
     }
+
 
     // 🔒 OPTION A ENFORCEMENT: If profile picture is updated without explicit new faceDescriptor, clear old vector array
     if (body.profilePicture && (!body.faceDescriptor || !Array.isArray(body.faceDescriptor) || body.faceDescriptor.length === 0)) {

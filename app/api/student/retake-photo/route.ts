@@ -48,11 +48,24 @@ export async function POST(req: NextRequest) {
             ? { ...student.dynamicFields } 
             : {};
 
-        // Explicitly clear recapture flag
-        dynamicFields.requiresFaceRecapture = false;
+        let finalProfilePicture = profilePicture;
+        if (profilePicture && (profilePicture.startsWith("data:image/") || profilePicture.startsWith("data:"))) {
+            try {
+                const { saveFileToRailway } = await import("@/lib/fileStorage");
+                const studentUid = student.firebaseUid || student.firebaseUID || firebaseUID || targetId;
+                const tenantFolder = student.tenantId || "default";
+                const filename = `${studentUid}_${Date.now()}`;
+                const savedUrl = await saveFileToRailway(profilePicture, `profile-pictures/${tenantFolder}`, filename);
+                if (savedUrl) {
+                    finalProfilePicture = savedUrl;
+                }
+            } catch (r2Err: any) {
+                console.warn("⚠️ Failed to upload retaken photo to R2:", r2Err.message);
+            }
+        }
 
         const updatePayload: any = {
-            profilePicture,
+            profilePicture: finalProfilePicture,
             faceDescriptor,
             dynamicFields,
             firebaseUid: student.firebaseUid || student.firebaseUID || firebaseUID,
@@ -62,6 +75,7 @@ export async function POST(req: NextRequest) {
 
         const studentIdToUpdate = student._id || student.id || targetId;
         const updated = await db.students.update(studentIdToUpdate, updatePayload);
+
 
         return NextResponse.json({
             success: true,

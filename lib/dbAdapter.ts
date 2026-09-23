@@ -984,8 +984,52 @@ export const db = {
                 ];
             }
 
+            // ⚡ BANDWIDTH OPTIMIZATION: In light mode (or default list queries), exclude heavy Base64 profile photos and face vectors!
+            const isLight = options.light !== false;
+            const selectFields = isLight ? {
+                id: true,
+                name: true,
+                email: true,
+                phoneNumber: true,
+                hostelName: true,
+                roomNumber: true,
+                floorNumber: true,
+                registrationId: true,
+                erpInformation: true,
+                erpId: true,
+                studentStatus: true,
+                fatherName: true,
+                fatherNumber: true,
+                motherName: true,
+                motherNumber: true,
+                collegeName: true,
+                branch: true,
+                year: true,
+                semester: true,
+                section: true,
+                permanentAddress: true,
+                homeState: true,
+                dob: true,
+                category: true,
+                joiningDate: true,
+                localGuardianAddress: true,
+                localGuardianPhoneNumber: true,
+                isProfileLocked: true,
+                deviceId: true,
+                deviceResetCount: true,
+                attendanceMode: true,
+                profilePicture: true,
+                firebaseUid: true,
+                supabaseId: true,
+                tenantId: true,
+                createdAt: true,
+                updatedAt: true,
+            } : undefined;
+
+
             let students = await prisma.student.findMany({
                 where: whereClause,
+                select: selectFields,
                 take: options.limit || undefined,
                 skip: options.offset || undefined,
                 orderBy: { name: 'asc' }
@@ -999,6 +1043,7 @@ export const db = {
                     delete fallbackWhere.tenantId;
                     students = await prisma.student.findMany({
                         where: fallbackWhere,
+                        select: selectFields,
                         take: options.limit || undefined,
                         skip: options.offset || undefined,
                         orderBy: { name: 'asc' }
@@ -1989,11 +2034,13 @@ export const db = {
                                 semester: true,
                                 permanentAddress: true,
                                 homeState: true,
+                                studentStatus: true,
                                 profilePicture: true
                             }
                         }
                     }
                 } : {})
+
             });
 
             const mapped = records.map(mapGatePassToCamelCase);
@@ -2452,7 +2499,32 @@ export const db = {
                     orderBy: { createdAt: 'desc' },
                     take: options.limit || undefined,
                     skip: options.offset || undefined,
-                    include: options.populate !== false ? { student: true } : undefined
+                    include: options.populate !== false ? {
+                        student: {
+                            select: {
+                                id: true,
+                                name: true,
+                                registrationId: true,
+                                erpInformation: true,
+                                erpId: true,
+                                phoneNumber: true,
+                                email: true,
+                                fatherName: true,
+                                fatherNumber: true,
+                                motherName: true,
+                                motherNumber: true,
+                                hostelName: true,
+                                roomNumber: true,
+                                collegeName: true,
+                                branch: true,
+                                year: true,
+                                semester: true,
+                                studentStatus: true,
+                                profilePicture: true
+                            }
+                        }
+                    } : undefined
+
                 });
             } catch (dbErr) {
                 console.error("Error in db.permissions.list:", dbErr);
