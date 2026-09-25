@@ -59,7 +59,8 @@ export async function POST(request: Request) {
 
         if (action === 'unmarkBulk') {
             const result = await db.attendance.unmarkBulk(studentIds, date || today);
-            return NextResponse.json({ success: true, count: result.count });
+            const count = result.deletedCount ?? (result as any).count ?? 0;
+            return NextResponse.json({ success: true, count });
         }
 
         if (action === 'markBulkDirect' && body.attendanceRecords) {

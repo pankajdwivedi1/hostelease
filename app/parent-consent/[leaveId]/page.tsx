@@ -1,6 +1,7 @@
 import { db } from "@/lib/dbAdapter";
 import ParentConsentClient from "./ParentConsentClient";
 import { notFound } from "next/navigation";
+import { formatDateDDMMYYYY } from "@/lib/dateFormat";
 
 export const dynamic = "force-dynamic";
 
@@ -30,23 +31,8 @@ export default async function ParentConsentPage({ params }: PageProps) {
     const studentName = student?.name || "Student";
     const parentName = student?.fatherName || student?.motherName || "Parent";
     
-    // Format dates to readable Indian format (e.g. 25-06-2026)
-    const formatDate = (dateStr: string) => {
-        try {
-            const date = new Date(dateStr);
-            return date.toLocaleDateString("en-IN", {
-                timeZone: "Asia/Kolkata",
-                day: "2-digit",
-                month: "2-digit",
-                year: "numeric"
-            });
-        } catch (e) {
-            return dateStr;
-        }
-    };
-    
-    const startDate = formatDate(permission.fromDateTime);
-    const endDate = formatDate(permission.toDateTime);
+    const startDate = formatDateDDMMYYYY(permission.fromDateTime);
+    const endDate = formatDateDDMMYYYY(permission.toDateTime);
     
     const parentUserId = student?.fatherNumber || ((student?.id || student?._id || "").toString() + "_parent");
     

@@ -4,6 +4,8 @@ import { useEffect, useState, useRef } from "react";
 import { usePathname } from "next/navigation";
 import { AlertCircle, Lock, ShieldAlert, CheckCircle2, CreditCard, Calendar, RefreshCw, QrCode, Loader2 } from "lucide-react";
 import QRCode from "qrcode";
+import { generateOfficialInvoicePDF } from "@/lib/invoicePdfGenerator";
+import { formatDateDDMMYYYY } from "@/lib/dateFormat";
 
 function QRCodeCanvas({ data, size = 120 }: { data: string; size?: number }) {
     const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -245,13 +247,13 @@ function AdminExpiredPortal({
                             <div className="bg-white/5 border border-white/5 p-3 sm:p-4 rounded-xl sm:rounded-2xl">
                                 <p className="text-[9px] sm:text-[10px] text-gray-500 font-bold uppercase tracking-wider mb-0.5 sm:mb-1">Activated On</p>
                                 <p className="text-sm sm:text-base md:text-lg font-black text-white">
-                                    {status.startDate ? new Date(status.startDate).toLocaleDateString("en-IN", { dateStyle: "medium" }) : "N/A"}
+                                    {status.startDate ? formatDateDDMMYYYY(status.startDate) : "N/A"}
                                 </p>
                             </div>
                             <div className="bg-white/5 border border-white/5 p-3 sm:p-4 rounded-xl sm:rounded-2xl col-span-2">
                                 <p className="text-[9px] sm:text-[10px] text-gray-500 font-bold uppercase tracking-wider mb-0.5 sm:mb-1">Subscription Valid Until (Midnight)</p>
                                 <p className="text-sm sm:text-base md:text-lg font-black text-rose-400">
-                                    {status.endDate ? `${new Date(status.endDate).toLocaleDateString("en-IN", { dateStyle: "medium", timeZone: "Asia/Kolkata" })} (11:59:59 PM)` : "N/A"}
+                                    {status.endDate ? `${formatDateDDMMYYYY(status.endDate)} (11:59:59 PM)` : "N/A"}
                                 </p>
                             </div>
                         </div>
@@ -282,7 +284,7 @@ function AdminExpiredPortal({
                                                 </div>
                                             </div>
                                             <div className="flex items-center gap-2 sm:gap-3">
-                                                <span className="text-[8px] sm:text-[9px] text-gray-500">{new Date(tx.date || tx.createdAt).toLocaleDateString("en-IN")}</span>
+                                                <span className="text-[8px] sm:text-[9px] text-gray-500">{formatDateDDMMYYYY(tx.date || tx.createdAt)}</span>
                                                 <button
                                                     onClick={() => generateInvoicePDF(tx, status.name)}
                                                     className="px-2 py-1 sm:px-2.5 sm:py-1.5 bg-blue-600 hover:bg-blue-700 text-white font-black rounded-lg sm:rounded-xl transition-all text-[8px] sm:text-[9px] uppercase tracking-wider"
@@ -597,7 +599,7 @@ function AdminExpiredPortal({
                                                         <img src={customQrUrl} alt="QR" className="w-32 h-32 object-contain rounded-lg" />
                                                     ) : (
                                                         <div className="relative flex items-center justify-center">
-                                                            <QRCodeCanvas data={upiDeepLink} size={120} level="H" />
+                                                            <QRCodeCanvas data={upiDeepLink} size={120} />
                                                             <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
                                                                 <div className="w-5 h-5 bg-white rounded-full p-0.5 shadow-md flex items-center justify-center border border-slate-100">
                                                                     <svg viewBox="0 0 24 24" className="w-3.5 h-3.5" fill="none">
@@ -662,7 +664,7 @@ function AdminExpiredPortal({
                                                             <img src={customQrUrl} alt="QR" className="w-full aspect-square object-contain rounded-lg" />
                                                         ) : (
                                                             <div className="relative flex items-center justify-center w-full">
-                                                                <QRCodeCanvas data={upiDeepLink} size={140} level="H" className="w-full h-auto max-w-[140px]" />
+                                                                <QRCodeCanvas data={upiDeepLink} size={140} />
                                                                 <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
                                                                     <div className="w-5 h-5 bg-white rounded-full p-0.5 shadow-md flex items-center justify-center border border-slate-100">
                                                                         <svg viewBox="0 0 24 24" className="w-3.5 h-3.5" fill="none">
@@ -940,262 +942,15 @@ export default function TenantGuard({ children }: { children: React.ReactNode })
     }, [status?.isExpired]);
 
     const generateInvoicePDF = (tx: any, collegeName: string) => {
-        const printWindow = window.open('', '_blank');
-        if (!printWindow) {
-            alert("Popup blocker prevented opening invoice. Please allow popups for this site.");
-            return;
-        }
-        
-        const formattedDate = new Date(tx.date).toLocaleDateString("en-IN", { dateStyle: "long" });
-        const invoiceNo = tx.id.replace('tx_', 'INV-').toUpperCase();
-        
-        printWindow.document.write(`
-            <html>
-                <head>
-                    <title>Invoice ${invoiceNo}</title>
-                    <style>
-                        * { box-sizing: border-box; }
-                        body, table, th, td, h1, h2, h3, h4, p, div, span, button {
-                            font-family: 'Cambria Math', Cambria, Georgia, serif !important;
-                        }
-                        body {
-                            font-family: 'Cambria Math', Cambria, Georgia, serif !important;
-                            margin: 0;
-                            padding: 40px;
-                            color: #333;
-                            line-height: 1.5;
-                        }
-                        .invoice-box {
-                            max-width: 800px;
-                            margin: auto;
-                            background: #fff;
-                        }
-                        .header {
-                            display: flex;
-                            justify-content: space-between;
-                            align-items: center;
-                            border-bottom: 2px solid #f3f4f6;
-                            padding-bottom: 20px;
-                            margin-bottom: 30px;
-                        }
-                        .logo {
-                            font-size: 28px;
-                            font-weight: 900;
-                            color: #4f46e5;
-                            text-transform: uppercase;
-                            letter-spacing: -0.5px;
-                        }
-                        .title {
-                            text-align: right;
-                        }
-                        .title h1 {
-                            margin: 0;
-                            font-size: 24px;
-                            font-weight: 900;
-                            color: #1f2937;
-                            letter-spacing: -0.5px;
-                        }
-                        .details {
-                            display: grid;
-                            grid-template-cols: 1fr 1fr;
-                            gap: 20px;
-                            margin-bottom: 40px;
-                        }
-                        .details h3 {
-                            margin: 0 0 8px 0;
-                            font-size: 11px;
-                            text-transform: uppercase;
-                            letter-spacing: 1px;
-                            color: #9ca3af;
-                            font-weight: 800;
-                        }
-                        .details p {
-                            margin: 0;
-                            font-size: 14px;
-                            font-weight: 700;
-                            color: #4b5563;
-                        }
-                        .table {
-                            width: 100%;
-                            border-collapse: collapse;
-                            margin-bottom: 40px;
-                        }
-                        .table th {
-                            background: #f9fafb;
-                            border-bottom: 2px solid #e5e7eb;
-                            color: #4b5563;
-                            font-size: 11px;
-                            font-weight: 800;
-                            text-transform: uppercase;
-                            letter-spacing: 0.5px;
-                            padding: 12px 16px;
-                            text-align: left;
-                        }
-                        .table td {
-                            padding: 16px;
-                            border-bottom: 1px solid #f3f4f6;
-                            font-size: 14px;
-                            font-weight: 600;
-                            color: #1f2937;
-                        }
-                        .table tr:last-child td {
-                            border-bottom: none;
-                        }
-                        .total-box {
-                            display: flex;
-                            justify-content: flex-end;
-                            margin-bottom: 50px;
-                        }
-                        .total-table {
-                            width: 250px;
-                            font-size: 14px;
-                        }
-                        .total-table tr td {
-                            padding: 8px 0;
-                        }
-                        .total-table tr td:last-child {
-                            text-align: right;
-                            font-weight: 700;
-                        }
-                        .grand-total {
-                            font-size: 18px;
-                            font-weight: 900;
-                            color: #111827;
-                            border-top: 2px solid #e5e7eb;
-                            padding-top: 12px;
-                        }
-                        .footer {
-                            border-top: 2px solid #f3f4f6;
-                            padding-top: 20px;
-                            text-align: center;
-                            font-size: 12px;
-                            color: #9ca3af;
-                            font-weight: 600;
-                            margin-top: 50px;
-                        }
-                        @media print {
-                            body { padding: 0; }
-                            .no-print { display: none; }
-                        }
-                        .print-btn {
-                            background: #4f46e5;
-                            color: #fff;
-                            border: none;
-                            padding: 12px 24px;
-                            border-radius: 8px;
-                            font-weight: 700;
-                            font-size: 14px;
-                            cursor: pointer;
-                            box-shadow: 0 4px 6px -1px rgba(79, 70, 229, 0.1), 0 2px 4px -1px rgba(79, 70, 229, 0.06);
-                            transition: all 0.2s;
-                            margin-bottom: 20px;
-                        }
-                        .print-btn:hover {
-                            background: #4338ca;
-                        }
-                    </style>
-                </head>
-                <body>
-                    <div style="max-width: 800px; margin: auto;" class="no-print">
-                        <button onclick="window.print()" class="print-btn">Print / Save as PDF</button>
-                    </div>
-                    <div class="invoice-box">
-                        <div class="header">
-                            <div class="logo">Hosteleaze</div>
-                            <div class="title">
-                                <h1>TAX INVOICE</h1>
-                                <p style="margin: 4px 0 0 0; font-size: 12px; font-weight: 700; color: #6b7280;">No: ${invoiceNo}</p>
-                            </div>
-                        </div>
-                        
-                        <div class="details">
-                            <div>
-                                <h3>Billed To</h3>
-                                <p style="font-size: 16px; color: #111827; margin-bottom: 4px;">${collegeName || "Partner College"}</p>
-                                <p style="font-size: 12px; font-weight: 500; color: #9ca3af;">Subscription Client</p>
-                            </div>
-                            <div style="text-align: right;">
-                                <h3>Billed From</h3>
-                                <p style="font-size: 16px; color: #111827; margin-bottom: 4px;">Hosteleaze Inc.</p>
-                                <p style="font-size: 12px; font-weight: 500; color: #9ca3af; margin-bottom: 2px;">Developer Account: DR. PANKAJ DWIVEDI</p>
-                                <p style="font-size: 12px; font-weight: 500; color: #9ca3af;">Email: support@hosteleaze.com</p>
-                            </div>
-                        </div>
-
-                        <div class="details" style="margin-bottom: 30px;">
-                            <div>
-                                <h3>Invoice Date</h3>
-                                <p>${formattedDate}</p>
-                            </div>
-                            <div style="text-align: right;">
-                                <h3>Payment Method</h3>
-                                <p>Razorpay (Instant Online Renewal)</p>
-                            </div>
-                        </div>
-
-                        <table class="table">
-                            <thead>
-                                <tr>
-                                    <th>Item Description</th>
-                                    <th style="text-align: right;">Billing Period</th>
-                                    <th style="text-align: right;">Amount</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                <tr>
-                                    <td>
-                                        <div style="font-weight: 700; color: #111827;">Hosteleaze Campus Management Software License</div>
-                                        <div style="font-size: 12px; color: #6b7280; font-weight: 500; margin-top: 4px;">Full Administrative & Warden Gatepass Portals Access</div>
-                                    </td>
-                                    <td style="text-align: right;">${tx.billingPeriod || "1 Year"}</td>
-                                    <td style="text-align: right;">₹${tx.amount?.toLocaleString("en-IN") || 0}.00</td>
-                                </tr>
-                            </tbody>
-                        </table>
-
-                        <div class="total-box">
-                            <table class="total-table">
-                                <tr>
-                                    <td>Subtotal</td>
-                                    <td>₹${tx.amount?.toLocaleString("en-IN") || 0}.00</td>
-                                </tr>
-                                ${(tx.extraDiscountType === "amount" || (tx.extraDiscountAmount && Number(tx.extraDiscountAmount) > 0)) ? `
-                                <tr>
-                                    <td style="color: #7e22ce; font-weight: 700;">🌟 Special Concession</td>
-                                    <td style="color: #7e22ce; font-weight: 700;">-₹${(Number(tx.extraDiscountAmount) || Number(tx.extraDiscountValue) || 0).toLocaleString("en-IN")}.00</td>
-                                </tr>
-                                ` : (tx.extraDiscountPercent && Number(tx.extraDiscountPercent) > 0) ? `
-                                <tr>
-                                    <td style="color: #7e22ce; font-weight: 700;">🌟 Special Concession (${tx.extraDiscountPercent}%)</td>
-                                    <td style="color: #7e22ce; font-weight: 700;">Applied</td>
-                                </tr>
-                                ` : ''}
-                                <tr>
-                                    <td>Tax (0%)</td>
-                                    <td>₹0.00</td>
-                                </tr>
-                                <tr class="grand-total">
-                                    <td>Total Paid</td>
-                                    <td style="color: #4f46e5;">₹${tx.amount?.toLocaleString("en-IN") || 0}.00</td>
-                                </tr>
-                            </table>
-                        </div>
-
-                        <div style="background: #f9fafb; border: 1px solid #e5e7eb; padding: 16px; border-radius: 12px; margin-bottom: 40px;">
-                            <p style="margin: 0; font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px; color: #9ca3af; font-weight: 800; margin-bottom: 6px;">Payment Verification Proof</p>
-                            <p style="margin: 0; font-family: monospace; font-size: 13px; font-weight: 700; color: #1f2937;">Transaction / Payment ID: ${tx.utr || "N/A"}</p>
-                            <p style="margin: 4px 0 0 0; font-size: 12px; font-weight: 500; color: #10b981;">✓ Paid Successfully & Verified</p>
-                        </div>
-
-                        <div class="footer">
-                            <p style="margin: 0; font-size: 14px; font-weight: 800; color: #4b5563; margin-bottom: 6px;">Thank you for using Hosteleaze!</p>
-                            <p style="margin: 0;">This is a computer-generated tax invoice receipt. No signature is required.</p>
-                        </div>
-                    </div>
-                </body>
-            </html>
-        `);
-        printWindow.document.close();
+        generateOfficialInvoicePDF(tx, {
+            name: collegeName || status?.name,
+            address: status?.address,
+            email: status?.email,
+            phone: status?.phone,
+            contactName: status?.contactName,
+            contactPhone: status?.contactPhone,
+            gstin: status?.gstin
+        });
     };
 
     const handleRenewalSubmit = async (e: React.FormEvent) => {

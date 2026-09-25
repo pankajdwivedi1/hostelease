@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect, useCallback, useRef } from "react";
 import { useRouter } from "next/navigation";
+import FastAvatar, { preloadFastImage } from "@/app/components/FastAvatar";
 
 // ============================================================
 // GATEPASS GATE DESKTOP — Split Screen: QR Code + Outing History
@@ -199,6 +200,7 @@ function RectangleTimer({ timeLeft, maxTime = 10 }: { timeLeft: number; maxTime?
 // ===================== Types =====================
 interface OutingRecord {
     _id: string;
+    id?: string;
     studentId: string;
     studentName: string;
     hostelName: string;
@@ -408,7 +410,15 @@ export default function GatepassView({ onClose }: { onClose?: () => void }) {
             email: fallbackRecord?.email || s?.email || "",
             profilePicture: fallbackRecord?.profilePicture || s?.profilePicture || fallbackRecord?.photo || s?.photo || "",
             photo: fallbackRecord?.photo || s?.photo || fallbackRecord?.profilePicture || s?.profilePicture || "",
+            outingType: fallbackRecord?.type || fallbackRecord?.outingType || fallbackRecord?.requestType || s?.outingType || s?.requestType || "",
+            leaveFrom: fallbackRecord?.fromDateTime || fallbackRecord?.leaveFrom || s?.leaveFrom || "",
+            leaveTo: fallbackRecord?.toDateTime || fallbackRecord?.leaveTo || fallbackRecord?.expectedReturnDate || fallbackRecord?.expectedReturnIstDate || s?.leaveTo || "",
+            leaveReason: fallbackRecord?.reason || fallbackRecord?.leaveReason || s?.leaveReason || "",
         };
+
+        if (initialStudent.profilePicture) {
+            preloadFastImage(initialStudent.profilePicture);
+        }
 
         if (initialStudent.fatherName || initialStudent.collegeName || initialStudent.profilePicture) {
             profileCache.current.set(studentId, {
@@ -419,7 +429,7 @@ export default function GatepassView({ onClose }: { onClose?: () => void }) {
         }
 
         setSelectedStudent(initialStudent);
-        if (fallbackRecord && (fallbackRecord.checkOutTime || fallbackRecord.checkInTime)) {
+        if (fallbackRecord && (fallbackRecord.checkOutTime || fallbackRecord.checkInTime || fallbackRecord.fromDateTime)) {
             setLastOuting(fallbackRecord);
         }
         setIsProfileModalOpen(true);
@@ -434,18 +444,22 @@ export default function GatepassView({ onClose }: { onClose?: () => void }) {
             if (res.ok) {
                 const data = await res.json();
                 if (data.student) {
+                    if (data.student.profilePicture) {
+                        preloadFastImage(data.student.profilePicture);
+                    }
                     const freshStudent = {
                         ...initialStudent,
                         ...data.student,
                         studentStatus: currentRealStatus
                     };
+                    const freshLastOuting = data.lastOuting || fallbackRecord || null;
                     profileCache.current.set(studentId, {
                         student: freshStudent,
-                        lastOuting: data.lastOuting || fallbackRecord || null,
+                        lastOuting: freshLastOuting,
                         ts: Date.now(),
                     });
                     setSelectedStudent(freshStudent);
-                    if (data.lastOuting) setLastOuting(data.lastOuting);
+                    if (freshLastOuting) setLastOuting(freshLastOuting);
                     setProfileError(null);
                 }
             }
@@ -501,8 +515,9 @@ export default function GatepassView({ onClose }: { onClose?: () => void }) {
                 });
                 setLoading(false);
             }
-        } catch (err) {
-            console.error("Failed to fetch live data:", err);
+        } catch (err: any) {
+            // Transient fetch failure during server reload or network switch
+            console.warn("Live data fetch warning (auto-recovering):", err?.message || err);
         }
     }, []);
 
@@ -1118,7 +1133,7 @@ export default function GatepassView({ onClose }: { onClose?: () => void }) {
             </div>
 
             {/* =================== RIGHT PANEL: LIVE OUTING HISTORY =================== */}
-            <div className="w-full md:w-[58%] flex flex-col p-6 md:p-8 bg-gradient-to-b from-[#0d1117] to-[#0a0e14] min-h-[500px] md:h-full md:overflow-hidden overflow-visible">
+            <div className="w-full md:w-[58%] flex flex-col p-2.5 sm:p-4 md:p-8 bg-gradient-to-b from-[#0d1117] to-[#0a0e14] min-h-[500px] md:h-full md:overflow-hidden overflow-visible">
                 {/* Summary Cards */}
                 <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-4 mb-2">
                     <h2 className="text-lg md:text-xl font-bold text-white m-0 flex items-center gap-2">
@@ -1363,7 +1378,7 @@ export default function GatepassView({ onClose }: { onClose?: () => void }) {
 
 
                 {/* Side-by-Side Lists Container */}
-                <div className="flex-1 flex flex-col md:flex-row gap-4 min-h-0 overflow-hidden">
+                <div className="flex-1 flex flex-col md:flex-row gap-3 md:gap-4 min-h-0 overflow-hidden">
                     {/* LEFT COLUMN: Currently Outside */}
                     <div className="flex-1 flex flex-col min-h-0">
                         <div className="mb-2">
@@ -1372,13 +1387,13 @@ export default function GatepassView({ onClose }: { onClose?: () => void }) {
                             </h3>
                         </div>
 
-                        <div className="flex-1 overflow-y-auto border border-[rgba(255,255,255,0.05)] rounded-xl p-2 bg-[#0a0a1a]/30 custom-scrollbar">
+                        <div className="flex-1 overflow-y-auto border-0 md:border md:border-[rgba(255,255,255,0.05)] rounded-none md:rounded-xl p-0 md:p-2 bg-transparent md:bg-[#0a0a1a]/30 custom-scrollbar">
                             {liveData?.currentlyOut && liveData.currentlyOut.length > 0 ? (
                                 <div className="flex flex-col gap-1.5">
                                     {liveData.currentlyOut.map((record, index) => {
                                         const targetId = record.studentId || (record as any).student_id || record._id || record.id;
                                         return (
-                                            <div key={record._id || (record as any).id || `out-${record.studentId || index}`} className="flex justify-between items-center py-1.5 px-2.5 bg-[#161b2e] rounded-xl border border-[#ff6b6b15] transition-all hover:border-[#ff6b6b30] group">
+                                            <div key={record._id || (record as any).id || `out-${record.studentId || index}`} className="flex justify-between items-center py-2 px-2.5 sm:px-3 bg-[#161b2e] rounded-xl border border-[#ff6b6b15] transition-all hover:border-[#ff6b6b30] group w-full">
                                                 <div className="flex items-center gap-2.5 min-w-0 flex-1">
                                                     <div
                                                         onClick={() => handleStudentClick(targetId, record)}
@@ -1387,10 +1402,10 @@ export default function GatepassView({ onClose }: { onClose?: () => void }) {
                                                         {record.studentName?.charAt(0)?.toUpperCase() || "?"}
                                                     </div>
                                                     <div className="min-w-0 flex-1">
-                                                        <div className="flex items-center gap-1.5">
+                                                        <div className="flex items-center gap-1.5 min-w-0">
                                                             <h4
                                                                 onClick={() => handleStudentClick(targetId, record)}
-                                                                className="text-[12px] font-bold text-white m-0 cursor-pointer hover:text-[#ff6b6b] transition-colors leading-tight truncate tracking-wide"
+                                                                className="text-[12px] sm:text-[13px] font-bold text-white m-0 cursor-pointer hover:text-[#ff6b6b] transition-colors leading-tight truncate tracking-wide flex-1 min-w-0"
                                                             >
                                                                 {record.studentName}
                                                             </h4>
@@ -1412,7 +1427,7 @@ export default function GatepassView({ onClose }: { onClose?: () => void }) {
                                                         </p>
                                                     </div>
                                                 </div>
-                                                <div className="flex flex-col items-end shrink-0">
+                                                <div className="flex flex-col items-end shrink-0 pl-2">
                                                     <span className="text-[12px] font-black text-[#ff6b6b] tabular-nums tracking-tighter">
                                                         {record.currentDurationText || formatDuration(record.currentDurationMinutes || 0)}
                                                     </span>
@@ -1441,13 +1456,13 @@ export default function GatepassView({ onClose }: { onClose?: () => void }) {
                             </h3>
                         </div>
 
-                        <div className="flex-1 overflow-y-auto border border-[rgba(255,255,255,0.05)] rounded-xl p-2 bg-[#0a0a1a]/30 custom-scrollbar">
+                        <div className="flex-1 overflow-y-auto border-0 md:border md:border-[rgba(255,255,255,0.05)] rounded-none md:rounded-xl p-0 md:p-2 bg-transparent md:bg-[#0a0a1a]/30 custom-scrollbar">
                             {liveData?.recentActivity && liveData.recentActivity.length > 0 ? (
                                 <div className="flex flex-col gap-1.5">
                                     {liveData.recentActivity.map((record, index) => {
                                         const targetId = record.studentId || (record as any).student_id || record._id || record.id;
                                         return (
-                                            <div key={record._id || (record as any).id || `recent-${record.studentId || index}`} className="flex justify-between items-center py-1.5 px-2.5 bg-[#161b2e] rounded-xl border border-[#00ff8815] transition-all hover:border-[#00ff8830] group">
+                                            <div key={record._id || (record as any).id || `recent-${record.studentId || index}`} className="flex justify-between items-center py-2 px-2.5 sm:px-3 bg-[#161b2e] rounded-xl border border-[#00ff8815] transition-all hover:border-[#00ff8830] group w-full">
                                                 <div className="flex items-center gap-2.5 min-w-0 flex-1">
                                                     <div
                                                         onClick={() => handleStudentClick(targetId, record)}
@@ -1458,7 +1473,7 @@ export default function GatepassView({ onClose }: { onClose?: () => void }) {
                                                     <div className="min-w-0 flex-1">
                                                         <h4
                                                             onClick={() => handleStudentClick(targetId, record)}
-                                                            className="text-[12px] font-bold text-white m-0 cursor-pointer hover:text-[#00ff88] transition-colors leading-tight truncate tracking-wide"
+                                                            className="text-[12px] sm:text-[13px] font-bold text-white m-0 cursor-pointer hover:text-[#00ff88] transition-colors leading-tight truncate tracking-wide flex-1 min-w-0"
                                                         >
                                                             {record.studentName}
                                                         </h4>
@@ -1467,7 +1482,7 @@ export default function GatepassView({ onClose }: { onClose?: () => void }) {
                                                         </p>
                                                     </div>
                                                 </div>
-                                                <div className="flex flex-col items-end shrink-0">
+                                                <div className="flex flex-col items-end shrink-0 pl-2">
                                                     <span className="text-[12px] font-black text-[#00ff88] tabular-nums tracking-tighter">
                                                         {getCompletedOutingDuration(record)}
                                                     </span>
@@ -1544,75 +1559,127 @@ export default function GatepassView({ onClose }: { onClose?: () => void }) {
                                         </div>
 
                                         {/* Registration ID + Hostel & Room + Recent History in 1 Row (Mobile & Desktop) */}
-                                        <div className="flex flex-wrap items-center gap-2 sm:gap-6 mt-1 sm:mt-2">
-                                            <div className="flex flex-col items-start group">
-                                                <p className="text-[7.5px] sm:text-[10px] font-black text-gray-400 uppercase tracking-widest group-hover:text-blue-500 transition-colors">Registration ID</p>
-                                                <p className="text-blue-600 font-extrabold text-[10px] sm:text-2xl tracking-tight">{selectedStudent.registrationId || "N/A"}</p>
+                                        <div className="flex flex-wrap sm:flex-nowrap items-center gap-2 sm:gap-3 lg:gap-4 mt-1 sm:mt-2">
+                                            <div className="flex flex-col items-start group shrink-0">
+                                                <p className="text-[7.5px] sm:text-[9px] font-black text-gray-400 uppercase tracking-widest group-hover:text-blue-500 transition-colors">Registration ID</p>
+                                                <p className="text-blue-600 font-extrabold text-[10px] sm:text-base md:text-lg lg:text-xl tracking-tight">{selectedStudent.registrationId || "N/A"}</p>
                                             </div>
 
-                                            <div className="w-[1px] h-6 sm:h-10 bg-slate-200" />
+                                            <div className="w-[1px] h-6 sm:h-8 bg-slate-200 shrink-0" />
 
-                                            <div className="flex flex-col items-start group">
-                                                <p className="text-[7.5px] sm:text-[10px] font-black text-gray-400 uppercase tracking-widest group-hover:text-blue-500 transition-colors">Hostel & Room</p>
-                                                <p className="text-gray-900 font-extrabold text-[10px] sm:text-2xl tracking-tight">{formatHostelDisplay(selectedStudent.hostelName)} • {selectedStudent.roomNumber}</p>
+                                            <div className="flex flex-col items-start group shrink-0">
+                                                <p className="text-[7.5px] sm:text-[9px] font-black text-gray-400 uppercase tracking-widest group-hover:text-blue-500 transition-colors">Hostel & Room</p>
+                                                <p className="text-gray-900 font-extrabold text-[10px] sm:text-base md:text-lg lg:text-xl tracking-tight">{formatHostelDisplay(selectedStudent.hostelName)} • {selectedStudent.roomNumber}</p>
                                             </div>
 
-                                            <div className="w-[1px] h-6 sm:h-10 bg-slate-200" />
+                                            <div className="w-[1px] h-6 sm:h-8 bg-slate-200 shrink-0" />
 
-                                            {/* Recent History — Side-by-Side OUT and IN Timestamps */}
-                                            <div className="flex flex-col items-start px-2 py-1.5 sm:px-3 sm:py-2 bg-slate-50/90 rounded-lg sm:rounded-2xl border border-slate-200/80 shrink-0 shadow-sm">
-                                                <p className="text-[7px] sm:text-[9px] font-black text-gray-500 uppercase tracking-widest mb-1">Recent Outing Record</p>
-                                                {lastOuting ? (
-                                                    <div className="flex items-center gap-2 sm:gap-3">
-                                                        {/* OUT TIMESTAMP */}
-                                                        <div className="flex flex-col px-2 py-1 bg-red-50/90 rounded-lg border border-red-100 min-w-[75px] sm:min-w-[90px]">
-                                                            <span className="text-[7px] sm:text-[8px] font-black text-red-500 uppercase tracking-tight">OUT 🚪</span>
-                                                            <span className="text-red-700 font-extrabold text-[8.5px] sm:text-xs leading-tight">
-                                                                {formatDateDDMMYYYY(lastOuting.checkOutISTDate || lastOuting.checkOutTime)}
-                                                            </span>
-                                                            <span className="text-red-600 font-bold text-[8px] sm:text-[10px] tabular-nums">
-                                                                {formatISTTimeAMPM(lastOuting.checkOutISTTime, lastOuting.checkOutTime)}
-                                                            </span>
+                                            {/* Recent History — Side-by-Side OUT and IN/EXPECTED Timestamps */}
+                                            {(() => {
+                                                const rawType = String((lastOuting as any)?.type || (lastOuting as any)?.requestType || selectedStudent?.outingType || selectedStudent?.requestType || '').toLowerCase();
+                                                const isHomeLeave = rawType.includes('leave') || rawType === 'hleave';
+                                                const isReturned = lastOuting?.status === 'in' || !!lastOuting?.checkInISTTime || !!lastOuting?.checkInTime;
+                                                const isCurrentlyOut = !isReturned && (lastOuting?.status === 'out' || selectedStudent?.studentStatus === 'out');
+
+                                                const fromDateVal = lastOuting?.checkOutISTDate || lastOuting?.checkOutTime || (lastOuting as any)?.fromDateTime || selectedStudent?.leaveFrom;
+                                                const fromTimeVal = lastOuting?.checkOutISTTime || lastOuting?.checkOutTime || (lastOuting as any)?.fromDateTime || selectedStudent?.leaveFrom;
+
+                                                let expectedReturnVal = (lastOuting as any)?.expectedReturnDate || (lastOuting as any)?.toDateTime || (lastOuting as any)?.expectedReturnIstDate || selectedStudent?.leaveTo || selectedStudent?.toDateTime;
+                                                if (isHomeLeave && !expectedReturnVal && fromDateVal) {
+                                                    try {
+                                                        const fromDateObj = new Date(fromDateVal);
+                                                        if (!isNaN(fromDateObj.getTime())) {
+                                                            expectedReturnVal = new Date(fromDateObj.getTime() + 6 * 24 * 60 * 60 * 1000).toISOString();
+                                                        }
+                                                    } catch (e) {}
+                                                }
+                                                const expectedReturnTimeVal = (lastOuting as any)?.expectedReturnIstTime || expectedReturnVal;
+
+                                                const isOverdue = isCurrentlyOut && isHomeLeave && expectedReturnVal && new Date(expectedReturnVal).getTime() < Date.now();
+
+                                                return (
+                                                    <div className="flex flex-col items-start px-2 py-1 sm:px-2.5 sm:py-1.5 bg-slate-50/90 rounded-lg sm:rounded-xl border border-slate-200/80 shrink-0 shadow-sm">
+                                                        <div className="flex items-center justify-between w-full gap-1.5 mb-0.5">
+                                                            <p className="text-[6.5px] sm:text-[8px] font-black text-gray-500 uppercase tracking-widest">
+                                                                {isHomeLeave ? "🏠 Home-Leave" : "Recent Outing"}
+                                                            </p>
+                                                            {isHomeLeave && isCurrentlyOut && (
+                                                                <span className={`text-[6px] sm:text-[7.5px] font-black px-1.5 py-0.2 rounded uppercase tracking-wider ${isOverdue ? "bg-red-100 text-red-700 border border-red-200 animate-pulse" : "bg-blue-100 text-blue-700 border border-blue-200"}`}>
+                                                                    {isOverdue ? "🚨 OVERDUE" : "ON LEAVE"}
+                                                                </span>
+                                                            )}
                                                         </div>
 
-                                                        {/* IN TIMESTAMP OR STILL OUTSIDE */}
-                                                        {lastOuting.status === 'in' || lastOuting.checkInISTTime || lastOuting.checkInTime ? (
-                                                            <div className="flex flex-col px-2 py-1 bg-green-50/90 rounded-lg border border-green-100 min-w-[75px] sm:min-w-[90px]">
-                                                                <span className="text-[7px] sm:text-[8px] font-black text-green-600 uppercase tracking-tight">IN 🏠</span>
-                                                                <span className="text-green-700 font-extrabold text-[8.5px] sm:text-xs leading-tight">
-                                                                    {formatDateDDMMYYYY(lastOuting.checkInISTDate || lastOuting.checkInTime || lastOuting.checkOutISTDate || lastOuting.checkOutTime)}
-                                                                </span>
-                                                                <span className="text-green-600 font-bold text-[8px] sm:text-[10px] tabular-nums">
-                                                                    {formatISTTimeAMPM(lastOuting.checkInISTTime || lastOuting.checkOutISTTime, lastOuting.checkInTime || lastOuting.checkOutTime)}
-                                                                </span>
+                                                        {lastOuting ? (
+                                                            <div className="flex items-center gap-1 sm:gap-2">
+                                                                {/* OUT / LEAVE FROM TIMESTAMP */}
+                                                                <div className="flex flex-col px-1.5 py-0.5 sm:px-2 sm:py-1 bg-red-50/90 rounded-md sm:rounded-lg border border-red-100 min-w-[68px] sm:min-w-[80px]">
+                                                                    <span className="text-[6.5px] sm:text-[7.5px] font-black text-red-500 uppercase tracking-tight">
+                                                                        {isHomeLeave ? "LEAVE FROM 🚪" : "OUT 🚪"}
+                                                                    </span>
+                                                                    <span className="text-red-700 font-extrabold text-[8px] sm:text-[10px] md:text-[11px] leading-tight">
+                                                                        {formatDateDDMMYYYY(fromDateVal)}
+                                                                    </span>
+                                                                    <span className="text-red-600 font-bold text-[7px] sm:text-[8.5px] md:text-[9px] tabular-nums">
+                                                                        {formatISTTimeAMPM(lastOuting.checkOutISTTime, fromTimeVal)}
+                                                                    </span>
+                                                                </div>
+
+                                                                {/* IN TIMESTAMP (IF RETURNED) */}
+                                                                {isReturned ? (
+                                                                    <div className="flex flex-col px-1.5 py-0.5 sm:px-2 sm:py-1 bg-green-50/90 rounded-md sm:rounded-lg border border-green-100 min-w-[68px] sm:min-w-[80px]">
+                                                                        <span className="text-[6.5px] sm:text-[7.5px] font-black text-green-600 uppercase tracking-tight">
+                                                                            {isHomeLeave ? "RETURNED IN 🏠" : "IN 🏠"}
+                                                                        </span>
+                                                                        <span className="text-green-700 font-extrabold text-[8px] sm:text-[10px] md:text-[11px] leading-tight">
+                                                                            {formatDateDDMMYYYY(lastOuting.checkInISTDate || lastOuting.checkInTime || lastOuting.checkOutISTDate || lastOuting.checkOutTime)}
+                                                                        </span>
+                                                                        <span className="text-green-600 font-bold text-[7px] sm:text-[8.5px] md:text-[9px] tabular-nums">
+                                                                            {formatISTTimeAMPM(lastOuting.checkInISTTime || lastOuting.checkOutISTTime, lastOuting.checkInTime || lastOuting.checkOutTime)}
+                                                                        </span>
+                                                                    </div>
+                                                                ) : isHomeLeave ? (
+                                                                    /* EXPECTED COMING DATE (IF ON LEAVE) */
+                                                                    <div className={`flex flex-col px-1.5 py-0.5 sm:px-2 sm:py-1 rounded-md sm:rounded-lg border min-w-[68px] sm:min-w-[80px] ${isOverdue ? "bg-red-50/90 border-red-200" : "bg-blue-50/90 border-blue-200"}`}>
+                                                                        <span className={`text-[6.5px] sm:text-[7.5px] font-black uppercase tracking-tight ${isOverdue ? "text-red-600" : "text-blue-600"}`}>
+                                                                            COMING 🏠
+                                                                        </span>
+                                                                        <span className={`font-extrabold text-[8px] sm:text-[10px] md:text-[11px] leading-tight ${isOverdue ? "text-red-700" : "text-blue-900"}`}>
+                                                                            {expectedReturnVal ? formatDateDDMMYYYY(expectedReturnVal) : "Pending Return"}
+                                                                        </span>
+                                                                        <span className={`font-bold text-[7px] sm:text-[8.5px] md:text-[9px] tabular-nums ${isOverdue ? "text-red-600" : "text-blue-600"}`}>
+                                                                            {expectedReturnVal ? formatISTTimeAMPM((lastOuting as any).expectedReturnIstTime, expectedReturnTimeVal) : "On Leave"}
+                                                                        </span>
+                                                                    </div>
+                                                                ) : (
+                                                                    /* FALLBACK STATUS BOX (REGULAR GATE-PASS) */
+                                                                    <div className="flex flex-col px-1.5 py-0.5 sm:px-2 sm:py-1 bg-amber-50 rounded-md sm:rounded-lg border border-amber-200 min-w-[68px] sm:min-w-[80px] justify-center">
+                                                                        <span className="text-[6.5px] sm:text-[7.5px] font-black text-amber-600 uppercase tracking-tight">STATUS</span>
+                                                                        <span className="text-amber-700 font-extrabold text-[8.5px] sm:text-[10.5px]">
+                                                                            🔴 Outside
+                                                                        </span>
+                                                                    </div>
+                                                                )}
                                                             </div>
                                                         ) : (
-                                                            <div className="flex flex-col px-2 py-1 bg-amber-50 rounded-lg border border-amber-200 min-w-[75px] sm:min-w-[90px] justify-center">
-                                                                <span className="text-[7px] sm:text-[8px] font-black text-amber-600 uppercase tracking-tight">STATUS</span>
-                                                                <span className="text-amber-700 font-extrabold text-[9px] sm:text-xs">🔴 Outside</span>
-                                                            </div>
+                                                            <p className="text-[8px] sm:text-xs text-gray-400 font-semibold italic">No gate pass history yet</p>
                                                         )}
                                                     </div>
-                                                ) : (
-                                                    <p className="text-[8px] sm:text-xs text-gray-400 font-semibold italic">No gate pass history yet</p>
-                                                )}
-                                            </div>
+                                                );
+                                            })()}
                                         </div>
 
                                     </div>
 
                                     {/* RIGHT: Profile Picture */}
                                     <div className="order-2 sm:order-1 shrink-0 mt-3 sm:-mt-8 z-10">
-                                        <div className="w-24 h-24 sm:w-48 sm:h-48 rounded-2xl sm:rounded-[2rem] ring-[3px] ring-blue-500 shadow-[0_10px_30px_rgba(0,0,0,0.15)] sm:shadow-[0_20px_50px_rgba(0,0,0,0.2)]">
-                                            <div className="w-full h-full rounded-2xl sm:rounded-[2rem] bg-gray-50 flex items-center justify-center text-3xl sm:text-7xl font-black text-blue-600 overflow-hidden">
-                                                {selectedStudent.profilePicture ? (
-                                                    <img src={selectedStudent.profilePicture} alt={selectedStudent.name} className="w-full h-full object-cover" />
-                                                ) : (
-                                                    <span className="bg-gradient-to-br from-blue-600 to-indigo-700 bg-clip-text text-transparent">
-                                                        {selectedStudent.name?.charAt(0).toUpperCase()}
-                                                    </span>
-                                                )}
-                                            </div>
+                                        <div className="w-24 h-24 sm:w-48 sm:h-48 rounded-2xl sm:rounded-[2rem] ring-[3px] ring-blue-500 shadow-[0_10px_30px_rgba(0,0,0,0.15)] sm:shadow-[0_20px_50px_rgba(0,0,0,0.2)] overflow-hidden">
+                                            <FastAvatar
+                                                src={selectedStudent.profilePicture || selectedStudent.photo}
+                                                name={selectedStudent.name}
+                                                className="w-full h-full rounded-2xl sm:rounded-[2rem]"
+                                                sizeClass="text-3xl sm:text-7xl"
+                                            />
                                         </div>
                                     </div>
                                 </div>
@@ -1631,6 +1698,7 @@ export default function GatepassView({ onClose }: { onClose?: () => void }) {
                                         { label: "Mother Name", value: selectedStudent.motherName || "N/A", icon: "👩‍👦" },
                                         { label: "Mother Mobile", value: selectedStudent.motherNumber || "N/A", icon: "📱" },
                                         { label: "Permanent Address", value: `${selectedStudent.permanentAddress || "N/A"}${selectedStudent.homeState ? `, ${selectedStudent.homeState}` : ""}`, icon: "🏠", fullWidth: true },
+                                        ...(selectedStudent.leaveReason ? [{ label: "Leave Reason", value: selectedStudent.leaveReason, icon: "📝", fullWidth: true, valueClass: "text-amber-800 font-bold" }] : []),
                                     ].map((item: any, idx) => (
                                         <div key={idx} className={`flex gap-2 sm:gap-4 items-start bg-white p-2.5 sm:p-0 sm:bg-transparent rounded-xl sm:rounded-none border border-gray-100 sm:border-0 shadow-sm sm:shadow-none ${item.fullWidth ? 'col-span-2 lg:col-span-3' : ''}`}>
                                             <div className="w-7 h-7 sm:w-10 sm:h-10 rounded-lg sm:rounded-xl bg-gray-50 sm:bg-white shadow-sm flex items-center justify-center text-sm sm:text-lg shrink-0 border border-gray-100">{item.icon}</div>

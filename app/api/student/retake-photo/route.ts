@@ -35,7 +35,7 @@ export async function POST(req: NextRequest) {
         // Fetch current student by studentId or firebaseUID
         let student = await db.students.getById(targetId);
         if (!student && firebaseUID) {
-            student = await db.students.getByFirebaseUID(firebaseUID);
+            student = await db.students.findOne({ firebaseUID });
         }
         if (!student && studentId) {
             student = await db.students.getById(studentId);
@@ -52,7 +52,7 @@ export async function POST(req: NextRequest) {
         if (profilePicture && (profilePicture.startsWith("data:image/") || profilePicture.startsWith("data:"))) {
             try {
                 const { saveFileToRailway } = await import("@/lib/fileStorage");
-                const studentUid = student.firebaseUid || student.firebaseUID || firebaseUID || targetId;
+                const studentUid = (student as any).firebaseUid || student.firebaseUID || firebaseUID || targetId;
                 const tenantFolder = student.tenantId || "default";
                 const filename = `${studentUid}_${Date.now()}`;
                 const savedUrl = await saveFileToRailway(profilePicture, `profile-pictures/${tenantFolder}`, filename);
@@ -68,7 +68,7 @@ export async function POST(req: NextRequest) {
             profilePicture: finalProfilePicture,
             faceDescriptor,
             dynamicFields,
-            firebaseUid: student.firebaseUid || student.firebaseUID || firebaseUID,
+            firebaseUid: (student as any).firebaseUid || student.firebaseUID || firebaseUID,
             email: student.email,
             phoneNumber: student.phoneNumber
         };

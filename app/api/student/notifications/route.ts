@@ -59,12 +59,8 @@ export async function POST(request: NextRequest) {
             return NextResponse.json({ error: "Missing fields" }, { status: 400 });
         }
 
-        const notification = await db.notifications.update(
-            notificationId,
-            {
-                $addToSet: { acknowledgedBy: { studentId: studentId, at: new Date() } },
-            }
-        );
+        await db.notifications.acknowledge(notificationId, studentId);
+        const notification = await db.notifications.getById(notificationId);
 
         return NextResponse.json({ success: true, notification });
     } catch (error: any) {

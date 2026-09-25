@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useParams } from "next/navigation";
+import { formatDateDDMMYYYY } from "@/lib/dateFormat";
 
 interface StudentInfo {
     name: string;
@@ -218,7 +219,7 @@ export default function PublicStudentProfile() {
                                     .filter(f => f.visible && !['name', 'email', 'phoneNumber', 'collegeName', 'branch', 'section', 'hostelName', 'roomNumber', 'erpInformation'].includes(f.id))
                                     .map((field) => {
                                         const value = (student as any)[field.id] || student.dynamicFields?.[field.id] || "N/A";
-                                        const displayValue = (field.type === 'date' || field.id === 'joiningDate') ? new Date(value).toLocaleDateString() : value;
+                                        const displayValue = (field.type === 'date' || field.id === 'joiningDate') ? formatDateDDMMYYYY(value) : value;
 
                                         return (
                                             <div key={field.id} className="bg-gray-50 rounded-lg p-3">

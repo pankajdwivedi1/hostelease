@@ -140,6 +140,17 @@ const filterGatePassForPrisma = (data: any) => {
             }
         }
     }
+    // ⚡ GLOBAL INTEGRITY: Always guarantee clean type
+    if (filtered.type) {
+        const rawT = String(filtered.type).toLowerCase().trim();
+        if (rawT.includes('leave') || rawT === 'hleave' || rawT === 'home') {
+            filtered.type = 'HOME-LEAVE';
+        } else if (rawT.includes('outing') || rawT.includes('gate-pass') || rawT.includes('gatepass')) {
+            filtered.type = 'outing';
+        }
+    } else if (filtered.type === null || filtered.type === undefined) {
+        filtered.type = 'outing';
+    }
     return filtered;
 };
 
@@ -191,6 +202,14 @@ const filterPermissionForPrisma = (data: any) => {
             }
         }
     }
+    // ⚡ GLOBAL INTEGRITY: Synchronize role statuses with overall decision
+    if (filtered.status === 'allowed') {
+        if (!filtered.wardenStatus || filtered.wardenStatus === 'pending') filtered.wardenStatus = 'allowed';
+        if (!filtered.deanStatus || filtered.deanStatus === 'pending') filtered.deanStatus = 'allowed';
+    } else if (filtered.status === 'rejected') {
+        if (!filtered.wardenStatus || filtered.wardenStatus === 'pending') filtered.wardenStatus = 'rejected';
+        if (!filtered.deanStatus || filtered.deanStatus === 'pending') filtered.deanStatus = 'rejected';
+    }
     return filtered;
 };
 
@@ -215,18 +234,19 @@ const filterTransactionForPrisma = (data: any) => {
 };
 
 const filterNotificationForPrisma = (data: any) => {
+    const rawData = data?.$set || data || {};
     const fields = [
         'id', 'senderId', 'targetType', 'targetHostel', 'targetStudentId',
         'message', 'image', 'priority', 'expiresAt', 'acknowledgedBy'
     ];
     const filtered: any = {};
     for (const key of fields) {
-        if (data[key] !== undefined) {
-            if (key === 'expiresAt' && data[key]) {
-                const d = new Date(data[key]);
+        if (rawData[key] !== undefined) {
+            if (key === 'expiresAt' && rawData[key]) {
+                const d = new Date(rawData[key]);
                 filtered[key] = isNaN(d.getTime()) ? null : d;
             } else {
-                filtered[key] = data[key];
+                filtered[key] = rawData[key];
             }
         }
     }
@@ -312,8 +332,8 @@ export const mapStudentToCamelCase = (s: any) => {
             if (genderKey && df[genderKey] && String(df[genderKey]).trim()) return String(df[genderKey]).trim();
             
             const h = (s.hostel_name || s.hostelName || "").toLowerCase();
-            if (h.includes("boy") || h.includes("ghb")) return "MALE";
-            if (h.includes("girl")) return "FEMALE";
+            if (h.includes("boy") || h.includes("ghb") || h.startsWith("bh")) return "MALE";
+            if (h.includes("girl") || h.includes("gangotri") || h.includes("gaytri") || h.includes("gayatri") || h.includes("female") || h.includes("women") || h.startsWith("gh")) return "FEMALE";
             return "MALE";
         })(),
         dob: profile?.dob !== undefined ? profile.dob : s.dob,
@@ -591,6 +611,7 @@ export const mapFieldEnforcementToCamelCase = (f: any) => {
         notificationPriority: f.notification_priority || f.notificationPriority || 'medium',
         successMessage: f.success_message || f.successMessage || 'Profile details completed successfully!',
         autoCloseNotification: f.auto_close_notification !== undefined ? f.auto_close_notification : (f.autoCloseNotification ?? true),
+        durationDays: f.duration_days !== undefined ? f.duration_days : f.durationDays,
         tenantId: f.tenant_id || f.tenantId,
         createdAt: f.created_at || f.createdAt,
         updatedAt: f.updated_at || f.updatedAt
@@ -1935,7 +1956,7 @@ export const db = {
             return db.gatePasses.list(filter, options);
         },
 
-        list: async (filter: any = {}, options: { page?: number; limit?: number; offset?: number; countOnly?: boolean; sortField?: string; sortOrder?: 'asc' | 'desc'; populate?: boolean; light?: boolean } = {}) => {
+        list: async (filter: any = {}, options: { page?: number; limit?: number; offset?: number; countOnly?: boolean; skipCount?: boolean; sortField?: string; sortOrder?: 'asc' | 'desc'; populate?: boolean; light?: boolean } = {}) => {
             let tenantId: string | null = null;
             try {
                 tenantId = await getTenantIdOrThrow();
@@ -1945,7 +1966,20 @@ export const db = {
             if (tenantId) whereClause.tenantId = tenantId;
             if (filter.studentId) whereClause.studentId = filter.studentId;
             if (filter.status) whereClause.status = filter.status;
-            if (filter.type) whereClause.type = filter.type;
+            if (filter.type) {
+                const rawT = String(filter.type).toLowerCase().trim();
+                if (rawT === 'leave' || rawT === 'home-leave' || rawT === 'hleave') {
+                    whereClause.type = {
+                        in: ['leave', 'HOME-LEAVE', 'home-leave', 'hleave', 'LEAVE', 'Home-Leave', 'Home Leave', 'home']
+                    };
+                } else if (rawT === 'outing' || rawT === 'gate-pass' || rawT === 'gatepass') {
+                    whereClause.type = {
+                        in: ['outing', 'GATE-PASS', 'gate-pass', 'gatepass', 'OUTING', 'Gate-Pass', 'Gate Pass']
+                    };
+                } else {
+                    whereClause.type = { equals: filter.type, mode: 'insensitive' };
+                }
+            }
             if (filter.firebaseUID) whereClause.firebaseUid = filter.firebaseUID;
             if (filter.registrationId) whereClause.registrationId = filter.registrationId;
             if (filter.hostelName && filter.hostelName !== 'all') {
@@ -2052,15 +2086,29 @@ export const db = {
         },
 
         create: async (gatePassData: any) => {
-            let tenantId: string | null = null;
-            try {
-                tenantId = await getTenantIdOrThrow();
-            } catch (err) {}
+            let tenantId: string | null = gatePassData.tenantId || null;
+            if (!tenantId) {
+                try {
+                    tenantId = await getTenantIdOrThrow();
+                } catch (err) {}
+            }
+            if (!tenantId && gatePassData.studentId) {
+                try {
+                    const st = await prisma.student.findUnique({
+                        where: { id: gatePassData.studentId },
+                        select: { tenantId: true }
+                    });
+                    if (st?.tenantId) tenantId = st.tenantId;
+                } catch (e) {}
+            }
+            if (!tenantId) {
+                tenantId = "26739d24-0214-409b-aa81-42e628e88c2b";
+            }
 
             const data = {
                 ...filterGatePassForPrisma(gatePassData),
                 id: crypto.randomUUID(),
-                tenantId: gatePassData.tenantId || tenantId
+                tenantId: tenantId
             };
             const record = await prisma.gatePass.create({ data });
             return mapGatePassToCamelCase(record);
@@ -2149,6 +2197,11 @@ export const db = {
                 where: { expiresAt: { lt: new Date() } }
             });
             return true;
+        },
+
+        deleteMany: async (filter: any = {}) => {
+            const res = await prisma.gatePassToken.deleteMany({ where: filter });
+            return { deletedCount: res.count };
         }
     },
 
@@ -2296,6 +2349,15 @@ export const db = {
                 id: crypto.randomUUID()
             };
             const record = await prisma.notification.create({ data: prismaData });
+            return mapNotificationToCamelCase(record);
+        },
+
+        update: async (id: string, data: any) => {
+            const prismaData = filterNotificationForPrisma(data);
+            const record = await prisma.notification.update({
+                where: { id },
+                data: prismaData
+            });
             return mapNotificationToCamelCase(record);
         },
 

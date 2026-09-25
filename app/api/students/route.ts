@@ -92,6 +92,7 @@ export async function POST(request: NextRequest) {
     if (adminSettings?.enforceUniqueFace && faceDescriptor && Array.isArray(faceDescriptor) && faceDescriptor.length > 0) {
       const allStudents = await db.students.list({});
       for (const s of allStudents) {
+        if (!s) continue;
         if (existingStudent && (s.firebaseUID === existingStudent.firebaseUID || s._id === existingStudent._id)) continue;
         if (s.faceDescriptor && Array.isArray(s.faceDescriptor) && s.faceDescriptor.length === faceDescriptor.length) {
           let sum = 0;
@@ -293,13 +294,15 @@ export async function POST(request: NextRequest) {
       const operator = isOnboarding ? "Self (Onboarding)" : (adminEmail || wardenUsername || "Admin");
       const actionType = isOnboarding ? 'ONBOARD' : (existingStudent ? 'UPDATE' : 'ADD');
 
-      await writeHostelActivityLog({
-        hostelName: student.hostelName || hostelName,
-        actionType,
-        studentName: student.name || name || "Unknown Student",
-        erpId: student.erpInformation || erpInformation || "N/A",
-        operator,
-      });
+      if (student) {
+        await writeHostelActivityLog({
+          hostelName: student.hostelName || hostelName,
+          actionType,
+          studentName: student.name || name || "Unknown Student",
+          erpId: student.erpInformation || erpInformation || "N/A",
+          operator,
+        });
+      }
     } catch (logErr) {
       console.error("Failed to write hostel activity log:", logErr);
     }
@@ -409,7 +412,7 @@ export async function GET(request: NextRequest) {
           stud.outingType = (pType === 'leave' || pType === 'home-leave' || pType === 'hleave') ? 'leave' : 'outing';
           stud.leaveReason = openPass.reason;
           stud.leaveFrom = openPass.checkOutIstDate ? `${openPass.checkOutIstDate} ${openPass.checkOutIstTime || ''}` : openPass.checkOutTime;
-          stud.leaveTo = openPass.expectedReturnDate || openPass.expectedReturnIstDate || null;
+          stud.leaveTo = (openPass as any).expectedReturnDate || (openPass as any).expectedReturnIstDate || null;
         } else {
           stud.studentStatus = stud.studentStatus || "in";
           stud.outingType = undefined;
@@ -534,7 +537,7 @@ export async function GET(request: NextRequest) {
       await enrichStudentOuting(student);
 
       if (isNotModified(student)) {
-        return NextResponse.json({ notModified: true, success: true, studentStatus: student.studentStatus || "in", outingType: student.outingType }, { status: 200 });
+        return NextResponse.json({ notModified: true, success: true, studentStatus: student.studentStatus || "in", outingType: (student as any).outingType }, { status: 200 });
       }
       const tenant = student.tenantId ? await getTenantById(student.tenantId) : null;
       return NextResponse.json({ 
@@ -668,8 +671,8 @@ export async function GET(request: NextRequest) {
 
       // 2. Fetch Active Permissions to enrich student leave information (lean, no relation overhead)
       try {
-        const permsResult = await db.permissions.list({ status: "allowed" }, { limit: 100, populate: false });
-        const permsList = Array.isArray(permsResult) ? permsResult : (permsResult?.records || permsResult?.permissions || []);
+        const permsResult = await db.permissions.list({}, { limit: 500, populate: false });
+        const permsList = Array.isArray(permsResult) ? permsResult : (permsResult?.records || (permsResult as any)?.permissions || []);
         const permsById = new Map<string, any>();
         const permsByReg = new Map<string, any>();
         const permsByName = new Map<string, any>();

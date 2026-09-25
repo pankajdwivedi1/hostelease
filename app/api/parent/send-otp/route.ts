@@ -44,6 +44,7 @@ export async function POST(request: NextRequest) {
 
     if (students && students.length > 0) {
       for (const s of students) {
+        if (!s) continue;
         const fatherNorm = normalizePhoneWithCountry(s.fatherNumber);
         const motherNorm = normalizePhoneWithCountry(s.motherNumber);
         const lgNorm = normalizePhoneWithCountry(s.localGuardianPhoneNumber);

@@ -3,6 +3,7 @@ export const dynamic = "force-dynamic";
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/dbAdapter";
 import { checkRateLimit } from "@/lib/requestLimiter";
+import { formatDateTimeDDMMYYYY } from "@/lib/dateFormat";
 
 // Cache for AdminSettings to reduce DB load during peak times
 let cachedAdminSettings: any = null;
@@ -379,7 +380,7 @@ export async function POST(request: NextRequest) {
                                 (wl.name && wl.name.toLowerCase().includes(hostelName.toLowerCase()))
                             );
 
-                            const currentTimestamp = new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+                            const currentTimestamp = formatDateTimeDDMMYYYY(new Date());
 
                             if (existingHostelIpIdx >= 0) {
                                 const isWardenSynced = updatedWhitelist[existingHostelIpIdx].name?.toLowerCase().includes("warden") ||

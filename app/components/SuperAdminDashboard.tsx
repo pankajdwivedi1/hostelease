@@ -28,8 +28,11 @@ import {
     Database,
     Loader2,
     Edit3,
-    FileText
+    FileText,
+    Cloud
 } from "lucide-react";
+import { generateOfficialInvoicePDF } from "@/lib/invoicePdfGenerator";
+import { formatToDDMMYYYY, formatDateDDMMYYYY, formatDateTimeDDMMYYYY } from "@/lib/dateFormat";
 
 interface Tenant {
     _id: string;
@@ -645,6 +648,8 @@ export default function SuperAdminDashboard() {
     const [selectedInvoiceId, setSelectedInvoiceId] = useState<string | null>(null);
     const [invoiceTenantId, setInvoiceTenantId] = useState<string>("");
     const [invoiceTenantName, setInvoiceTenantName] = useState<string>("");
+    const [invoiceStudentCount, setInvoiceStudentCount] = useState<string>("500");
+    const [invoiceRatePerStudentMonth, setInvoiceRatePerStudentMonth] = useState<string>("30");
     const [invoiceAmount, setInvoiceAmount] = useState<string>("");
     const [invoiceUtr, setInvoiceUtr] = useState<string>("");
     const [invoiceDate, setInvoiceDate] = useState<string>("");
@@ -654,20 +659,65 @@ export default function SuperAdminDashboard() {
     const [invoiceRemarks, setInvoiceRemarks] = useState<string>("");
     const [invoiceExtraDiscountType, setInvoiceExtraDiscountType] = useState<"percent" | "amount">("amount");
     const [invoiceExtraDiscountValue, setInvoiceExtraDiscountValue] = useState<string>("");
+    const [invoiceScreenshotUrl, setInvoiceScreenshotUrl] = useState<string>("");
+    const [invoiceCollegeAddress, setInvoiceCollegeAddress] = useState<string>("Oriental Campus, Raisen Road, Bhopal, MP - 462021");
+    const [invoiceCollegeEmail, setInvoiceCollegeEmail] = useState<string>("pankajdwivedi81@gmail.com");
+    const [invoiceCollegePhone, setInvoiceCollegePhone] = useState<string>("+91 9981414729 / 0755-2529015");
+    const [invoiceCollegeCoordinator, setInvoiceCollegeCoordinator] = useState<string>("Dr Pankaj Dwivedi");
+    const [invoiceCollegeCoordinatorPhone, setInvoiceCollegeCoordinatorPhone] = useState<string>("7974704918");
+    const [invoiceCollegeGstin, setInvoiceCollegeGstin] = useState<string>("");
+    const [isUploadingProof, setIsUploadingProof] = useState<boolean>(false);
     const [isSavingInvoice, setIsSavingInvoice] = useState<boolean>(false);
     const [isDeletingInvoiceId, setIsDeletingInvoiceId] = useState<string | null>(null);
+    const [isRetrievingR2, setIsRetrievingR2] = useState<boolean>(false);
+
+    const handleRetrieveAllInvoicesFromR2 = async () => {
+        setIsRetrievingR2(true);
+        try {
+            const res = await fetch("/api/super-admin/billing-ledger?forceR2=true");
+            const data = await res.json();
+            if (data.success) {
+                setBillingLogs(data.logs);
+                showToast(`🎉 Cloudflare R2 Sync Complete! Retrieved ${data.totalRetrieved || data.logs.length} permanent invoices.`, "success");
+            } else {
+                showToast(data.error || "Failed to retrieve from Cloudflare", "error");
+            }
+        } catch (e: any) {
+            showToast(e.message || "Failed to connect to Cloudflare R2", "error");
+        } finally {
+            setIsRetrievingR2(false);
+        }
+    };
 
     const handleOpenCreateInvoiceModal = () => {
         setInvoiceModalMode("create");
         setSelectedInvoiceId(null);
         if (tenants.length > 0) {
             const firstT = tenants[0];
-            setInvoiceTenantId((firstT as any)._id || (firstT as any).id || firstT.slug);
+            const tid = (firstT as any)._id || (firstT as any).id || firstT.slug;
+            const isOgi = firstT.name.toLowerCase().includes("oriental") || firstT.slug.includes("ogi");
+            setInvoiceTenantId(tid);
             setInvoiceTenantName(firstT.name);
+            setInvoiceStudentCount(String((firstT as any).studentCount || 500));
+            setInvoiceCollegeAddress((firstT as any).address || (isOgi ? "Oriental Campus, Raisen Road, Bhopal, MP - 462021" : ""));
+            setInvoiceCollegeEmail(firstT.adminEmail || (firstT as any).email || (isOgi ? "pankajdwivedi81@gmail.com" : ""));
+            setInvoiceCollegePhone((firstT as any).phone || (isOgi ? "+91 9981414729 / 0755-2529015" : ""));
+            setInvoiceCollegeCoordinator((firstT as any).contactName || "Dr Pankaj Dwivedi");
+            setInvoiceCollegeCoordinatorPhone((firstT as any).contactPhone || "7974704918");
+            setInvoiceCollegeGstin((firstT as any).gstin || "");
         } else {
             setInvoiceTenantId("");
             setInvoiceTenantName("");
+            setInvoiceStudentCount("500");
+            setInvoiceCollegeAddress("Oriental Campus, Raisen Road, Bhopal, MP - 462021");
+            setInvoiceCollegeEmail("pankajdwivedi81@gmail.com");
+            setInvoiceCollegePhone("+91 9981414729 / 0755-2529015");
+            setInvoiceCollegeCoordinator("Dr Pankaj Dwivedi");
+            setInvoiceCollegeCoordinatorPhone("7974704918");
+            setInvoiceCollegeGstin("");
         }
+        setInvoiceRatePerStudentMonth("30");
+        setInvoiceBillingPeriod("1 Year");
         setInvoiceAmount("");
         setInvoiceExtraDiscountType("amount");
         setInvoiceExtraDiscountValue("");
@@ -675,8 +725,8 @@ export default function SuperAdminDashboard() {
         setInvoiceDate(new Date().toISOString().split("T")[0]);
         setInvoiceBillingType("Verified Payment");
         setInvoicePaymentSource("Direct Bank / UPI Transfer (UTR Verified)");
-        setInvoiceBillingPeriod("1 Year");
         setInvoiceRemarks("");
+        setInvoiceScreenshotUrl("");
         setInvoiceModalOpen(true);
     };
 
@@ -685,6 +735,9 @@ export default function SuperAdminDashboard() {
         setSelectedInvoiceId(log.id);
         setInvoiceTenantId(log.tenantId || "");
         setInvoiceTenantName(log.tenantName || "");
+        setInvoiceStudentCount(String(log.studentCount || 500));
+        setInvoiceRatePerStudentMonth(String(log.ratePerStudentMonth || 30));
+        setInvoiceBillingPeriod(log.billingPeriod || "1 Year");
         setInvoiceAmount(log.amount !== undefined ? String(log.amount) : "");
         if (log.extraDiscountType === "amount" || (log.extraDiscountAmount && Number(log.extraDiscountAmount) > 0)) {
             setInvoiceExtraDiscountType("amount");
@@ -700,9 +753,41 @@ export default function SuperAdminDashboard() {
         setInvoiceDate(log.date ? new Date(log.date).toISOString().split("T")[0] : new Date().toISOString().split("T")[0]);
         setInvoiceBillingType(log.billingType || "Verified Payment");
         setInvoicePaymentSource(log.paymentSource || "Direct Bank / UPI Transfer (UTR Verified)");
-        setInvoiceBillingPeriod(log.billingPeriod || "1 Year");
         setInvoiceRemarks(log.remarks || "");
+        setInvoiceScreenshotUrl(log.screenshotUrl || "");
+
+        const isOgi = String(log.tenantName || "").toLowerCase().includes("oriental") || log.id === "tx_seed_ogi";
+        setInvoiceCollegeAddress(log.collegeDetails?.address || (isOgi ? "Oriental Campus, Raisen Road, Bhopal, MP - 462021" : ""));
+        setInvoiceCollegeEmail(log.collegeDetails?.email || (isOgi ? "pankajdwivedi81@gmail.com" : ""));
+        setInvoiceCollegePhone(log.collegeDetails?.phone || (isOgi ? "+91 9981414729 / 0755-2529015" : ""));
+        setInvoiceCollegeCoordinator(log.collegeDetails?.contactName || "Dr Pankaj Dwivedi");
+        setInvoiceCollegeCoordinatorPhone(log.collegeDetails?.contactPhone || "7974704918");
+        setInvoiceCollegeGstin(log.collegeDetails?.gstin || "");
         setInvoiceModalOpen(true);
+    };
+
+    const handleProofFileUpload = async (file: File) => {
+        setIsUploadingProof(true);
+        try {
+            const formData = new FormData();
+            formData.append("file", file);
+            formData.append("invoiceId", selectedInvoiceId || `inv_${Date.now()}`);
+            const res = await fetch("/api/admin/upload-payment-proof", {
+                method: "POST",
+                body: formData
+            });
+            const data = await res.json();
+            if (data.success && data.url) {
+                setInvoiceScreenshotUrl(data.url);
+                showToast("Payment proof screenshot uploaded to Cloudflare R2!", "success");
+            } else {
+                showToast(data.error || "Upload failed", "error");
+            }
+        } catch (e: any) {
+            showToast(e.message || "Failed to upload screenshot", "error");
+        } finally {
+            setIsUploadingProof(false);
+        }
     };
 
     const handleSaveInvoice = async (e: React.FormEvent) => {
@@ -715,11 +800,36 @@ export default function SuperAdminDashboard() {
         setIsSavingInvoice(true);
         try {
             const discountNum = Number(invoiceExtraDiscountValue) || 0;
+            const months = invoiceBillingPeriod.includes("1 Month") ? 1 :
+                invoiceBillingPeriod.includes("3") ? 3 :
+                invoiceBillingPeriod.includes("6") ? 6 :
+                invoiceBillingPeriod.includes("2 Year") ? 24 :
+                invoiceBillingPeriod.includes("3 Year") ? 36 : 12;
+
+            const studentCount = Number(invoiceStudentCount) || 500;
+            const ratePerStudentMonth = Number(invoiceRatePerStudentMonth) || 30;
+            const grossBase = studentCount * ratePerStudentMonth * months;
+
+            const collegeDetails = {
+                name: invoiceTenantName,
+                address: invoiceCollegeAddress,
+                email: invoiceCollegeEmail,
+                phone: invoiceCollegePhone,
+                contactName: invoiceCollegeCoordinator,
+                contactPhone: invoiceCollegeCoordinatorPhone,
+                gstin: invoiceCollegeGstin
+            };
+
             const payload = {
                 id: selectedInvoiceId,
                 tenantId: invoiceTenantId,
                 tenantName: invoiceTenantName,
-                amount: Number(invoiceAmount) || 0,
+                studentCount,
+                ratePerStudentMonth,
+                billingPeriod: invoiceBillingPeriod,
+                months,
+                grossBase,
+                amount: invoiceAmount ? Number(invoiceAmount) : undefined,
                 extraDiscountType: invoiceExtraDiscountType,
                 extraDiscountValue: discountNum,
                 extraDiscountPercent: invoiceExtraDiscountType === "percent" ? discountNum : 0,
@@ -728,8 +838,9 @@ export default function SuperAdminDashboard() {
                 date: invoiceDate ? new Date(invoiceDate).toISOString() : new Date().toISOString(),
                 billingType: invoiceBillingType,
                 paymentSource: invoicePaymentSource,
-                billingPeriod: invoiceBillingPeriod,
-                remarks: invoiceRemarks
+                remarks: invoiceRemarks,
+                screenshotUrl: invoiceScreenshotUrl,
+                collegeDetails
             };
 
             const method = invoiceModalMode === "create" ? "POST" : "PUT";
@@ -744,8 +855,8 @@ export default function SuperAdminDashboard() {
                 setBillingLogs(data.logs);
                 showToast(
                     invoiceModalMode === "create"
-                        ? "New invoice generated and published to tenant!"
-                        : "Invoice successfully updated!",
+                        ? "New invoice generated and permanently saved to Cloudflare R2!"
+                        : "Invoice successfully updated on Cloudflare R2 & live PDF!",
                     "success"
                 );
                 setInvoiceModalOpen(false);
@@ -757,6 +868,10 @@ export default function SuperAdminDashboard() {
         } finally {
             setIsSavingInvoice(false);
         }
+    };
+
+    const handleViewInvoicePDF = (log: any) => {
+        generateOfficialInvoicePDF(log, log.collegeDetails);
     };
 
     const handleDeleteInvoice = async (id: string, tenantName: string) => {
@@ -1508,6 +1623,22 @@ export default function SuperAdminDashboard() {
                                     </div>
                                     <div className="flex flex-wrap items-center gap-2">
                                         <button 
+                                            onClick={handleRetrieveAllInvoicesFromR2}
+                                            disabled={isRetrievingR2}
+                                            className="bg-sky-600 hover:bg-sky-700 text-white px-4 py-2 rounded-xl text-[9px] font-black uppercase tracking-widest active:scale-95 transition-all shadow-md shadow-sky-500/20 flex items-center justify-center gap-1.5 cursor-pointer disabled:opacity-50"
+                                            title="Deep-scan & retrieve all permanent invoices stored on Cloudflare R2 bucket"
+                                        >
+                                            {isRetrievingR2 ? (
+                                                <>
+                                                    <Loader2 className="w-3.5 h-3.5 animate-spin" /> Retrieving...
+                                                </>
+                                            ) : (
+                                                <>
+                                                    <Cloud className="w-3.5 h-3.5" /> ☁️ Retrieve from Cloudflare
+                                                </>
+                                            )}
+                                        </button>
+                                        <button 
                                             onClick={handleOpenCreateInvoiceModal}
                                             className="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-xl text-[9px] font-black uppercase tracking-widest active:scale-95 transition-all shadow-md shadow-indigo-500/20 flex items-center justify-center gap-1.5 cursor-pointer"
                                         >
@@ -1529,6 +1660,7 @@ export default function SuperAdminDashboard() {
                                             <tr className="border-b border-slate-100 text-slate-400 font-black uppercase tracking-wider text-[8px]">
                                                 <th className="py-3 px-4">Date</th>
                                                 <th className="py-3 px-4">College/University</th>
+                                                <th className="py-3 px-4">Students</th>
                                                 <th className="py-3 px-4">Billing Type</th>
                                                 <th className="py-3 px-4">Billing Period</th>
                                                 <th className="py-3 px-4">UTR Number</th>
@@ -1541,12 +1673,32 @@ export default function SuperAdminDashboard() {
                                         <tbody className="divide-y divide-slate-50 font-bold">
                                             {billingLogs.length === 0 ? (
                                                 <tr>
-                                                    <td colSpan={9} className="py-12 text-center text-slate-400 italic">No billing records found.</td>
+                                                    <td colSpan={10} className="py-12 text-center text-slate-400 italic">No billing records found.</td>
                                                 </tr>
                                             ) : billingLogs.map((log: any, idx: number) => (
                                                 <tr key={log.id || idx} className="hover:bg-slate-50 transition-colors">
-                                                    <td className="py-3 px-4 text-slate-500 whitespace-nowrap">{new Date(log.date).toLocaleDateString("en-IN", { dateStyle: "medium" })}</td>
-                                                    <td className="py-3 px-4 text-slate-900 font-extrabold">{log.tenantName}</td>
+                                                    <td className="py-3 px-4 text-slate-500 whitespace-nowrap">{formatDateDDMMYYYY(log.date)}</td>
+                                                    <td className="py-3 px-4 text-slate-900 font-extrabold">
+                                                        <div className="flex items-center gap-1.5">
+                                                            <span>{log.tenantName}</span>
+                                                            {log.screenshotUrl && (
+                                                                <a 
+                                                                    href={log.screenshotUrl} 
+                                                                    target="_blank" 
+                                                                    rel="noreferrer"
+                                                                    className="text-indigo-600 hover:text-indigo-800 text-[8px] bg-indigo-50 px-1.5 py-0.5 rounded border border-indigo-200"
+                                                                    title="View Payment Proof Screenshot on Cloudflare R2"
+                                                                >
+                                                                    📷 Proof
+                                                                </a>
+                                                            )}
+                                                        </div>
+                                                    </td>
+                                                    <td className="py-3 px-4 text-slate-700 font-black">
+                                                        <span className="px-2 py-0.5 bg-slate-100 rounded-md text-slate-800 text-[9px]">
+                                                            {log.studentCount || 500}
+                                                        </span>
+                                                    </td>
                                                     <td className="py-3 px-4">
                                                         <span className={`px-2 py-1 rounded-md text-[8px] font-black uppercase tracking-tighter ${
                                                             log.billingType === 'Verified Payment' ? 'bg-emerald-50 text-emerald-600 border border-emerald-100' :
@@ -1577,6 +1729,13 @@ export default function SuperAdminDashboard() {
                                                     <td className="py-3 px-4 text-slate-500 leading-normal max-w-xs truncate" title={log.remarks}>{log.remarks || "-"}</td>
                                                     <td className="py-3 px-4 text-right whitespace-nowrap">
                                                         <div className="flex items-center justify-end gap-1.5">
+                                                            <button
+                                                                onClick={() => handleViewInvoicePDF(log)}
+                                                                className="px-2.5 py-1 bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200 rounded-lg text-[9px] font-black uppercase tracking-wider transition-all cursor-pointer flex items-center gap-1 active:scale-95 shadow-2xs"
+                                                                title="View / Print Official Tax Invoice PDF"
+                                                            >
+                                                                <FileText className="w-3 h-3" /> PDF
+                                                            </button>
                                                             <button
                                                                 onClick={() => handleOpenEditInvoiceModal(log)}
                                                                 className="px-2.5 py-1 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 rounded-lg text-[9px] font-black uppercase tracking-wider transition-all cursor-pointer flex items-center gap-1 active:scale-95 shadow-2xs"
@@ -1678,7 +1837,7 @@ export default function SuperAdminDashboard() {
                                                                 className="w-3.5 h-3.5 rounded text-blue-600 focus:ring-blue-500 cursor-pointer"
                                                             />
                                                         </td>
-                                                        <td className="py-3 px-4 text-slate-500 whitespace-nowrap">{new Date(log.timestamp).toLocaleString()}</td>
+                                                        <td className="py-3 px-4 text-slate-500 whitespace-nowrap">{formatDateTimeDDMMYYYY(log.timestamp)}</td>
                                                         <td className="py-3 px-4 text-blue-600 font-black">{log.user}</td>
                                                         <td className="py-3 px-4">
                                                             <span className={`px-2 py-1 rounded-md text-[8px] font-black uppercase tracking-tighter ${
@@ -1812,12 +1971,12 @@ export default function SuperAdminDashboard() {
                                         <div className="mt-3 flex justify-between items-center text-xs font-bold text-gray-700 border-t border-slate-100 pt-3 w-full">
                                             <div>
                                                 <p className="text-[6.5px] font-black text-slate-400 uppercase tracking-widest">Start Date</p>
-                                                <p className="text-[10px] font-extrabold text-left">{tenant.createdAt ? new Date(tenant.createdAt).toLocaleDateString("en-IN", { dateStyle: "medium", timeZone: "Asia/Kolkata" }) : "N/A"}</p>
+                                                <p className="text-[10px] font-extrabold text-left">{tenant.createdAt ? formatDateDDMMYYYY(tenant.createdAt) : "N/A"}</p>
                                             </div>
                                             <div className="h-4 w-px bg-slate-200" />
                                             <div className="text-right">
                                                 <p className="text-[6.5px] font-black text-slate-400 uppercase tracking-widest">End Date</p>
-                                                <p className="text-[10px] font-extrabold text-right">{tenant.subscriptionEndDate ? new Date(tenant.subscriptionEndDate).toLocaleDateString("en-IN", { dateStyle: "medium", timeZone: "Asia/Kolkata" }) : "Unlimited"}</p>
+                                                <p className="text-[10px] font-extrabold text-right">{tenant.subscriptionEndDate ? formatDateDDMMYYYY(tenant.subscriptionEndDate) : "Unlimited"}</p>
                                             </div>
                                         </div>
 
@@ -1829,7 +1988,7 @@ export default function SuperAdminDashboard() {
                                                         <div className="flex justify-between items-center font-mono">
                                                             <span className="select-all font-extrabold">UTR: {tenant.renewalUtr}</span>
                                                             <span className="text-[8px] text-amber-600 font-sans">
-                                                                {tenant.renewalSubmittedAt ? new Date(tenant.renewalSubmittedAt).toLocaleString("en-IN", { dateStyle: "short", timeStyle: "short" }) : "N/A"}
+                                                                {tenant.renewalSubmittedAt ? formatDateTimeDDMMYYYY(tenant.renewalSubmittedAt) : "N/A"}
                                                             </span>
                                                         </div>
                                                     </div>
@@ -2168,7 +2327,7 @@ export default function SuperAdminDashboard() {
                                         <div className="flex justify-between items-center bg-white/60 px-2.5 py-1.5 rounded-xl border border-amber-100/50">
                                             <span className="text-[8px] font-black text-amber-700 uppercase tracking-widest">At:</span>
                                             <span className="font-extrabold text-amber-900">
-                                                {editingTenant.renewalSubmittedAt ? new Date(editingTenant.renewalSubmittedAt).toLocaleDateString("en-IN", { day: "numeric", month: "short" }) : "N/A"}
+                                                {editingTenant.renewalSubmittedAt ? formatDateTimeDDMMYYYY(editingTenant.renewalSubmittedAt) : "N/A"}
                                             </span>
                                         </div>
                                     </div>
@@ -3257,6 +3416,9 @@ export default function SuperAdminDashboard() {
                                             const matched = tenants.find((t: any) => (t._id || t.id || t.slug) === val);
                                             if (matched) {
                                                 setInvoiceTenantName(matched.name);
+                                                if (invoiceModalMode === "create") {
+                                                    setInvoiceStudentCount(String((matched as any).studentCount || 500));
+                                                }
                                             }
                                         }}
                                         className="w-full border-2 border-gray-100 rounded-xl px-3.5 py-2.5 text-xs font-black text-gray-900 bg-white focus:border-indigo-500 outline-none transition-all cursor-pointer"
@@ -3266,7 +3428,7 @@ export default function SuperAdminDashboard() {
                                             const tid = t._id || t.id || t.slug;
                                             return (
                                                 <option key={tid} value={tid}>
-                                                    {t.name} ({t.slug})
+                                                    {t.name} ({t.slug}) — {(t as any).studentCount || 0} Students
                                                 </option>
                                             );
                                         })}
@@ -3279,11 +3441,225 @@ export default function SuperAdminDashboard() {
                                     </select>
                                 </div>
 
+                                {/* College Official Details for Invoice (Snapshot) */}
+                                <div className="p-3.5 bg-slate-50 border border-slate-200/80 rounded-2xl space-y-3">
+                                    <div className="flex items-center justify-between">
+                                        <label className="text-[10px] font-black text-slate-700 uppercase tracking-widest flex items-center gap-1.5">
+                                            <Building2 className="w-3.5 h-3.5 text-indigo-600" />
+                                            <span>College Details on Invoice</span>
+                                        </label>
+                                        <span className="text-[8px] font-bold text-slate-400 uppercase tracking-wider">Prints on Official PDF</span>
+                                    </div>
+                                    <div className="space-y-2">
+                                        <div>
+                                            <label className="block text-[9px] font-bold text-slate-500 uppercase tracking-wider mb-1">
+                                                Campus Full Address
+                                            </label>
+                                            <input
+                                                type="text"
+                                                placeholder="Oriental Campus, Raisen Road, Bhopal, MP - 462021"
+                                                value={invoiceCollegeAddress}
+                                                onChange={(e) => setInvoiceCollegeAddress(e.target.value)}
+                                                className="w-full border border-slate-200 rounded-xl px-3 py-1.5 text-xs font-bold text-slate-800 bg-white focus:border-indigo-500 outline-none transition-all"
+                                            />
+                                        </div>
+                                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                                            <div>
+                                                <label className="block text-[9px] font-bold text-slate-500 uppercase tracking-wider mb-1">
+                                                    Official Email
+                                                </label>
+                                                <input
+                                                    type="email"
+                                                    placeholder="pankajdwivedi81@gmail.com"
+                                                    value={invoiceCollegeEmail}
+                                                    onChange={(e) => setInvoiceCollegeEmail(e.target.value)}
+                                                    className="w-full border border-slate-200 rounded-xl px-3 py-1.5 text-xs font-bold text-slate-800 bg-white focus:border-indigo-500 outline-none transition-all"
+                                                />
+                                            </div>
+                                            <div>
+                                                <label className="block text-[9px] font-bold text-slate-500 uppercase tracking-wider mb-1">
+                                                    Official Phone / Landline
+                                                </label>
+                                                <input
+                                                    type="text"
+                                                    placeholder="+91 9981414729 / 0755-2529015"
+                                                    value={invoiceCollegePhone}
+                                                    onChange={(e) => setInvoiceCollegePhone(e.target.value)}
+                                                    className="w-full border border-slate-200 rounded-xl px-3 py-1.5 text-xs font-bold text-slate-800 bg-white focus:border-indigo-500 outline-none transition-all"
+                                                />
+                                            </div>
+                                        </div>
+                                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                                            <div>
+                                                <label className="block text-[9px] font-bold text-slate-500 uppercase tracking-wider mb-1">
+                                                    Coordinator Name
+                                                </label>
+                                                <input
+                                                    type="text"
+                                                    placeholder="Dr Pankaj Dwivedi"
+                                                    value={invoiceCollegeCoordinator}
+                                                    onChange={(e) => setInvoiceCollegeCoordinator(e.target.value)}
+                                                    className="w-full border border-slate-200 rounded-xl px-3 py-1.5 text-xs font-bold text-slate-800 bg-white focus:border-indigo-500 outline-none transition-all"
+                                                />
+                                            </div>
+                                            <div>
+                                                <label className="block text-[9px] font-bold text-slate-500 uppercase tracking-wider mb-1">
+                                                    Coordinator Phone
+                                                </label>
+                                                <input
+                                                    type="text"
+                                                    placeholder="7974704918"
+                                                    value={invoiceCollegeCoordinatorPhone}
+                                                    onChange={(e) => setInvoiceCollegeCoordinatorPhone(e.target.value)}
+                                                    className="w-full border border-slate-200 rounded-xl px-3 py-1.5 text-xs font-bold text-slate-800 bg-white focus:border-indigo-500 outline-none transition-all"
+                                                />
+                                            </div>
+                                            <div>
+                                                <label className="block text-[9px] font-bold text-slate-500 uppercase tracking-wider mb-1">
+                                                    GSTIN (Optional)
+                                                </label>
+                                                <input
+                                                    type="text"
+                                                    placeholder="23AAAAA0000A1Z5"
+                                                    value={invoiceCollegeGstin}
+                                                    onChange={(e) => setInvoiceCollegeGstin(e.target.value)}
+                                                    className="w-full border border-slate-200 rounded-xl px-3 py-1.5 text-xs font-mono font-bold text-slate-800 bg-white focus:border-indigo-500 outline-none transition-all uppercase"
+                                                />
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                {/* Student Count & Rate per Student Month */}
+                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+                                    <div>
+                                        <label className="block text-[10px] font-black text-gray-500 uppercase tracking-widest mb-1.5">
+                                            Student Count (Snapshot) *
+                                        </label>
+                                        <input
+                                            type="number"
+                                            min="1"
+                                            required
+                                            placeholder="e.g. 500"
+                                            value={invoiceStudentCount}
+                                            onChange={(e) => setInvoiceStudentCount(e.target.value)}
+                                            className="w-full border-2 border-gray-100 rounded-xl px-3.5 py-2 text-xs font-black text-gray-900 bg-white focus:border-indigo-500 outline-none transition-all"
+                                        />
+                                        <p className="text-[9px] text-gray-400 mt-1">Locks student count in this invoice permanently</p>
+                                    </div>
+                                    <div>
+                                        <label className="block text-[10px] font-black text-gray-500 uppercase tracking-widest mb-1.5">
+                                            Rate / Student / Month (₹) *
+                                        </label>
+                                        <div className="relative">
+                                            <span className="absolute left-3.5 top-2 text-xs font-black text-gray-400">₹</span>
+                                            <input
+                                                type="number"
+                                                min="1"
+                                                required
+                                                placeholder="30"
+                                                value={invoiceRatePerStudentMonth}
+                                                onChange={(e) => setInvoiceRatePerStudentMonth(e.target.value)}
+                                                className="w-full border-2 border-gray-100 rounded-xl pl-8 pr-4 py-2 text-xs font-black text-gray-900 bg-white focus:border-indigo-500 outline-none transition-all"
+                                            />
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+                                    {/* Billing Period */}
+                                    <div>
+                                        <label className="block text-[10px] font-black text-gray-500 uppercase tracking-widest mb-1.5">
+                                            Subscription Period *
+                                        </label>
+                                        <select
+                                            value={invoiceBillingPeriod}
+                                            onChange={(e) => setInvoiceBillingPeriod(e.target.value)}
+                                            className="w-full border-2 border-gray-100 rounded-xl px-3.5 py-2 text-xs font-black text-gray-900 bg-white focus:border-indigo-500 outline-none transition-all cursor-pointer"
+                                        >
+                                            <option value="1 Month">1 Month</option>
+                                            <option value="3 Months">3 Months</option>
+                                            <option value="6 Months">6 Months</option>
+                                            <option value="1 Year">1 Year</option>
+                                            <option value="2 Years">2 Years</option>
+                                            <option value="3 Years">3 Years</option>
+                                        </select>
+                                    </div>
+
+                                    {/* Date */}
+                                    <div>
+                                        <label className="block text-[10px] font-black text-gray-500 uppercase tracking-widest mb-1.5">
+                                            Payment Date *
+                                        </label>
+                                        <input
+                                            type="date"
+                                            required
+                                            value={invoiceDate}
+                                            onChange={(e) => setInvoiceDate(e.target.value)}
+                                            className="w-full border-2 border-gray-100 rounded-xl px-3.5 py-2 text-xs font-black text-gray-900 bg-white focus:border-indigo-500 outline-none transition-all"
+                                        />
+                                    </div>
+                                </div>
+
+                                {/* Live Auto-Calculation Breakdown Card */}
+                                {(() => {
+                                    const count = Number(invoiceStudentCount) || 0;
+                                    const rate = Number(invoiceRatePerStudentMonth) || 30;
+                                    const months = invoiceBillingPeriod.includes("1 Month") ? 1 :
+                                        invoiceBillingPeriod.includes("3") ? 3 :
+                                        invoiceBillingPeriod.includes("6") ? 6 :
+                                        invoiceBillingPeriod.includes("2 Year") ? 24 :
+                                        invoiceBillingPeriod.includes("3 Year") ? 36 : 12;
+                                    const gross = count * rate * months;
+                                    const isDirect = invoicePaymentSource.toLowerCase().includes("direct") || invoicePaymentSource.toLowerCase().includes("bank");
+                                    const stdDiscPct = (months === 1 ? 0 : months === 3 ? 20 : months === 6 ? 30 : 40) + (isDirect ? 3 : 0);
+                                    const stdDiscAmount = Math.round(gross * (stdDiscPct / 100));
+                                    const extraVal = Number(invoiceExtraDiscountValue) || 0;
+                                    const extraAmount = invoiceExtraDiscountType === "amount" ? extraVal : Math.round(gross * (extraVal / 100));
+                                    const netCalculated = Math.max(0, gross - stdDiscAmount - extraAmount);
+
+                                    return (
+                                        <div className="bg-indigo-50/70 border border-indigo-200/80 p-3.5 rounded-2xl text-[10px] space-y-2 font-sans">
+                                            <div className="flex items-center justify-between text-indigo-900 font-black uppercase tracking-wider text-[9px]">
+                                                <span>📊 Live Plan Calculation</span>
+                                                <span className="text-indigo-600 font-bold">{count} Students × ₹{rate} × {months} mo</span>
+                                            </div>
+                                            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-slate-700">
+                                                <div className="bg-white p-2 rounded-xl border border-indigo-100">
+                                                    <span className="text-[8px] text-slate-400 font-bold block uppercase">Gross Subtotal</span>
+                                                    <span className="font-black text-slate-900">₹{gross.toLocaleString("en-IN")}</span>
+                                                </div>
+                                                <div className="bg-white p-2 rounded-xl border border-indigo-100">
+                                                    <span className="text-[8px] text-pink-600 font-bold block uppercase">Plan Disc ({stdDiscPct}%)</span>
+                                                    <span className="font-black text-pink-600">-₹{stdDiscAmount.toLocaleString("en-IN")}</span>
+                                                </div>
+                                                <div className="bg-white p-2 rounded-xl border border-indigo-100">
+                                                    <span className="text-[8px] text-purple-600 font-bold block uppercase">Extra Concession</span>
+                                                    <span className="font-black text-purple-600">-₹{extraAmount.toLocaleString("en-IN")}</span>
+                                                </div>
+                                                <div className="bg-white p-2 rounded-xl border border-indigo-100">
+                                                    <span className="text-[8px] text-emerald-600 font-bold block uppercase">Net Total</span>
+                                                    <span className="font-black text-emerald-700">₹{netCalculated.toLocaleString("en-IN")}</span>
+                                                </div>
+                                            </div>
+                                            <div className="flex justify-end pt-1">
+                                                <button
+                                                    type="button"
+                                                    onClick={() => setInvoiceAmount(String(netCalculated))}
+                                                    className="px-2.5 py-1 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-[9px] font-black uppercase tracking-wider transition-all shadow-xs cursor-pointer active:scale-95"
+                                                >
+                                                    ⚡ Apply Calculated Net Amount (₹{netCalculated.toLocaleString("en-IN")})
+                                                </button>
+                                            </div>
+                                        </div>
+                                    );
+                                })()}
+
                                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
                                     {/* Amount */}
                                     <div>
                                         <label className="block text-[10px] font-black text-gray-500 uppercase tracking-widest mb-1.5">
-                                            Amount (₹) *
+                                            Final Total Amount (₹) *
                                         </label>
                                         <div className="relative">
                                             <span className="absolute left-3.5 top-2.5 text-sm font-black text-gray-400">₹</span>
@@ -3365,41 +3741,6 @@ export default function SuperAdminDashboard() {
                                 </div>
 
                                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
-                                    {/* Date */}
-                                    <div>
-                                        <label className="block text-[10px] font-black text-gray-500 uppercase tracking-widest mb-1.5">
-                                            Payment Date *
-                                        </label>
-                                        <input
-                                            type="date"
-                                            required
-                                            value={invoiceDate}
-                                            onChange={(e) => setInvoiceDate(e.target.value)}
-                                            className="w-full border-2 border-gray-100 rounded-xl px-3.5 py-2 text-xs font-black text-gray-900 bg-white focus:border-indigo-500 outline-none transition-all"
-                                        />
-                                    </div>
-
-                                    {/* Billing Period */}
-                                    <div>
-                                        <label className="block text-[10px] font-black text-gray-500 uppercase tracking-widest mb-1.5">
-                                            Subscription Period *
-                                        </label>
-                                        <select
-                                            value={invoiceBillingPeriod}
-                                            onChange={(e) => setInvoiceBillingPeriod(e.target.value)}
-                                            className="w-full border-2 border-gray-100 rounded-xl px-3.5 py-2 text-xs font-black text-gray-900 bg-white focus:border-indigo-500 outline-none transition-all cursor-pointer"
-                                        >
-                                            <option value="1 Month">1 Month</option>
-                                            <option value="3 Months">3 Months</option>
-                                            <option value="6 Months">6 Months</option>
-                                            <option value="1 Year">1 Year</option>
-                                            <option value="2 Years">2 Years</option>
-                                            <option value="3 Years">3 Years</option>
-                                        </select>
-                                    </div>
-                                </div>
-
-                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
                                     {/* UTR / Ref ID */}
                                     <div>
                                         <label className="block text-[10px] font-black text-gray-500 uppercase tracking-widest mb-1.5">
@@ -3449,6 +3790,45 @@ export default function SuperAdminDashboard() {
                                     </select>
                                 </div>
 
+                                {/* Payment Proof Screenshot Upload (Cloudflare R2) */}
+                                <div className="p-3.5 bg-slate-50 border border-slate-200/70 rounded-2xl space-y-2">
+                                    <label className="block text-[10px] font-black text-slate-600 uppercase tracking-widest flex items-center justify-between">
+                                        <span>📥 Payment Proof Screenshot (Cloudflare R2 CDN)</span>
+                                        <span className="text-[8px] text-emerald-600 font-bold">100% Permanent</span>
+                                    </label>
+                                    <div className="flex items-center gap-3">
+                                        {invoiceScreenshotUrl && (
+                                            <div className="w-12 h-12 rounded-xl border border-slate-300 overflow-hidden shrink-0 bg-white">
+                                                <img src={invoiceScreenshotUrl} alt="Proof thumbnail" className="w-full h-full object-cover" />
+                                            </div>
+                                        )}
+                                        <div className="flex-1 space-y-1.5">
+                                            <input
+                                                type="file"
+                                                accept="image/*"
+                                                disabled={isUploadingProof}
+                                                onChange={(e) => {
+                                                    const file = e.target.files?.[0];
+                                                    if (file) handleProofFileUpload(file);
+                                                }}
+                                                className="w-full border border-slate-200 rounded-xl px-2.5 py-1 text-xs bg-white file:mr-3 file:py-1 file:px-2.5 file:rounded-lg file:border-0 file:text-[9px] file:uppercase file:font-black file:bg-indigo-50 file:text-indigo-700 hover:file:bg-indigo-100 cursor-pointer"
+                                            />
+                                            {isUploadingProof && (
+                                                <p className="text-[9px] text-indigo-600 font-bold animate-pulse">Uploading screenshot to Cloudflare R2...</p>
+                                            )}
+                                        </div>
+                                        {invoiceScreenshotUrl && (
+                                            <button
+                                                type="button"
+                                                onClick={() => setInvoiceScreenshotUrl("")}
+                                                className="text-[9px] text-red-600 hover:text-red-700 font-black uppercase px-2 py-1 bg-red-50 hover:bg-red-100 rounded-lg border border-red-100 transition-all cursor-pointer"
+                                            >
+                                                Remove
+                                            </button>
+                                        )}
+                                    </div>
+                                </div>
+
                                 {/* Remarks */}
                                 <div>
                                     <label className="block text-[10px] font-black text-gray-500 uppercase tracking-widest mb-1.5">
@@ -3456,7 +3836,7 @@ export default function SuperAdminDashboard() {
                                     </label>
                                     <input
                                         type="text"
-                                        placeholder="e.g. Annual renewal payment for 482 students"
+                                        placeholder="e.g. Annual renewal payment for 500 students"
                                         value={invoiceRemarks}
                                         onChange={(e) => setInvoiceRemarks(e.target.value)}
                                         className="w-full border-2 border-gray-100 rounded-xl px-3.5 py-2 text-xs font-bold text-gray-900 bg-white focus:border-indigo-500 outline-none transition-all"

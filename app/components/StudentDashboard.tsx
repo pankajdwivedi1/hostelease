@@ -15,26 +15,31 @@ import {
 } from "@/lib/parentConsentVideo";
 import { getInstallationId } from "@/lib/installationId";
 import LiveFaceCaptureModal from "./LiveFaceCaptureModal";
+import { formatToDDMMYYYY, formatDateDDMMYYYY, formatDateTimeDDMMYYYY } from "@/lib/dateFormat";
 
 interface Permission {
     _id: string;
+    id?: string;
     fromDateTime: string | Date;
     toDateTime: string | Date;
     reason: string;
-    status: "pending" | "allowed" | "rejected";
-    wardenStatus: "pending" | "allowed" | "rejected";
-    deanStatus: "pending" | "allowed" | "rejected";
-    parentStatus?: "pending" | "allowed" | "rejected" | "no_response" | null;
+    status: "pending" | "allowed" | "rejected" | "approved" | "accepted" | "cancelled" | string;
+    wardenStatus: "pending" | "allowed" | "rejected" | "approved" | "accepted" | "cancelled" | string;
+    deanStatus: "pending" | "allowed" | "rejected" | "approved" | "accepted" | "cancelled" | string;
+    parentStatus?: "pending" | "allowed" | "rejected" | "approved" | "accepted" | "cancelled" | "no_response" | string | null;
     parentConsentUrl?: string | null;
+    requestType?: string;
     createdAt?: string;
     updatedAt?: string;
 }
 
 interface StudentProfile {
     _id: string;
+    id?: string;
     name: string;
     email: string;
     phoneNumber: string;
+    parentPhone?: string;
     hostelName: string;
     roomNumber: string;
     profilePicture?: string;
@@ -48,6 +53,7 @@ interface StudentProfile {
     permanentAddress?: string;
     erpInformation?: string;
     joiningDate?: string;
+    leaveTo?: string;
     branch?: string;
     collegeName?: string;
     year?: string;
@@ -61,7 +67,7 @@ interface StudentProfile {
     registrationId?: string;
     dob?: string;
     category?: string;
-    faceDescriptor?: number[]; // ⚡ NEW: Stores face embedding
+    faceDescriptor?: any; // ⚡ NEW: Stores face embedding
     firebaseUID?: string;
     attendanceMode?: "default" | "strict" | "gps-only" | "biometric"; // ⚡ NEW: Override
     isProfileLocked?: boolean; // ⚡ Admin-controlled profile lock
@@ -78,6 +84,7 @@ interface StudentProfile {
         endDate?: string;
         createdAt?: string;
     } | null;
+    updatedAt?: string;
 }
 
 interface DBNotification {
@@ -95,13 +102,7 @@ const formatPermDate = (item: any, isOut: boolean) => {
         ? (item.fromDateTime || item.from_date_time || (item.outDate ? `${item.outDate} ${item.outTime || ''}` : item.createdAt))
         : (item.toDateTime || item.to_date_time || (item.inDate ? `${item.inDate} ${item.inTime || ''}` : null));
     if (!raw) return "N/A";
-    try {
-        const d = new Date(raw);
-        if (isNaN(d.getTime())) return String(raw);
-        return d.toLocaleString("en-IN", { timeZone: "Asia/Kolkata", dateStyle: "medium", timeStyle: "short" });
-    } catch {
-        return String(raw);
-    }
+    return formatDateTimeDDMMYYYY(raw) || String(raw);
 };
 
 const getPermDurationStr = (item: any) => {
@@ -559,7 +560,7 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
                 type: 'outing'
             }));
 
-            const combinedGatePasses = [...outingPasses, ...outingPerms].sort((a, b) => {
+            const combinedGatePasses = [...outingPasses, ...outingPerms].sort((a: any, b: any) => {
                 const dateA = new Date(a.checkOutTime || a.fromDateTime || a.createdAt || 0).getTime();
                 const dateB = new Date(b.checkOutTime || b.fromDateTime || b.createdAt || 0).getTime();
                 return dateB - dateA;
@@ -2417,17 +2418,7 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
 
     const formatDate = (dateString: string | undefined) => {
         if (!dateString) return "N/A";
-        try {
-            const date = new Date(dateString);
-            if (isNaN(date.getTime())) return dateString;
-            return date.toLocaleDateString("en-GB", {
-                day: "numeric",
-                month: "long",
-                year: "numeric",
-            });
-        } catch (e) {
-            return dateString;
-        }
+        return formatDateDDMMYYYY(dateString) || dateString;
     };
 
     const handleMandatoryUpdateSubmit = async () => {
@@ -3677,7 +3668,7 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
                                         <div className="min-w-0 flex-1">
                                             <p className="text-[10px] sm:text-xs font-black text-red-800 uppercase tracking-tight">Approved Leave Expired</p>
                                             <p className="text-[8.5px] sm:text-[9.5px] text-red-700 font-bold leading-tight mt-0.5">
-                                                Your approved leave expired on {toDate.toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" })}. Please check in at the gate or report to your warden.
+                                                Your approved leave expired on {formatDateDDMMYYYY(toDate)}. Please check in at the gate or report to your warden.
                                             </p>
                                         </div>
                                     </div>
@@ -4264,7 +4255,7 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
                                                         <button
                                                             type="button"
                                                             disabled={isCancellingLeave}
-                                                            onClick={() => handleCancelLeave(latestPermission._id || latestPermission.id)}
+                                                            onClick={() => handleCancelLeave(latestPermission._id || latestPermission.id || "")}
                                                             className="px-2 py-0.5 rounded-md text-[9px] sm:text-[9.5px] font-bold bg-rose-50 text-rose-700 border border-rose-200 hover:bg-rose-100 hover:border-rose-300 transition-all flex items-center gap-1 cursor-pointer disabled:opacity-50"
                                                             title="Cancel / Revoke this leave request"
                                                         >
@@ -4814,7 +4805,7 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
                                                                     <span className="font-black text-gray-900 text-[9px]">₹{p.amount}</span>
                                                                 </td>
                                                                 <td className="px-2 py-4 text-center">
-                                                                    <span className="text-[8px] text-gray-500 font-bold">{new Date(p.createdAt).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })}</span>
+                                                                    <span className="text-[8px] text-gray-500 font-bold">{formatDateDDMMYYYY(p.createdAt)}</span>
                                                                 </td>
                                                                 <td className="px-2 py-4 text-center">
                                                                     <span className={`inline-flex items-center px-2 py-0.5 rounded-md text-[8px] font-black uppercase tracking-widest ${
@@ -5089,7 +5080,7 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
                                                             {selectedCalendarDay && (
                                                                 <div className="px-6 pb-6 pt-4 border-t border-gray-100 bg-gray-50/50">
                                                                     <h4 className="text-[11px] font-black text-gray-400 uppercase tracking-widest mb-3 flex items-center gap-1.5">
-                                                                        <span>📋</span> Details • {selectedCalendarDay.toLocaleDateString("en-IN", { dateStyle: "long" })}
+                                                                        <span>📋</span> Details • {formatDateDDMMYYYY(selectedCalendarDay)}
                                                                     </h4>
                                                                     {(() => {
                                                                         const today = new Date();
@@ -5352,10 +5343,10 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
                                                                                 const isPending = !isAllowed && !isRejected;
 
                                                                                 const fromFormatted = permission.fromDateTime
-                                                                                    ? new Date(permission.fromDateTime).toLocaleString("en-IN", { timeZone: "Asia/Kolkata", dateStyle: "medium", timeStyle: "short" })
+                                                                                    ? formatDateTimeDDMMYYYY(permission.fromDateTime)
                                                                                     : "N/A";
                                                                                 const toFormatted = permission.toDateTime
-                                                                                    ? new Date(permission.toDateTime).toLocaleString("en-IN", { timeZone: "Asia/Kolkata", dateStyle: "medium", timeStyle: "short" })
+                                                                                    ? formatDateTimeDDMMYYYY(permission.toDateTime)
                                                                                     : "N/A";
 
                                                                                 const consentVideo = permission.parentConsentUrl || permission.consentVideoUrl || permission.videoUrl || permission.parentVideoUrl;
@@ -5520,10 +5511,10 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
                                                                                 const fromRawDate = item.checkOutTime || item.fromDateTime || item.createdAt;
                                                                                 const toRawDate = item.checkInTime || item.toDateTime;
                                                                                 
-                                                                                const formattedOutDate = item.checkOutIstDate || (fromRawDate ? new Date(fromRawDate).toLocaleDateString("en-IN", { timeZone: "Asia/Kolkata", day: "2-digit", month: "short", year: "numeric" }) : "N/A");
+                                                                                const formattedOutDate = item.checkOutIstDate || (fromRawDate ? formatDateDDMMYYYY(fromRawDate) : "N/A");
                                                                                 const formattedOutTime = item.checkOutIstTime || (fromRawDate ? new Date(fromRawDate).toLocaleTimeString("en-IN", { timeZone: "Asia/Kolkata", hour: "2-digit", minute: "2-digit", hour12: true }) : "");
                                                                                 
-                                                                                const formattedInDate = item.checkInIstDate || (toRawDate ? new Date(toRawDate).toLocaleDateString("en-IN", { timeZone: "Asia/Kolkata", day: "2-digit", month: "short", year: "numeric" }) : (isCurrentlyOut ? "Pending Return" : "Completed"));
+                                                                                const formattedInDate = item.checkInIstDate || (toRawDate ? formatDateDDMMYYYY(toRawDate) : (isCurrentlyOut ? "Pending Return" : "Completed"));
                                                                                 const formattedInTime = item.checkInIstTime || (toRawDate ? new Date(toRawDate).toLocaleTimeString("en-IN", { timeZone: "Asia/Kolkata", hour: "2-digit", minute: "2-digit", hour12: true }) : "");
 
                                                                                 let leaveDuration = "—";
@@ -5713,7 +5704,7 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
                                                                                 const rawOutDate = pass.checkOutTime || pass.fromDateTime || pass.createdAt;
                                                                                 const rawInDate = pass.checkInTime || pass.toDateTime;
 
-                                                                                const formattedDate = pass.checkOutIstDate || (rawOutDate ? new Date(rawOutDate).toLocaleDateString("en-IN", { timeZone: "Asia/Kolkata", day: "2-digit", month: "short", year: "numeric" }) : "N/A");
+                                                                                const formattedDate = pass.checkOutIstDate || (rawOutDate ? formatDateDDMMYYYY(rawOutDate) : "N/A");
                                                                                 const formattedOutTime = pass.checkOutIstTime || (rawOutDate ? new Date(rawOutDate).toLocaleTimeString("en-IN", { timeZone: "Asia/Kolkata", hour: "2-digit", minute: "2-digit", hour12: true }) : "N/A");
                                                                                 const formattedInTime = isCurrentlyOut ? "Not Returned" : (pass.checkInIstTime || (rawInDate ? new Date(rawInDate).toLocaleTimeString("en-IN", { timeZone: "Asia/Kolkata", hour: "2-digit", minute: "2-digit", hour12: true }) : "Completed"));
 
@@ -5750,7 +5741,7 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
                                                                                                 <span className={`text-[9px] font-bold tracking-wider px-2 py-0.5 rounded-md border ${
                                                                                                     isCurrentlyOut ? 'bg-rose-100/80 text-rose-800 border-rose-200' : 'bg-emerald-50 text-emerald-700 border-emerald-200'
                                                                                                 }`}>
-                                                                                                    🚪 {pass.gateName ? pass.gateName.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase()) : 'Main Gate'}
+                                                                                                    🚪 {pass.gateName ? pass.gateName.replace(/_/g, ' ').replace(/\b\w/g, (c: string) => c.toUpperCase()) : 'Main Gate'}
                                                                                                 </span>
                                                                                                 <span className="text-[10px] font-bold text-slate-700 bg-slate-100 px-2 py-0.5 rounded-md border border-slate-200 flex items-center gap-1">
                                                                                                     📅 {formattedDate}
@@ -6879,7 +6870,7 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
                                 <div className={`px-2 py-0.5 rounded-md text-[10px] font-black uppercase tracking-widest ${currentNotification.priority === 'critical' ? 'bg-red-100 text-red-600' : currentNotification.priority === 'urgent' ? 'bg-orange-100 text-orange-600' : 'bg-blue-100 text-blue-600'}`}>
                                     Message from Dean
                                 </div>
-                                <span className="text-[10px] text-gray-400">{new Date(currentNotification.createdAt).toLocaleDateString()}</span>
+                                <span className="text-[10px] text-gray-400">{formatDateDDMMYYYY(currentNotification.createdAt)}</span>
                             </div>
                             {currentNotification.image && (
                                 <div className="w-full rounded-2xl overflow-hidden border border-gray-100 shadow-sm">
@@ -7112,7 +7103,7 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
                                                 <div key={p._id} className="p-3 rounded-xl border border-gray-100 bg-gray-50/50 flex items-center justify-between">
                                                     <div>
                                                         <p className="text-xs font-bold text-gray-900">UTR: {p.utrNumber}</p>
-                                                        <p className="text-[10px] text-gray-500">{new Date(p.createdAt).toLocaleDateString()}</p>
+                                                        <p className="text-[10px] text-gray-500">{formatDateDDMMYYYY(p.createdAt)}</p>
                                                     </div>
                                                     <div className="text-right">
                                                         <p className="text-xs font-bold text-gray-900">₹{p.amount}</p>

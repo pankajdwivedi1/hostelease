@@ -19,10 +19,11 @@ export async function POST(request: NextRequest) {
         // Update all hostels with the same password using dbAdapter
         const result = await db.hostels.bulkUpdate({}, { wardenPassword: password });
 
+        const count = result.modifiedCount ?? (result as any).count ?? 0;
         return NextResponse.json({
             success: true,
-            message: `Updated ${result.count} hostels with warden password`,
-            modifiedCount: result.count
+            message: `Updated ${count} hostels with warden password`,
+            modifiedCount: count
         });
     } catch (error: any) {
         console.error("Error setting bulk passwords:", error);

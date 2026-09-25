@@ -6,6 +6,7 @@ import jsQR from "jsqr";
 import { getInstallationId, isPWAInstalled } from "@/lib/installationId";
 import { onAuthStateChanged } from "firebase/auth";
 import { auth } from "@/lib/firebase";
+import { formatDateDDMMYYYY } from "@/lib/dateFormat";
 
 // ============================================================
 // GATEPASS STUDENT SCANNER — QR Code Scanner for Students
@@ -35,7 +36,7 @@ interface OutingRecord {
     checkInTime?: string;
     checkInISTTime?: string;
     checkInISTDate?: string;
-    status: "out" | "in";
+    status: "out" | "in" | "auto-resolved" | string;
     durationMinutes?: number;
     gateName?: string;
     type?: "outing" | "leave" | string;
@@ -822,7 +823,7 @@ export default function StudentScannerPage() {
                                             <span style={{ color: "#d1d5db", fontWeight: "normal", padding: "0 8px", flexShrink: 0 }}>|</span>
                                             <span style={{ textAlign: "center", flex: 1, fontVariantNumeric: "tabular-nums" }}>{record.checkOutISTTime}</span>
                                             <span style={{ color: "#d1d5db", fontWeight: "normal", padding: "0 8px", flexShrink: 0 }}>|</span>
-                                            <span style={{ textAlign: "right", flex: 1, fontVariantNumeric: "tabular-nums" }}>{record.checkOutISTDate}</span>
+                                            <span style={{ textAlign: "right", flex: 1, fontVariantNumeric: "tabular-nums" }}>{formatDateDDMMYYYY(record.checkOutISTDate || record.checkOutTime)}</span>
                                         </div>
 
                                         <div style={{ display: "flex", alignItems: "center", fontSize: "11px", fontWeight: "800", color: "#111827" }}>
@@ -832,7 +833,7 @@ export default function StudentScannerPage() {
                                                 <>
                                                     <span style={{ textAlign: "center", flex: 1, fontVariantNumeric: "tabular-nums" }}>{record.checkInISTTime || "---"}</span>
                                                     <span style={{ color: "#d1d5db", fontWeight: "normal", padding: "0 8px", flexShrink: 0 }}>|</span>
-                                                    <span style={{ textAlign: "right", flex: 1, fontVariantNumeric: "tabular-nums" }}>{record.checkInISTDate}</span>
+                                                    <span style={{ textAlign: "right", flex: 1, fontVariantNumeric: "tabular-nums" }}>{formatDateDDMMYYYY(record.checkInISTDate || record.checkInTime || record.checkOutISTDate)}</span>
                                                 </>
                                             ) : (
                                                 <span style={{ flex: 1, textAlign: "center", color: "#f43f5e", fontWeight: "800", textTransform: "uppercase", letterSpacing: "0.05em", fontSize: "10px" }}>

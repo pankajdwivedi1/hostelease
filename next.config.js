@@ -5,6 +5,18 @@ const defaultRuntimeCaching = require("next-pwa/cache");
 // rather than pre-downloading all 500+ student images during initial app launch.
 const customRuntimeCaching = [
     {
+        // ⚡ On-demand caching for Cloudflare R2 student profile photos
+        urlPattern: /^https:\/\/.*\.r2\.dev\/.*/i,
+        handler: "CacheFirst",
+        options: {
+            cacheName: "r2-profile-photos-cache",
+            expiration: {
+                maxEntries: 500,
+                maxAgeSeconds: 30 * 24 * 60 * 60, // 30 Days
+            },
+        },
+    },
+    {
         // ⚡ On-demand caching for student photos and uploaded documents
         urlPattern: /\/(?:api\/)?uploads\/.+/i,
         handler: "CacheFirst",

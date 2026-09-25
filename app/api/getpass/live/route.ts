@@ -59,35 +59,49 @@ export async function GET(request: NextRequest) {
                 returnsFilters.hostelName = hostelName;
             }
 
-            // ⚡ FAST COUNTS: Use Promise.all to fetch counts and recent items in parallel
-            // 📡 BANDWIDTH OPTIMIZATION: We fetch ONLY the counts for "leave" and "outing" types 
-            // instead of fetching all 700+ rows of data.
-            const [recentRes, summaryRes, studentsRes, leaveCountRes, outingCountRes] = await Promise.all([
+            const [recentRes, allOutPassesRes, totalStudents] = await Promise.all([
                 db.gatePasses.list(returnsFilters, {
                     limit: 5,
                     sortField: source === 'SUPABASE' ? 'check_in_time' : 'checkInTime',
                     sortOrder: 'desc'
                 }),
-                db.gatePasses.list(filters, { limit: 1, countOnly: true }),
-                db.students.count(countFilters),
-                db.gatePasses.list({ ...filters, type: 'leave' }, { countOnly: true }),
-                db.gatePasses.list({ ...filters, type: 'outing' }, { countOnly: true })
+                db.gatePasses.list(filters, { limit: 1000 }),
+                db.students.count(countFilters)
             ]);
 
             const { records: miniRecent } = recentRes;
-            const uniqueStudentsOut = summaryRes.total || 0;
-            const totalStudents = studentsRes || 0;
-            const miniLeaveCount = leaveCountRes.total || 0;
-            const miniGatePassCount = outingCountRes.total || 0;
+            const openPasses = allOutPassesRes.records || [];
+
+            const uniqueOutRecords = new Map<string, any>();
+            openPasses.forEach((p: any) => {
+                const sId = (typeof p.studentId === 'object' ? (p.studentId?._id || p.studentId?.id) : p.studentId)?.toString() || p.registrationId;
+                if (sId && !uniqueOutRecords.has(sId)) {
+                    uniqueOutRecords.set(sId, p);
+                }
+            });
+
+            const currentlyOut = Array.from(uniqueOutRecords.values());
+            const uniqueStudentsOut = currentlyOut.length;
+
+            let miniLeaveCount = 0;
+            let miniGatePassCount = 0;
+            currentlyOut.forEach((p) => {
+                const t = String(p.type || '').toLowerCase().trim();
+                if (t === 'leave' || t === 'home-leave' || t === 'hleave' || t.includes('leave')) {
+                    miniLeaveCount++;
+                } else {
+                    miniGatePassCount++;
+                }
+            });
 
             return NextResponse.json({
                 success: true,
                 minimal: true,
                 recentActivity: miniRecent,
                 summary: {
-                    totalStudents,
-                    glitchFix: totalStudents < uniqueStudentsOut ? (uniqueStudentsOut + 10) : totalStudents,
-                    studentsIn: (totalStudents - uniqueStudentsOut) < 0 ? 0 : (totalStudents - uniqueStudentsOut),
+                    totalStudents: totalStudents || 0,
+                    glitchFix: (totalStudents || 0) < uniqueStudentsOut ? (uniqueStudentsOut + 10) : (totalStudents || 0),
+                    studentsIn: ((totalStudents || 0) - uniqueStudentsOut) < 0 ? 0 : ((totalStudents || 0) - uniqueStudentsOut),
                     studentsOut: uniqueStudentsOut,
                     leaveCount: miniLeaveCount,
                     gatePassCount: miniGatePassCount,

@@ -8,6 +8,7 @@ import { supabase } from "@/lib/supabase";
 
 import { useRef } from "react";
 import * as faceMatching from "@/lib/faceMatching";
+import { formatDateDDMMYYYY } from "@/lib/dateFormat";
 
 // Global flag to track if warmup is done so we don't do it twice
 let globalIsAIWarmedUp = false;
@@ -1052,7 +1053,7 @@ export default function OnboardingPage() {
     const resolvedParent = formData.fatherName || formData.fathersName || formData.father_name || formData.motherName || formData.mothersName || "";
     const resolvedCollege = formData.collegeName || formData.college || formData.institute || "";
     const resolvedName = formData.name || formData.fullName || formData.studentName || "";
-    const resolvedDate = new Date().toLocaleDateString('en-IN', { day: '2-digit', month: '2-digit', year: 'numeric' });
+    const resolvedDate = formatDateDDMMYYYY(new Date());
     const resolvedPlace = formData.permanentAddress || formData.address || formData.permanent_address || formData.city || formData.state || formData.addressLine1 || "";
 
     return parts.map((part, index) => {

@@ -159,7 +159,7 @@ export async function POST(request: NextRequest) {
           hostelName: student.hostelName || "Hostel",
           fromDate: fromDate.toLocaleDateString('hi-IN'),
           toDate: toDate.toLocaleDateString('hi-IN'),
-          leaveId: permission._id?.toString() || "",
+          leaveId: (permission?._id || (permission as any)?.id || "").toString(),
         });
       } catch (err) {
         console.error("Error in triggerLeaveVoiceCall:", err);

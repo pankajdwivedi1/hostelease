@@ -221,18 +221,39 @@ export async function POST(request: NextRequest) {
         let activePermissions: any[] = [];
         let consumedPasses: any[] = [];
 
+        const studentDbId = (student._id || student.id).toString();
+
         try {
             const [activityRes, openPassesRes, permissionsRes, consumedRes] = await Promise.all([
-                db.gatePasses.list({ firebaseUID: student.firebaseUID }, { limit: 1, sortField: 'checkOutTime', sortOrder: 'desc' }),
-                db.gatePasses.list({ studentId: student._id.toString(), firebaseUID: student.firebaseUID, status: "out" }),
-                db.permissions.list({ studentId: student._id.toString() }),
-                db.gatePasses.list({ studentId: student._id.toString() })
+                db.gatePasses.list({ studentId: studentDbId }, { limit: 1, sortField: 'checkOutTime', sortOrder: 'desc' }),
+                db.gatePasses.list({ studentId: studentDbId, status: "out" }),
+                db.permissions.list({ studentId: studentDbId }),
+                db.gatePasses.list({ studentId: studentDbId })
             ]);
 
             activity = activityRes?.records || [];
             openPasses = openPassesRes?.records || [];
             activePermissions = permissionsRes?.records || [];
             consumedPasses = consumedRes?.records || [];
+
+            // ⚡ FALLBACK: If open passes were not found by studentId, check by registrationId
+            if (openPasses.length === 0 && student.registrationId) {
+                try {
+                    const fallbackOpen = await db.gatePasses.list({ registrationId: student.registrationId, status: "out" });
+                    if (fallbackOpen?.records?.length > 0) {
+                        openPasses = fallbackOpen.records;
+                    }
+                } catch (e) {}
+            }
+
+            if (activity.length === 0 && student.registrationId) {
+                try {
+                    const fallbackAct = await db.gatePasses.list({ registrationId: student.registrationId }, { limit: 1, sortField: 'checkOutTime', sortOrder: 'desc' });
+                    if (fallbackAct?.records?.length > 0) {
+                        activity = fallbackAct.records;
+                    }
+                } catch (e) {}
+            }
         } catch (dbErr) {
             console.error("⚠️ Failed to load scan database dependencies in parallel:", dbErr);
         }
@@ -399,7 +420,8 @@ export async function POST(request: NextRequest) {
             // Create new gate pass (check-out)
             const gatePass = await db.gatePasses.create({
                 studentId: (student._id || student.id).toString(),
-                firebaseUID: student.firebaseUID || student.firebase_uid || (student as any).firebaseUid || "",
+                tenantId: student.tenantId || (student as any).tenant_id || "26739d24-0214-409b-aa81-42e628e88c2b",
+                firebaseUID: student.firebaseUID || (student as any).firebase_uid || (student as any).firebaseUid || "",
                 studentName: student.name,
                 hostelName: student.hostelName,
                 roomNumber: student.roomNumber,
@@ -409,7 +431,7 @@ export async function POST(request: NextRequest) {
                 checkOutISTTime: istTime,
                 checkOutISTDate: istDate,
                 status: "out",
-                type: activeLeave ? "leave" : "outing",
+                type: activeLeave ? "HOME-LEAVE" : "GATE-PASS",
                 permissionId: activeLeave?._id || null,
                 gateName: gateName,
                 qrTokenUsedOut: token,
@@ -462,12 +484,12 @@ export async function POST(request: NextRequest) {
                 success: true,
                 action: "checkout",
                 message: `${student.name}, you are now checked OUT from campus.`,
-                gatePass: {
-                    id: gatePass._id,
-                    checkOutTime: gatePass.checkOutISTTime,
-                    checkOutDate: gatePass.checkOutISTDate,
+                gatePass: gatePass ? {
+                    id: gatePass._id || gatePass.id,
+                    checkOutTime: (gatePass as any).checkOutISTTime || (gatePass as any).checkOutIstTime,
+                    checkOutDate: (gatePass as any).checkOutISTDate || (gatePass as any).checkOutIstDate,
                     gateName: gatePass.gateName,
-                },
+                } : null,
                 studentName: student.name,
                 hostelName: student.hostelName,
                 roomNumber: student.roomNumber,
@@ -537,10 +559,31 @@ export async function POST(request: NextRequest) {
                 });
 
                 if (isMainRecord) lastUpdatedPass = updated;
+
+                if (pass.permissionId) {
+                    try {
+                        await db.permissions.update(pass.permissionId.toString(), { status: "completed" });
+                    } catch (pErr) {
+                        console.warn("Failed to complete linked permission on scan checkin:", pErr);
+                    }
+                }
+            }
+
+            // Complete all remaining active permissions for this student upon return
+            try {
+                const activePermsRes = await db.permissions.list({ studentId: studentDbId, status: "allowed" });
+                const activePerms = Array.isArray(activePermsRes) ? activePermsRes : (activePermsRes?.records || (activePermsRes as any)?.permissions || []);
+                for (const p of activePerms) {
+                    const pId = (p._id || p.id)?.toString();
+                    if (pId) {
+                        await db.permissions.update(pId, { status: "completed" });
+                    }
+                }
+            } catch (pErr) {
+                console.warn("Failed to complete remaining permissions on scan checkin:", pErr);
             }
 
             // Update student status to "in"
-            const studentDbId = (student._id || student.id || student.firebaseUID).toString();
             try {
                 await db.students.update(studentDbId, { studentStatus: "in" });
             } catch (statusErr) {

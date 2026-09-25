@@ -33,9 +33,9 @@ export async function GET(request: NextRequest) {
             db.transactions?.list ? db.transactions.list({}, { limit: TRANSACTION_LIMIT }) : Promise.resolve({ records: [] })
         ]);
 
-        const attendance = Array.isArray(attendanceResp) ? attendanceResp : (attendanceResp.records || []);
-        const permissions = Array.isArray(permissionsResp) ? permissionsResp : (permissionsResp.records || []);
-        const transactions = Array.isArray(transactionsResp) ? transactionsResp : (transactionsResp.records || []);
+        const attendance = Array.isArray(attendanceResp) ? attendanceResp : ((attendanceResp as any)?.records || []);
+        const permissions = Array.isArray(permissionsResp) ? permissionsResp : ((permissionsResp as any)?.records || []);
+        const transactions = Array.isArray(transactionsResp) ? transactionsResp : ((transactionsResp as any)?.records || []);
 
         if (format === "json") {
             const allData = {

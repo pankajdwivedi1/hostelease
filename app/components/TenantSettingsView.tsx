@@ -12,6 +12,16 @@ interface TenantSettingsViewProps {
     mode?: "all" | "profile" | "subscription";
 }
 
+function formatDateDDMMYYYY(dateVal: any): string {
+    if (!dateVal) return "N/A";
+    const d = new Date(dateVal);
+    if (isNaN(d.getTime())) return String(dateVal);
+    const day = String(d.getDate()).padStart(2, "0");
+    const month = String(d.getMonth() + 1).padStart(2, "0");
+    const year = d.getFullYear();
+    return `${day}-${month}-${year}`;
+}
+
 export default function TenantSettingsView({ onRenew, generateInvoicePDF, mode = "all" }: TenantSettingsViewProps = {}) {
     const [settings, setSettings] = useState<any>(cachedSettings);
     const [loading, setLoading] = useState(!cachedSettings);
@@ -204,14 +214,14 @@ export default function TenantSettingsView({ onRenew, generateInvoicePDF, mode =
                             <div className="bg-white py-1.5 px-1 sm:py-2.5 sm:px-3 md:p-5 rounded sm:rounded-lg shadow-sm border border-slate-100 sm:border-indigo-100/50 flex flex-col justify-center text-center sm:text-left">
                               <p className="text-[7px] sm:text-[9.5px] md:text-[11px] text-gray-500 font-bold uppercase tracking-tight sm:tracking-widest leading-none mb-1">Activation Date</p>
                               <p className="text-[9px] sm:text-xs md:text-sm font-black text-gray-900 leading-none whitespace-nowrap">
-                                {settings.subscriptionStartDate ? new Date(settings.subscriptionStartDate).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric", timeZone: "Asia/Kolkata" }) : "N/A"}
+                                {formatDateDDMMYYYY(settings.subscriptionStartDate)}
                               </p>
                             </div>
 
                             <div className="bg-white py-1.5 px-1 sm:py-2.5 sm:px-3 md:p-5 rounded sm:rounded-lg shadow-sm border border-slate-100 sm:border-indigo-100/50 flex flex-col justify-center text-center sm:text-left">
                               <p className="text-[7px] sm:text-[9.5px] md:text-[11px] text-gray-500 font-bold uppercase tracking-tight sm:tracking-widest leading-none mb-1">Expiry Date</p>
                               <p className="text-[9px] sm:text-xs md:text-sm font-black text-gray-900 leading-none whitespace-nowrap">
-                                {settings.subscriptionEndDate ? new Date(settings.subscriptionEndDate).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric", timeZone: "Asia/Kolkata" }) : "N/A"}
+                                {formatDateDDMMYYYY(settings.subscriptionEndDate)}
                               </p>
                             </div>
                           </div>
@@ -259,7 +269,7 @@ export default function TenantSettingsView({ onRenew, generateInvoicePDF, mode =
                                     <tbody className="font-bold text-slate-700 text-[8.5px] sm:text-xs">
                                       {billingHistory.map((tx: any) => (
                                         <tr key={tx.id} className="border-b border-slate-100 hover:bg-slate-50/50 transition-colors">
-                                          <td className="py-2 px-1.5 sm:py-3.5 sm:px-5 whitespace-nowrap">{new Date(tx.date).toLocaleDateString("en-IN")}</td>
+                                          <td className="py-2 px-1.5 sm:py-3.5 sm:px-5 whitespace-nowrap">{formatDateDDMMYYYY(tx.date)}</td>
                                           <td className="py-2 px-1.5 sm:py-3.5 sm:px-5 whitespace-nowrap">{tx.billingPeriod || "1 Year"}</td>
                                           <td className="py-2 px-1.5 sm:py-3.5 sm:px-5 font-mono select-all text-slate-500 text-[7.5px] sm:text-xs break-all sm:break-normal">{tx.utr || "N/A"}</td>
                                           <td className="py-2 px-1.5 sm:py-3.5 sm:px-5 text-emerald-600 whitespace-nowrap">₹{tx.amount?.toLocaleString("en-IN") || 0}</td>

@@ -323,19 +323,103 @@ export async function GET(
 
     // Fast lookup for latest gate pass history using skipCount
     let lastOuting = null;
+    const studentDbId = (student.id || student._id || "").toString();
     try {
-      const historyRes = await db.gatePasses.list(
-        { studentId: student.id || student._id || student.firebaseUID },
-        { limit: 1, sortField: 'createdAt', sortOrder: 'desc', skipCount: true }
+      let historyRes = await db.gatePasses.list(
+        { studentId: studentDbId },
+        { limit: 1, sortField: 'checkOutTime', sortOrder: 'desc', skipCount: true }
       );
-      if (historyRes.records && historyRes.records.length > 0) {
+      if ((!historyRes?.records || historyRes.records.length === 0) && student.registrationId) {
+        try {
+          historyRes = await db.gatePasses.list(
+            { registrationId: student.registrationId },
+            { limit: 1, sortField: 'checkOutTime', sortOrder: 'desc', skipCount: true }
+          );
+        } catch (e) {}
+      }
+      if (historyRes?.records && historyRes.records.length > 0) {
         lastOuting = historyRes.records[0];
-        if (lastOuting.status === 'out' || lastOuting.action === 'CHECK_OUT') {
+        if (student.studentStatus === 'out' && (lastOuting.status === 'out' || lastOuting.action === 'CHECK_OUT')) {
           student.studentStatus = 'out';
         }
       }
     } catch (e) {
       console.warn("Could not fetch last outing for student:", e);
+    }
+
+    // Fast lookup for latest / active leave permission to enrich Home-Leave dates
+    try {
+      let permRes = await db.permissions.list(
+        { studentId: studentDbId },
+        { limit: 10 } as any
+      );
+      let perms = Array.isArray(permRes) ? permRes : (permRes?.records || (permRes as any)?.permissions || []);
+      if (perms.length === 0 && student.registrationId) {
+        try {
+          const fallbackPermRes = await db.permissions.list(
+            { registrationId: student.registrationId },
+            { limit: 10 } as any
+          );
+          perms = Array.isArray(fallbackPermRes) ? fallbackPermRes : (fallbackPermRes?.records || (fallbackPermRes as any)?.permissions || []);
+        } catch (e) {}
+      }
+      const leavePerm = perms.find((p: any) => {
+        const t = String(p.requestType || '').toLowerCase();
+        return t.includes('leave') || t === 'hleave';
+      }) || perms[0];
+
+      if (leavePerm) {
+        const s = student as any;
+        s.outingType = leavePerm.requestType || s.outingType || 'leave';
+        s.leaveFrom = leavePerm.fromDateTime || s.leaveFrom;
+        s.leaveTo = leavePerm.toDateTime || s.leaveTo;
+        s.leaveReason = leavePerm.reason || s.leaveReason;
+        s.permissionStatus = leavePerm.status;
+
+        if (lastOuting) {
+          lastOuting = {
+            ...lastOuting,
+            type: (lastOuting as any).type || leavePerm.requestType,
+            fromDateTime: (lastOuting as any).fromDateTime || leavePerm.fromDateTime,
+            toDateTime: (lastOuting as any).toDateTime || leavePerm.toDateTime,
+            expectedReturnDate: (lastOuting as any).expectedReturnDate || leavePerm.toDateTime,
+            reason: (lastOuting as any).reason || leavePerm.reason,
+          };
+        }
+      }
+
+      if (lastOuting) {
+        const lo = lastOuting as any;
+        const s = student as any;
+        if (lo.toDateTime || lo.expectedReturnDate) {
+          s.leaveTo = s.leaveTo || lo.toDateTime || lo.expectedReturnDate;
+        }
+        if (lo.fromDateTime) {
+          s.leaveFrom = s.leaveFrom || lo.fromDateTime;
+        }
+        if (lo.reason) {
+          s.leaveReason = s.leaveReason || lo.reason;
+        }
+      }
+
+      // ⚡ If Home-Leave is active or recent and no explicit return date was set, default to 6 days from departure
+      const rawType = String((lastOuting as any)?.type || (lastOuting as any)?.requestType || (student as any)?.outingType || (student as any)?.dynamicFields?.outingType || '').toLowerCase();
+      const isHomeLeave = rawType.includes('leave') || rawType === 'hleave';
+      if (isHomeLeave) {
+        const s = student as any;
+        const lo = lastOuting as any;
+        if (!s.leaveTo && (!lo || (!lo.toDateTime && !lo.expectedReturnDate))) {
+          const departure = lo?.checkOutTime || lo?.createdAt || s.leaveFrom || s.dynamicFields?.leaveFrom || new Date();
+          const autoSixDays = new Date(new Date(departure).getTime() + 6 * 24 * 60 * 60 * 1000).toISOString();
+          s.leaveTo = autoSixDays;
+          if (lo) {
+            lo.expectedReturnDate = autoSixDays;
+            lo.toDateTime = autoSixDays;
+          }
+        }
+      }
+    } catch (e) {
+      console.warn("Could not fetch latest permission for student:", e);
     }
 
     return NextResponse.json({ success: true, student, lastOuting }, { status: 200 });

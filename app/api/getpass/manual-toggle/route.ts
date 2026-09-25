@@ -36,7 +36,7 @@ function getISTStrings(date: Date) {
 export async function POST(request: NextRequest) {
     try {
         const body = await request.json();
-        const { studentId, studentIds, searchId, action, userType = 'admin', requestType = 'HOME-LEAVE', reason = 'Manual Management Override', operator = 'Admin' } = body;
+        const { studentId, studentIds, searchId, action, userType = 'admin', requestType = 'HOME-LEAVE', reason = 'Manual Management Override', operator = 'Admin', fromDateTime, toDateTime } = body;
         const targetIds: string[] = studentIds || (studentId ? [studentId] : []);
 
         // 2. Validate Authorization (Only Admin/Warden/Gatekeeper/SuperAdmin can manually toggle)
@@ -148,10 +148,15 @@ export async function POST(request: NextRequest) {
                     studentId: id.toString(),
                     status: "out",
                 };
-                if (student.firebaseUID && String(student.firebaseUID).trim()) {
-                    passOutFilters.firebaseUID = String(student.firebaseUID).trim();
+                let { records: existingPasses } = await db.gatePasses.list(passOutFilters);
+                if ((!existingPasses || existingPasses.length === 0) && student.registrationId) {
+                    try {
+                        const fallbackPasses = await db.gatePasses.list({ registrationId: student.registrationId, status: "out" });
+                        if (fallbackPasses?.records?.length > 0) {
+                            existingPasses = fallbackPasses.records;
+                        }
+                    } catch (e) {}
                 }
-                const { records: existingPasses } = await db.gatePasses.list(passOutFilters);
 
                 let initialCheckOutTime = now;
                 let initialIstTime = istTime;
@@ -191,7 +196,7 @@ export async function POST(request: NextRequest) {
                         studentId: id.toString(),
                         status: "allowed"
                     }, { limit: 5 });
-                    const activePerms = Array.isArray(permsRes) ? permsRes : (permsRes?.records || permsRes?.permissions || []);
+                    const activePerms = Array.isArray(permsRes) ? permsRes : (permsRes?.records || (permsRes as any)?.permissions || []);
                     const approvedHomeLeave = activePerms.find((p: any) => {
                         const rType = String(p.requestType || '').toLowerCase();
                         const isLeaveType = (rType === 'home-leave' || rType === 'leave' || rType === 'hleave');
@@ -216,6 +221,29 @@ export async function POST(request: NextRequest) {
                     passReason = passReason || 'Gate Pass (Outing)';
                 }
 
+                let permIdToUse = createdPermId;
+                const defaultSixDaysLater = new Date((fromDateTime ? new Date(fromDateTime) : initialCheckOutTime).getTime() + 6 * 24 * 60 * 60 * 1000);
+                const leaveToDateToUse = toDateTime ? new Date(toDateTime) : defaultSixDaysLater;
+
+                if (targetType === 'HOME-LEAVE' || targetType === 'leave') {
+                    try {
+                        const newPerm = await db.permissions.create({
+                            studentId: id.toString(),
+                            fromDateTime: fromDateTime ? new Date(fromDateTime) : initialCheckOutTime,
+                            toDateTime: leaveToDateToUse,
+                            reason: passReason,
+                            requestType: "leave",
+                            status: "allowed",
+                            wardenStatus: "allowed",
+                            deanStatus: "allowed",
+                            parentStatus: "allowed",
+                        });
+                        if (newPerm) permIdToUse = (newPerm._id || newPerm.id)?.toString();
+                    } catch (permCreateErr) {
+                        console.warn("Failed to create permission record during manual leave toggle:", permCreateErr);
+                    }
+                }
+
                 await db.gatePasses.create({
                     studentId: id.toString(),
                     firebaseUID: student.firebaseUID,
@@ -223,13 +251,16 @@ export async function POST(request: NextRequest) {
                     hostelName: student.hostelName,
                     roomNumber: student.roomNumber,
                     registrationId: student.registrationId,
-                    checkOutTime: initialCheckOutTime,
+                    checkOutTime: fromDateTime ? new Date(fromDateTime) : initialCheckOutTime,
                     checkOutISTTime: initialIstTime,
                     checkOutISTDate: initialIstDate,
+                    fromDateTime: fromDateTime ? new Date(fromDateTime) : initialCheckOutTime,
+                    toDateTime: (targetType === 'HOME-LEAVE' || targetType === 'leave') ? leaveToDateToUse : (toDateTime ? new Date(toDateTime) : undefined),
+                    expectedReturnDate: (targetType === 'HOME-LEAVE' || targetType === 'leave') ? leaveToDateToUse : (toDateTime ? new Date(toDateTime) : undefined),
                     status: "out",
                     type: targetType,
                     reason: passReason,
-                    permissionId: createdPermId,
+                    permissionId: permIdToUse,
                     gateName: "Management Override",
                     qrTokenUsedOut: "MANUAL_BY_" + userType.toUpperCase(),
                 });
@@ -261,12 +292,18 @@ export async function POST(request: NextRequest) {
                     studentId: id.toString(),
                     status: "out",
                 };
-                if (student.firebaseUID && String(student.firebaseUID).trim()) {
-                    passInFilters.firebaseUID = String(student.firebaseUID).trim();
-                }
 
                 const openPassesRes = await db.gatePasses.list(passInFilters);
-                const uniqueOpenPasses = openPassesRes.records || [];
+                let uniqueOpenPasses = openPassesRes.records || [];
+
+                if (uniqueOpenPasses.length === 0 && student.registrationId) {
+                    try {
+                        const fallbackOpen = await db.gatePasses.list({ registrationId: student.registrationId, status: "out" });
+                        if (fallbackOpen?.records?.length > 0) {
+                            uniqueOpenPasses = fallbackOpen.records;
+                        }
+                    } catch (e) {}
+                }
 
                 if (uniqueOpenPasses.length > 0) {
                     for (const pass of uniqueOpenPasses) {
@@ -297,7 +334,13 @@ export async function POST(request: NextRequest) {
                 // Complete all remaining active permissions for this student upon return
                 try {
                     const activePermsRes = await db.permissions.list({ studentId: id.toString(), status: "allowed" });
-                    const activePerms = Array.isArray(activePermsRes) ? activePermsRes : (activePermsRes?.records || activePermsRes?.permissions || []);
+                    let activePerms = Array.isArray(activePermsRes) ? activePermsRes : (activePermsRes?.records || (activePermsRes as any)?.permissions || []);
+                    if (activePerms.length === 0 && student.registrationId) {
+                        try {
+                            const fallbackPerms = await db.permissions.list({ registrationId: student.registrationId, status: "allowed" } as any);
+                            activePerms = Array.isArray(fallbackPerms) ? fallbackPerms : (fallbackPerms?.records || (fallbackPerms as any)?.permissions || []);
+                        } catch (e) {}
+                    }
                     for (const p of activePerms) {
                         const pId = (p._id || p.id)?.toString();
                         if (pId) {

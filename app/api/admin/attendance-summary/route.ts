@@ -107,7 +107,7 @@ export async function GET(request: NextRequest) {
         let summaryData = result;
         if (!summaryData) {
             console.warn("[ATTENDANCE_SUMMARY] db.attendance.summary returned null/undefined, using fallback empty summary");
-            summaryData = { presentStudentIds: [], summary: [] };
+            summaryData = { presentStudentIds: [], summary: [], count: 0 };
         }
 
         let presentStudentIds: string[] = summaryData.presentStudentIds || [];

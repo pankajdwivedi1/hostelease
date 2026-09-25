@@ -11,6 +11,8 @@ import dynamic from "next/dynamic";
 import { supabase } from "@/lib/supabase";
 import { showToast, showConfirm, showPrompt } from "@/lib/toast";
 import { registerPushNotifications } from "@/lib/pushRegister";
+import { generateOfficialInvoicePDF } from "@/lib/invoicePdfGenerator";
+import { formatToDDMMYYYY, formatDateDDMMYYYY, formatDateTimeDDMMYYYY } from "@/lib/dateFormat";
 
 const LocationPickerMap = dynamic(() => import("./LocationPickerMap"), {
   ssr: false,
@@ -628,8 +630,10 @@ const DeveloperTools = ({ hostels, developerPassword, students = [], refreshStud
 
 interface Permission {
   _id: string;
+  id?: string;
   studentId: {
     _id: string;
+    id?: string;
     name: string;
     email: string;
     phoneNumber: string;
@@ -642,15 +646,31 @@ interface Permission {
     semester?: string;
     section?: string;
     floorNumber?: string;
+    registrationId?: string;
+    erpInformation?: string;
+    firebaseUID?: string;
+    [key: string]: any;
   };
+  student?: any;
   fromDateTime: string | Date;
   toDateTime: string | Date;
   reason: string;
-  status: "pending" | "allowed" | "rejected";
-  wardenStatus: "pending" | "allowed" | "rejected";
-  deanStatus: "pending" | "allowed" | "rejected";
-  parentStatus?: "pending" | "allowed" | "rejected" | "no_response";
+  status: "pending" | "allowed" | "rejected" | "approved" | "accepted" | "cancelled" | "hidden" | "all" | string;
+  wardenStatus?: "pending" | "allowed" | "rejected" | "approved" | "accepted" | "cancelled" | string;
+  deanStatus?: "pending" | "allowed" | "rejected" | "approved" | "accepted" | "cancelled" | string;
+  parentStatus?: "pending" | "allowed" | "rejected" | "no_response" | string | null;
+  parentConsentUrl?: string | null;
+  consentVideoUrl?: string | null;
+  videoUrl?: string | null;
+  parentVideoUrl?: string | null;
+  requestType?: string;
+  type?: string;
+  isHidden?: boolean;
+  registrationId?: string;
+  firebaseUID?: string;
+  name?: string;
   createdAt?: string | Date;
+  [key: string]: any;
 }
 
 interface SimplePermission {
@@ -658,10 +678,10 @@ interface SimplePermission {
   fromDateTime: string | Date;
   toDateTime: string | Date;
   reason: string;
-  status: "pending" | "allowed" | "rejected";
-  wardenStatus: "pending" | "allowed" | "rejected";
-  deanStatus: "pending" | "allowed" | "rejected";
-  parentStatus?: "pending" | "allowed" | "rejected" | "no_response";
+  status: "pending" | "allowed" | "rejected" | string;
+  wardenStatus?: "pending" | "allowed" | "rejected" | string;
+  deanStatus?: "pending" | "allowed" | "rejected" | string;
+  parentStatus?: "pending" | "allowed" | "rejected" | "no_response" | string | null;
   parentConsentUrl?: string | null;
   createdAt?: string | Date;
 }
@@ -677,6 +697,9 @@ interface AttendanceLog {
     hostelName: string;
     roomNumber: string;
     registrationId?: string;
+    erpInformation?: string;
+    erpId?: string;
+    [key: string]: any;
   } | null;
   name?: string;
   hostelName?: string;
@@ -689,16 +712,30 @@ interface AttendanceLog {
     lng: number;
     accuracy: number;
   };
+  accuracy?: number;
   faceMatchPercentage?: number;
-  faceMatchStatus?: "auto-approved" | "flagged" | "manual-override";
+  faceMatchStatus?: "auto-approved" | "flagged" | "manual-override" | "verified" | string;
   flaggedPhotoUrl?: string;
   needsReview?: boolean;
   markedBy?: string;
   deviceId?: string;
+  erpId?: string;
+  erpInformation?: string;
+  verificationMethod?: string;
+  verification_method?: string;
+  verifiedBy?: string;
+  verified_by?: string;
+  isWifiVerified?: boolean;
+  is_wifi_verified?: boolean;
+  attendanceMode?: string;
+  wifiBSSID?: string;
+  wifi_bssid?: string;
+  [key: string]: any;
 }
 
 interface DBNotification {
   _id: string;
+  id?: string;
   message: string;
   image?: string;
   targetType: "all" | "hostel" | "individual";
@@ -710,13 +747,20 @@ interface DBNotification {
   priority: "normal" | "urgent" | "critical";
   createdAt: string;
   acknowledgedBy: string[];
+  senderRole?: string;
+  senderHostel?: string;
+  [key: string]: any;
 }
 
 interface StudentDetails {
   id: string;
+  _id?: string;
   name: string;
   email: string;
   phoneNumber: string;
+  gender?: string;
+  address?: string;
+  permanent_address?: string;
   hostelName: string;
   roomNumber: string;
   floorNumber?: string;
@@ -758,6 +802,7 @@ interface StudentDetails {
     createdAt: string;
   }[];
   thumbImpressionId?: string; // ⚡ NEW: Thumb biometrics
+  faceDescriptor?: any;
   outingType?: string | null;
   leaveFrom?: string | Date | null;
   leaveTo?: string | Date | null;
@@ -766,6 +811,8 @@ interface StudentDetails {
   checkOutIstTime?: string | null;
   permissions: SimplePermission[];
   firebaseUID?: string;
+  dynamicFields?: Record<string, any>;
+  [key: string]: any;
 }
 
 // Cache constants
@@ -863,7 +910,7 @@ const normalizeFloorName = (floorVal: string | number | undefined, roomNum?: str
 
 export default function AdminDashboard({ title = "Admin Dashboard", showRemoveButton = false }: { title?: string; showRemoveButton?: boolean }) {
   const router = useRouter();
-  const [filter, setFilter] = useState<"all" | "allowed" | "rejected" | "pending">("all");
+  const [filter, setFilter] = useState<"all" | "allowed" | "rejected" | "pending" | "hidden">("all");
   const [statusFilter, setStatusFilter] = useState<"all" | "in" | "out">("all");
 
   const [permissions, setPermissions] = useState<Permission[]>([]);
@@ -909,7 +956,7 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
   const [sectionFilter, setSectionFilter] = useState<string>("all");
   const [floorFilter, setFloorFilter] = useState<string>("all");
   const [roomFilter, setRoomFilter] = useState<string>("all");
-  const [hostels, setHostels] = useState<Array<{ _id: string; name: string; attendanceMode?: 'strict' | 'gps-only' | 'biometric' }>>(() => {
+  const [hostels, setHostels] = useState<Array<{ _id: string; id?: string; name: string; attendanceMode?: 'strict' | 'gps-only' | 'biometric' }>>(() => {
     if (typeof window !== "undefined") {
       try {
         const cached = localStorage.getItem(CACHE_KEYS.HOSTELS);
@@ -1151,7 +1198,7 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
         type: 'outing'
       }));
 
-      const combinedGatePasses = [...outingPasses, ...outingPerms].sort((a, b) => {
+      const combinedGatePasses = [...outingPasses, ...outingPerms].sort((a: any, b: any) => {
         const dateA = new Date(a.checkOutTime || a.fromDateTime || a.createdAt || 0).getTime();
         const dateB = new Date(b.checkOutTime || b.fromDateTime || b.createdAt || 0).getTime();
         return dateB - dateA;
@@ -1464,7 +1511,7 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
   const [bulkStudentsEditList, setBulkStudentsEditList] = useState<any[]>([]);
   const [bulkFillColumn, setBulkFillColumn] = useState("");
   const [bulkFillValue, setBulkFillValue] = useState("");
-  const [addStudentForm, setAddStudentForm] = useState<Record<string, string>>({});
+  const [addStudentForm, setAddStudentForm] = useState<Record<string, any>>({});
   const [isSavingStudent, setIsSavingStudent] = useState(false);
   const [showHomeLeaveModal, setShowHomeLeaveModal] = useState(false);
   const [homeLeaveModalStudent, setHomeLeaveModalStudent] = useState<any>(null);
@@ -2436,447 +2483,15 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
   }, [activeSettingsTab]);
 
   const generateInvoicePDF = (tx: any, collegeName: string) => {
-    const printWindow = window.open('', '_blank');
-    if (!printWindow) {
-      alert("Popup blocker prevented opening invoice. Please allow popups for this site.");
-      return;
-    }
-    
-    const paymentDateObj = new Date(tx.date || Date.now());
-    const formattedDate = paymentDateObj.toLocaleDateString("en-IN", { day: "2-digit", month: "long", year: "numeric" });
-    const formattedTime = paymentDateObj.toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: true });
-    const fullDateTimeStr = `${formattedDate} • ${formattedTime} IST`;
-    const invoiceNo = (tx.id || "tx_invoice").replace('tx_', 'INV-').replace('dir_', 'INV-DIR-').toUpperCase();
-    
-    // 1. Strictly use app settings: Rate = ₹30/student/mo, Discounts = 0%, 20%, 30%, 40% (+3% Direct Transfer)
-    const liveCount = (students && students.length > 0) ? students.length : (dashboardStats?.totalStudents || 448);
-    const studentCount = (tx.studentCount && tx.studentCount !== 446) ? tx.studentCount : liveCount;
-    const months = tx.months || (tx.billingPeriod?.includes("1 Month") ? 1 : tx.billingPeriod?.includes("3") ? 3 : tx.billingPeriod?.includes("6") ? 6 : 12);
-    const ratePerStudentMonth = tx.ratePerStudentMonth || 30; // Your exact configured app setting: ₹30
-
-    const methodRaw = (tx.paymentMethod || tx.billingType || tx.paymentSource || tx.remarks || "").toString();
-    let paymentMethodText = "Direct Bank Transfer (UTR Verified)";
-    if (methodRaw.toLowerCase().includes("upi")) {
-      paymentMethodText = "UPI Transfer (UTR Verified)";
-    } else if (methodRaw.toLowerCase().includes("razorpay") || tx.id?.includes("rzp")) {
-      paymentMethodText = "Razorpay (Instant Online Renewal)";
-    } else if (methodRaw.toLowerCase().includes("direct bank") || methodRaw.toLowerCase().includes("bank") || methodRaw.toLowerCase().includes("direct") || methodRaw.toLowerCase().includes("verified payment")) {
-      paymentMethodText = "Direct Bank Transfer (UTR Verified)";
-    } else {
-      paymentMethodText = "Direct Bank Transfer (UTR Verified)";
-    }
-    const isDirectTransfer = paymentMethodText.toLowerCase().includes("direct") || paymentMethodText.toLowerCase().includes("bank");
-
-    // Determine discount rule % from app settings based on tenure (0%, 20%, 30%, 40%)
-    let standardDiscountPercent = tx.discountPercent !== undefined ? Number(tx.discountPercent) : 
-      months === 1 ? 0 :
-      months === 3 ? 20 :
-      months === 6 ? 30 : 40; // 40% for 12 months (Your exact Annual Plan setting)
-
-    // If direct transfer, add your configured 3% direct transfer incentive
-    if (isDirectTransfer && tx.discountPercent === undefined) {
-      standardDiscountPercent += 3;
-    }
-
-    // 2. Calculate Gross Subtotal at your set rate (₹30), discount amount, and exact net Total Paid
-    const grossBase = studentCount * ratePerStudentMonth * months;
-    const standardDiscountAmount = Math.round(grossBase * (standardDiscountPercent / 100));
-
-    // Extra discount added via BOSS CONTROL DASHBOARD (Direct ₹ Amount or % Wise)
-    let extraDiscountAmount = 0;
-    let extraDiscountPercent = 0;
-
-    if (tx.extraDiscountType === "amount" || (tx.extraDiscountAmount && Number(tx.extraDiscountAmount) > 0)) {
-      extraDiscountAmount = Number(tx.extraDiscountAmount || tx.extraDiscountValue || 0);
-      extraDiscountPercent = grossBase > 0 ? Number(((extraDiscountAmount / grossBase) * 100).toFixed(1)) : 0;
-    } else if (tx.extraDiscountPercent && Number(tx.extraDiscountPercent) > 0) {
-      extraDiscountPercent = Number(tx.extraDiscountPercent);
-      extraDiscountAmount = Math.round(grossBase * (extraDiscountPercent / 100));
-    }
-
-    const totalDiscountAmount = standardDiscountAmount + extraDiscountAmount;
-    const totalDiscountPercent = grossBase > 0 ? Math.round((totalDiscountAmount / grossBase) * 100) : (standardDiscountPercent + extraDiscountPercent);
-    const netCalculated = Math.max(0, grossBase - totalDiscountAmount);
-    const finalPaid = (tx.amount && tx.amount > 0 && tx.amount <= grossBase) ? tx.amount : netCalculated;
-    const logoUrl = typeof window !== 'undefined' ? `${window.location.origin}/logo.jpeg` : '/logo.jpeg';
-
-    printWindow.document.write(`
-      <!DOCTYPE html>
-      <html>
-        <head>
-          <title>Hosteleaze Tax Invoice ${invoiceNo}</title>
-          <style>
-            @page {
-              size: A4 portrait;
-              margin: 6mm 10mm;
-            }
-            * { box-sizing: border-box; }
-            body, table, th, td, h1, h2, h3, h4, p, div, span, button {
-              font-family: 'Cambria Math', Cambria, Georgia, serif !important;
-            }
-            body {
-              font-family: 'Cambria Math', Cambria, Georgia, serif !important;
-              margin: 0;
-              padding: 16px;
-              color: #0f172a;
-              line-height: 1.35;
-              background: #f8fafc;
-            }
-            .invoice-box {
-              max-width: 760px;
-              margin: auto;
-              background: #ffffff;
-              border: 1px solid #e2e8f0;
-              border-radius: 12px;
-              padding: 24px 28px;
-              box-shadow: 0 4px 16px rgba(0, 0, 0, 0.04);
-            }
-            .header {
-              display: flex;
-              justify-content: space-between;
-              align-items: center;
-              border-bottom: 2px solid #f1f5f9;
-              padding-bottom: 16px;
-              margin-bottom: 18px;
-            }
-            .brand-wrapper {
-              display: flex;
-              align-items: center;
-              gap: 12px;
-            }
-            .brand-logo {
-              width: 44px;
-              height: 44px;
-              border-radius: 10px;
-              object-fit: cover;
-            }
-            .logo-text {
-              font-size: 22px;
-              font-weight: 900;
-              letter-spacing: -0.5px;
-              color: #0f172a;
-            }
-            .logo-text span {
-              color: #4f46e5;
-            }
-            .brand-sub {
-              font-size: 10px;
-              font-weight: 600;
-              color: #64748b;
-            }
-            .title {
-              text-align: right;
-            }
-            .title h1 {
-              font-size: 16px;
-              font-weight: 900;
-              color: #0f172a;
-              letter-spacing: 0.5px;
-              margin: 0;
-            }
-            .title-no {
-              font-size: 11px;
-              font-weight: 700;
-              color: #64748b;
-              margin: 2px 0 0 0;
-            }
-            .details {
-              display: flex;
-              justify-content: space-between;
-              margin-bottom: 18px;
-              background: #f8fafc;
-              padding: 14px 18px;
-              border-radius: 10px;
-              border: 1px solid #f1f5f9;
-            }
-            .details h3 {
-              font-size: 10px;
-              text-transform: uppercase;
-              letter-spacing: 0.8px;
-              color: #64748b;
-              margin: 0 0 6px 0;
-              font-weight: 800;
-            }
-            .meta-bar {
-              display: flex;
-              justify-content: space-between;
-              background: #eef2ff;
-              border: 1px solid #c7d2fe;
-              padding: 12px 18px;
-              border-radius: 10px;
-              margin-bottom: 18px;
-            }
-            .meta-bar h3 {
-              font-size: 10px;
-              text-transform: uppercase;
-              letter-spacing: 0.8px;
-              color: #4338ca;
-              margin: 0 0 4px 0;
-              font-weight: 800;
-            }
-            .meta-bar p {
-              margin: 0;
-              font-size: 13px;
-              font-weight: 800;
-            }
-            .table {
-              width: 100%;
-              border-collapse: collapse;
-              margin-bottom: 18px;
-            }
-            .table th {
-              background: #f1f5f9;
-              padding: 10px 12px;
-              font-size: 10px;
-              text-transform: uppercase;
-              letter-spacing: 0.5px;
-              color: #475569;
-              font-weight: 800;
-              border-bottom: 1px solid #e2e8f0;
-            }
-            .table td {
-              padding: 12px;
-              font-size: 12px;
-              border-bottom: 1px solid #f1f5f9;
-              color: #334155;
-            }
-            .total-box {
-              display: flex;
-              justify-content: flex-end;
-              margin-bottom: 18px;
-            }
-            .total-table {
-              width: 280px;
-              border-collapse: collapse;
-            }
-            .total-table td {
-              padding: 6px 12px;
-              font-size: 11px;
-              color: #475569;
-              font-weight: 600;
-            }
-            .total-table td:last-child {
-              text-align: right;
-              font-weight: 800;
-            }
-            .total-table .grand-total td {
-              font-size: 14px;
-              font-weight: 900;
-              color: #0f172a;
-              border-top: 2px solid #e2e8f0;
-              padding-top: 10px;
-            }
-            .savings-badge {
-              background: #fdf2f8;
-              border: 1px solid #fbcfe8;
-              color: #be185d;
-              padding: 8px 12px;
-              border-radius: 8px;
-              font-size: 11px;
-              font-weight: 800;
-              text-align: center;
-              margin-bottom: 8px;
-            }
-            .audit-box {
-              background: #f8fafc;
-              border: 1px solid #e2e8f0;
-              padding: 12px 16px;
-              border-radius: 10px;
-              margin-bottom: 18px;
-            }
-            .footer {
-              text-align: center;
-              border-top: 1px solid #f1f5f9;
-              padding-top: 14px;
-              color: #64748b;
-            }
-            @media print {
-              .no-print { display: none !important; }
-              body { padding: 0; background: #fff; }
-              .invoice-box { border: none; box-shadow: none; padding: 0; margin: 0; width: 100%; max-width: 100%; }
-            }
-            .print-btn {
-              background: #4f46e5;
-              color: #fff;
-              border: none;
-              padding: 12px 24px;
-              border-radius: 8px;
-              font-weight: 800;
-              font-size: 13px;
-              cursor: pointer;
-              box-shadow: 0 4px 12px rgba(79, 70, 229, 0.2);
-              margin-bottom: 16px;
-            }
-          </style>
-        </head>
-        <body>
-          <div style="max-width: 760px; margin: auto;" class="no-print">
-            <button onclick="window.print()" class="print-btn">🖨️ Print / Save 1-Page A4 PDF Invoice</button>
-          </div>
-          <div class="invoice-box">
-            <div class="header">
-              <div class="brand-wrapper">
-                <img src="${logoUrl}" style="width: 44px; height: 44px; border-radius: 10px; object-fit: cover;" alt="Hosteleaze Logo" />
-                <div>
-                  <div class="logo-text">HOSTEL<span>EAZE</span></div>
-                  <div class="brand-sub">Smart Campus Automation • SAC 998313</div>
-                </div>
-              </div>
-              <div class="title">
-                <h1>OFFICIAL TAX INVOICE</h1>
-                <p class="title-no">NO: ${invoiceNo}</p>
-              </div>
-            </div>
-            
-            <div class="details">
-              <div>
-                <h3>Billed To (Client)</h3>
-                <p style="font-size: 15px; color: #0f172a; margin: 0 0 4px 0; font-weight: 800; line-height: 1.2;">${collegeName || tenantFormData.name || "Partner College"}</p>
-                ${tenantFormData.address ? `<p style="font-size: 10px; font-weight: 600; color: #475569; margin: 0 0 3px 0; line-height: 1.4;">📍 ${tenantFormData.address}</p>` : ''}
-                ${tenantFormData.email ? `<p style="font-size: 10px; font-weight: 600; color: #64748b; margin: 0 0 3px 0; line-height: 1.4;">✉️ ${tenantFormData.email}</p>` : ''}
-                ${tenantFormData.phone ? `<p style="font-size: 10px; font-weight: 600; color: #64748b; margin: 0 0 3px 0; line-height: 1.4;">📞 ${tenantFormData.phone}</p>` : ''}
-                ${(tenantFormData.contactName || tenantFormData.contactPhone) ? `<p style="font-size: 10px; font-weight: 700; color: #4338ca; margin: 0 0 3px 0; line-height: 1.4;">👤 Coordinator: ${tenantFormData.contactName || 'Dr Pankaj Dwivedi'}${tenantFormData.contactPhone ? ' • 📱 Mobile: ' + tenantFormData.contactPhone : ''}</p>` : ''}
-                ${tenantFormData.gstin ? `<p style="font-size: 10px; font-weight: 800; color: #4338ca; margin: 0 0 3px 0; line-height: 1.4;">GSTIN: ${tenantFormData.gstin}</p>` : ''}
-              </div>
-              <div style="text-align: right;">
-                <h3>Billed From (Provider)</h3>
-                <p style="font-size: 15px; color: #0f172a; margin-bottom: 2px;">Hosteleaze Inc.</p>
-                <p style="font-size: 11px; font-weight: 600; color: #64748b; margin-bottom: 1px;">Account: DR. PANKAJ DWIVEDI</p>
-                <p style="font-size: 11px; font-weight: 600; color: #64748b;">Support: support@hosteleaze.com</p>
-              </div>
-            </div>
-
-            <div class="meta-bar">
-              <div>
-                <h3>Payment Date & Exact Time</h3>
-                <p style="color: #0f172a;">${fullDateTimeStr}</p>
-              </div>
-              <div style="text-align: right;">
-                <h3>Payment Method</h3>
-                <p style="color: #4f46e5;">${paymentMethodText}</p>
-              </div>
-            </div>
-
-            <table class="table">
-              <thead>
-                <tr>
-                  <th>Item & Plan Description</th>
-                  <th style="text-align: center;">Students</th>
-                  <th style="text-align: center;">Rate / Mo</th>
-                  <th style="text-align: center;">Duration</th>
-                  <th style="text-align: right;">Amount</th>
-                </tr>
-              </thead>
-              <tbody>
-                <tr>
-                  <td>
-                    <div style="font-weight: 800; color: #0f172a;">Hosteleaze Enterprise License</div>
-                    <div style="font-size: 10px; color: #64748b; font-weight: 600; margin-top: 2px;">Full Warden, Student & Admin Gatepass Portals Access</div>
-                  </td>
-                  <td style="text-align: center; font-weight: 700;">${studentCount}</td>
-                  <td style="text-align: center; font-weight: 700;">₹${ratePerStudentMonth}</td>
-                  <td style="text-align: center; font-weight: 700;">${tx.billingPeriod || (months + " Months")}</td>
-                  <td style="text-align: right; font-weight: 800;">₹${grossBase.toLocaleString("en-IN")}.00</td>
-                </tr>
-
-                ${standardDiscountAmount > 0 ? `
-                <tr style="background: #fdf2f8;">
-                  <td colspan="4" style="color: #be185d; font-weight: 700;">
-                    🎁 Subscription Plan Discount & Incentives (${standardDiscountPercent}% OFF)
-                    ${isDirectTransfer ? '<span style="font-size: 9px; opacity: 0.8; margin-left: 4px;">(Includes Direct Transfer Incentive)</span>' : ''}
-                  </td>
-                  <td style="text-align: right; font-weight: 800; color: #be185d;">-₹${standardDiscountAmount.toLocaleString("en-IN")}.00</td>
-                </tr>
-                ` : ''}
-
-                ${extraDiscountAmount > 0 ? `
-                <tr style="background: #fdf4ff;">
-                  <td colspan="4" style="color: #7e22ce; font-weight: 700;">
-                    ✨ Special Concession (${extraDiscountPercent}% OFF)
-                  </td>
-                  <td style="text-align: right; font-weight: 800; color: #7e22ce;">-₹${extraDiscountAmount.toLocaleString("en-IN")}.00</td>
-                </tr>
-                ` : ''}
-              </tbody>
-            </table>
-
-            <div class="total-box" style="display: flex; justify-content: space-between; align-items: stretch; margin-bottom: 18px; gap: 20px;">
-              <div style="display: flex; align-items: center; gap: 16px; background: #f8fafc; border: 1.5px solid #cbd5e1; padding: 12px 16px; border-radius: 14px; max-width: 410px; flex: 1;">
-                <img src="https://api.qrserver.com/v1/create-qr-code/?size=220x220&data=${encodeURIComponent(`HOSTELEAZE TAX INVOICE\nInvoice: ${invoiceNo}\nCollege: ${collegeName || tenantFormData.name}\nAmount: Rs. ${finalPaid.toLocaleString("en-IN")}\nUTR: ${tx.utr || tx.id}\nStatus: PAID & VERIFIED`)}" style="width: 135px; height: 135px; border-radius: 10px; border: 1.5px solid #94a3b8; background: #fff; padding: 5px; box-shadow: 0 2px 8px rgba(0,0,0,0.05);" alt="Verification QR Code" />
-                <div style="flex: 1;">
-                  <div style="font-size: 11px; font-weight: 900; color: #0f172a; text-transform: uppercase; letter-spacing: 0.5px; line-height: 1.2;">Scan to Verify Invoice</div>
-                  <div style="font-size: 10px; color: #64748b; font-weight: 600; margin-top: 4px;">Official Digital Audit Proof</div>
-                  <div style="font-size: 9px; font-weight: 800; color: #3730a3; margin-top: 10px; background: #e0e7ff; border: 1px solid #c7d2fe; padding: 4px 8px; border-radius: 6px; display: inline-block;">✓ VERIFIED E-INVOICE</div>
-                </div>
-              </div>
-
-              <div style="width: 300px; shrink: 0;">
-                ${totalDiscountAmount > 0 ? `
-                <div class="savings-badge">
-                  🎉 Total College Savings: ₹${totalDiscountAmount.toLocaleString("en-IN")}.00
-                </div>
-                ` : ''}
-
-                <table class="total-table">
-                  <tr>
-                    <td>Gross Subtotal</td>
-                    <td>₹${grossBase.toLocaleString("en-IN")}.00</td>
-                  </tr>
-                  ${extraDiscountAmount > 0 && standardDiscountAmount > 0 ? `
-                  <tr>
-                    <td style="color: #be185d;">Standard Plan Discount (${standardDiscountPercent}%)</td>
-                    <td style="color: #be185d;">-₹${standardDiscountAmount.toLocaleString("en-IN")}.00</td>
-                  </tr>
-                  <tr>
-                    <td style="color: #7e22ce; font-weight: 700;">🌟 Special Concession (${extraDiscountPercent}%)</td>
-                    <td style="color: #7e22ce; font-weight: 700;">-₹${extraDiscountAmount.toLocaleString("en-IN")}.00</td>
-                  </tr>
-                  ` : extraDiscountAmount > 0 ? `
-                  <tr>
-                    <td style="color: #7e22ce; font-weight: 700;">🌟 Special Concession (${extraDiscountPercent}%)</td>
-                    <td style="color: #7e22ce; font-weight: 700;">-₹${extraDiscountAmount.toLocaleString("en-IN")}.00</td>
-                  </tr>
-                  ` : ''}
-                  ${totalDiscountAmount > 0 ? `
-                  <tr>
-                    <td style="color: #be185d; font-weight: 800;">Total Discounts (${totalDiscountPercent}%)</td>
-                    <td style="color: #be185d; font-weight: 800;">-₹${totalDiscountAmount.toLocaleString("en-IN")}.00</td>
-                  </tr>
-                  ` : ''}
-                  <tr>
-                    <td>GST / Service Tax (0%)</td>
-                    <td>₹0.00</td>
-                  </tr>
-                  <tr class="grand-total">
-                    <td>Total Paid</td>
-                    <td style="color: #4f46e5;">₹${finalPaid.toLocaleString("en-IN")}.00</td>
-                  </tr>
-                </table>
-              </div>
-            </div>
-
-            <div class="audit-box">
-              <p style="margin: 0; font-size: 9px; text-transform: uppercase; letter-spacing: 0.8px; color: #64748b; font-weight: 800; margin-bottom: 4px;">Payment Verification & Audit Proof</p>
-              <div style="display: flex; justify-content: space-between; align-items: center;">
-                <div>
-                  <p style="margin: 0; font-size: 12px; font-weight: 800; color: #0f172a;">Reference / UTR ID: ${tx.utr || tx.id || "N/A"}</p>
-                  <p style="margin: 2px 0 0 0; font-size: 10px; font-weight: 600; color: #64748b;">Method: ${paymentMethodText} • Timestamp: ${fullDateTimeStr}</p>
-                </div>
-                <div style="background: #dcfce7; border: 1px solid #86efac; color: #15803d; padding: 4px 12px; border-radius: 16px; font-size: 10px; font-weight: 900; letter-spacing: 0.5px;">
-                  ✓ PAID & VERIFIED
-                </div>
-              </div>
-            </div>
-
-            <div class="footer">
-              <p style="margin: 0; font-size: 13px; font-weight: 800; color: #334155; margin-bottom: 2px;">Thank you for trusting Hosteleaze!</p>
-              <p style="margin: 0; font-size: 10px;">This is an official computer-generated tax invoice receipt. Digital authorization valid without physical signature.</p>
-            </div>
-          </div>
-        </body>
-      </html>
-    `);
-    printWindow.document.close();
+    generateOfficialInvoicePDF(tx, {
+      name: collegeName || tenantFormData?.name,
+      address: tenantFormData?.address,
+      email: tenantFormData?.email,
+      phone: tenantFormData?.phone,
+      contactName: tenantFormData?.contactName,
+      contactPhone: tenantFormData?.contactPhone,
+      gstin: tenantFormData?.gstin
+    });
   };
 
   // Register Web Push notifications on mount
@@ -3263,9 +2878,9 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
     const now = new Date();
     const tzOffset = now.getTimezoneOffset() * 60000;
     const localNow = new Date(now.getTime() - tzOffset);
-    const twoDaysLater = new Date(now.getTime() + 2 * 24 * 60 * 60 * 1000 - tzOffset);
+    const sixDaysLater = new Date(now.getTime() + 6 * 24 * 60 * 60 * 1000 - tzOffset);
     setHomeLeaveFromDate(localNow.toISOString().slice(0, 16));
-    setHomeLeaveToDate(twoDaysLater.toISOString().slice(0, 16));
+    setHomeLeaveToDate(sixDaysLater.toISOString().slice(0, 16));
     setHomeLeaveReason("Home Leave (Manual Approval)");
     setShowHomeLeaveModal(true);
   };
@@ -4381,10 +3996,17 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
     borderScore: number;
     isPhotoOfPhoto: boolean;
     isBlurry: boolean;
+    canvasElement: HTMLCanvasElement | null;
   }> => {
     return new Promise((resolve) => {
       const trimmedSrc = (imgSrc || "").trim();
-      const isBlank = !trimmedSrc || trimmedSrc === "null" || trimmedSrc === "undefined" || trimmedSrc === "data:," || trimmedSrc.length < 20;
+      const isBlank = !trimmedSrc || 
+        trimmedSrc === "null" || 
+        trimmedSrc === "undefined" || 
+        trimmedSrc === "data:," || 
+        trimmedSrc.length < 20 ||
+        trimmedSrc.startsWith('/api/uploads');
+
       if (isBlank) {
         return resolve({
           isPoorQuality: true,
@@ -4393,17 +4015,47 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
           sharpnessScore: 0,
           borderScore: 0,
           isPhotoOfPhoto: false,
-          isBlurry: false
+          isBlurry: false,
+          canvasElement: null
         });
+      }
+
+      // Bypass non-CORS cached thumbnail responses by appending a query tag
+      let fetchSrc = trimmedSrc;
+      if (fetchSrc.startsWith('http://') || fetchSrc.startsWith('https://')) {
+        const sep = fetchSrc.includes('?') ? '&' : '?';
+        fetchSrc = `${fetchSrc}${sep}_cors=1`;
       }
 
       const img = new Image();
       img.crossOrigin = "anonymous";
+      let isSettled = false;
+
+      // Timeout safety: 8s maximum per image
+      const timer = setTimeout(() => {
+        if (!isSettled) {
+          isSettled = true;
+          resolve({
+            isPoorQuality: true,
+            issueType: "BLANK_PHOTO",
+            issueLabel: "Unloadable / Timeout Photo",
+            sharpnessScore: 0,
+            borderScore: 0,
+            isPhotoOfPhoto: false,
+            isBlurry: false,
+            canvasElement: null
+          });
+        }
+      }, 8000);
+
       img.onload = () => {
+        if (isSettled) return;
+        isSettled = true;
+        clearTimeout(timer);
         try {
           const canvas = document.createElement("canvas");
-          const w = 160;
-          const h = 160;
+          const w = 320;
+          const h = 320;
           canvas.width = w;
           canvas.height = h;
           const ctx = canvas.getContext("2d", { willReadFrequently: true });
@@ -4416,7 +4068,7 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
               borderScore: 0,
               isPhotoOfPhoto: false,
               isBlurry: false,
-              imgElement: img
+              canvasElement: null
             });
           }
 
@@ -4459,12 +4111,12 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
               borderScore: 0,
               isPhotoOfPhoto: false,
               isBlurry: false,
-              imgElement: img
+              canvasElement: canvas
             });
           }
 
           // 2. Outer Border & Framed Card/Screen Recapture Detection
-          const margin = 12;
+          const margin = 20;
           let topLuma = 0, bottomLuma = 0, leftLuma = 0, rightLuma = 0;
           let topCount = 0, bottomCount = 0, leftCount = 0, rightCount = 0;
 
@@ -4549,7 +4201,7 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
               );
               const gy = (
                 gray[idx + w - 1] + 2 * gray[idx + w] + gray[idx + w + 1] -
-                (gray[idx - w - 1] + 2 * gray[idx - w] + gray[idx - w + 1])
+                (gray[idx - w - 1] + 2 * gray[idx - 1] + gray[idx - w + 1])
               );
               const edgeMag = Math.min(511, Math.round(Math.sqrt(gx * gx + gy * gy)));
               edgeHist[edgeMag]++;
@@ -4574,15 +4226,15 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
 
           // Calibrated Sharpness Score (0-100%)
           let sharpnessScore = 0;
-          if (lapVariance < 800 || p95 < 140) {
-            sharpnessScore = Math.min(35, Math.max(5, Math.round((lapVariance / 800) * 20 + (p95 / 140) * 15)));
+          if (lapVariance < 60 || p95 < 24) {
+            sharpnessScore = Math.min(25, Math.max(5, Math.round((lapVariance / 60) * 15 + (p95 / 24) * 10)));
           } else {
-            const edgePart = Math.min(50, (p95 / 250.0) * 50.0);
-            const varPart = Math.min(50, (Math.min(10000, lapVariance) / 10000.0) * 50.0);
-            sharpnessScore = Math.min(100, Math.max(45, Math.round(edgePart + varPart)));
+            const edgePart = Math.min(50, (p95 / 120.0) * 50.0);
+            const varPart = Math.min(50, (Math.min(2500, lapVariance) / 2500.0) * 50.0);
+            sharpnessScore = Math.min(100, Math.max(50, Math.round(edgePart + varPart)));
           }
 
-          const isBlurry = sharpnessScore < 40 || (lapVariance < 1000 && p95 < 135);
+          const isBlurry = sharpnessScore < 35 || (lapVariance < 50 && p95 < 20);
 
           let issueType: "BLANK_PHOTO" | "MISSING_VECTOR" | "PHOTO_OF_PHOTO" | "BLURRY_PHOTO" | "CLEAN" = "CLEAN";
           let issueLabel = `✓ Sharp (${sharpnessScore}%)`;
@@ -4610,7 +4262,7 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
             borderScore,
             isPhotoOfPhoto,
             isBlurry,
-            imgElement: img
+            canvasElement: canvas
           });
         } catch (e) {
           resolve({
@@ -4621,25 +4273,28 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
             borderScore: 0,
             isPhotoOfPhoto: false,
             isBlurry: false,
-            imgElement: img
+            canvasElement: null
           });
         }
       };
 
       img.onerror = () => {
+        if (isSettled) return;
+        isSettled = true;
+        clearTimeout(timer);
         resolve({
           isPoorQuality: true,
           issueType: "BLANK_PHOTO",
-          issueLabel: "Corrupted / Unloadable Photo",
+          issueLabel: "Missing / Broken Photo",
           sharpnessScore: 0,
           borderScore: 0,
           isPhotoOfPhoto: false,
           isBlurry: false,
-          imgElement: null
+          canvasElement: null
         });
       };
 
-      img.src = imgSrc;
+      img.src = fetchSrc;
     });
   };
 
@@ -4649,27 +4304,28 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
     const updated = [...studentList];
     const total = updated.length;
 
-    // Detect mobile to tune batch size
-    const isMobileDevice = typeof navigator !== 'undefined' && /Mobi|Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
-
-    // Load fast face-api module for Face Presence, Multiple Faces & Vector Extraction
+    // Load full Face-API AI detection module on all viewports
     let faceApiModule: any = null;
-    if (!isMobileDevice) {
-      try {
-        faceApiModule = await import("@/lib/faceMatching");
-        await faceApiModule.loadFaceApiModels(false);
-      } catch (err) {
-        console.warn("Face-API loader warning in audit:", err);
-      }
+    try {
+      faceApiModule = await import("@/lib/faceMatching");
+      await faceApiModule.loadFaceApiModels(false);
+    } catch (err) {
+      console.warn("Face-API loader warning in audit:", err);
     }
 
-    // Process in smooth parallel batches: 4 on mobile, 8 on desktop with UI yielding
-    const batchSize = isMobileDevice ? 4 : 8;
+    // Process in smooth parallel batches: 4 students concurrently
+    const batchSize = 4;
     for (let i = 0; i < total; i += batchSize) {
       const batch = updated.slice(i, i + batchSize);
       await Promise.all(batch.map(async (s) => {
         const pic = (s.profilePicture || "").trim();
-        const isBlank = !pic || pic === "null" || pic === "undefined" || pic === "data:," || pic.length < 20;
+        const isBlank = !pic || 
+          pic === "null" || 
+          pic === "undefined" || 
+          pic === "data:," || 
+          pic.length < 20 ||
+          pic.startsWith('/api/uploads');
+
         if (isBlank) {
           s.issueType = "BLANK_PHOTO";
           s.isBlurry = false;
@@ -4688,11 +4344,10 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
           s.faceMissing = false;
           s.multipleFaces = false;
 
-          // AI Face Presence, Multiple Faces & Vector Extraction via face-api
-          if (!isMobileDevice && faceApiModule && res.imgElement && res.issueType !== "BLANK_PHOTO") {
+          // AI Face Presence, Multiple Faces & Vector Extraction via face-api using 320x320 canvas
+          if (faceApiModule && res.canvasElement && res.issueType !== "BLANK_PHOTO") {
             try {
-              // Pass the already loaded and decoded image element directly (0 redundant network/decoding load!)
-              const faceRes = await faceApiModule.detectFace(res.imgElement, false, !s.hasVector);
+              const faceRes = await faceApiModule.detectFace(res.canvasElement, false, !s.hasVector);
               if (!faceRes) {
                 s.faceMissing = true;
                 s.multipleFaces = false;
@@ -4718,12 +4373,17 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
             }
           }
 
-          if (s.multipleFaces || s.issueType === "MULTIPLE_FACES") {
+          if (res.issueType === "BLANK_PHOTO") {
+            s.issueType = "BLANK_PHOTO";
+            s.faceMissing = true;
+            s.isBlurry = false;
+            s.isPhotoOfPhoto = false;
+            s.multipleFaces = false;
+            s.qualityIssueLabel = "Blank / Missing Photo";
+          } else if (s.multipleFaces || s.issueType === "MULTIPLE_FACES") {
             s.issueType = "MULTIPLE_FACES";
           } else if (s.faceMissing || s.issueType === "NO_FACE") {
             s.issueType = "NO_FACE";
-          } else if (res.issueType === "BLANK_PHOTO") {
-            s.issueType = "BLANK_PHOTO";
           } else if (res.isPhotoOfPhoto) {
             s.issueType = "PHOTO_OF_PHOTO";
           } else if (res.isBlurry) {
@@ -4739,8 +4399,8 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
       }));
       setBlurScanProgress(Math.min(100, Math.round(((i + batch.length) / total) * 100)));
       setAuditResults([...updated]);
-      // Yield to browser UI thread between batches for 60 FPS fluidity
-      await new Promise(r => setTimeout(r, 0));
+      // Yield to browser UI thread to maintain 60 FPS
+      await new Promise(r => setTimeout(r, 5));
     }
     setIsScanningBlur(false);
   };
@@ -5048,7 +4708,7 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
           p.utrNumber || '',
           p.paymentSource || '',
           p.amount || 0,
-          new Date(p.createdAt).toLocaleDateString('en-GB'),
+          formatDateDDMMYYYY(p.createdAt),
           p.status
         ]);
       });
@@ -6018,7 +5678,7 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
           action: currentStatus === 'out' ? 'in' : 'out',
           requestType,
           reason: reason || "Manual Override",
-          operator: userEmail || storedUserType
+          operator: (typeof window !== "undefined" ? (localStorage.getItem("adminEmail") || localStorage.getItem("wardenEmail") || auth.currentUser?.email || "") : "") || storedUserType
         }),
       });
       const data = await res.json();
@@ -6936,7 +6596,7 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
 
       const titleRow = [`HOSTELEAZE - MULTI-DAY ATTENDANCE REGISTER MATRIX (${selectedDate} TO ${selectedEndDate})`].concat(Array(lastColIdx).fill(""));
       const infoRow1 = [`HOSTEL SCOPE: ${hostelTitle}   •   TOTAL STUDENTS: ${exportPreviewData.length}   •   PERIOD: ${selectedDate} TO ${selectedEndDate}`].concat(Array(lastColIdx).fill(""));
-      const infoRow2 = [`GENERATED DATE: ${new Date().toLocaleDateString('en-IN')}   •   SYSTEM: ${userTypeLabel}`].concat(Array(lastColIdx).fill(""));
+      const infoRow2 = [`GENERATED DATE: ${formatDateDDMMYYYY(new Date())}   •   SYSTEM: ${userTypeLabel}`].concat(Array(lastColIdx).fill(""));
       const emptyRow = Array(activeHeaders.length).fill("");
 
       const dataRows = exportPreviewData.map((row: any) => {
@@ -7078,7 +6738,7 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
 
       const titleRow = [titleBannerText].concat(Array(lastColIdx).fill(""));
       const infoRow1 = [`HOSTEL SCOPE: ${hostelTitle}   •   TOTAL RECORDS: ${exportPreviewData.length} STUDENTS`].concat(Array(lastColIdx).fill(""));
-      const infoRow2 = [`REPORT DATE: ${isAttendance ? selectedDate : new Date().toLocaleDateString('en-IN')}   •   SYSTEM: ${userTypeLabel}`].concat(Array(lastColIdx).fill(""));
+      const infoRow2 = [`REPORT DATE: ${isAttendance ? selectedDate : formatDateDDMMYYYY(new Date())}   •   SYSTEM: ${userTypeLabel}`].concat(Array(lastColIdx).fill(""));
       const emptyRow = Array(activeHeaders.length).fill("");
 
       const dataRows = exportPreviewData.map((row: any) => {
@@ -7190,8 +6850,8 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
     // ── ATTENDANCE / ABSENTEE PROFESSIONAL REPORT ──
     const institutionName = tenantFormData?.name || "HOSTELEAZE";
     const hostelLabel = attendanceHostelFilter !== "all" ? attendanceHostelFilter : "All Hostels";
-    const reportDate = selectedDate;
-    const generatedAt = new Date().toLocaleString("en-IN", { timeZone: "Asia/Kolkata" });
+    const reportDate = formatDateDDMMYYYY(selectedDate);
+    const generatedAt = formatDateTimeDDMMYYYY(new Date());
     
     // Calculate total students of the selected hostel category
     let totalStudents = students.length;
@@ -7476,7 +7136,7 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
       if (permissionWithStudent && typeof permissionWithStudent.studentId === 'object') {
         const s = permissionWithStudent.studentId;
         student = {
-          id: s._id || s.id,
+          id: s._id || s.id || studentId,
           name: s.name,
           email: s.email,
           phoneNumber: s.phoneNumber,
@@ -7523,7 +7183,7 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
       setSelectedStudent({
         ...student,
         permissions: studentPermissions.map((p): SimplePermission => ({
-          id: p._id || p.id,
+          id: p._id || p.id || String(Math.random()),
           fromDateTime: p.fromDateTime,
           toDateTime: p.toDateTime,
           reason: p.reason,
@@ -7755,6 +7415,106 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
     };
   }, [students, dropdownFilteredStudents, hostelFilter, isWarden, authorizedHostels, dashboardStats]);
 
+  // Flexible date parser for all Indian and ISO date formats
+  const parseFlexibleDate = (dateVal: any): Date | null => {
+    if (!dateVal) return null;
+    if (dateVal instanceof Date) return isNaN(dateVal.getTime()) ? null : dateVal;
+    if (typeof dateVal === 'number') {
+      const d = new Date(dateVal);
+      return isNaN(d.getTime()) ? null : d;
+    }
+    const str = String(dateVal).trim();
+    if (!str) return null;
+
+    // Direct ISO / standard parse
+    const direct = new Date(str);
+    if (!isNaN(direct.getTime())) return direct;
+
+    // DD/MM/YYYY or DD-MM-YYYY
+    const dmy = str.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})(?:[,\s]+(\d{1,2}):(\d{2})(?::(\d{2}))?(?:\s*(AM|PM))?)?/i);
+    if (dmy) {
+      const day = parseInt(dmy[1], 10);
+      const month = parseInt(dmy[2], 10) - 1;
+      const year = parseInt(dmy[3], 10);
+      let hours = dmy[4] ? parseInt(dmy[4], 10) : 0;
+      const minutes = dmy[5] ? parseInt(dmy[5], 10) : 0;
+      const seconds = dmy[6] ? parseInt(dmy[6], 10) : 0;
+      const meridiem = dmy[7] ? dmy[7].toUpperCase() : null;
+
+      if (meridiem === 'PM' && hours < 12) hours += 12;
+      if (meridiem === 'AM' && hours === 12) hours = 0;
+
+      const parsed = new Date(year, month, day, hours, minutes, seconds);
+      if (!isNaN(parsed.getTime())) return parsed;
+    }
+
+    // YYYY-MM-DD HH:MM:SS
+    const ymd = str.match(/^(\d{4})[\/\-](\d{1,2})[\/\-](\d{1,2})(?:[,\s]+(\d{1,2}):(\d{2})(?::(\d{2}))?(?:\s*(AM|PM))?)?/i);
+    if (ymd) {
+      const year = parseInt(ymd[1], 10);
+      const month = parseInt(ymd[2], 10) - 1;
+      const day = parseInt(ymd[3], 10);
+      let hours = ymd[4] ? parseInt(ymd[4], 10) : 0;
+      const minutes = ymd[5] ? parseInt(ymd[5], 10) : 0;
+      const seconds = ymd[6] ? parseInt(ymd[6], 10) : 0;
+      const meridiem = ymd[7] ? ymd[7].toUpperCase() : null;
+
+      if (meridiem === 'PM' && hours < 12) hours += 12;
+      if (meridiem === 'AM' && hours === 12) hours = 0;
+
+      const parsed = new Date(year, month, day, hours, minutes, seconds);
+      if (!isNaN(parsed.getTime())) return parsed;
+    }
+
+    return null;
+  };
+
+  // Universal Standard Date Formatter to DD-MM-YYYY (or DD-MM-YYYY, hh:mm A with time)
+  const formatToDDMMYYYY = (dateVal: any, includeTime = false): string => {
+    if (!dateVal) return "";
+    const d = parseFlexibleDate(dateVal);
+    if (!d || isNaN(d.getTime())) return String(dateVal);
+
+    try {
+      const parts = new Intl.DateTimeFormat('en-GB', {
+        timeZone: 'Asia/Kolkata',
+        day: '2-digit',
+        month: '2-digit',
+        year: 'numeric',
+        hour: includeTime ? '2-digit' : undefined,
+        minute: includeTime ? '2-digit' : undefined,
+        hour12: true
+      }).formatToParts(d);
+
+      let day = '', month = '', year = '', hour = '', minute = '', dayPeriod = '';
+      parts.forEach(p => {
+        if (p.type === 'day') day = p.value;
+        else if (p.type === 'month') month = p.value;
+        else if (p.type === 'year') year = p.value;
+        else if (p.type === 'hour') hour = p.value;
+        else if (p.type === 'minute') minute = p.value;
+        else if (p.type === 'dayPeriod') dayPeriod = p.value.toUpperCase();
+      });
+
+      const dateStr = `${day}-${month}-${year}`;
+      if (!includeTime || !hour) return dateStr;
+
+      const timeStr = `${hour}:${minute} ${dayPeriod}`;
+      return `${dateStr}, ${timeStr}`;
+    } catch {
+      const day = String(d.getDate()).padStart(2, '0');
+      const month = String(d.getMonth() + 1).padStart(2, '0');
+      const year = d.getFullYear();
+      const dateStr = `${day}-${month}-${year}`;
+      if (!includeTime) return dateStr;
+      let hours = d.getHours();
+      const minutes = String(d.getMinutes()).padStart(2, '0');
+      const ampm = hours >= 12 ? 'PM' : 'AM';
+      hours = hours % 12 || 12;
+      return `${dateStr}, ${String(hours).padStart(2, '0')}:${minutes} ${ampm}`;
+    }
+  };
+
   // 2. Roommate Status Helper
   const getRoommateStatus = (student: StudentDetails) => {
     if (student.studentStatus === 'out') {
@@ -7767,20 +7527,22 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
         return false;
       });
 
-      const leaveTo = perm?.toDateTime || student.leaveTo;
-      if (leaveTo) {
-        const toDate = new Date(leaveTo);
-        if (!isNaN(toDate.getTime()) && Date.now() > toDate.getTime()) {
-          return 'overdue';
+      const oType = String(student.outingType || perm?.type || '').toLowerCase().trim();
+      const isHomeLeaveType = oType === 'leave' || oType === 'home-leave' || oType === 'hleave';
+
+      if (isHomeLeaveType) {
+        const leaveTo = perm?.toDateTime || student.leaveTo || (student as any).expectedReturnDate || (student as any).expectedReturnIstDate;
+        if (leaveTo) {
+          const toDate = parseFlexibleDate(leaveTo);
+          if (toDate && Date.now() > toDate.getTime()) {
+            return 'overdue';
+          }
         }
+        return 'hleave';
       }
 
-      const oType = String(student.outingType || '').toLowerCase().trim();
-      if (oType === 'leave' || oType === 'home-leave' || oType === 'hleave') {
-        return 'hleave';
-      } else {
-        return 'gpass';
-      }
+      // Gate-Pass students always remain 'gpass'
+      return 'gpass';
     }
 
     return 'in';
@@ -8061,7 +7823,7 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                 >
                   {subscriptionStatus.isExpired
                     ? "Access Restricted - Contact Hosteleaze HQ"
-                    : `Only ${subscriptionStatus.daysRemaining} days remaining in active period (${subscriptionStatus.endDate ? `${new Date(subscriptionStatus.endDate).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', timeZone: 'Asia/Kolkata' })}, 11:59:59 PM` : '11:59:59 PM'})`}
+                    : `Only ${subscriptionStatus.daysRemaining} days remaining in active period (${subscriptionStatus.endDate ? `${formatDateDDMMYYYY(subscriptionStatus.endDate)}, 11:59:59 PM` : '11:59:59 PM'})`}
                 </p>
               </div>
             </div>
@@ -8652,7 +8414,7 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                           if (isGatepass) {
                             setShowGatepassOverlay(true);
                           } else {
-                            startTransition(() => setCurrentTab(tab.id));
+                            startTransition(() => setCurrentTab(tab.id as any));
                           }
                         }}
                         className={`w-full ${
@@ -8859,12 +8621,12 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                               )}
                               <div className="flex-1 min-w-0 flex flex-col md:flex-row gap-2 md:gap-4 items-stretch">
                                 {/* Left Side: Student Info & Approvals */}
-                                <div className="w-full md:w-[340px] shrink-0 flex flex-row md:flex-col gap-1 md:gap-2.5">
+                                <div className="w-full md:w-[390px] lg:w-[430px] shrink-0 flex flex-row md:flex-col gap-1 md:gap-2.5">
                                   <div className="flex flex-col flex-1 min-w-0 md:w-full">
-                                    <div className="flex items-start gap-2 md:gap-4 w-full">
+                                    <div className="flex items-start gap-2 md:gap-3 w-full">
                                       <button
                                         onClick={() => handleProfileClick((student._id || student.id)?.toString())}
-                                        className="w-10 h-10 md:w-12 md:h-12 rounded-full bg-foreground text-background flex items-center justify-center font-semibold text-sm flex-shrink-0 overflow-hidden cursor-pointer hover:opacity-80 transition-opacity"
+                                        className="w-10 h-10 md:w-11 md:h-11 rounded-full bg-foreground text-background flex items-center justify-center font-semibold text-sm flex-shrink-0 overflow-hidden cursor-pointer hover:opacity-80 transition-opacity"
                                       >
                                         {profilePic ? (
                                           <img 
@@ -8884,10 +8646,13 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                                       </button>
                                       <div className="flex-1 min-w-0">
                                         <p className="text-[11px] md:text-[13px] font-semibold text-foreground uppercase tracking-tight leading-tight">{student.name}</p>
-                                        <div className="flex flex-col md:flex-row md:items-center md:flex-wrap gap-0.5 md:gap-1.5 mt-0.5 text-[9px] md:text-xs text-secondary font-medium">
-                                          <span className="whitespace-nowrap">{new Date(permission.fromDateTime).toLocaleString("en-IN", { timeZone: "Asia/Kolkata", dateStyle: "medium", timeStyle: "short" })}</span>
-                                          <span className="hidden md:inline">•</span>
-                                          <span className="whitespace-nowrap">to {new Date(permission.toDateTime).toLocaleString("en-IN", { timeZone: "Asia/Kolkata", dateStyle: "medium", timeStyle: "short" })}</span>
+                                        <div className="flex flex-col md:flex-row md:items-center gap-0.5 md:gap-1.5 mt-0.5 text-[8.5px] sm:text-[9.5px] md:text-[11px] lg:text-xs text-secondary font-medium md:whitespace-nowrap">
+                                          <span className="whitespace-nowrap leading-tight">
+                                            {formatToDDMMYYYY(permission.fromDateTime, true)} <span className="opacity-70">•</span> to
+                                          </span>
+                                          <span className="whitespace-nowrap leading-tight">
+                                            {formatToDDMMYYYY(permission.toDateTime, true)}
+                                          </span>
                                         </div>
                                       </div>
                                     </div>
@@ -8910,12 +8675,20 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                                       }
 
                                       return (
-                                        <div className="mt-1.5 flex items-center gap-1 flex-wrap shrink-0 md:pl-8 lg:pl-[52px]">
+                                        <div className="mt-1.5 flex items-center gap-1 flex-wrap shrink-0 md:pl-[56px]">
                                           <div className="flex items-center flex-wrap gap-1 w-full max-w-full">
                                             {durationStr && (
                                               <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-blue-50/90 text-blue-800 border border-blue-200 text-[8.5px] md:text-[10px] font-bold shadow-2xs leading-tight whitespace-nowrap shrink-0">
                                                 <span className="text-slate-500 font-semibold">Duration:</span>
                                                 <span className="font-extrabold text-blue-700">{durationStr}</span>
+                                              </span>
+                                            )}
+                                            {/* ⚡ DIRECT MANAGEMENT OVERRIDE / OUTING BADGE WITH DATE */}
+                                            {(student.studentStatus === 'out' || permission.status === 'allowed') && (
+                                              <span className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[8.5px] md:text-[10px] font-bold shadow-2xs leading-tight whitespace-nowrap shrink-0 ${student.studentStatus === 'out' ? 'bg-amber-50 text-amber-900 border border-amber-300' : 'bg-emerald-50 text-emerald-900 border border-emerald-300'}`}>
+                                                <span>{student.studentStatus === 'out' ? '🚪' : '🛡️'}</span>
+                                                <span>{student.studentStatus === 'out' ? 'Checked Out:' : 'Override Allowed:'}</span>
+                                                <span className="font-black">{formatToDDMMYYYY(permission.fromDateTime, true)}</span>
                                               </span>
                                             )}
                                             <button
@@ -8932,7 +8705,7 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                                   </div>
                                   
                                   {/* Permissions Block under name */}
-                                  <div className="pl-0 md:pl-8 lg:pl-[52px] shrink-0 md:w-full">
+                                  <div className="pl-0 md:pl-[56px] shrink-0 md:w-full">
                                     <div className="flex flex-col items-start gap-1 md:gap-1.5 origin-top-left border border-gray-200 rounded-md p-1 sm:p-1.5 md:p-2 bg-white/40 shadow-sm w-full max-w-[155px] sm:max-w-[185px] md:max-w-[255px]">
                                       {/* Row 1: PARENT */}
                                       <div className="flex items-center justify-between w-full gap-0.5 sm:gap-1">
@@ -8991,7 +8764,7 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                                             <span className="inline-flex items-center justify-center text-[6px] sm:text-[7px] md:text-[8px] font-bold text-red-600 bg-red-50 px-1 py-0.5 rounded uppercase tracking-wider border border-red-100 text-center whitespace-nowrap">
                                               Rejected
                                             </span>
-                                          ) : permission.wardenStatus === "allowed" ? (
+                                          ) : (permission.wardenStatus === "allowed" || (permission.status === "allowed" && permission.wardenStatus !== "rejected")) ? (
                                             <span className="inline-flex items-center justify-center text-[6px] sm:text-[7px] md:text-[8px] font-bold text-green-600 bg-green-50 px-1 py-0.5 rounded uppercase tracking-wider border border-green-100 text-center whitespace-nowrap">
                                               Accepted
                                             </span>
@@ -9008,7 +8781,7 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                                               if (userType === "warden" || userType === "admin" || userType === "superadmin") handleStatusChange(permission._id, "allowed", "warden");
                                             }}
                                             disabled={(userType !== "warden" && userType !== "admin" && userType !== "superadmin") || isLeaveExpired}
-                                            className={`w-3.5 h-3.5 sm:w-4 sm:h-4 md:w-7 md:h-7 rounded-md border flex items-center justify-center transition-all bg-white shadow-2xs ${permission.wardenStatus === "allowed" ? "border-green-300 !bg-green-50 text-gray-500 shadow-sm" : "border-gray-200 text-gray-400 hover:border-green-300 hover:bg-green-50/50"} ${(userType !== "warden" && userType !== "admin" && userType !== "superadmin") || isLeaveExpired ? "cursor-not-allowed" : "cursor-pointer"}`}
+                                            className={`w-3.5 h-3.5 sm:w-4 sm:h-4 md:w-7 md:h-7 rounded-md border flex items-center justify-center transition-all bg-white shadow-2xs ${(permission.wardenStatus === "allowed" || (permission.status === "allowed" && permission.wardenStatus !== "rejected")) ? "border-green-300 !bg-green-50 text-green-600 shadow-sm" : "border-gray-200 text-gray-400 hover:border-green-300 hover:bg-green-50/50"} ${(userType !== "warden" && userType !== "admin" && userType !== "superadmin") || isLeaveExpired ? "cursor-not-allowed" : "cursor-pointer"}`}
                                           >
                                             <svg className="w-2 h-2 sm:w-2.5 sm:h-2.5 md:w-4 md:h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" /></svg>
                                           </button>
@@ -9945,7 +9718,7 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                                 attendanceHistoryLogs.map((log, idx) => (
                                   <tr key={log._id || log.id || `hist-${idx}`} className="hover:bg-blue-50/30 transition-colors">
                                     <td className="px-4 py-3">
-                                      <p className="font-bold text-gray-800 text-xs">{new Date(log.date).toLocaleDateString("en-IN", { day: 'numeric', month: 'short', year: 'numeric' })}</p>
+                                      <p className="font-bold text-gray-800 text-xs">{formatDateDDMMYYYY(log.date)}</p>
                                       <div className="md:hidden flex flex-col mt-0.5">
                                         <p className="text-[9px] text-gray-400 font-bold uppercase truncate">{log.hostelName}</p>
                                         <p className="text-[9px] text-gray-400 font-medium">ROOM {log.roomNumber}</p>
@@ -10715,7 +10488,7 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                                   </span>
                                 )}
                               </div>
-                              <span className="text-[10px] text-secondary">{new Date(notif.createdAt).toLocaleDateString()}</span>
+                              <span className="text-[10px] text-secondary">{formatDateDDMMYYYY(notif.createdAt)}</span>
                             </div>
                             <p className="text-sm text-foreground mt-1">{notif.message}</p>
                             {notif.image && (
@@ -10738,9 +10511,9 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                                   }
                                   return (
                                     <>
-                                      <button
+                                       <button
                                         onClick={() => {
-                                          setEditingNotificationId(notif._id || notif.id);
+                                          setEditingNotificationId(notif._id || notif.id || null);
                                           setNewMessage({
                                             message: notif.message,
                                             targetType: notif.targetType,
@@ -10757,7 +10530,10 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                                         Edit
                                       </button>
                                       <button
-                                        onClick={() => handleDeleteNotification(notif._id || notif.id)}
+                                        onClick={() => {
+                                          const nId = notif._id || notif.id;
+                                          if (nId) handleDeleteNotification(nId);
+                                        }}
                                         className="text-[10px] font-black text-red-600 uppercase hover:underline"
                                       >
                                         Delete
@@ -11038,7 +10814,7 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                                 </td>
                                 <td className="px-2 py-4 text-center">
                                   <span className="text-[9px] font-medium text-gray-600">
-                                    {p.createdAt ? new Date(p.createdAt).toLocaleDateString() : "N/A"}
+                                    {p.createdAt ? formatDateDDMMYYYY(p.createdAt) : "N/A"}
                                   </span>
                                 </td>
                                 <td className="px-2 py-4 text-center">
@@ -11259,8 +11035,8 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                                       {roommates.map((r, i) => {
                                         const rStatus = getRoommateStatus(r);
                                         const isOverdue = rStatus === 'overdue';
-                                        const studentIdStr = r.id || r._id;
-                                        const hasMarkedAttendance = presentStudentIdsToday.has(studentIdStr?.toString()) || presentStudentIds.includes(studentIdStr?.toString());
+                                        const studentIdStr = (r.id || r._id || "")?.toString();
+                                        const hasMarkedAttendance = studentIdStr ? (presentStudentIdsToday.has(studentIdStr) || presentStudentIds.includes(studentIdStr)) : false;
                                         return (
                                           <div key={r.id || i} className="flex flex-col items-center gap-0.5 shrink-0 relative">
                                             <div
@@ -11335,8 +11111,8 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                           {selectedRoomStudents.map(student => {
                             const rStatus = getRoommateStatus(student);
                             const isOverdue = rStatus === 'overdue';
-                            const studentIdStr = (student.id || student._id)?.toString();
-                            const hasMarkedAttendance = presentStudentIdsToday.has(studentIdStr) || presentStudentIds.includes(studentIdStr);
+                            const studentIdStr = (student.id || student._id || "")?.toString();
+                            const hasMarkedAttendance = studentIdStr ? (presentStudentIdsToday.has(studentIdStr) || presentStudentIds.includes(studentIdStr)) : false;
 
                             // Find linked permission from permissions list by ID, registrationId, or name
                             const studentPermission = permissions.find((p: any) => {
@@ -11347,29 +11123,10 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                               return false;
                             });
 
-                            const leaveFrom = studentPermission?.fromDateTime || student.leaveFrom || (student.checkOutIstDate ? `${student.checkOutIstDate} ${student.checkOutIstTime || ''}` : null);
-                            const leaveTo = studentPermission?.toDateTime || student.leaveTo;
-                            const leaveReason = studentPermission?.reason || student.leaveReason || (rStatus === 'hleave' || isOverdue ? "Home Leave" : null);
+                            const leaveFrom = studentPermission?.fromDateTime || student.leaveFrom || (student.checkOutIstDate ? `${student.checkOutIstDate} ${student.checkOutIstTime || ''}` : student.checkOutTime);
+                            const leaveTo = studentPermission?.toDateTime || student.leaveTo || (student as any).toDateTime || (student as any).expectedReturnDate || (student as any).expectedReturnIstDate;
+                            const leaveReason = studentPermission?.reason || student.leaveReason || (rStatus === 'hleave' || isOverdue ? "Home Leave" : "Gate-Pass");
                             const isHomeLeave = rStatus === 'hleave' || isOverdue;
-
-                            const formatLeaveDate = (dateVal: any) => {
-                              if (!dateVal) return "";
-                              try {
-                                const d = new Date(dateVal);
-                                if (isNaN(d.getTime())) return String(dateVal);
-                                return d.toLocaleString("en-IN", {
-                                  timeZone: "Asia/Kolkata",
-                                  day: "numeric",
-                                  month: "short",
-                                  year: "numeric",
-                                  hour: "numeric",
-                                  minute: "2-digit",
-                                  hour12: true
-                                });
-                              } catch {
-                                return String(dateVal);
-                              }
-                            };
 
                             return (
                               <div key={student.id || student._id || student.registrationId || student.name} className={`p-2.5 sm:p-3.5 rounded-2xl border flex flex-col gap-2 transition-all shadow-xs ${
@@ -11424,34 +11181,39 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                                   </div>
 
                                   {/* Right: Leave Details Box (Auto-adjustable / expands smoothly to fill gap) */}
-                                  {isHomeLeave && (
+                                  {(isHomeLeave || rStatus === 'gpass') && (
                                     <div className={`flex-1 min-w-0 px-2 py-1 sm:px-3 sm:py-1.5 rounded-xl text-left shadow-2xs ${
                                       isOverdue 
                                         ? 'bg-red-50/95 border border-red-300 ring-1 ring-red-200' 
-                                        : 'bg-blue-50/90 border border-blue-200/90'
+                                        : isHomeLeave
+                                        ? 'bg-purple-50/90 border border-purple-200/90'
+                                        : 'bg-yellow-50/90 border border-yellow-200/90'
                                     }`}>
-                                      <div className="flex items-center gap-1 text-[8px] sm:text-[9.5px] font-semibold text-slate-800 leading-tight">
-                                        <span className="text-slate-500 font-bold shrink-0 text-[7.5px] sm:text-[9px]">Leave:</span>
-                                        <span className={`font-bold flex items-center gap-0.5 truncate ${isOverdue ? 'text-red-700' : 'text-blue-700'}`}>
-                                          <span className="text-[9px]">📅</span>
-                                          <span>{formatLeaveDate(leaveFrom) || "Active"}</span>
-                                        </span>
-                                      </div>
-                                      {leaveTo && (
-                                        <div className="flex items-center gap-1 text-[8px] sm:text-[9.5px] font-semibold leading-tight mt-0.5">
-                                          <span className={`${isOverdue ? 'text-red-600 font-black' : 'text-slate-500 font-bold'} shrink-0 text-[7.5px] sm:text-[9px]`}>
-                                            {isOverdue ? '🚨 Overdue:' : 'Return:'}
-                                          </span>
-                                          <span className={`font-black truncate ${isOverdue ? 'text-red-700 underline' : 'text-blue-700'}`}>
-                                            {formatLeaveDate(leaveTo)}
+                                      <div className="flex flex-col gap-0.5 text-[8px] sm:text-[9.5px]">
+                                        <div className="flex items-center gap-1 leading-tight">
+                                          <span className="text-slate-500 font-bold shrink-0 text-[7.5px] sm:text-[9px]">Out:</span>
+                                          <span className={`font-bold flex items-center gap-0.5 truncate ${isOverdue ? 'text-red-700' : isHomeLeave ? 'text-purple-700' : 'text-yellow-800'}`}>
+                                            <span className="text-[9px]">📅</span>
+                                            <span>{formatToDDMMYYYY(leaveFrom, true) || "Active"}</span>
                                           </span>
                                         </div>
-                                      )}
-                                      {leaveReason && (
-                                        <p className="text-[7.5px] sm:text-[9px] text-slate-600 font-medium italic mt-0.5 truncate w-full" title={leaveReason}>
-                                          &ldquo;{leaveReason}&rdquo;
-                                        </p>
-                                      )}
+                                        {leaveTo && (
+                                          <div className="flex items-center gap-1 leading-tight">
+                                            <span className={`${isOverdue ? 'text-red-600 font-black' : 'text-slate-500 font-bold'} shrink-0 text-[7.5px] sm:text-[9px]`}>
+                                              {isOverdue ? '🚨 Overdue:' : 'Return:'}
+                                            </span>
+                                            <span className={`font-black truncate ${isOverdue ? 'text-red-700 underline' : isHomeLeave ? 'text-purple-700' : 'text-yellow-800'}`}>
+                                              <span className="text-[9px]">📅</span>
+                                              <span>{formatToDDMMYYYY(leaveTo, true)}</span>
+                                            </span>
+                                          </div>
+                                        )}
+                                        {leaveReason && (
+                                          <p className="text-[7.5px] sm:text-[9px] text-slate-600 font-medium italic mt-0.5 truncate w-full" title={leaveReason}>
+                                            &ldquo;{leaveReason}&rdquo;
+                                          </p>
+                                        )}
+                                      </div>
                                     </div>
                                   )}
                                 </div>
@@ -13052,7 +12814,7 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                       {selectedStudent.joiningDate && (
                         <div>
                           <p className="text-[10px] text-slate-400 font-bold uppercase">Joined Date</p>
-                          <p className="text-[10px] text-slate-700 font-bold">{new Date(selectedStudent.joiningDate).toLocaleDateString("en-IN", { day: '2-digit', month: 'short', year: 'numeric' })}</p>
+                          <p className="text-[10px] text-slate-700 font-bold">{formatDateDDMMYYYY(selectedStudent.joiningDate)}</p>
                         </div>
                       )}
                     </div>
@@ -13209,7 +12971,7 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                         {populatedCustomFields.map(f => (
                           <div key={f.id}>
                             <p className="text-[8px] sm:text-[9px] text-slate-400 uppercase font-bold">{f.label}</p>
-                            <p className="text-[10px] sm:text-xs text-slate-900 font-bold uppercase break-words">{selectedStudent.dynamicFields[f.id]}</p>
+                            <p className="text-[10px] sm:text-xs text-slate-900 font-bold uppercase break-words">{selectedStudent.dynamicFields?.[f.id]}</p>
                           </div>
                         ))}
                       </div>
@@ -13363,7 +13125,7 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                                 {history.action === 'registered' ? 'NEW LINK' : 'RESET LOG'}
                               </span>
                               <span className="text-[8px] font-bold text-slate-400">
-                                {new Date(history.timestamp).toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' })}
+                                {formatDateTimeDDMMYYYY(history.timestamp)}
                               </span>
                             </div>
                             <p className="text-[9px] font-mono text-slate-600 break-all leading-tight">
@@ -13467,10 +13229,10 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                             const isPending = !isAllowed && !isRejected;
 
                             const fromFormatted = permission.fromDateTime
-                              ? new Date(permission.fromDateTime).toLocaleString("en-IN", { timeZone: "Asia/Kolkata", dateStyle: "medium", timeStyle: "short" })
+                              ? formatDateTimeDDMMYYYY(permission.fromDateTime)
                               : "N/A";
                             const toFormatted = permission.toDateTime
-                              ? new Date(permission.toDateTime).toLocaleString("en-IN", { timeZone: "Asia/Kolkata", dateStyle: "medium", timeStyle: "short" })
+                              ? formatDateTimeDDMMYYYY(permission.toDateTime)
                               : "N/A";
 
                             return (
@@ -13637,10 +13399,10 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                             const fromRawDate = item.checkOutTime || item.fromDateTime || item.createdAt;
                             const toRawDate = item.checkInTime || item.toDateTime;
                             
-                            const formattedOutDate = item.checkOutIstDate || (fromRawDate ? new Date(fromRawDate).toLocaleDateString("en-IN", { timeZone: "Asia/Kolkata", day: "2-digit", month: "short", year: "numeric" }) : "N/A");
+                            const formattedOutDate = item.checkOutIstDate || (fromRawDate ? formatDateDDMMYYYY(fromRawDate) : "N/A");
                             const formattedOutTime = item.checkOutIstTime || (fromRawDate ? new Date(fromRawDate).toLocaleTimeString("en-IN", { timeZone: "Asia/Kolkata", hour: "2-digit", minute: "2-digit", hour12: true }) : "");
                             
-                            const formattedInDate = item.checkInIstDate || (toRawDate ? new Date(toRawDate).toLocaleDateString("en-IN", { timeZone: "Asia/Kolkata", day: "2-digit", month: "short", year: "numeric" }) : (isCurrentlyOut ? "Pending Return" : "Completed"));
+                            const formattedInDate = item.checkInIstDate || (toRawDate ? formatDateDDMMYYYY(toRawDate) : (isCurrentlyOut ? "Pending Return" : "Completed"));
                             const formattedInTime = item.checkInIstTime || (toRawDate ? new Date(toRawDate).toLocaleTimeString("en-IN", { timeZone: "Asia/Kolkata", hour: "2-digit", minute: "2-digit", hour12: true }) : "");
 
                             // Calculate Duration in Days/Hours
@@ -13838,7 +13600,7 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                             const rawOutDate = pass.checkOutTime || pass.fromDateTime || pass.createdAt;
                             const rawInDate = pass.checkInTime || pass.toDateTime;
 
-                            const formattedDate = pass.checkOutIstDate || (rawOutDate ? new Date(rawOutDate).toLocaleDateString("en-IN", { timeZone: "Asia/Kolkata", day: "2-digit", month: "short", year: "numeric" }) : "N/A");
+                            const formattedDate = pass.checkOutIstDate || (rawOutDate ? formatDateDDMMYYYY(rawOutDate) : "N/A");
                             const formattedOutTime = pass.checkOutIstTime || (rawOutDate ? new Date(rawOutDate).toLocaleTimeString("en-IN", { timeZone: "Asia/Kolkata", hour: "2-digit", minute: "2-digit", hour12: true }) : "N/A");
                             const formattedInTime = isCurrentlyOut ? "Not Returned" : (pass.checkInIstTime || (rawInDate ? new Date(rawInDate).toLocaleTimeString("en-IN", { timeZone: "Asia/Kolkata", hour: "2-digit", minute: "2-digit", hour12: true }) : "Completed"));
 
@@ -13877,7 +13639,7 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                                     <span className={`text-[9px] font-bold tracking-wider px-2 py-0.5 rounded-md border ${
                                       isCurrentlyOut ? 'bg-rose-100/80 text-rose-800 border-rose-200' : 'bg-emerald-50 text-emerald-700 border-emerald-200'
                                     }`}>
-                                      🚪 {pass.gateName ? pass.gateName.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase()) : 'Main Gate'}
+                                      🚪 {pass.gateName ? pass.gateName.replace(/_/g, ' ').replace(/\b\w/g, (c: string) => c.toUpperCase()) : 'Main Gate'}
                                     </span>
                                     {/* Prominent Date Display */}
                                     <span className="text-[10px] font-bold text-slate-700 bg-slate-100 px-2 py-0.5 rounded-md border border-slate-200 flex items-center gap-1">
@@ -17156,7 +16918,7 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                                   if (currentIp) {
                                     const confirmSync = await showConfirm(`Your detected public IP is: ${currentIp}.\n\nDo you want to whitelist this IP for campus wifi access?`);
                                     if (confirmSync) {
-                                      const label = await showPrompt("Enter network label:", `Synced IP (${new Date().toLocaleDateString('en-IN')})`);
+                                      const label = await showPrompt("Enter network label:", `Synced IP (${formatDateDDMMYYYY(new Date())})`);
                                       if (label) {
                                         const updated = [...wifiWhitelist, { name: label, ip: currentIp }];
                                         setWifiWhitelist(updated);
@@ -18786,15 +18548,15 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                             ? excelTemplate
                             : formTemplates.find(t => t.id === selectedTemplateId);
                           if (!tpl) return null;
-                          const sections = Array.from(new Set(tpl.fields.map(f => f.section)));
-                          return sections.map(sec => (
-                            <div key={sec}>
+                          const sections = Array.from(new Set(tpl.fields.map((f: any) => f.section)));
+                          return sections.map((sec: any) => (
+                            <div key={String(sec)}>
                               <div className="flex items-center gap-1 mb-1.5 mt-1">
                                 <div className="flex-1 h-px bg-purple-100"></div>
-                                <span className="text-[7px] font-black text-purple-400 uppercase tracking-wider px-1">{sec}</span>
+                                <span className="text-[7px] font-black text-purple-400 uppercase tracking-wider px-1">{String(sec)}</span>
                                 <div className="flex-1 h-px bg-purple-100"></div>
                               </div>
-                              {tpl.fields.filter(f => f.section === sec).map(field => (
+                              {tpl.fields.filter((f: any) => f.section === sec).map((field: any) => (
                                 <div key={field.id} className="mb-1.5">
                                   <p className="text-[7px] font-black text-gray-500 uppercase tracking-wide mb-0.5">
                                     {field.label}{field.required && <span className="text-red-400 ml-0.5">*</span>}
@@ -18912,14 +18674,7 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                   </div>
                 ) : (
                   formBuilderVersions.map((ver: any, i: number) => {
-                    const date = new Date(ver.timestamp).toLocaleDateString("en-IN", {
-                      day: "2-digit",
-                      month: "short",
-                      year: "numeric",
-                      hour: "2-digit",
-                      minute: "2-digit",
-                      hour12: true
-                    });
+                    const date = formatDateTimeDDMMYYYY(ver.timestamp);
                     return (
                       <div
                         key={ver.id}

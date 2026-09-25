@@ -502,32 +502,26 @@ export async function detectFace(
             }
         };
 
-        const useSSD = accurate || withDescriptor;
+        const useSSD = accurate;
 
-        // Tier 1 & 2: SSD-MobileNet (Standard then Relaxed confidence)
-        if (useSSD && fa.nets.ssdMobilenetv1?.isLoaded) {
-            // Tier 1: Standard confidence (0.50)
-            detections = await runDetectorPass(new fa.SsdMobilenetv1Options({ minConfidence: 0.50 }));
-
-            // Tier 2: Relaxed confidence (0.25) for close-up portrait selfies & soft indoor lighting
-            if (!detections || detections.length === 0) {
-                detections = await runDetectorPass(new fa.SsdMobilenetv1Options({ minConfidence: 0.25 }));
-            }
-        }
-
-        // Tier 3: Multi-Scale TinyFaceDetector fallback (Optimal for close mobile front-camera selfies)
-        if (!detections || detections.length === 0) {
-            detections = await runDetectorPass(new fa.TinyFaceDetectorOptions({
-                inputSize: 416,
-                scoreThreshold: 0.25
-            }));
-        }
-
-        // Tier 4: Sensitive TinyFaceDetector fallback for low light or challenging camera angles
-        if (!detections || detections.length === 0) {
+        // Tier 1: Fast TinyFaceDetector (Default for high speed & robust detection on 320x320 canvas)
+        if (!useSSD && fa.nets.tinyFaceDetector?.isLoaded) {
             detections = await runDetectorPass(new fa.TinyFaceDetectorOptions({
                 inputSize: 320,
                 scoreThreshold: 0.15
+            }));
+        }
+
+        // Tier 2: SSD-MobileNet (When accurate mode requested or as fallback)
+        if ((!detections || detections.length === 0) && fa.nets.ssdMobilenetv1?.isLoaded) {
+            detections = await runDetectorPass(new fa.SsdMobilenetv1Options({ minConfidence: 0.25 }));
+        }
+
+        // Tier 3: Sensitive multi-scale fallback for challenging lighting or smaller face crops
+        if (!detections || detections.length === 0) {
+            detections = await runDetectorPass(new fa.TinyFaceDetectorOptions({
+                inputSize: 416,
+                scoreThreshold: 0.10
             }));
         }
 

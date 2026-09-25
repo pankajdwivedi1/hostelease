@@ -61,8 +61,9 @@ export async function POST(request: NextRequest) {
                 if (targetType === "individual" && targetStudentId) {
                     await sendPushNotification(targetStudentId, "student", "deanBroadcast", payload);
                 } else if (targetType === "hostel" && targetHostel) {
-                    const students = await db.students.findMany({ hostelName: targetHostel });
+                    const students = await db.students.list({ hostelName: targetHostel });
                     for (const s of (students || [])) {
+                        if (!s) continue;
                         const sid = s._id || s.id;
                         if (sid) {
                             sendPushNotification(sid, "student", "deanBroadcast", payload).catch(() => {});
@@ -71,6 +72,7 @@ export async function POST(request: NextRequest) {
                 } else if (targetType === "all") {
                     const students = await db.students.getAll();
                     for (const s of (students || [])) {
+                        if (!s) continue;
                         const sid = s._id || s.id;
                         if (sid) {
                             sendPushNotification(sid, "student", "deanBroadcast", payload).catch(() => {});
@@ -129,7 +131,7 @@ export async function DELETE(request: NextRequest) {
                 createdAt: { $lt: thirtyDaysAgo },
             });
 
-            return NextResponse.json({ success: true, deletedCount: result.deletedCount });
+            return NextResponse.json({ success: true, deletedCount: typeof result === 'object' ? (result as any).deletedCount : 0 });
         }
 
         if (id) {
@@ -137,7 +139,7 @@ export async function DELETE(request: NextRequest) {
             if (role === "warden") {
                 try {
                     const existingNotif = await db.notifications.getById(id);
-                    if (existingNotif && (existingNotif.senderRole === "dean" || existingNotif.senderRole === "superadmin" || existingNotif.targetType === "all")) {
+                    if (existingNotif && ((existingNotif as any).senderRole === "dean" || (existingNotif as any).senderRole === "superadmin" || existingNotif.targetType === "all")) {
                         return NextResponse.json({ error: "Wardens cannot delete broadcasts issued by Deans or Super Admins" }, { status: 403 });
                     }
                 } catch (e) {

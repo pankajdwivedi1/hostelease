@@ -78,7 +78,7 @@ export async function GET(request: NextRequest) {
           // Get expected return date/time
           let expectedReturn: Date;
           if ((pass.type === "leave" || pass.type === "HOME-LEAVE" || pass.type === "Leave") && perm) {
-            expectedReturn = new Date(perm.toDateTime || perm.to_date_time || now);
+            expectedReturn = new Date((perm as any).toDateTime || (perm as any).to_date_time || now);
           } else {
             const outTime = new Date(pass.checkOutTime || pass.check_out_time || now);
             const duration = pass.durationMinutes || pass.duration_minutes || 0;
@@ -134,24 +134,27 @@ export async function GET(request: NextRequest) {
 
     if (isCurfewTriggerTime || isForced) {
       if (settings.parentCurfewAbsentEnabled !== false) {
-        // Fetch all tenants from Railway
-        const { records: tenants } = await db.tenants.list({});
+        // Fetch all active tenants
+        const tenants = await prisma.tenant.findMany({ where: { isActive: true } });
 
         if (tenants && tenants.length > 0) {
           // Fetch approved leaves/permissions across all tenants
-          const { records: approvedLeaves } = await db.permissions.list({ status: "allowed" });
+          const rawLeaves = await db.permissions.list({ status: "allowed" });
+          const approvedLeaves = Array.isArray(rawLeaves) ? rawLeaves : ((rawLeaves as any)?.records || []);
 
           for (const tenant of tenants) {
             // Fetch all students for this tenant
-            const { records: students } = await db.students.list({ tenantId: tenant.id });
+            const rawStudents = await db.students.list({ tenantId: tenant.id });
+            const students = Array.isArray(rawStudents) ? rawStudents : ((rawStudents as any)?.records || []);
 
             if (!students || students.length === 0) continue;
 
-            // Fetch present attendance for today from Railway
-            const { records: attendanceData } = await db.attendance.list({
+            // Fetch present attendance for today
+            const rawAttendance = await db.attendance.list({
               tenantId: tenant.id,
               date: todayStr
             });
+            const attendanceData = Array.isArray(rawAttendance) ? rawAttendance : ((rawAttendance as any)?.records || []);
 
             const presentIds = new Set((attendanceData || []).map((a: any) => String(a.studentId || a.student_id)));
 

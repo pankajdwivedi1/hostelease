@@ -29,10 +29,10 @@ export async function POST(request: NextRequest) {
 
         // Fetch all permissions for this student
         const result = await db.permissions.list({ studentId }, { limit: 1000 });
-        const permissions = result.permissions || [];
+        const permissions: any[] = Array.isArray(result) ? result : (result?.records || (result as any)?.permissions || []);
 
         // Filter permissions that have a parentConsentUrl
-        const permissionsWithConsent = permissions.filter(p => p.parentConsentUrl && p.parentConsentUrl.trim() !== "");
+        const permissionsWithConsent = permissions.filter((p: any) => p.parentConsentUrl && p.parentConsentUrl.trim() !== "");
 
         if (permissionsWithConsent.length === 0) {
             return NextResponse.json({

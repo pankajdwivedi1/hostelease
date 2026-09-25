@@ -3,6 +3,7 @@
 import React, { useState, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import ExcelJS from "exceljs";
+import FastAvatar, { preloadFastImage } from "@/app/components/FastAvatar";
 
 const formatYMD = (d: Date) => {
     const y = d.getFullYear();
@@ -218,8 +219,8 @@ export default function OutingHistoryPage() {
                     passCount: data.summary?.passCount || 0
                 });
             }
-        } catch (error) {
-            console.error("Error fetching history:", error);
+        } catch (error: any) {
+            console.warn("History fetch warning:", error?.message || error);
         } finally {
             setIsLoading(false);
         }
@@ -283,9 +284,16 @@ export default function OutingHistoryPage() {
                 email: fallbackRecord.email || s.email || "",
                 profilePicture: fallbackRecord.profilePicture || s.profilePicture || fallbackRecord.photo || s.photo || "",
                 photo: fallbackRecord.photo || s.photo || fallbackRecord.profilePicture || s.profilePicture || "",
+                outingType: fallbackRecord.type || fallbackRecord.outingType || fallbackRecord.requestType || s.outingType || s.requestType || "",
+                leaveFrom: fallbackRecord.fromDateTime || fallbackRecord.leaveFrom || s.leaveFrom || "",
+                leaveTo: fallbackRecord.toDateTime || fallbackRecord.leaveTo || fallbackRecord.expectedReturnDate || fallbackRecord.expectedReturnIstDate || s.leaveTo || "",
+                leaveReason: fallbackRecord.reason || fallbackRecord.leaveReason || s.leaveReason || "",
             };
+            if (initialStudent.profilePicture) {
+                preloadFastImage(initialStudent.profilePicture);
+            }
             setSelectedStudent(initialStudent);
-            if (fallbackRecord.checkOutISTDate || fallbackRecord.checkOutTime) {
+            if (fallbackRecord.checkOutISTDate || fallbackRecord.checkOutTime || fallbackRecord.fromDateTime) {
                 setLastOuting(fallbackRecord);
             }
             setIsProfileModalOpen(true);
@@ -303,6 +311,9 @@ export default function OutingHistoryPage() {
             const response = await fetch(`/api/students/${studentId}`);
             const data = await response.json();
             if (data.success && data.student) {
+                if (data.student.profilePicture) {
+                    preloadFastImage(data.student.profilePicture);
+                }
                 setSelectedStudent(data.student);
                 if (data.lastOuting) setLastOuting(data.lastOuting);
                 setProfileError(null);
@@ -377,8 +388,8 @@ export default function OutingHistoryPage() {
                 if (selectedColumns.has("erpId")) row.erpId = r.erpId || "";
                 if (selectedColumns.has("hostel")) row.hostel = formatHostelDisplay(r.hostelName);
                 if (selectedColumns.has("room")) row.room = r.roomNumber;
-                if (selectedColumns.has("outTime")) row.outTime = `${r.checkOutISTTime} ${r.checkOutISTDate}`;
-                if (selectedColumns.has("inTime")) row.inTime = (r.status === 'in' || r.status === 'auto-resolved') ? `${r.checkInISTTime} ${r.checkInISTDate}` : "Still Outside";
+                if (selectedColumns.has("outTime")) row.outTime = `${r.checkOutISTTime} ${formatDateDDMMYYYY(r.checkOutISTDate || r.checkOutTime)}`;
+                if (selectedColumns.has("inTime")) row.inTime = (r.status === 'in' || r.status === 'auto-resolved') ? `${r.checkInISTTime} ${formatDateDDMMYYYY(r.checkInISTDate || r.checkInTime || r.checkOutISTDate)}` : "Still Outside";
                 if (selectedColumns.has("duration")) row.duration = formatDuration(r.durationMinutes);
                 if (selectedColumns.has("status")) row.status = r.status === 'out' ? "OUT" : "IN";
                 if (selectedColumns.has("fatherName")) row.fatherName = r.fatherName || "";
@@ -876,75 +887,127 @@ export default function OutingHistoryPage() {
                                         </div>
 
                                         {/* Registration ID + Hostel & Room + Recent History in 1 Row (Mobile & Desktop) */}
-                                        <div className="flex flex-wrap items-center gap-2 sm:gap-6 mt-1 sm:mt-2">
-                                            <div className="flex flex-col items-start group">
-                                                <p className="text-[7.5px] sm:text-[10px] font-black text-gray-400 uppercase tracking-widest group-hover:text-blue-500 transition-colors">Registration ID</p>
-                                                <p className="text-blue-600 font-extrabold text-[10px] sm:text-2xl tracking-tight">{selectedStudent.registrationId || "N/A"}</p>
+                                        <div className="flex flex-wrap sm:flex-nowrap items-center gap-2 sm:gap-3 lg:gap-4 mt-1 sm:mt-2">
+                                            <div className="flex flex-col items-start group shrink-0">
+                                                <p className="text-[7.5px] sm:text-[9px] font-black text-gray-400 uppercase tracking-widest group-hover:text-blue-500 transition-colors">Registration ID</p>
+                                                <p className="text-blue-600 font-extrabold text-[10px] sm:text-base md:text-lg lg:text-xl tracking-tight">{selectedStudent.registrationId || "N/A"}</p>
                                             </div>
 
-                                            <div className="w-[1px] h-6 sm:h-10 bg-slate-200" />
+                                            <div className="w-[1px] h-6 sm:h-8 bg-slate-200 shrink-0" />
 
-                                            <div className="flex flex-col items-start group">
-                                                <p className="text-[7.5px] sm:text-[10px] font-black text-gray-400 uppercase tracking-widest group-hover:text-blue-500 transition-colors">Hostel & Room</p>
-                                                <p className="text-gray-900 font-extrabold text-[10px] sm:text-2xl tracking-tight">{formatHostelDisplay(selectedStudent.hostelName)} • {selectedStudent.roomNumber}</p>
+                                            <div className="flex flex-col items-start group shrink-0">
+                                                <p className="text-[7.5px] sm:text-[9px] font-black text-gray-400 uppercase tracking-widest group-hover:text-blue-500 transition-colors">Hostel & Room</p>
+                                                <p className="text-gray-900 font-extrabold text-[10px] sm:text-base md:text-lg lg:text-xl tracking-tight">{formatHostelDisplay(selectedStudent.hostelName)} • {selectedStudent.roomNumber}</p>
                                             </div>
 
-                                            <div className="w-[1px] h-6 sm:h-10 bg-slate-200" />
+                                            <div className="w-[1px] h-6 sm:h-8 bg-slate-200 shrink-0" />
 
-                                            {/* Recent History — Side-by-Side OUT and IN Timestamps */}
-                                            <div className="flex flex-col items-start px-2 py-1.5 sm:px-3 sm:py-2 bg-slate-50/90 rounded-lg sm:rounded-2xl border border-slate-200/80 shrink-0 shadow-sm">
-                                                <p className="text-[7px] sm:text-[9px] font-black text-gray-500 uppercase tracking-widest mb-1">Recent Outing Record</p>
-                                                {lastOuting ? (
-                                                    <div className="flex items-center gap-2 sm:gap-3">
-                                                        {/* OUT TIMESTAMP */}
-                                                        <div className="flex flex-col px-2 py-1 bg-red-50/90 rounded-lg border border-red-100 min-w-[75px] sm:min-w-[90px]">
-                                                            <span className="text-[7px] sm:text-[8px] font-black text-red-500 uppercase tracking-tight">OUT 🚪</span>
-                                                            <span className="text-red-700 font-extrabold text-[8.5px] sm:text-xs leading-tight">
-                                                                {formatDateDDMMYYYY(lastOuting.checkOutISTDate || lastOuting.checkOutTime)}
-                                                            </span>
-                                                            <span className="text-red-600 font-bold text-[8px] sm:text-[10px] tabular-nums">
-                                                                {formatISTTimeAMPM(lastOuting.checkOutISTTime, lastOuting.checkOutTime)}
-                                                            </span>
+                                            {/* Recent History — Side-by-Side OUT and IN/EXPECTED Timestamps */}
+                                            {(() => {
+                                                const rawType = String((lastOuting as any)?.type || (lastOuting as any)?.requestType || selectedStudent?.outingType || selectedStudent?.requestType || '').toLowerCase();
+                                                const isHomeLeave = rawType.includes('leave') || rawType === 'hleave';
+                                                const isReturned = lastOuting?.status === 'in' || !!lastOuting?.checkInISTTime || !!lastOuting?.checkInTime;
+                                                const isCurrentlyOut = !isReturned && (lastOuting?.status === 'out' || selectedStudent?.studentStatus === 'out');
+
+                                                const fromDateVal = lastOuting?.checkOutISTDate || lastOuting?.checkOutTime || (lastOuting as any)?.fromDateTime || selectedStudent?.leaveFrom;
+                                                const fromTimeVal = lastOuting?.checkOutISTTime || lastOuting?.checkOutTime || (lastOuting as any)?.fromDateTime || selectedStudent?.leaveFrom;
+
+                                                let expectedReturnVal = (lastOuting as any)?.expectedReturnDate || (lastOuting as any)?.toDateTime || (lastOuting as any)?.expectedReturnIstDate || selectedStudent?.leaveTo || selectedStudent?.toDateTime;
+                                                if (isHomeLeave && !expectedReturnVal && fromDateVal) {
+                                                    try {
+                                                        const fromDateObj = new Date(fromDateVal);
+                                                        if (!isNaN(fromDateObj.getTime())) {
+                                                            expectedReturnVal = new Date(fromDateObj.getTime() + 6 * 24 * 60 * 60 * 1000).toISOString();
+                                                        }
+                                                    } catch (e) {}
+                                                }
+                                                const expectedReturnTimeVal = (lastOuting as any)?.expectedReturnIstTime || expectedReturnVal;
+
+                                                const isOverdue = isCurrentlyOut && isHomeLeave && expectedReturnVal && new Date(expectedReturnVal).getTime() < Date.now();
+
+                                                return (
+                                                    <div className="flex flex-col items-start px-2 py-1 sm:px-2.5 sm:py-1.5 bg-slate-50/90 rounded-lg sm:rounded-xl border border-slate-200/80 shrink-0 shadow-sm">
+                                                        <div className="flex items-center justify-between w-full gap-1.5 mb-0.5">
+                                                            <p className="text-[6.5px] sm:text-[8px] font-black text-gray-500 uppercase tracking-widest">
+                                                                {isHomeLeave ? "🏠 Home-Leave" : "Recent Outing"}
+                                                            </p>
+                                                            {isHomeLeave && isCurrentlyOut && (
+                                                                <span className={`text-[6px] sm:text-[7.5px] font-black px-1.5 py-0.2 rounded uppercase tracking-wider ${isOverdue ? "bg-red-100 text-red-700 border border-red-200 animate-pulse" : "bg-blue-100 text-blue-700 border border-blue-200"}`}>
+                                                                    {isOverdue ? "🚨 OVERDUE" : "ON LEAVE"}
+                                                                </span>
+                                                            )}
                                                         </div>
 
-                                                        {/* IN TIMESTAMP OR STILL OUTSIDE */}
-                                                        {lastOuting.status === 'in' || lastOuting.checkInISTTime || lastOuting.checkInTime ? (
-                                                            <div className="flex flex-col px-2 py-1 bg-green-50/90 rounded-lg border border-green-100 min-w-[75px] sm:min-w-[90px]">
-                                                                <span className="text-[7px] sm:text-[8px] font-black text-green-600 uppercase tracking-tight">IN 🏠</span>
-                                                                <span className="text-green-700 font-extrabold text-[8.5px] sm:text-xs leading-tight">
-                                                                    {formatDateDDMMYYYY(lastOuting.checkInISTDate || lastOuting.checkInTime || lastOuting.checkOutISTDate || lastOuting.checkOutTime)}
-                                                                </span>
-                                                                <span className="text-green-600 font-bold text-[8px] sm:text-[10px] tabular-nums">
-                                                                    {formatISTTimeAMPM(lastOuting.checkInISTTime || lastOuting.checkOutISTTime, lastOuting.checkInTime || lastOuting.checkOutTime)}
-                                                                </span>
+                                                        {lastOuting ? (
+                                                            <div className="flex items-center gap-1 sm:gap-2">
+                                                                {/* OUT / LEAVE FROM TIMESTAMP */}
+                                                                <div className="flex flex-col px-1.5 py-0.5 sm:px-2 sm:py-1 bg-red-50/90 rounded-md sm:rounded-lg border border-red-100 min-w-[68px] sm:min-w-[80px]">
+                                                                    <span className="text-[6.5px] sm:text-[7.5px] font-black text-red-500 uppercase tracking-tight">
+                                                                        {isHomeLeave ? "LEAVE FROM 🚪" : "OUT 🚪"}
+                                                                    </span>
+                                                                    <span className="text-red-700 font-extrabold text-[8px] sm:text-[10px] md:text-[11px] leading-tight">
+                                                                        {formatDateDDMMYYYY(fromDateVal)}
+                                                                    </span>
+                                                                    <span className="text-red-600 font-bold text-[7px] sm:text-[8.5px] md:text-[9px] tabular-nums">
+                                                                        {formatISTTimeAMPM(lastOuting.checkOutISTTime, fromTimeVal)}
+                                                                    </span>
+                                                                </div>
+
+                                                                {/* IN TIMESTAMP (IF RETURNED) */}
+                                                                {isReturned ? (
+                                                                    <div className="flex flex-col px-1.5 py-0.5 sm:px-2 sm:py-1 bg-green-50/90 rounded-md sm:rounded-lg border border-green-100 min-w-[68px] sm:min-w-[80px]">
+                                                                        <span className="text-[6.5px] sm:text-[7.5px] font-black text-green-600 uppercase tracking-tight">
+                                                                            {isHomeLeave ? "RETURNED IN 🏠" : "IN 🏠"}
+                                                                        </span>
+                                                                        <span className="text-green-700 font-extrabold text-[8px] sm:text-[10px] md:text-[11px] leading-tight">
+                                                                            {formatDateDDMMYYYY(lastOuting.checkInISTDate || lastOuting.checkInTime || lastOuting.checkOutISTDate || lastOuting.checkOutTime)}
+                                                                        </span>
+                                                                        <span className="text-green-600 font-bold text-[7px] sm:text-[8.5px] md:text-[9px] tabular-nums">
+                                                                            {formatISTTimeAMPM(lastOuting.checkInISTTime || lastOuting.checkOutISTTime, lastOuting.checkInTime || lastOuting.checkOutTime)}
+                                                                        </span>
+                                                                    </div>
+                                                                ) : isHomeLeave ? (
+                                                                    /* EXPECTED COMING DATE (IF ON LEAVE) */
+                                                                    <div className={`flex flex-col px-1.5 py-0.5 sm:px-2 sm:py-1 rounded-md sm:rounded-lg border min-w-[68px] sm:min-w-[80px] ${isOverdue ? "bg-red-50/90 border-red-200" : "bg-blue-50/90 border-blue-200"}`}>
+                                                                        <span className={`text-[6.5px] sm:text-[7.5px] font-black uppercase tracking-tight ${isOverdue ? "text-red-600" : "text-blue-600"}`}>
+                                                                            COMING 🏠
+                                                                        </span>
+                                                                        <span className={`font-extrabold text-[8px] sm:text-[10px] md:text-[11px] leading-tight ${isOverdue ? "text-red-700" : "text-blue-900"}`}>
+                                                                            {expectedReturnVal ? formatDateDDMMYYYY(expectedReturnVal) : "Pending Return"}
+                                                                        </span>
+                                                                        <span className={`font-bold text-[7px] sm:text-[8.5px] md:text-[9px] tabular-nums ${isOverdue ? "text-red-600" : "text-blue-600"}`}>
+                                                                            {expectedReturnVal ? formatISTTimeAMPM((lastOuting as any).expectedReturnIstTime, expectedReturnTimeVal) : "On Leave"}
+                                                                        </span>
+                                                                    </div>
+                                                                ) : (
+                                                                    /* FALLBACK STATUS BOX (REGULAR GATE-PASS) */
+                                                                    <div className="flex flex-col px-1.5 py-0.5 sm:px-2 sm:py-1 bg-amber-50 rounded-md sm:rounded-lg border border-amber-200 min-w-[68px] sm:min-w-[80px] justify-center">
+                                                                        <span className="text-[6.5px] sm:text-[7.5px] font-black text-amber-600 uppercase tracking-tight">STATUS</span>
+                                                                        <span className="text-amber-700 font-extrabold text-[8.5px] sm:text-[10.5px]">
+                                                                            🔴 Outside
+                                                                        </span>
+                                                                    </div>
+                                                                )}
                                                             </div>
                                                         ) : (
-                                                            <div className="flex flex-col px-2 py-1 bg-amber-50 rounded-lg border border-amber-200 min-w-[75px] sm:min-w-[90px] justify-center">
-                                                                <span className="text-[7px] sm:text-[8px] font-black text-amber-600 uppercase tracking-tight">STATUS</span>
-                                                                <span className="text-amber-700 font-extrabold text-[9px] sm:text-xs">🔴 Outside</span>
-                                                            </div>
+                                                            <p className="text-[8px] sm:text-xs text-gray-400 font-semibold italic">No gate pass history yet</p>
                                                         )}
                                                     </div>
-                                                ) : (
-                                                    <p className="text-[8px] sm:text-xs text-gray-400 font-semibold italic">No gate pass history yet</p>
-                                                )}
-                                            </div>
+                                                );
+                                            })()}
                                         </div>
 
                                     </div>
 
                                     {/* RIGHT: Profile Picture */}
                                     <div className="order-2 sm:order-1 shrink-0 mt-3 sm:-mt-8 z-10">
-                                        <div className="w-24 h-24 sm:w-48 sm:h-48 rounded-2xl sm:rounded-[2rem] ring-[3px] ring-blue-500 shadow-[0_10px_30px_rgba(0,0,0,0.15)] sm:shadow-[0_20px_50px_rgba(0,0,0,0.2)]">
-                                            <div className="w-full h-full rounded-2xl sm:rounded-[2rem] bg-gray-50 flex items-center justify-center text-3xl sm:text-7xl font-black text-blue-600 overflow-hidden">
-                                                {selectedStudent.profilePicture ? (
-                                                    <img src={selectedStudent.profilePicture} alt={selectedStudent.name} className="w-full h-full object-cover" />
-                                                ) : (
-                                                    <span className="bg-gradient-to-br from-blue-600 to-indigo-700 bg-clip-text text-transparent">
-                                                        {selectedStudent.name?.charAt(0).toUpperCase()}
-                                                    </span>
-                                                )}
-                                            </div>
+                                        <div className="w-24 h-24 sm:w-48 sm:h-48 rounded-2xl sm:rounded-[2rem] ring-[3px] ring-blue-500 shadow-[0_10px_30px_rgba(0,0,0,0.15)] sm:shadow-[0_20px_50px_rgba(0,0,0,0.2)] overflow-hidden">
+                                            <FastAvatar
+                                                src={selectedStudent.profilePicture || selectedStudent.photo}
+                                                name={selectedStudent.name}
+                                                className="w-full h-full rounded-2xl sm:rounded-[2rem]"
+                                                sizeClass="text-3xl sm:text-7xl"
+                                            />
                                         </div>
                                     </div>
                                 </div>
@@ -963,6 +1026,7 @@ export default function OutingHistoryPage() {
                                         { label: "Mother Name", value: selectedStudent.motherName || "N/A", icon: "👩‍👦" },
                                         { label: "Mother Mobile", value: selectedStudent.motherNumber || "N/A", icon: "📱" },
                                         { label: "Permanent Address", value: `${selectedStudent.permanentAddress || "N/A"}${selectedStudent.homeState ? `, ${selectedStudent.homeState}` : ""}`, icon: "🏠", fullWidth: true },
+                                        ...(selectedStudent.leaveReason ? [{ label: "Leave Reason", value: selectedStudent.leaveReason, icon: "📝", fullWidth: true, valueClass: "text-amber-800 font-bold" }] : []),
                                     ].map((item: any, idx) => (
                                         <div key={idx} className={`flex gap-2 sm:gap-4 items-start bg-white p-2.5 sm:p-0 sm:bg-transparent rounded-xl sm:rounded-none border border-gray-100 sm:border-0 shadow-sm sm:shadow-none ${item.fullWidth ? 'col-span-2 lg:col-span-3' : ''}`}>
                                             <div className="w-7 h-7 sm:w-10 sm:h-10 rounded-lg sm:rounded-xl bg-gray-50 sm:bg-white shadow-sm flex items-center justify-center text-sm sm:text-lg shrink-0 border border-gray-100">{item.icon}</div>
@@ -1106,14 +1170,14 @@ export default function OutingHistoryPage() {
                                                     case "room": return <td key="room" className="px-3 sm:px-6 py-2 sm:py-4 text-[10px] sm:text-xs font-bold text-white/90 border-b border-white/5">{r.roomNumber}</td>;
                                                     case "outTime": return (
                                                         <td key="outTime" className="px-3 sm:px-6 py-2 sm:py-4 text-[9px] sm:text-[11px] font-medium text-white/40 border-b border-white/5">
-                                                            <span className="text-white/80">{r.checkOutISTTime}</span> <br /> {r.checkOutISTDate}
+                                                            <span className="text-white/80">{r.checkOutISTTime}</span> <br /> {formatDateDDMMYYYY(r.checkOutISTDate || r.checkOutTime)}
                                                         </td>
                                                     );
                                                     case "inTime": return (
                                                         <td key="inTime" className="px-3 sm:px-6 py-2 sm:py-4 text-[9px] sm:text-[11px] font-medium text-white/40 border-b border-white/5">
                                                              {r.status === 'in' || r.status === 'auto-resolved' ? (
                                                                 <>
-                                                                    <span className="text-green-400">{r.checkInISTTime}</span> <br /> {r.checkInISTDate}
+                                                                    <span className="text-green-400">{r.checkInISTTime}</span> <br /> {formatDateDDMMYYYY(r.checkInISTDate || r.checkInTime || r.checkOutISTDate)}
                                                                 </>
                                                             ) : "---"}
                                                         </td>
