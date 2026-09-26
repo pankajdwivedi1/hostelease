@@ -2,6 +2,7 @@ export const dynamic = "force-dynamic";
 
 import { NextRequest, NextResponse } from "next/server";
 import { db, supabase } from "@/lib/dbAdapter";
+import { jsonWithEtag } from "@/lib/etag";
 
 /**
  * GET /api/getpass/live
@@ -94,7 +95,7 @@ export async function GET(request: NextRequest) {
                 }
             });
 
-            return NextResponse.json({
+            return jsonWithEtag(request, {
                 success: true,
                 minimal: true,
                 recentActivity: miniRecent,
@@ -246,7 +247,7 @@ export async function GET(request: NextRequest) {
                 };
             });
 
-        return NextResponse.json({
+        return jsonWithEtag(request, {
             success: true,
             summary: {
                 totalStudents,

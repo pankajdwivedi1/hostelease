@@ -2,6 +2,7 @@ export const dynamic = "force-dynamic";
 
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/dbAdapter";
+import { jsonWithEtag } from "@/lib/etag";
 import { validators, validateStudentRegistration } from "@/lib/validation";
 import { getCurrentTenantId, getTenantById } from "@/lib/tenant";
 import { writeHostelActivityLog } from "@/lib/auditLog";
@@ -720,7 +721,7 @@ export async function GET(request: NextRequest) {
       console.warn("⚠️ Status sync failed in list API:", syncError);
     }
 
-    return NextResponse.json({
+    return jsonWithEtag(request, {
       success: true,
       students,
       total: students.length,
@@ -730,7 +731,7 @@ export async function GET(request: NextRequest) {
         matchedStudentsInList: typeof syncCount !== 'undefined' ? syncCount : 0
       },
       count: students.length,
-    }, { status: 200 });
+    }, 200);
   } catch (error: any) {
     console.error("❌ Error fetching students:", error.message);
     return NextResponse.json(
