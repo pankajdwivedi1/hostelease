@@ -58,7 +58,7 @@ export async function GET(request: NextRequest) {
             isPaymentEnabled: settings?.isPaymentEnabled || false,
             wardenPassword: isAdmin ? (settings?.wardenPassword || "warden456") : "••••••••",
             adminPassword: isAdmin ? (settings?.adminPassword || "pankajdwivedi81") : "••••••••",
-            developerPassword: isAdmin ? (settings?.developerPassword || "Pankaj852963") : "••••••••",
+            developerPassword: isAdmin ? (settings?.developerPassword || "Pankaj1258") : "••••••••",
             overlapRadius: settings?.overlapRadius || false,
             prioritizeAssignedHostel: settings?.prioritizeAssignedHostel || false,
             getpassPassword: isAdmin ? (settings?.getpassPassword || "GET456") : "••••••••",

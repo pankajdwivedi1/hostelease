@@ -36,14 +36,18 @@ export const parseFlexibleDate = (dateVal: any): Date | null => {
     }
 
     // Pattern 2: YYYY-MM-DD with optional time
-    const yyyymmddMatch = trimmed.match(/^(\d{4})[-/](\d{1,2})[-/](\d{1,2})(?:[T\s]+(\d{1,2}):(\d{2})(?::(\d{2}))?)?/i);
+    const yyyymmddMatch = trimmed.match(/^(\d{4})[-/](\d{1,2})[-/](\d{1,2})(?:[T\s]+(\d{1,2}):(\d{2})(?::(\d{2}))?\s*(am|pm)?)?/i);
     if (yyyymmddMatch) {
       const year = parseInt(yyyymmddMatch[1], 10);
       const month = parseInt(yyyymmddMatch[2], 10) - 1;
       const day = parseInt(yyyymmddMatch[3], 10);
-      const hours = yyyymmddMatch[4] ? parseInt(yyyymmddMatch[4], 10) : 0;
+      let hours = yyyymmddMatch[4] ? parseInt(yyyymmddMatch[4], 10) : 0;
       const minutes = yyyymmddMatch[5] ? parseInt(yyyymmddMatch[5], 10) : 0;
       const seconds = yyyymmddMatch[6] ? parseInt(yyyymmddMatch[6], 10) : 0;
+      const ampm = yyyymmddMatch[7]?.toLowerCase();
+
+      if (ampm === 'pm' && hours < 12) hours += 12;
+      if (ampm === 'am' && hours === 12) hours = 0;
 
       const d = new Date(year, month, day, hours, minutes, seconds);
       if (!isNaN(d.getTime())) return d;

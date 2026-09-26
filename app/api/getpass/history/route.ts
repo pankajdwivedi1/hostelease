@@ -79,6 +79,33 @@ export async function GET(request: NextRequest) {
         const { records, total } = historyRes;
         const leaveCount = leaveCountRes.total || 0;
         const passCount = passCountRes.total || 0;
+
+        // Enrich records with linked permission reason if available
+        try {
+            const permissionIds = (records || []).map((r: any) => r.permissionId || r.permission_id).filter(Boolean);
+            if (permissionIds.length > 0) {
+                const permsRes = await db.permissions.list({}, { limit: 500, populate: false });
+                const permsList = Array.isArray(permsRes) ? permsRes : (permsRes?.records || (permsRes as any)?.permissions || []);
+                const permsMap = new Map<string, any>();
+                permsList.forEach((p: any) => {
+                    const pid = (p._id || p.id)?.toString();
+                    if (pid) permsMap.set(pid, p);
+                });
+
+                records.forEach((r: any) => {
+                    const pid = (r.permissionId || r.permission_id)?.toString();
+                    const perm = pid ? permsMap.get(pid) : null;
+                    if (perm?.reason) {
+                        r.leaveReason = perm.reason;
+                        if (!r.reason || r.reason.includes('Manual Approval') || r.reason.includes('Override')) {
+                            r.reason = perm.reason;
+                        }
+                    }
+                });
+            }
+        } catch (enrichErr) {
+            console.warn("History permission enrichment error:", enrichErr);
+        }
         
         // Calculate grand total from the independent counts
         const grandTotal = leaveCount + passCount;

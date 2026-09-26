@@ -144,13 +144,28 @@ export default function Dashboard() {
                       } else if (response.ok) {
                         const data = await response.json();
                         if (data.notModified) {
+                          let isChanged = false;
+                          let updated = { ...currentCache };
                           if (data.studentStatus && (currentCache.studentStatus !== data.studentStatus || currentCache.outingType !== data.outingType)) {
-                            const updated = { ...currentCache, studentStatus: data.studentStatus, outingType: data.outingType };
+                            updated = { ...updated, studentStatus: data.studentStatus, outingType: data.outingType };
+                            isChanged = true;
+                          }
+                          if (data.isProfileLocked !== undefined && currentCache.isProfileLocked !== data.isProfileLocked) {
+                            updated = { ...updated, isProfileLocked: data.isProfileLocked };
+                            isChanged = true;
+                          }
+                          if (isChanged) {
                             localStorage.setItem("cachedStudentData", JSON.stringify(updated));
                             setStudentData(updated);
                           }
                         } else if (data.student) {
-                          const updatedStudent = { ...currentCache, ...data.student, studentStatus: data.student.studentStatus || "in", outingType: data.student.outingType };
+                          const updatedStudent = { 
+                            ...currentCache, 
+                            ...data.student, 
+                            studentStatus: data.student.studentStatus || "in", 
+                            outingType: data.student.outingType,
+                            isProfileLocked: data.student.isProfileLocked !== undefined ? data.student.isProfileLocked : false
+                          };
                           localStorage.setItem("cachedStudentData", JSON.stringify(updatedStudent));
                           setStudentData(updatedStudent);
                         }

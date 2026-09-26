@@ -408,6 +408,7 @@ export default function OnboardingPage() {
               };
 
               setFormData(initialForm);
+              if (s.isProfileLocked !== undefined) setIsProfileLocked(s.isProfileLocked === true);
               if (s.profilePicture) setCapturedImage(s.profilePicture);
             }
           } catch (error) {

@@ -111,8 +111,8 @@ export async function GET(request: NextRequest) {
         }
 
         // 2. Full Mode (Heavier Data - Runs Infrequently)
-        // ⚡ SPEED FIX: Fetch all data elements in parallel
-        const [allOutPassesRes, totalStudents, recentActivityRes] = await Promise.all([
+        // ⚡ SPEED FIX: Fetch all data elements in parallel including active permissions
+        const [allOutPassesRes, totalStudents, recentActivityRes, activePermsRes] = await Promise.all([
             db.gatePasses.list(filters, { limit: 1000, populate: true }),
             db.students.count(countFilters),
             db.gatePasses.list({
@@ -124,11 +124,27 @@ export async function GET(request: NextRequest) {
                 sortField: source === 'SUPABASE' ? 'check_in_time' : 'checkInTime',
                 sortOrder: 'desc',
                 populate: true
-            })
+            }),
+            db.permissions.list({
+                status: "allowed"
+            }, { limit: 500, populate: false })
         ]);
 
         const openPasses = allOutPassesRes.records || [];
         const recentActivity = recentActivityRes.records || [];
+        const activePermsList = Array.isArray(activePermsRes) ? activePermsRes : (activePermsRes?.records || (activePermsRes as any)?.permissions || []);
+
+        const permsByStudentId = new Map<string, any>();
+        const permsByRegId = new Map<string, any>();
+        activePermsList.forEach((perm: any) => {
+            const pSid = (typeof perm.studentId === 'object' ? (perm.studentId?._id || perm.studentId?.id) : perm.studentId)?.toString();
+            const rType = String(perm.requestType || '').toLowerCase();
+            const isLeave = rType.includes('leave') || rType === 'hleave';
+            if (isLeave && perm.status !== 'rejected' && perm.status !== 'cancelled') {
+                if (pSid && !permsByStudentId.has(pSid)) permsByStudentId.set(pSid, perm);
+                if (perm.registrationId && !permsByRegId.has(perm.registrationId)) permsByRegId.set(perm.registrationId, perm);
+            }
+        });
         
         // ⚡ DE-DUPLICATION: Use a Map to keep ONLY the most recent record per student
         const uniqueOutRecords = new Map<string, any>();
@@ -171,8 +187,35 @@ export async function GET(request: NextRequest) {
                 durationText = `${mins}m`;
             }
 
+            const recordSid = (typeof record.studentId === 'object' ? (record.studentId?._id || record.studentId?.id) : record.studentId)?.toString() || record.student?._id || record.student?.id;
+            const matchedPerm = (recordSid ? permsByStudentId.get(recordSid) : null) || (record.registrationId ? permsByRegId.get(record.registrationId) : null);
+
+            const expectedReturn = matchedPerm?.toDateTime || record.expectedReturnDate || record.toDateTime || record.student?.dynamicFields?.leaveTo || record.student?.leaveTo || null;
+            const leaveFrom = matchedPerm?.fromDateTime || record.fromDateTime || record.leaveFrom || record.student?.dynamicFields?.leaveFrom || null;
+            const genuineReason = matchedPerm?.reason || record.reason || record.leaveReason || record.student?.dynamicFields?.leaveReason || null;
+            const isLeave = String(record.type || '').toLowerCase().includes('leave') || String(record.type || '').toLowerCase() === 'hleave' || !!matchedPerm;
+            
+            let isOverdue = false;
+            if (isLeave) {
+                if (expectedReturn) {
+                    const retDate = new Date(expectedReturn);
+                    if (!isNaN(retDate.getTime())) {
+                        isOverdue = retDate.getTime() < now.getTime();
+                    }
+                } else {
+                    // Fallback only if no expected return date is found at all
+                    isOverdue = durationMinutes > (6 * 24 * 60);
+                }
+            }
+
             return {
                 ...record,
+                expectedReturnDate: expectedReturn,
+                leaveTo: expectedReturn,
+                leaveFrom: leaveFrom,
+                leaveReason: genuineReason,
+                reason: genuineReason,
+                isOverdue,
                 currentDurationMinutes: durationMinutes,
                 currentDurationText: durationText,
             };

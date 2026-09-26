@@ -2069,7 +2069,8 @@ export const db = {
                                 permanentAddress: true,
                                 homeState: true,
                                 studentStatus: true,
-                                profilePicture: true
+                                profilePicture: true,
+                                dynamicFields: true
                             }
                         }
                     }

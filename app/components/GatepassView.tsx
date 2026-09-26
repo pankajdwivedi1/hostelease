@@ -3,6 +3,7 @@
 import React, { useState, useEffect, useCallback, useRef } from "react";
 import { useRouter } from "next/navigation";
 import FastAvatar, { preloadFastImage } from "@/app/components/FastAvatar";
+import { formatToDDMMYYYY, formatDateDDMMYYYY, formatDateTimeDDMMYYYY, parseFlexibleDate } from "@/lib/dateFormat";
 
 // ============================================================
 // GATEPASS GATE DESKTOP — Split Screen: QR Code + Outing History
@@ -218,6 +219,8 @@ interface OutingRecord {
     currentDurationText?: string;
     gateName?: string;
     type?: "outing" | "leave" | string;
+    expectedReturnDate?: string;
+    isOverdue?: boolean;
 }
 
 interface LiveData {
@@ -410,10 +413,10 @@ export default function GatepassView({ onClose }: { onClose?: () => void }) {
             email: fallbackRecord?.email || s?.email || "",
             profilePicture: fallbackRecord?.profilePicture || s?.profilePicture || fallbackRecord?.photo || s?.photo || "",
             photo: fallbackRecord?.photo || s?.photo || fallbackRecord?.profilePicture || s?.profilePicture || "",
-            outingType: fallbackRecord?.type || fallbackRecord?.outingType || fallbackRecord?.requestType || s?.outingType || s?.requestType || "",
-            leaveFrom: fallbackRecord?.fromDateTime || fallbackRecord?.leaveFrom || s?.leaveFrom || "",
-            leaveTo: fallbackRecord?.toDateTime || fallbackRecord?.leaveTo || fallbackRecord?.expectedReturnDate || fallbackRecord?.expectedReturnIstDate || s?.leaveTo || "",
-            leaveReason: fallbackRecord?.reason || fallbackRecord?.leaveReason || s?.leaveReason || "",
+            outingType: fallbackRecord?.type || fallbackRecord?.outingType || fallbackRecord?.requestType || s?.outingType || s?.requestType || "GATE-PASS",
+            leaveFrom: (String(fallbackRecord?.type || s?.outingType || '').toLowerCase().includes('leave') || String(fallbackRecord?.type || s?.outingType || '').toLowerCase() === 'hleave') ? (fallbackRecord?.fromDateTime || fallbackRecord?.leaveFrom || s?.leaveFrom || "") : "",
+            leaveTo: (String(fallbackRecord?.type || s?.outingType || '').toLowerCase().includes('leave') || String(fallbackRecord?.type || s?.outingType || '').toLowerCase() === 'hleave') ? (fallbackRecord?.toDateTime || fallbackRecord?.leaveTo || fallbackRecord?.expectedReturnDate || fallbackRecord?.expectedReturnIstDate || s?.leaveTo || "") : "",
+            leaveReason: (String(fallbackRecord?.type || s?.outingType || '').toLowerCase().includes('leave') || String(fallbackRecord?.type || s?.outingType || '').toLowerCase() === 'hleave') ? (fallbackRecord?.reason || fallbackRecord?.leaveReason || s?.leaveReason || "") : "",
         };
 
         if (initialStudent.profilePicture) {
@@ -447,12 +450,19 @@ export default function GatepassView({ onClose }: { onClose?: () => void }) {
                     if (data.student.profilePicture) {
                         preloadFastImage(data.student.profilePicture);
                     }
+                    const activeOuting = fallbackRecord || data.lastOuting || null;
+                    const isOutingLeave = String(activeOuting?.type || activeOuting?.requestType || '').toLowerCase().includes('leave') || String(activeOuting?.type || activeOuting?.requestType || '').toLowerCase() === 'hleave';
+
                     const freshStudent = {
                         ...initialStudent,
                         ...data.student,
-                        studentStatus: currentRealStatus
+                        studentStatus: currentRealStatus,
+                        outingType: activeOuting?.type || data.student?.outingType || initialStudent.outingType,
+                        leaveFrom: isOutingLeave ? (data.student?.leaveFrom || initialStudent.leaveFrom || "") : "",
+                        leaveTo: isOutingLeave ? (data.student?.leaveTo || initialStudent.leaveTo || "") : "",
+                        leaveReason: isOutingLeave ? (data.student?.leaveReason || initialStudent.leaveReason || "") : "",
                     };
-                    const freshLastOuting = data.lastOuting || fallbackRecord || null;
+                    const freshLastOuting = activeOuting;
                     profileCache.current.set(studentId, {
                         student: freshStudent,
                         lastOuting: freshLastOuting,
@@ -866,40 +876,7 @@ export default function GatepassView({ onClose }: { onClose?: () => void }) {
         return raw.replace(/am/i, "AM").replace(/pm/i, "PM");
     };
 
-    const formatDate = (date: Date) => {
-        const ist = new Date(date.toLocaleString("en-US", { timeZone: "Asia/Kolkata" }));
-        const dd = String(ist.getDate()).padStart(2, "0");
-        const mm = String(ist.getMonth() + 1).padStart(2, "0");
-        const yyyy = ist.getFullYear();
-        return `${dd}-${mm}-${yyyy}`;
-    };
-
-    const formatDateDDMMYYYY = (dateVal: any) => {
-        if (!dateVal) return "--:--";
-        const str = String(dateVal).trim();
-        if (!str || str === 'undefined' || str === 'null') return "--:--";
-
-        if (/^\d{2}[-/]\d{2}[-/]\d{4}$/.test(str)) {
-            return str.replace(/\//g, '-');
-        }
-
-        if (/^\d{4}-\d{2}-\d{2}$/.test(str)) {
-            const [y, m, d] = str.split('-');
-            return `${d}-${m}-${y}`;
-        }
-
-        try {
-            const d = new Date(str);
-            if (!isNaN(d.getTime())) {
-                const day = String(d.getDate()).padStart(2, "0");
-                const month = String(d.getMonth() + 1).padStart(2, "0");
-                const year = d.getFullYear();
-                return `${day}-${month}-${year}`;
-            }
-        } catch (e) {}
-
-        return str;
-    };
+    const formatDate = (dateVal: any) => formatDateDDMMYYYY(dateVal) || "--:--";
 
     // Standardize any timestamp or 24h string to 12-hour AM/PM format
     const formatISTTimeAMPM = (timeStr?: string, isoDateStr?: string) => {
@@ -1133,7 +1110,7 @@ export default function GatepassView({ onClose }: { onClose?: () => void }) {
             </div>
 
             {/* =================== RIGHT PANEL: LIVE OUTING HISTORY =================== */}
-            <div className="w-full md:w-[58%] flex flex-col p-2.5 sm:p-4 md:p-8 bg-gradient-to-b from-[#0d1117] to-[#0a0e14] min-h-[500px] md:h-full md:overflow-hidden overflow-visible">
+            <div className="w-full md:w-[58%] flex flex-col p-2 sm:p-3 md:px-2.5 md:py-4 bg-gradient-to-b from-[#0d1117] to-[#0a0e14] min-h-[500px] md:h-full md:overflow-hidden overflow-visible">
                 {/* Summary Cards */}
                 <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-4 mb-2">
                     <h2 className="text-lg md:text-xl font-bold text-white m-0 flex items-center gap-2">
@@ -1378,7 +1355,7 @@ export default function GatepassView({ onClose }: { onClose?: () => void }) {
 
 
                 {/* Side-by-Side Lists Container */}
-                <div className="flex-1 flex flex-col md:flex-row gap-3 md:gap-4 min-h-0 overflow-hidden">
+                <div className="flex-1 flex flex-col md:flex-row gap-2.5 md:gap-3 min-h-0 overflow-hidden">
                     {/* LEFT COLUMN: Currently Outside */}
                     <div className="flex-1 flex flex-col min-h-0">
                         <div className="mb-2">
@@ -1387,7 +1364,7 @@ export default function GatepassView({ onClose }: { onClose?: () => void }) {
                             </h3>
                         </div>
 
-                        <div className="flex-1 overflow-y-auto border-0 md:border md:border-[rgba(255,255,255,0.05)] rounded-none md:rounded-xl p-0 md:p-2 bg-transparent md:bg-[#0a0a1a]/30 custom-scrollbar">
+                        <div className="flex-1 overflow-y-auto border-0 md:border md:border-[rgba(255,255,255,0.05)] rounded-none md:rounded-xl p-0 md:p-1 bg-transparent md:bg-[#0a0a1a]/30 custom-scrollbar">
                             {liveData?.currentlyOut && liveData.currentlyOut.length > 0 ? (
                                 <div className="flex flex-col gap-1.5">
                                     {liveData.currentlyOut.map((record, index) => {
@@ -1411,14 +1388,31 @@ export default function GatepassView({ onClose }: { onClose?: () => void }) {
                                                             </h4>
                                                             {(() => {
                                                                 const isLeaveRecord = String(record.type || '').toLowerCase().includes('leave') || String(record.type || '').toLowerCase() === 'hleave';
+                                                                const expReturn = record.expectedReturnDate || (record as any).toDateTime || (record as any).expectedReturnIstDate || (record as any).leaveTo;
+                                                                const isOverdue = record.isOverdue !== undefined
+                                                                    ? Boolean(record.isOverdue)
+                                                                    : (isLeaveRecord && (
+                                                                        expReturn ? new Date(expReturn).getTime() < Date.now() : (record.currentDurationMinutes || 0) > (6 * 24 * 60)
+                                                                    ));
+
                                                                 return (
-                                                                    <span className={`px-1.5 py-0.5 rounded-md text-[8px] font-black uppercase tracking-widest border transition-all flex items-center gap-1 shrink-0 ${isLeaveRecord
-                                                                        ? "bg-amber-500/20 text-amber-400 border-amber-500/30"
-                                                                        : "bg-blue-500/20 text-blue-400 border-blue-500/30"
-                                                                        }`}>
-                                                                        <span className="text-[9px]">{isLeaveRecord ? "🏠" : "🎫"}</span>
-                                                                        <span>{isLeaveRecord ? "HOME-LEAVE" : "GATE-PASS"}</span>
-                                                                    </span>
+                                                                    <div className="flex items-center gap-1 shrink-0">
+                                                                        {isLeaveRecord && isOverdue && (
+                                                                            <span className="relative flex h-2 w-2 mr-0.5 items-center justify-center" title="Overdue Student (Scheduled Return Passed)">
+                                                                                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-80"></span>
+                                                                                <span className="relative inline-flex rounded-full h-2 w-2 bg-red-500 shadow-[0_0_8px_#ef4444] animate-rapid-blink"></span>
+                                                                            </span>
+                                                                        )}
+                                                                        <span className={`px-1.5 py-0.5 rounded-md text-[8px] font-black uppercase tracking-widest border transition-all flex items-center gap-1 shrink-0 ${isLeaveRecord
+                                                                            ? isOverdue
+                                                                                ? "bg-red-500/20 text-red-400 border-red-500/40"
+                                                                                : "bg-amber-500/20 text-amber-400 border-amber-500/30"
+                                                                            : "bg-blue-500/20 text-blue-400 border-blue-500/30"
+                                                                            }`}>
+                                                                            <span className="text-[9px]">{isLeaveRecord ? "🏠" : "🎫"}</span>
+                                                                            <span>{isLeaveRecord ? "HOME-LEAVE" : "GATE-PASS"}</span>
+                                                                        </span>
+                                                                    </div>
                                                                 );
                                                             })()}
                                                         </div>
@@ -1456,7 +1450,7 @@ export default function GatepassView({ onClose }: { onClose?: () => void }) {
                             </h3>
                         </div>
 
-                        <div className="flex-1 overflow-y-auto border-0 md:border md:border-[rgba(255,255,255,0.05)] rounded-none md:rounded-xl p-0 md:p-2 bg-transparent md:bg-[#0a0a1a]/30 custom-scrollbar">
+                        <div className="flex-1 overflow-y-auto border-0 md:border md:border-[rgba(255,255,255,0.05)] rounded-none md:rounded-xl p-0 md:p-1 bg-transparent md:bg-[#0a0a1a]/30 custom-scrollbar">
                             {liveData?.recentActivity && liveData.recentActivity.length > 0 ? (
                                 <div className="flex flex-col gap-1.5">
                                     {liveData.recentActivity.map((record, index) => {
@@ -1578,13 +1572,18 @@ export default function GatepassView({ onClose }: { onClose?: () => void }) {
                                             {(() => {
                                                 const rawType = String((lastOuting as any)?.type || (lastOuting as any)?.requestType || selectedStudent?.outingType || selectedStudent?.requestType || '').toLowerCase();
                                                 const isHomeLeave = rawType.includes('leave') || rawType === 'hleave';
-                                                const isReturned = lastOuting?.status === 'in' || !!lastOuting?.checkInISTTime || !!lastOuting?.checkInTime;
-                                                const isCurrentlyOut = !isReturned && (lastOuting?.status === 'out' || selectedStudent?.studentStatus === 'out');
+                                                
+                                                // ⚡ Realtime Campus Status: Check if student is actively outside
+                                                const isCurrentlyOut = selectedStudent?.studentStatus === 'out' || (liveData?.currentlyOut || []).some((item: any) => {
+                                                    const sId = item.studentId || item.student_id || item._id || item.id;
+                                                    return String(sId) === String(selectedStudent?._id || selectedStudent?.id);
+                                                });
+                                                const isReturned = !isCurrentlyOut;
 
-                                                const fromDateVal = lastOuting?.checkOutISTDate || lastOuting?.checkOutTime || (lastOuting as any)?.fromDateTime || selectedStudent?.leaveFrom;
-                                                const fromTimeVal = lastOuting?.checkOutISTTime || lastOuting?.checkOutTime || (lastOuting as any)?.fromDateTime || selectedStudent?.leaveFrom;
+                                                const fromDateVal = selectedStudent?.leaveFrom || (lastOuting as any)?.fromDateTime || lastOuting?.checkOutISTDate || lastOuting?.checkOutTime;
+                                                const fromTimeVal = selectedStudent?.leaveFrom || (lastOuting as any)?.fromDateTime || lastOuting?.checkOutISTTime || lastOuting?.checkOutTime;
 
-                                                let expectedReturnVal = (lastOuting as any)?.expectedReturnDate || (lastOuting as any)?.toDateTime || (lastOuting as any)?.expectedReturnIstDate || selectedStudent?.leaveTo || selectedStudent?.toDateTime;
+                                                let expectedReturnVal = selectedStudent?.leaveTo || (lastOuting as any)?.toDateTime || (lastOuting as any)?.expectedReturnDate || (lastOuting as any)?.expectedReturnIstDate;
                                                 if (isHomeLeave && !expectedReturnVal && fromDateVal) {
                                                     try {
                                                         const fromDateObj = new Date(fromDateVal);
@@ -1686,20 +1685,34 @@ export default function GatepassView({ onClose }: { onClose?: () => void }) {
 
                                 {/* Info Cards Grid — 2 cols on mobile */}
                                 <div className="flex-1 px-4 sm:px-10 pb-6 sm:pb-8 grid grid-cols-2 lg:grid-cols-3 gap-2.5 sm:gap-x-12 sm:gap-y-8 bg-gray-50/50 pt-4 sm:pt-8 border-t border-gray-100">
-                                    {[
-                                        { label: "College Name", value: selectedStudent.collegeName || "N/A", icon: "🎓" },
-                                        { label: "ERP ID", value: selectedStudent.erpInformation || "N/A", icon: "🆔", valueClass: "text-blue-600" },
-                                        { label: "Branch", value: selectedStudent.branch || "N/A", icon: "📚" },
-                                        { label: "Year & Sem", value: `${selectedStudent.year || "N/A"} • ${selectedStudent.semester || "N/A"}`, icon: "📅" },
-                                        { label: "Mobile", value: selectedStudent.phoneNumber || "N/A", icon: "📞" },
-                                        { label: "Email", value: selectedStudent.email || "N/A", icon: <span className="text-[#FBBC05]">📧</span> },
-                                        { label: "Father Name", value: selectedStudent.fatherName || "N/A", icon: "👨‍👦" },
-                                        { label: "Father Mobile", value: selectedStudent.fatherNumber || "N/A", icon: "📱" },
-                                        { label: "Mother Name", value: selectedStudent.motherName || "N/A", icon: "👩‍👦" },
-                                        { label: "Mother Mobile", value: selectedStudent.motherNumber || "N/A", icon: "📱" },
-                                        { label: "Permanent Address", value: `${selectedStudent.permanentAddress || "N/A"}${selectedStudent.homeState ? `, ${selectedStudent.homeState}` : ""}`, icon: "🏠", fullWidth: true },
-                                        ...(selectedStudent.leaveReason ? [{ label: "Leave Reason", value: selectedStudent.leaveReason, icon: "📝", fullWidth: true, valueClass: "text-amber-800 font-bold" }] : []),
-                                    ].map((item: any, idx) => (
+                                    {(() => {
+                                        const rawType = String((lastOuting as any)?.type || (lastOuting as any)?.requestType || selectedStudent?.outingType || selectedStudent?.requestType || '').toLowerCase();
+                                        const isHomeLeave = rawType.includes('leave') || rawType === 'hleave';
+                                        
+                                        // ⚡ Realtime Campus Status: Check if student is actively outside
+                                        const isCurrentlyOut = selectedStudent?.studentStatus === 'out' || (liveData?.currentlyOut || []).some((item: any) => {
+                                            const sId = item.studentId || item.student_id || item._id || item.id;
+                                            return String(sId) === String(selectedStudent?._id || selectedStudent?.id);
+                                        });
+
+                                        const leaveReasonVal = selectedStudent?.leaveReason || (lastOuting as any)?.reason || (selectedStudent as any)?.dynamicFields?.leaveReason;
+                                        const showLeaveReason = isHomeLeave && isCurrentlyOut && !!leaveReasonVal;
+
+                                        return [
+                                            { label: "College Name", value: selectedStudent.collegeName || "N/A", icon: "🎓" },
+                                            { label: "ERP ID", value: selectedStudent.erpInformation || "N/A", icon: "🆔", valueClass: "text-blue-600" },
+                                            { label: "Branch", value: selectedStudent.branch || "N/A", icon: "📚" },
+                                            { label: "Year & Sem", value: `${selectedStudent.year || "N/A"} • ${selectedStudent.semester || "N/A"}`, icon: "📅" },
+                                            { label: "Mobile", value: selectedStudent.phoneNumber || "N/A", icon: "📞" },
+                                            { label: "Email", value: selectedStudent.email || "N/A", icon: <span className="text-[#FBBC05]">📧</span> },
+                                            { label: "Father Name", value: selectedStudent.fatherName || "N/A", icon: "👨‍👦" },
+                                            { label: "Father Mobile", value: selectedStudent.fatherNumber || "N/A", icon: "📱" },
+                                            { label: "Mother Name", value: selectedStudent.motherName || "N/A", icon: "👩‍👦" },
+                                            { label: "Mother Mobile", value: selectedStudent.motherNumber || "N/A", icon: "📱" },
+                                            { label: "Permanent Address", value: `${selectedStudent.permanentAddress || "N/A"}${selectedStudent.homeState ? `, ${selectedStudent.homeState}` : ""}`, icon: "🏠", fullWidth: true },
+                                            ...(showLeaveReason ? [{ label: "Leave Reason", value: leaveReasonVal, icon: "📝", fullWidth: true, valueClass: "text-amber-800 font-bold" }] : []),
+                                        ];
+                                    })().map((item: any, idx) => (
                                         <div key={idx} className={`flex gap-2 sm:gap-4 items-start bg-white p-2.5 sm:p-0 sm:bg-transparent rounded-xl sm:rounded-none border border-gray-100 sm:border-0 shadow-sm sm:shadow-none ${item.fullWidth ? 'col-span-2 lg:col-span-3' : ''}`}>
                                             <div className="w-7 h-7 sm:w-10 sm:h-10 rounded-lg sm:rounded-xl bg-gray-50 sm:bg-white shadow-sm flex items-center justify-center text-sm sm:text-lg shrink-0 border border-gray-100">{item.icon}</div>
                                             <div className="min-w-0 flex-1">
@@ -1742,6 +1755,19 @@ export default function GatepassView({ onClose }: { onClose?: () => void }) {
 
 
             <style jsx global>{`
+                @keyframes continuousBlink {
+                    0%, 100% {
+                        opacity: 1;
+                        transform: scale(1);
+                    }
+                    50% {
+                        opacity: 0;
+                        transform: scale(0.6);
+                    }
+                }
+                .animate-rapid-blink {
+                    animation: continuousBlink 0.6s ease-in-out infinite;
+                }
                 input[type="date"]::-webkit-calendar-picker-indicator {
                     filter: invert(1);
                     opacity: 0.5;

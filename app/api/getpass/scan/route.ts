@@ -430,17 +430,31 @@ export async function POST(request: NextRequest) {
                 checkOutTime: now,
                 checkOutISTTime: istTime,
                 checkOutISTDate: istDate,
+                fromDateTime: activeLeave?.fromDateTime ? new Date(activeLeave.fromDateTime) : now,
+                toDateTime: activeLeave?.toDateTime ? new Date(activeLeave.toDateTime) : undefined,
+                expectedReturnDate: activeLeave?.toDateTime ? new Date(activeLeave.toDateTime) : undefined,
+                reason: activeLeave?.reason || (activeLeave ? "Home Leave" : "Gate Pass (Outing)"),
                 status: "out",
                 type: activeLeave ? "HOME-LEAVE" : "GATE-PASS",
-                permissionId: activeLeave?._id || null,
+                permissionId: activeLeave?._id || activeLeave?.id || null,
                 gateName: gateName,
                 qrTokenUsedOut: token,
             });
 
-            // Update student status to "out"
+            // Update student status to "out" and update dynamicFields with genuine leave reason & dates
             const studentDbId = (student._id || student.id || student.firebaseUID).toString();
             try {
-                await db.students.update(studentDbId, { studentStatus: "out" });
+                const updatedDynamicFields = {
+                    ...((student as any).dynamicFields || {}),
+                    outingType: activeLeave ? "leave" : "outing",
+                    leaveFrom: activeLeave?.fromDateTime ? new Date(activeLeave.fromDateTime).toISOString() : null,
+                    leaveTo: activeLeave?.toDateTime ? new Date(activeLeave.toDateTime).toISOString() : null,
+                    leaveReason: activeLeave?.reason || null,
+                };
+                await db.students.update(studentDbId, { 
+                    studentStatus: "out",
+                    dynamicFields: updatedDynamicFields
+                });
             } catch (statusErr) {
                 console.warn("⚠️ Student status update to 'out' failed (non-critical):", statusErr);
             }
@@ -504,7 +518,17 @@ export async function POST(request: NextRequest) {
                 // No open pass found but status is "out" - fix status
                 const studentDbId = (student._id || student.id || student.firebaseUID).toString();
                 try {
-                    await db.students.update(studentDbId, { studentStatus: "in" });
+                    let updatedDynamicFields = typeof student.dynamicFields === 'string'
+                        ? JSON.parse(student.dynamicFields || '{}')
+                        : { ...(student.dynamicFields || {}) };
+                    delete updatedDynamicFields.leaveTo;
+                    delete updatedDynamicFields.leaveFrom;
+                    delete updatedDynamicFields.leaveReason;
+
+                    await db.students.update(studentDbId, { 
+                        studentStatus: "in",
+                        dynamicFields: updatedDynamicFields
+                    });
                 } catch (statusErr) {
                     console.warn("⚠️ Student status update to 'in' failed (non-critical):", statusErr);
                 }
@@ -585,7 +609,17 @@ export async function POST(request: NextRequest) {
 
             // Update student status to "in"
             try {
-                await db.students.update(studentDbId, { studentStatus: "in" });
+                let updatedDynamicFields = typeof student.dynamicFields === 'string'
+                    ? JSON.parse(student.dynamicFields || '{}')
+                    : { ...(student.dynamicFields || {}) };
+                delete updatedDynamicFields.leaveTo;
+                delete updatedDynamicFields.leaveFrom;
+                delete updatedDynamicFields.leaveReason;
+
+                await db.students.update(studentDbId, { 
+                    studentStatus: "in",
+                    dynamicFields: updatedDynamicFields
+                });
             } catch (statusErr) {
                 console.warn("⚠️ Student status update to 'in' failed (non-critical):", statusErr);
             }

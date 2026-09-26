@@ -494,7 +494,13 @@ export async function GET(request: NextRequest) {
       await enrichStudentOuting(student);
 
       if (isNotModified(student)) {
-        return NextResponse.json({ notModified: true, success: true, studentStatus: student.studentStatus || "in", outingType: student.outingType }, { status: 200 });
+        return NextResponse.json({ 
+          notModified: true, 
+          success: true, 
+          studentStatus: student.studentStatus || "in", 
+          outingType: student.outingType,
+          isProfileLocked: student.isProfileLocked !== undefined ? student.isProfileLocked : true
+        }, { status: 200 });
       }
       const tenant = student.tenantId ? await getTenantById(student.tenantId) : null;
       return NextResponse.json({ 
@@ -537,7 +543,13 @@ export async function GET(request: NextRequest) {
       await enrichStudentOuting(student);
 
       if (isNotModified(student)) {
-        return NextResponse.json({ notModified: true, success: true, studentStatus: student.studentStatus || "in", outingType: (student as any).outingType }, { status: 200 });
+        return NextResponse.json({ 
+          notModified: true, 
+          success: true, 
+          studentStatus: student.studentStatus || "in", 
+          outingType: (student as any).outingType,
+          isProfileLocked: student.isProfileLocked !== undefined ? student.isProfileLocked : true
+        }, { status: 200 });
       }
       const tenant = student.tenantId ? await getTenantById(student.tenantId) : null;
       return NextResponse.json({ 
@@ -695,9 +707,9 @@ export async function GET(request: NextRequest) {
                        (s.registrationId ? permsByReg.get(s.registrationId) : null) ||
                        (s.name ? permsByName.get(s.name.trim().toLowerCase()) : null);
           if (perm) {
-            if (!s.leaveFrom || s.leaveFrom === s.checkOutTime) s.leaveFrom = perm.fromDateTime;
-            if (!s.leaveTo) s.leaveTo = perm.toDateTime;
-            if (!s.leaveReason) s.leaveReason = perm.reason;
+            if (perm.fromDateTime) s.leaveFrom = perm.fromDateTime;
+            if (perm.toDateTime) s.leaveTo = perm.toDateTime;
+            if (perm.reason) s.leaveReason = perm.reason;
             s.permissionStatus = perm.status;
           }
         });

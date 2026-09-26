@@ -1076,6 +1076,49 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
         }
     }, [studentProfile?._id, studentProfile?.hostelName]);
 
+    // ⚡ INSTANT PROFILE SYNC: Re-validates student profile & lock status on profile open or avatar click
+    const refreshStudentProfile = useCallback(async () => {
+        const currentStudentId = studentProfile?._id || (studentProfile as any)?.id;
+        const fbUid = studentProfile?.firebaseUID || (studentProfile as any)?.firebaseUid;
+        const email = studentProfile?.email;
+        if (!currentStudentId && !fbUid && !email) return;
+
+        try {
+            const queryParam = fbUid 
+                ? `firebaseUID=${encodeURIComponent(fbUid)}${email ? `&email=${encodeURIComponent(email)}` : ''}`
+                : (currentStudentId ? `studentId=${encodeURIComponent(currentStudentId)}${email ? `&email=${encodeURIComponent(email)}` : ''}` : `email=${encodeURIComponent(email || '')}`);
+            
+            const res = await fetch(`/api/students?${queryParam}&minimal=true${getTenantParam(false)}`, { cache: 'no-store' });
+            if (res.ok) {
+                const data = await res.json();
+                if (data.student) {
+                    setStudentProfile(prev => {
+                        if (!prev) return prev;
+                        const updated = {
+                            ...prev,
+                            ...data.student,
+                            studentStatus: data.student.studentStatus || prev.studentStatus || "in",
+                            outingType: data.student.outingType !== undefined ? data.student.outingType : prev.outingType,
+                            isProfileLocked: data.student.isProfileLocked !== undefined ? data.student.isProfileLocked : false
+                        };
+                        try {
+                            localStorage.setItem("cachedStudentData", JSON.stringify(updated));
+                        } catch (e) {}
+                        return updated;
+                    });
+                }
+            }
+        } catch (e) {
+            console.warn("Silent profile sync error:", e);
+        }
+    }, [studentProfile?._id, (studentProfile as any)?.id, studentProfile?.firebaseUID, (studentProfile as any)?.firebaseUid, studentProfile?.email]);
+
+    useEffect(() => {
+        if (showProfile) {
+            refreshStudentProfile();
+        }
+    }, [showProfile, refreshStudentProfile]);
+
     // ⚡ Master Full Sync (Manual Pull or Auto App Resume)
     const syncFullDashboard = useCallback(async (isManualPull = false) => {
         if (isManualPull) setIsRefreshing(true);
@@ -1114,8 +1157,19 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
                         .then(fullData => {
                             if (!fullData) return;
                             if (fullData.notModified) {
-                                if (fullData.studentStatus) {
-                                    setStudentProfile(prev => prev ? ({ ...prev, studentStatus: fullData.studentStatus, outingType: fullData.outingType }) : prev);
+                                if (fullData.studentStatus || fullData.isProfileLocked !== undefined) {
+                                    setStudentProfile(prev => {
+                                        if (!prev) return prev;
+                                        const updated = {
+                                            ...prev,
+                                            ...(fullData.studentStatus ? { studentStatus: fullData.studentStatus, outingType: fullData.outingType } : {}),
+                                            ...(fullData.isProfileLocked !== undefined ? { isProfileLocked: fullData.isProfileLocked } : {})
+                                        };
+                                        try {
+                                            localStorage.setItem("cachedStudentData", JSON.stringify(updated));
+                                        } catch (e) {}
+                                        return updated;
+                                    });
                                 }
                                 return;
                             }
@@ -1123,10 +1177,13 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
                                 const fullStudentData = {
                                     ...fullData.student,
                                     studentStatus: fullData.student.studentStatus || "in",
-                                    outingType: fullData.student.outingType
+                                    outingType: fullData.student.outingType,
+                                    isProfileLocked: fullData.student.isProfileLocked !== undefined ? fullData.student.isProfileLocked : false
                                 };
                                 setStudentProfile(fullStudentData);
-                                localStorage.setItem("cachedStudentData", JSON.stringify(fullStudentData));
+                                try {
+                                    localStorage.setItem("cachedStudentData", JSON.stringify(fullStudentData));
+                                } catch (e) {}
                             }
                         })
                         .catch(err => console.warn("Background profile sync error:", err))
@@ -1501,7 +1558,17 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
                         const initialFormData: Record<string, string> = {};
                         data.missingFields.forEach((f: any) => {
                             const val = f.currentValue ?? (studentProfile as any)[f.fieldId] ?? studentProfile.dynamicFields?.[f.fieldId] ?? "";
-                            initialFormData[f.fieldId] = (val || "").toString();
+                            const strVal = (val || "").toString();
+                            if (f.fieldId === 'semester') {
+                                const upper = strVal.toUpperCase();
+                                if (upper.includes('2ND') || upper.includes('4TH') || upper.includes('6TH') || upper.includes('8TH')) {
+                                    initialFormData[f.fieldId] = "";
+                                } else {
+                                    initialFormData[f.fieldId] = strVal;
+                                }
+                            } else {
+                                initialFormData[f.fieldId] = strVal;
+                            }
                         });
                         setEnforcementFormData(initialFormData);
                         setShowFieldEnforcementModal(true);
@@ -1728,8 +1795,7 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
                             method: "PATCH",
                             headers: { "Content-Type": "application/json" },
                             body: JSON.stringify({
-                                deviceId: currentDeviceId,
-                                isProfileLocked: true
+                                deviceId: currentDeviceId
                             }),
                         });
                         
@@ -3637,7 +3703,10 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
                                 </div>
 
                                 <button
-                                    onClick={() => setShowProfile(true)}
+                                    onClick={() => {
+                                        setShowProfile(true);
+                                        refreshStudentProfile();
+                                    }}
                                     className="w-14 h-14 md:w-16 md:h-16 rounded-full ring-2 ring-blue-100 ring-offset-2 overflow-hidden hover:opacity-90 transition-opacity flex-shrink-0 shadow-lg"
                                 >
                                     {studentProfile?.profilePicture ? (
@@ -3657,7 +3726,9 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
                             {/* Overdue Student Alert Banner */}
                             {(() => {
                                 if (studentProfile?.studentStatus !== 'out') return null;
-                                const leaveTo = latestPermission?.toDateTime || studentProfile?.leaveTo;
+                                const isCurrentHomeLeave = String(studentProfile.outingType || '').toLowerCase().includes('leave') || (studentProfile as any).rStatus === 'hleave';
+                                const activePerm = latestPermission && (latestPermission.status === 'allowed' || ((latestPermission.wardenStatus === 'allowed' || latestPermission.wardenStatus === 'approved') && latestPermission.status !== 'completed' && latestPermission.status !== 'cancelled' && latestPermission.status !== 'rejected')) ? latestPermission : null;
+                                const leaveTo = isCurrentHomeLeave ? (activePerm?.toDateTime || studentProfile?.leaveTo) : null;
                                 if (!leaveTo) return null;
                                 const toDate = new Date(leaveTo);
                                 const isOverdue = !isNaN(toDate.getTime()) && Date.now() > toDate.getTime();
@@ -3680,11 +3751,13 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
                                 <div className={`h-12 px-2.5 sm:px-3 rounded-xl border-2 shadow-sm flex flex-col justify-center overflow-hidden min-w-0 ${
                                     studentProfile.studentStatus === 'out'
                                         ? (() => {
-                                            const leaveTo = latestPermission?.toDateTime || studentProfile?.leaveTo;
+                                            const isCurrentHomeLeave = String(studentProfile.outingType || '').toLowerCase().includes('leave') || (studentProfile as any).rStatus === 'hleave';
+                                            const activePerm = latestPermission && (latestPermission.status === 'allowed' || ((latestPermission.wardenStatus === 'allowed' || latestPermission.wardenStatus === 'approved') && latestPermission.status !== 'completed' && latestPermission.status !== 'cancelled' && latestPermission.status !== 'rejected')) ? latestPermission : null;
+                                            const leaveTo = isCurrentHomeLeave ? (activePerm?.toDateTime || studentProfile?.leaveTo) : null;
                                             const toDate = leaveTo ? new Date(leaveTo) : null;
                                             const isOverdue = toDate && !isNaN(toDate.getTime()) && Date.now() > toDate.getTime();
                                             if (isOverdue) return 'bg-gradient-to-br from-red-50 via-rose-50 to-red-100 border-red-300 ring-2 ring-red-200';
-                                            return String(studentProfile.outingType || '').toLowerCase().includes('leave')
+                                            return isCurrentHomeLeave
                                                 ? 'bg-gradient-to-br from-blue-50 via-indigo-50 to-blue-100 border-blue-200'
                                                 : 'bg-gradient-to-br from-amber-50 via-orange-50 to-amber-100 border-amber-200';
                                           })()
@@ -3693,11 +3766,13 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
                                     <span className={`block text-[7.5px] font-black uppercase tracking-[0.2em] leading-none mb-1 truncate ${
                                         studentProfile.studentStatus === 'out'
                                             ? (() => {
-                                                const leaveTo = latestPermission?.toDateTime || studentProfile?.leaveTo;
+                                                const isCurrentHomeLeave = String(studentProfile.outingType || '').toLowerCase().includes('leave') || (studentProfile as any).rStatus === 'hleave';
+                                                const activePerm = latestPermission && (latestPermission.status === 'allowed' || ((latestPermission.wardenStatus === 'allowed' || latestPermission.wardenStatus === 'approved') && latestPermission.status !== 'completed' && latestPermission.status !== 'cancelled' && latestPermission.status !== 'rejected')) ? latestPermission : null;
+                                                const leaveTo = isCurrentHomeLeave ? (activePerm?.toDateTime || studentProfile?.leaveTo) : null;
                                                 const toDate = leaveTo ? new Date(leaveTo) : null;
                                                 const isOverdue = toDate && !isNaN(toDate.getTime()) && Date.now() > toDate.getTime();
                                                 if (isOverdue) return 'text-red-800';
-                                                return String(studentProfile.outingType || '').toLowerCase().includes('leave')
+                                                return isCurrentHomeLeave
                                                     ? 'text-blue-800'
                                                     : 'text-amber-800';
                                               })()
@@ -3706,7 +3781,9 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
                                     <div className="flex items-center gap-1.5 min-w-0">
                                         {studentProfile.studentStatus === 'out' ? (
                                             (() => {
-                                                const leaveTo = latestPermission?.toDateTime || studentProfile?.leaveTo;
+                                                const isCurrentHomeLeave = String(studentProfile.outingType || '').toLowerCase().includes('leave') || (studentProfile as any).rStatus === 'hleave';
+                                                const activePerm = latestPermission && (latestPermission.status === 'allowed' || ((latestPermission.wardenStatus === 'allowed' || latestPermission.wardenStatus === 'approved') && latestPermission.status !== 'completed' && latestPermission.status !== 'cancelled' && latestPermission.status !== 'rejected')) ? latestPermission : null;
+                                                const leaveTo = isCurrentHomeLeave ? (activePerm?.toDateTime || studentProfile?.leaveTo) : null;
                                                 const toDate = leaveTo ? new Date(leaveTo) : null;
                                                 const isOverdue = toDate && !isNaN(toDate.getTime()) && Date.now() > toDate.getTime();
                                                 if (isOverdue) {
@@ -3717,7 +3794,7 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
                                                         </>
                                                     );
                                                 }
-                                                return String(studentProfile.outingType || '').toLowerCase().includes('leave') ? (
+                                                return isCurrentHomeLeave ? (
                                                     <>
                                                         <div className="w-2.5 h-2.5 rounded-full shrink-0 bg-blue-500 ring-2 ring-blue-200 animate-pulse" />
                                                         <p className="text-[9.5px] md:text-[11px] font-black text-blue-950 uppercase tracking-tight truncate">🏠 HOME-LEAVE</p>
@@ -6157,22 +6234,46 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
                                                     ) : field.fieldId === 'year' ? (
                                                         <select
                                                             value={enforcementFormData[field.fieldId] || ''}
-                                                            onChange={(e) => setEnforcementFormData(prev => ({ ...prev, [field.fieldId]: e.target.value }))}
+                                                            onChange={(e) => {
+                                                                const yr = e.target.value;
+                                                                let sem = enforcementFormData['semester'] || '';
+                                                                if (yr === '1ST YEAR') sem = '1ST SEM';
+                                                                else if (yr === '2ND YEAR') sem = '3RD SEM';
+                                                                else if (yr === '3RD YEAR') sem = '5TH SEM';
+                                                                else if (yr === '4TH YEAR') sem = '7TH SEM';
+                                                                setEnforcementFormData(prev => ({
+                                                                    ...prev,
+                                                                    [field.fieldId]: yr,
+                                                                    ...(sem ? { semester: sem } : {})
+                                                                }));
+                                                            }}
                                                             className="w-full h-12 px-4 rounded-xl border border-gray-200 bg-gray-50 font-bold text-gray-800 transition-all focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 focus:bg-white"
                                                         >
-                                                            <option value="">SELECT YEAR</option>
-                                                            {["1ST YEAR", "2ND YEAR", "3RD YEAR", "4TH YEAR", "5TH YEAR"].map((opt) => (
+                                                            <option value="">-- SELECT CURRENT YEAR --</option>
+                                                            {["1ST YEAR", "2ND YEAR", "3RD YEAR", "4TH YEAR"].map((opt) => (
                                                                 <option key={opt} value={opt}>{opt}</option>
                                                             ))}
                                                         </select>
                                                     ) : field.fieldId === 'semester' ? (
                                                         <select
                                                             value={enforcementFormData[field.fieldId] || ''}
-                                                            onChange={(e) => setEnforcementFormData(prev => ({ ...prev, [field.fieldId]: e.target.value }))}
+                                                            onChange={(e) => {
+                                                                const sem = e.target.value;
+                                                                let yr = enforcementFormData['year'] || '';
+                                                                if (sem === '1ST SEM') yr = '1ST YEAR';
+                                                                else if (sem === '3RD SEM') yr = '2ND YEAR';
+                                                                else if (sem === '5TH SEM') yr = '3RD YEAR';
+                                                                else if (sem === '7TH SEM') yr = '4TH YEAR';
+                                                                setEnforcementFormData(prev => ({
+                                                                    ...prev,
+                                                                    [field.fieldId]: sem,
+                                                                    ...(yr ? { year: yr } : {})
+                                                                }));
+                                                            }}
                                                             className="w-full h-12 px-4 rounded-xl border border-gray-200 bg-gray-50 font-bold text-gray-800 transition-all focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 focus:bg-white"
                                                         >
-                                                            <option value="">SELECT SEMESTER</option>
-                                                            {["1ST SEM", "2ND SEM", "3RD SEM", "4TH SEM", "5TH SEM", "6TH SEM", "7TH SEM", "8TH SEM"].map((opt) => (
+                                                            <option value="">-- SELECT CURRENT SEMESTER --</option>
+                                                            {["1ST SEM", "3RD SEM", "5TH SEM", "7TH SEM"].map((opt) => (
                                                                 <option key={opt} value={opt}>{opt}</option>
                                                             ))}
                                                         </select>

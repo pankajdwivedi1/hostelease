@@ -347,79 +347,87 @@ export async function GET(
       console.warn("Could not fetch last outing for student:", e);
     }
 
-    // Fast lookup for latest / active leave permission to enrich Home-Leave dates
-    try {
-      let permRes = await db.permissions.list(
-        { studentId: studentDbId },
-        { limit: 10 } as any
-      );
-      let perms = Array.isArray(permRes) ? permRes : (permRes?.records || (permRes as any)?.permissions || []);
-      if (perms.length === 0 && student.registrationId) {
-        try {
-          const fallbackPermRes = await db.permissions.list(
-            { registrationId: student.registrationId },
-            { limit: 10 } as any
-          );
-          perms = Array.isArray(fallbackPermRes) ? fallbackPermRes : (fallbackPermRes?.records || (fallbackPermRes as any)?.permissions || []);
-        } catch (e) {}
-      }
-      const leavePerm = perms.find((p: any) => {
-        const t = String(p.requestType || '').toLowerCase();
-        return t.includes('leave') || t === 'hleave';
-      }) || perms[0];
+    // Check if the current/latest outing is genuine Home-Leave or a normal Gate-Pass Outing
+    const lastOutingType = String((lastOuting as any)?.type || (lastOuting as any)?.requestType || '').toLowerCase().trim();
+    const isOutingGatePass = lastOuting && (lastOutingType === 'outing' || lastOutingType === 'gatepass' || lastOutingType === 'gate-pass' || lastOutingType === 'pass');
+    const isOutingHomeLeave = lastOuting && (lastOutingType.includes('leave') || lastOutingType === 'hleave');
+    const studentDynamicLeave = (student as any)?.dynamicFields?.outingType === 'leave' || !!(student as any)?.dynamicFields?.leaveTo;
 
-      if (leavePerm) {
-        const s = student as any;
-        s.outingType = leavePerm.requestType || s.outingType || 'leave';
-        s.leaveFrom = leavePerm.fromDateTime || s.leaveFrom;
-        s.leaveTo = leavePerm.toDateTime || s.leaveTo;
-        s.leaveReason = leavePerm.reason || s.leaveReason;
-        s.permissionStatus = leavePerm.status;
-
-        if (lastOuting) {
-          lastOuting = {
-            ...lastOuting,
-            type: (lastOuting as any).type || leavePerm.requestType,
-            fromDateTime: (lastOuting as any).fromDateTime || leavePerm.fromDateTime,
-            toDateTime: (lastOuting as any).toDateTime || leavePerm.toDateTime,
-            expectedReturnDate: (lastOuting as any).expectedReturnDate || leavePerm.toDateTime,
-            reason: (lastOuting as any).reason || leavePerm.reason,
-          };
-        }
-      }
-
+    if (isOutingGatePass) {
+      // ⚡ STRICT RULE: For students on regular GATE-PASS (outing), do NOT attach old expired leaves
+      const s = student as any;
+      s.outingType = (lastOuting as any)?.type || 'GATE-PASS';
+      s.leaveFrom = null;
+      s.leaveTo = null;
+      s.leaveReason = null;
       if (lastOuting) {
-        const lo = lastOuting as any;
-        const s = student as any;
-        if (lo.toDateTime || lo.expectedReturnDate) {
-          s.leaveTo = s.leaveTo || lo.toDateTime || lo.expectedReturnDate;
-        }
-        if (lo.fromDateTime) {
-          s.leaveFrom = s.leaveFrom || lo.fromDateTime;
-        }
-        if (lo.reason) {
-          s.leaveReason = s.leaveReason || lo.reason;
-        }
+        lastOuting = {
+          ...lastOuting,
+          type: (lastOuting as any).type || 'GATE-PASS',
+          fromDateTime: null,
+          toDateTime: null,
+          expectedReturnDate: null,
+          reason: null
+        };
       }
-
-      // ⚡ If Home-Leave is active or recent and no explicit return date was set, default to 6 days from departure
-      const rawType = String((lastOuting as any)?.type || (lastOuting as any)?.requestType || (student as any)?.outingType || (student as any)?.dynamicFields?.outingType || '').toLowerCase();
-      const isHomeLeave = rawType.includes('leave') || rawType === 'hleave';
-      if (isHomeLeave) {
+    } else if (isOutingHomeLeave || (student.studentStatus === 'out' && studentDynamicLeave)) {
+      // ⚡ HOME-LEAVE: Look up active leave permission or student dynamicFields
+      try {
         const s = student as any;
-        const lo = lastOuting as any;
-        if (!s.leaveTo && (!lo || (!lo.toDateTime && !lo.expectedReturnDate))) {
-          const departure = lo?.checkOutTime || lo?.createdAt || s.leaveFrom || s.dynamicFields?.leaveFrom || new Date();
-          const autoSixDays = new Date(new Date(departure).getTime() + 6 * 24 * 60 * 60 * 1000).toISOString();
-          s.leaveTo = autoSixDays;
-          if (lo) {
-            lo.expectedReturnDate = autoSixDays;
-            lo.toDateTime = autoSixDays;
+        s.outingType = (lastOuting as any)?.type || 'HOME-LEAVE';
+        s.leaveFrom = s.dynamicFields?.leaveFrom || (lastOuting as any)?.fromDateTime || (lastOuting as any)?.checkOutTime || null;
+        s.leaveTo = s.dynamicFields?.leaveTo || (lastOuting as any)?.toDateTime || (lastOuting as any)?.expectedReturnDate || null;
+        s.leaveReason = s.dynamicFields?.leaveReason || (lastOuting as any)?.reason || null;
+
+        let permRes = await db.permissions.list(
+          { studentId: studentDbId },
+          { limit: 5 } as any
+        );
+        let perms = Array.isArray(permRes) ? permRes : (permRes?.records || (permRes as any)?.permissions || []);
+        if (perms.length === 0 && student.registrationId) {
+          try {
+            const fallbackPermRes = await db.permissions.list(
+              { registrationId: student.registrationId },
+              { limit: 5 } as any
+            );
+            perms = Array.isArray(fallbackPermRes) ? fallbackPermRes : (fallbackPermRes?.records || (fallbackPermRes as any)?.permissions || []);
+          } catch (e) {}
+        }
+
+        const activeLeavePerm = perms.find((p: any) => {
+          const t = String(p.requestType || '').toLowerCase();
+          return (t.includes('leave') || t === 'hleave') && p.status !== 'cancelled' && p.status !== 'rejected';
+        });
+
+        if (activeLeavePerm) {
+          const genuineReason = activeLeavePerm.reason || s.dynamicFields?.leaveReason || (lastOuting as any)?.reason || null;
+          s.leaveFrom = activeLeavePerm.fromDateTime || s.leaveFrom || s.dynamicFields?.leaveFrom || null;
+          s.leaveTo = activeLeavePerm.toDateTime || s.leaveTo || s.dynamicFields?.leaveTo || null;
+          s.leaveReason = genuineReason;
+          s.permissionStatus = activeLeavePerm.status;
+
+          if (lastOuting) {
+            lastOuting = {
+              ...lastOuting,
+              fromDateTime: s.leaveFrom,
+              toDateTime: s.leaveTo,
+              expectedReturnDate: s.leaveTo,
+              reason: genuineReason,
+            };
           }
         }
+      } catch (e) {
+        console.warn("Could not fetch leave permission for student:", e);
       }
-    } catch (e) {
-      console.warn("Could not fetch latest permission for student:", e);
+    } else {
+      // Inside student or no active leave
+      const s = student as any;
+      if (lastOuting) {
+        s.outingType = (lastOuting as any).type || 'outing';
+        s.leaveFrom = null;
+        s.leaveTo = null;
+        s.leaveReason = null;
+      }
     }
 
     return NextResponse.json({ success: true, student, lastOuting }, { status: 200 });

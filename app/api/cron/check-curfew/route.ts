@@ -75,10 +75,14 @@ export async function GET(request: NextRequest) {
             perm = await db.permissions.getById(permIdKey.toString()).catch(() => null);
           }
 
+          const rawType = String(pass.type || '').toLowerCase().trim();
+          const isLeavePass = rawType.includes('leave') || rawType === 'hleave';
+
           // Get expected return date/time
           let expectedReturn: Date;
-          if ((pass.type === "leave" || pass.type === "HOME-LEAVE" || pass.type === "Leave") && perm) {
-            expectedReturn = new Date((perm as any).toDateTime || (perm as any).to_date_time || now);
+          if (isLeavePass) {
+            const leaveToVal = (perm as any)?.toDateTime || (perm as any)?.to_date_time || pass.expectedReturnDate || pass.toDateTime || student.dynamicFields?.leaveTo;
+            expectedReturn = leaveToVal ? new Date(leaveToVal) : new Date(now.getTime() + 24 * 60 * 60 * 1000);
           } else {
             const outTime = new Date(pass.checkOutTime || pass.check_out_time || now);
             const duration = pass.durationMinutes || pass.duration_minutes || 0;
@@ -88,8 +92,10 @@ export async function GET(request: NextRequest) {
           // Calculate grace return time
           const graceReturn = new Date(expectedReturn.getTime() + outingGracePeriod * 60 * 1000);
 
-          // Student is overdue if past grace time OR past absolute cutoff time
-          const isOverdue = now > graceReturn || now > absoluteCutoffDate;
+          // Student is overdue:
+          // - For multi-day HOME-LEAVE: only overdue if current time is past the scheduled return date/time
+          // - For daily GATE-PASS: overdue if past grace time OR past today's absolute daily cutoff
+          const isOverdue = isLeavePass ? (now > expectedReturn) : (now > graceReturn || now > absoluteCutoffDate);
 
           if (isOverdue) {
             // 1. Notify Warden

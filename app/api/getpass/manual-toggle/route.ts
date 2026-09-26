@@ -184,35 +184,31 @@ export async function POST(request: NextRequest) {
                 }
 
                 // Determine target outing type:
-                // Only mark as HOME-LEAVE if explicitly requested (e.g. from Visual Rooms Mark Home-Leave)
-                // OR if the student already has an active approved HOME-LEAVE permission from Dean/Warden!
+                // Check if the student already has an active approved HOME-LEAVE permission from Dean/Warden!
                 let targetType = requestType;
                 let passReason = reason;
                 let createdPermId: string | undefined;
 
-                if (userType === 'gatekeeper' && (!targetType || targetType === 'GATE-PASS')) {
-                    // Gatekeeper manual checkout: Check if student has a currently valid approved HOME-LEAVE permission
-                    const permsRes = await db.permissions.list({
-                        studentId: id.toString(),
-                        status: "allowed"
-                    }, { limit: 5 });
-                    const activePerms = Array.isArray(permsRes) ? permsRes : (permsRes?.records || (permsRes as any)?.permissions || []);
-                    const approvedHomeLeave = activePerms.find((p: any) => {
-                        const rType = String(p.requestType || '').toLowerCase();
-                        const isLeaveType = (rType === 'home-leave' || rType === 'leave' || rType === 'hleave');
-                        const isApproved = (p.status === 'allowed' || p.wardenStatus === 'approved' || p.deanStatus === 'approved') && p.status !== 'completed';
-                        const notExpired = !p.toDateTime || (new Date(p.toDateTime).getTime() >= (now.getTime() - 24 * 60 * 60 * 1000));
-                        return isLeaveType && isApproved && notExpired;
-                    });
+                // Look up student's approved HOME-LEAVE permission
+                const permsRes = await db.permissions.list({
+                    studentId: id.toString(),
+                    status: "allowed"
+                }, { limit: 10 });
+                const activePerms = Array.isArray(permsRes) ? permsRes : (permsRes?.records || (permsRes as any)?.permissions || []);
+                const approvedHomeLeave = activePerms.find((p: any) => {
+                    const rType = String(p.requestType || '').toLowerCase();
+                    const isLeaveType = (rType === 'home-leave' || rType === 'leave' || rType === 'hleave');
+                    const isApproved = (p.status === 'allowed' || p.wardenStatus === 'approved' || p.deanStatus === 'approved' || p.status === 'approved') && p.status !== 'completed' && p.status !== 'rejected' && p.status !== 'cancelled';
+                    const notExpired = !p.toDateTime || (new Date(p.toDateTime).getTime() >= (now.getTime() - 24 * 60 * 60 * 1000));
+                    return isLeaveType && isApproved && notExpired;
+                });
 
-                    if (approvedHomeLeave) {
-                        targetType = 'HOME-LEAVE';
-                        passReason = passReason || approvedHomeLeave.reason || 'Approved Home Leave';
-                        createdPermId = approvedHomeLeave._id || approvedHomeLeave.id;
-                    } else {
-                        targetType = 'GATE-PASS';
-                        passReason = passReason || 'Gate Pass (Outing)';
-                    }
+                if (approvedHomeLeave) {
+                    targetType = 'HOME-LEAVE';
+                    passReason = (reason && reason !== 'Home Leave (Manual Approval)' && reason !== 'Management Override' && reason !== 'Manual Override')
+                        ? reason
+                        : (approvedHomeLeave.reason || 'Approved Home Leave');
+                    createdPermId = (approvedHomeLeave._id || approvedHomeLeave.id)?.toString();
                 } else if (targetType === 'HOME-LEAVE' || targetType === 'leave') {
                     targetType = 'HOME-LEAVE';
                     passReason = passReason || 'Home Leave (Manual Approval)';
@@ -222,14 +218,16 @@ export async function POST(request: NextRequest) {
                 }
 
                 let permIdToUse = createdPermId;
-                const defaultSixDaysLater = new Date((fromDateTime ? new Date(fromDateTime) : initialCheckOutTime).getTime() + 6 * 24 * 60 * 60 * 1000);
-                const leaveToDateToUse = toDateTime ? new Date(toDateTime) : defaultSixDaysLater;
+                const fromDateToUse = approvedHomeLeave?.fromDateTime ? new Date(approvedHomeLeave.fromDateTime) : (fromDateTime ? new Date(fromDateTime) : initialCheckOutTime);
+                const defaultSixDaysLater = new Date(fromDateToUse.getTime() + 6 * 24 * 60 * 60 * 1000);
+                const leaveToDateToUse = approvedHomeLeave?.toDateTime ? new Date(approvedHomeLeave.toDateTime) : (toDateTime ? new Date(toDateTime) : defaultSixDaysLater);
 
-                if (targetType === 'HOME-LEAVE' || targetType === 'leave') {
+                // Only create a new permission record if an approved home leave didn't already exist!
+                if (!approvedHomeLeave && (targetType === 'HOME-LEAVE' || targetType === 'leave')) {
                     try {
                         const newPerm = await db.permissions.create({
                             studentId: id.toString(),
-                            fromDateTime: fromDateTime ? new Date(fromDateTime) : initialCheckOutTime,
+                            fromDateTime: fromDateToUse,
                             toDateTime: leaveToDateToUse,
                             reason: passReason,
                             requestType: "leave",
@@ -251,10 +249,10 @@ export async function POST(request: NextRequest) {
                     hostelName: student.hostelName,
                     roomNumber: student.roomNumber,
                     registrationId: student.registrationId,
-                    checkOutTime: fromDateTime ? new Date(fromDateTime) : initialCheckOutTime,
+                    checkOutTime: fromDateToUse,
                     checkOutISTTime: initialIstTime,
                     checkOutISTDate: initialIstDate,
-                    fromDateTime: fromDateTime ? new Date(fromDateTime) : initialCheckOutTime,
+                    fromDateTime: fromDateToUse,
                     toDateTime: (targetType === 'HOME-LEAVE' || targetType === 'leave') ? leaveToDateToUse : (toDateTime ? new Date(toDateTime) : undefined),
                     expectedReturnDate: (targetType === 'HOME-LEAVE' || targetType === 'leave') ? leaveToDateToUse : (toDateTime ? new Date(toDateTime) : undefined),
                     status: "out",
@@ -265,7 +263,18 @@ export async function POST(request: NextRequest) {
                     qrTokenUsedOut: "MANUAL_BY_" + userType.toUpperCase(),
                 });
 
-                await db.students.update(id.toString(), { studentStatus: "out" });
+                const updatedDynamicFields = {
+                    ...((student as any).dynamicFields || {}),
+                    outingType: targetType === 'HOME-LEAVE' ? 'leave' : 'outing',
+                    leaveFrom: (targetType === 'HOME-LEAVE' || targetType === 'leave') ? fromDateToUse.toISOString() : null,
+                    leaveTo: (targetType === 'HOME-LEAVE' || targetType === 'leave') ? leaveToDateToUse.toISOString() : null,
+                    leaveReason: (targetType === 'HOME-LEAVE' || targetType === 'leave') ? passReason : null,
+                };
+
+                await db.students.update(id.toString(), { 
+                    studentStatus: "out",
+                    dynamicFields: updatedDynamicFields
+                });
                 
                 // ⚡ REAL-TIME BROADCAST: Notify all connected Warden/Dean dashboards immediately
                 broadcastGateEvent({
@@ -351,7 +360,17 @@ export async function POST(request: NextRequest) {
                     console.warn("Failed to complete permissions on return:", pErr);
                 }
 
-                await db.students.update(id.toString(), { studentStatus: "in" });
+                let updatedDynamicFields = typeof student.dynamicFields === 'string'
+                    ? JSON.parse(student.dynamicFields || '{}')
+                    : { ...(student.dynamicFields || {}) };
+                delete updatedDynamicFields.leaveTo;
+                delete updatedDynamicFields.leaveFrom;
+                delete updatedDynamicFields.leaveReason;
+
+                await db.students.update(id.toString(), { 
+                    studentStatus: "in",
+                    dynamicFields: updatedDynamicFields
+                });
 
                 // ⚡ REAL-TIME BROADCAST: Notify all connected Warden/Dean dashboards immediately
                 broadcastGateEvent({
