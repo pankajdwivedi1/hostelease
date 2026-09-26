@@ -1,5 +1,5 @@
 [start]
-cmd = "node --max-old-space-size=400 node_modules/next/dist/bin/next start"
+cmd = "node --max-old-space-size=350 node_modules/next/dist/bin/next start"
 
 [variables]
-NODE_OPTIONS = "--max-old-space-size=400"
+NODE_OPTIONS = "--max-old-space-size=350"

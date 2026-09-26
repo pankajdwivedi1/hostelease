@@ -11,7 +11,7 @@ function getDatabaseUrl(): string | undefined {
   // Optimize connection pool limits and timeouts if not explicitly set
   if (!url.includes('connection_limit=')) {
     const sep = url.includes('?') ? '&' : '?';
-    url = `${url}${sep}connection_limit=25&pool_timeout=60`;
+    url = `${url}${sep}connection_limit=10&pool_timeout=30`;
   }
   process.env.DATABASE_URL = url;
   return url;
