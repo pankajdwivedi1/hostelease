@@ -172,13 +172,16 @@ export async function GET(request: NextRequest) {
 
         // Use the deduplicated list for display (no extra healing needed as it's already mapped)
         const currentlyOutWithDuration = currentlyOut.map((record: any) => {
-            const diffMs = now.getTime() - new Date(record.checkOutTime).getTime();
-            const durationMinutes = Math.round(diffMs / 60000);
+            const outDate = new Date(record.checkOutTime);
+            const diffMs = !isNaN(outDate.getTime()) ? (now.getTime() - outDate.getTime()) : 0;
+            const durationMinutes = Math.max(0, Math.round(diffMs / 60000));
             const hours = Math.floor(durationMinutes / 60);
             const mins = durationMinutes % 60;
 
             let durationText = "";
-            if (hours >= 24) {
+            if (durationMinutes <= 0) {
+                durationText = "Just now";
+            } else if (hours >= 24) {
                 const days = Math.floor(hours / 24);
                 const remainingHours = hours % 24;
                 durationText = `${days}d ${remainingHours}h ${mins}m`;

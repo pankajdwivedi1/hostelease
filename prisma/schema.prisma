@@ -101,7 +101,7 @@ model Attendance {
   id                  String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid @map("_id")
   tenantId            String   @db.Uuid @map("tenant_id")
   studentId           String   @map("student_id")
-  student             Student  @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  student             Student? @relation(fields: [studentId], references: [id], onDelete: Cascade)
   firebaseUid         String   @map("firebase_uid")
   name                String
   hostelName          String   @map("hostel_name")
@@ -185,7 +185,7 @@ model AdminSettings {
 model GatePass {
   id               String    @id @default(dbgenerated("gen_random_uuid()")) @map("_id")
   studentId        String    @map("student_id")
-  student          Student   @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  student          Student?  @relation(fields: [studentId], references: [id], onDelete: Cascade)
   firebaseUid      String    @map("firebase_uid")
   studentName      String    @map("student_name")
   hostelName       String    @map("hostel_name")
@@ -283,7 +283,7 @@ model Permission {
 model Transaction {
   id               String    @id @default(dbgenerated("gen_random_uuid()")) @map("_id")
   studentId        String    @map("student_id")
-  student          Student   @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  student          Student?  @relation(fields: [studentId], references: [id], onDelete: Cascade)
   registrationId   String    @map("registration_id")
   utrNumber        String    @map("utr_number")
   amount           Decimal   @db.Decimal
@@ -303,7 +303,7 @@ model Transaction {
 model StudentFieldProgress {
   id             String    @id @default(dbgenerated("gen_random_uuid()")) @map("_id")
   studentId      String    @map("student_id")
-  student        Student   @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  student        Student?  @relation(fields: [studentId], references: [id], onDelete: Cascade)
   firebaseUid    String    @map("firebase_uid")
   hostelName     String    @map("hostel_name")
   fieldId        String    @map("field_id")

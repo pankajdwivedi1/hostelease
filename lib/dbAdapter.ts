@@ -491,11 +491,15 @@ export const mapGatePassToCamelCase = (g: any) => {
         profilePicture: g.profile_picture || g.profilePicture || g.student?.profilePicture,
         photo: g.photo || g.student?.profilePicture,
         checkOutTime: g.check_out_time || g.checkOutTime,
-        checkOutIstTime: g.check_out_ist_time || g.checkOutIstTime,
-        checkOutIstDate: g.check_out_ist_date || g.checkOutIstDate,
+        checkOutIstTime: g.check_out_ist_time || g.checkOutIstTime || g.checkOutISTTime,
+        checkOutISTTime: g.check_out_ist_time || g.checkOutIstTime || g.checkOutISTTime,
+        checkOutIstDate: g.check_out_ist_date || g.checkOutIstDate || g.checkOutISTDate,
+        checkOutISTDate: g.check_out_ist_date || g.checkOutIstDate || g.checkOutISTDate,
         checkInTime: g.check_in_time || g.checkInTime,
-        checkInIstTime: g.check_in_ist_time || g.checkInIstTime,
-        checkInIstDate: g.check_in_ist_date || g.checkInIstDate,
+        checkInIstTime: g.check_in_ist_time || g.checkInIstTime || g.checkInISTTime,
+        checkInISTTime: g.check_in_ist_time || g.checkInIstTime || g.checkInISTTime,
+        checkInIstDate: g.check_in_ist_date || g.checkInIstDate || g.checkInISTDate,
+        checkInISTDate: g.check_in_ist_date || g.checkInIstDate || g.checkInISTDate,
         status: g.status,
         durationMinutes: g.duration_minutes !== undefined ? g.duration_minutes : g.durationMinutes,
         gateName: g.gate_name || g.gateName,
@@ -2037,7 +2041,11 @@ export const db = {
 
             const take = options.limit || 100;
             const skip = options.offset !== undefined ? options.offset : (options.page ? (options.page - 1) * take : undefined);
-            const sortField = options.sortField || 'checkOutTime';
+            let sortField = options.sortField || 'checkOutTime';
+            if (sortField === 'check_in_time') sortField = 'checkInTime';
+            if (sortField === 'check_out_time') sortField = 'checkOutTime';
+            if (sortField === 'updated_at') sortField = 'updatedAt';
+            if (sortField === 'created_at') sortField = 'createdAt';
 
             const total = options.skipCount ? 0 : await prisma.gatePass.count({ where: whereClause });
             const records = await prisma.gatePass.findMany({

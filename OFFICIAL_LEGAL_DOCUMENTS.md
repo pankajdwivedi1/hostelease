@@ -1,28 +1,19 @@
-# HOSTELEAZE - HOSTEL & CAMPUS AUTOMATION PLATFORM
-## Legal Compliance, Accreditation & Software Licensing Dossier
-> **Applicable for NAAC (National Assessment and Accreditation Council) & NBA (National Board of Accreditation) Inspections**
+# OFFICIAL LEGAL DOCUMENTS TAILORED FOR HOSTELEAZE
+## Institutional Accreditation Dossier (NAAC & NBA Compliance)
+
+This document contains the permanent reference and printable formats of all legal documents required by educational institutions and accreditation inspection bodies (NAAC, NBA, NIRF, AICTE).
 
 ---
 
-### TABLE OF CONTENTS
-1. [Overview & Accreditation Mapping](#1-overview--accreditation-mapping)
-2. [Document 1: Certificate of Software Authenticity & Licensing](#document-1-certificate-of-software-authenticity--licensing)
-3. [Document 2: Master Software License & Service Level Agreement (SLA)](#document-2-master-software-license--service-level-agreement-sla)
-4. [Document 3: Software Implementation & Go-Live Certificate (UAT)](#document-3-software-implementation--go-live-certificate-uat)
-5. [Document 4: Data Protection, Privacy & IT Act Undertaking](#document-4-data-protection-privacy--it-act-undertaking)
-6. [Document 5: NAAC / NBA E-Governance Feature Compliance Matrix](#document-5-naac--nba-e-governance-feature-compliance-matrix)
-7. [Printing & PDF Export Instructions](#7-printing--pdf-export-instructions)
+### SUMMARY OF OFFICIAL LEGAL DOCUMENTS
 
----
-
-## 1. Overview & Accreditation Mapping
-
-During NAAC and NBA inspections, colleges are required to demonstrate legitimate ICT tools and e-governance implementation. **Hosteleaze** fulfills the following accreditation criteria:
-
-* **NAAC Criterion 6.2.2 (Institutional Governance & E-Governance):** Digital administration, student admission, room allocation, gate pass/leave workflow, and support services.
-* **NAAC Criterion 4.3 (IT Infrastructure):** Genuine licensed software, cloud deployment, biometric and network-bound access.
-* **NAAC Criterion 5.1 & 5.2 (Student Support & Progression):** Transparent grievance redressal, parent communication, and resident safety.
-* **NBA Criteria 8 & 10 (Support Facilities & Institutional Support):** Campus hostel management and automated facilities.
+| Document # | Document Title | Reference Code | Purpose in Inspection |
+|:---|:---|:---|:---|
+| **Document 1** | **Certificate of Software Authenticity & User Licensing** | `HLZ/NAAC-LIC` | Proves genuine, proprietary ownership, active license validity, and student capacity (NAAC 6.2.2 & 4.3). |
+| **Document 2** | **Master Software License & Service Level Agreement (SLA / EULA)** | `HLZ/SLA-AGR` | Comprehensive legal contract establishing service scope, 99.5% uptime SLA, and institutional data ownership. |
+| **Document 3** | **Software Implementation & Go-Live Certificate (UAT)** | `HLZ/UAT-LIVE` | Certifies completed user acceptance testing and live operational deployment on campus. |
+| **Document 4** | **Undertaking on Data Privacy, Cyber Security & Statutory Compliance** | `HLZ/SEC-DPDP` | Statutory declaration of compliance under Digital Personal Data Protection (DPDP) Act 2023 & IT Act 2000 for encrypted facial biometrics. |
+| **Document 5** | **NAAC / NBA E-Governance Feature Compliance Matrix** | `HLZ/EGOV-MTX` | Detailed mapping of all software features against NAAC Criteria 4.3, 5.1, 5.2, and 6.2.2. |
 
 ---
 
@@ -30,7 +21,7 @@ During NAAC and NBA inspections, colleges are required to demonstrate legitimate
 
 ## DOCUMENT 1: Certificate of Software Authenticity & Licensing
 
-```
+```text
 ====================================================================================================
                         CERTIFICATE OF SOFTWARE AUTHENTICITY & LICENSING
                             FOR NAAC / NBA ACCREDITATION COMPLIANCE
@@ -93,7 +84,7 @@ Official Seal / Stamp:
 
 ## DOCUMENT 2: Master Software License & Service Level Agreement (SLA)
 
-```
+```text
 ====================================================================================================
                        MASTER SOFTWARE LICENSE & SERVICE LEVEL AGREEMENT
 ====================================================================================================
@@ -165,7 +156,7 @@ Seal:                                    Seal:
 
 ## DOCUMENT 3: Software Implementation & Go-Live Certificate (UAT)
 
-```
+```text
 ====================================================================================================
                         SOFTWARE IMPLEMENTATION & GO-LIVE CERTIFICATE
 ====================================================================================================
@@ -210,7 +201,7 @@ Hosteleaze Technologies                  [Name of College]
 
 ## DOCUMENT 4: Data Protection, Privacy & IT Act Undertaking
 
-```
+```text
 ====================================================================================================
                UNDERTAKING ON DATA PRIVACY, CYBERSECURITY & REGULATORY COMPLIANCE
 ====================================================================================================
@@ -270,25 +261,3 @@ Designation: [Chief Technology Officer / Founder]
 | 4 | **Criterion 5.1.4: Grievance Redressal** | In-app Maintenance & Complaint Ticketing System | Ticket creation timestamps, SLA resolution status, student feedback. |
 | 5 | **Criterion 4.3: IT Infrastructure** | Cloud-based PWA & Responsive Web ERP Architecture | 24x7 uptime, mobile-friendly interface for students & wardens. |
 | 6 | **Data Audit & Accreditation Dossier** | Automated Excel & PDF Export Engine for DVV verification | Single-click institutional report generation for peer committee reviews. |
-
----
-
-<div style="page-break-after: always; break-after: page;"></div>
-
-## 7. Printing & PDF Export Instructions
-
-### Method 1: Using Visual Studio Code (Recommended)
-1. Install the extension **Markdown PDF** or **Markdown Preview Enhanced**.
-2. Open this `README.md` file in VS Code.
-3. Right-click anywhere in the editor and select **"Markdown PDF: Export (pdf)"**.
-4. The document includes `<div style="page-break-after: always;"></div>` tags, ensuring each certificate exports on a distinct, clean page ready for printing and stamping.
-
-### Method 2: Using Any Web Browser (Chrome / Edge)
-1. Open this file in a markdown viewer (or GitHub/GitLab web interface).
-2. Press `Ctrl + P` (or `Cmd + P` on Mac).
-3. Set **Destination** to **Save as PDF**.
-4. In **More settings**, enable **Background graphics** and set Paper Size to **A4**.
-5. Click **Save / Print**.
-
----
-*Maintained and Certified by Hosteleaze Technologies*
