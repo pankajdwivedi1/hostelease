@@ -105,6 +105,16 @@ const nextConfig = {
                 ],
             },
             {
+                // ⚡ MediaPipe Model Assets: Cache immutably for 1 year
+                source: '/mediapipe/:path*',
+                headers: [
+                    {
+                        key: 'Cache-Control',
+                        value: 'public, max-age=31536000, immutable',
+                    },
+                ],
+            },
+            {
                 // ⚡ PWA Icons & Static Images: Cache for 30 days
                 source: '/icons/:path*',
                 headers: [

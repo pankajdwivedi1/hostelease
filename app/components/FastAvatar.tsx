@@ -7,10 +7,6 @@ const memoryLoadedUrls = new Set<string>();
 
 export function getOptimizedImageUrl(src?: string | null): string {
   if (!src) return "";
-  if (src.startsWith("data:") || src.startsWith("blob:") || src.startsWith("/api/image-proxy")) return src;
-  if (src.startsWith("http://") || src.startsWith("https://")) {
-    return `/api/image-proxy?url=${encodeURIComponent(src)}`;
-  }
   return src;
 }
 
