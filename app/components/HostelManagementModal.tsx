@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import Barcode from "react-barcode";
 import { showConfirm, showPrompt, showToast } from "@/lib/toast";
 
 interface HostelLogItem {
@@ -54,11 +55,375 @@ function HostelLogsButton({ hostelName, onClick }: { hostelName: string; onClick
   );
 }
 
+function DeletedStudentProfileModal({
+  student,
+  hostelName,
+  onClose,
+  onRestore,
+  onPermanentDelete,
+  isProcessingAction
+}: {
+  student: any;
+  hostelName: string;
+  onClose: () => void;
+  onRestore: (student: any) => void;
+  onPermanentDelete: (studentId: string, studentName: string) => void;
+  isProcessingAction: boolean;
+}) {
+  const [zoomedImage, setZoomedImage] = useState<string | null>(null);
+
+  if (!student) return null;
+
+  const snap = student.snapshot || {};
+  const sName = student.studentName || "Unknown Student";
+  const sReg = student.registrationId && student.registrationId !== "N/A" ? student.registrationId : (snap.registrationId || "");
+  const sErp = student.erpId && student.erpId !== "N/A" ? student.erpId : (snap.erpId || snap.erpInformation || "");
+  const sPhone = student.phoneNumber && student.phoneNumber !== "N/A" ? student.phoneNumber : (snap.studentPhone || snap.phoneNumber || "");
+  const sRoom = student.roomNumber && student.roomNumber !== "N/A" ? student.roomNumber : (snap.roomNumber || "Unassigned");
+  const sFloor = student.floorNumber || snap.floorNumber || snap.floor_number || "";
+  const sCollege = student.collegeName || snap.collegeName || snap.college_name || "";
+  const sBranch = student.branch || snap.branch || "";
+  const sYear = student.year || snap.year || "";
+  const sSem = student.semester || snap.semester || "";
+  const sSec = student.section || snap.section || "";
+  const sFather = student.fatherName || snap.fatherName || snap.father_name || "";
+  const sFatherPhone = student.fatherNumber || snap.fatherNumber || snap.father_number || "";
+  const sMother = student.motherName || snap.motherName || snap.mother_name || "";
+  const sMotherPhone = student.motherNumber || snap.motherNumber || snap.mother_number || "";
+  const sAddress = student.permanentAddress || snap.permanentAddress || snap.permanent_address || "";
+  const sState = student.homeState || snap.homeState || snap.home_state || "";
+  const sEmail = student.email || snap.email || "";
+  const sDob = student.dob || snap.dob || "";
+  const sGender = student.gender || snap.gender || "";
+  const sCategory = student.category || snap.category || "";
+  const sJoined = student.joiningDate || snap.joiningDate || snap.joining_date || "";
+  const sPic = student.profilePicture || snap.profilePicture || snap.profile_picture || null;
+  const barcodeValue = sReg || sErp || student.studentId || "ARCHIVED";
+
+  return (
+    <div className="fixed inset-0 z-[80] bg-black/70 backdrop-blur-xs flex items-end sm:items-center justify-center p-0 sm:p-4 animate-in fade-in duration-200" onClick={onClose}>
+      <div className="bg-white w-full max-w-2xl rounded-t-3xl sm:rounded-2xl max-h-[92vh] flex flex-col shadow-2xl overflow-hidden border border-rose-200 animate-in slide-in-from-bottom-5 duration-200" onClick={(e) => e.stopPropagation()}>
+        
+        {/* Sticky Header with Red Accent */}
+        <div className="px-4 py-3 sm:px-6 sm:py-3.5 border-b border-rose-100 flex items-center justify-between bg-rose-50/60 sticky top-0 z-20">
+          <div className="flex items-center gap-2">
+            <span className="w-2.5 h-2.5 rounded-full bg-red-600 animate-pulse"></span>
+            <h2 className="text-sm sm:text-base font-black text-rose-950 uppercase tracking-tight">Archived Student Profile</h2>
+            <span className="px-2 py-0.5 rounded-md text-[9px] font-black uppercase tracking-wider bg-rose-100 text-rose-700 border border-rose-200">
+              Deleted
+            </span>
+          </div>
+          <button
+            onClick={onClose}
+            className="w-8 h-8 rounded-full border border-rose-200 bg-white text-slate-500 hover:text-red-700 hover:bg-rose-50 flex items-center justify-center transition-all font-bold text-sm shadow-2xs cursor-pointer"
+          >
+            ✕
+          </button>
+        </div>
+
+        {/* Scrollable Content Container */}
+        <div className="p-4 sm:p-6 overflow-y-auto space-y-3.5">
+          
+          {/* Hero Card with Rose/Red theme */}
+          <div className="bg-gradient-to-br from-rose-50/90 via-red-50/40 to-slate-50 rounded-2xl p-3.5 sm:p-4 border border-rose-200 shadow-2xs">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 sm:gap-4">
+              
+              {/* Left Side: Avatar & Info */}
+              <div className="flex items-start gap-3.5 sm:gap-4 min-w-0 flex-1">
+                <div
+                  className="w-16 h-16 sm:w-20 sm:h-20 rounded-2xl border-2 border-white shadow-md overflow-hidden flex-shrink-0 cursor-pointer relative group bg-rose-100"
+                  onClick={() => sPic && setZoomedImage(sPic)}
+                >
+                  {sPic ? (
+                    <img src={sPic} alt={sName} className="w-full h-full object-cover" />
+                  ) : (
+                    <div className="w-full h-full bg-rose-100 text-rose-700 flex items-center justify-center font-black text-lg sm:text-xl border border-rose-200">
+                      {sName.charAt(0).toUpperCase()}
+                    </div>
+                  )}
+                </div>
+
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-1.5 mb-1 flex-wrap min-w-0">
+                    <h3 className="text-sm sm:text-base font-black text-slate-900 leading-snug tracking-tight uppercase" title={sName}>
+                      {sName}
+                    </h3>
+                    <span className="shrink-0 px-2 py-0.5 rounded-md text-[9px] font-black uppercase tracking-wider bg-rose-100 text-rose-700 border border-rose-200 flex items-center gap-1 shadow-2xs">
+                      <span>🗑️</span>
+                      <span>DELETED</span>
+                    </span>
+                  </div>
+
+                  <p className="text-xs text-slate-500 font-semibold truncate mb-1.5">{sEmail || "No email on record"}</p>
+
+                  <div className="flex flex-wrap items-center gap-1.5 text-[9px] font-bold">
+                    <span className="px-2 py-0.5 bg-amber-50 text-amber-800 border border-amber-200 rounded-md">
+                      🔒 ARCHIVED SNAPSHOT
+                    </span>
+                    {student.gatePassCount > 0 && (
+                      <span className="px-2 py-0.5 bg-indigo-50 text-indigo-700 border border-indigo-200 rounded-md">
+                        📜 {student.gatePassCount} Outing Pass(es)
+                      </span>
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              {/* Right Side: Registration & Barcode Ticket */}
+              {(sReg || sErp) && (
+                <div className="w-full sm:w-auto sm:min-w-[220px] sm:max-w-[250px] bg-white/95 rounded-xl border border-rose-200 p-2.5 shadow-2xs">
+                  <div className="grid grid-cols-2 gap-2 text-left mb-1">
+                    {sReg && (
+                      <div>
+                        <p className="text-[8px] font-black text-rose-500 tracking-widest uppercase">Registration ID</p>
+                        <p className="text-xs font-black text-rose-950 leading-tight">{sReg}</p>
+                      </div>
+                    )}
+                    {sErp && (
+                      <div className="text-right">
+                        <p className="text-[8px] font-black text-rose-500 tracking-widest uppercase">ERP ID</p>
+                        <p className="text-xs font-black text-rose-950 leading-tight">{sErp}</p>
+                      </div>
+                    )}
+                  </div>
+                  <div className="pt-1.5 border-t border-rose-100 flex justify-center">
+                    <div className="w-full max-w-[200px] overflow-hidden flex justify-center h-[24px]">
+                      <Barcode value={String(barcodeValue)} width={1.4} height={24} fontSize={9} displayValue={false} margin={0} />
+                    </div>
+                  </div>
+                </div>
+              )}
+
+            </div>
+
+            {/* Deletion Metadata Banner */}
+            <div className="mt-3 pt-2.5 border-t border-rose-200/70 flex flex-wrap items-center justify-between gap-2 text-[10px] text-rose-800 font-semibold bg-rose-100/50 px-3 py-1.5 rounded-lg">
+              <span>🗑️ Deleted: <strong>{student.deletedAt ? new Date(student.deletedAt).toLocaleString('en-IN') : 'N/A'}</strong></span>
+              <span>Operator: <strong>{student.deletedBy || 'Warden'}</strong></span>
+            </div>
+          </div>
+
+          {/* Details Grid matching Student Details */}
+          <div className="bg-slate-50/80 rounded-2xl p-3 sm:p-4 border border-slate-200/70 space-y-2.5">
+            
+            {/* Contact & Hostel */}
+            <div className="bg-white p-2.5 sm:p-3 rounded-xl border border-slate-100 shadow-2xs">
+              <div className="grid grid-cols-2 gap-2 sm:gap-3 text-sm divide-x divide-slate-100">
+                
+                {/* Column 1: Contact & Profile */}
+                <div className="space-y-1.5 min-w-0 pr-1.5 sm:pr-2">
+                  <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest border-b border-slate-100 pb-1">Contact & Profile</p>
+                  <div>
+                    <p className="text-[10px] text-slate-400 font-bold uppercase">Phone Number</p>
+                    {sPhone ? (
+                      <a href={`tel:${sPhone}`} className="text-[10px] text-blue-600 font-bold hover:underline block truncate">
+                        {sPhone}
+                      </a>
+                    ) : (
+                      <p className="text-[10px] text-slate-500 font-semibold">N/A</p>
+                    )}
+                  </div>
+                  {sDob && (
+                    <div>
+                      <p className="text-[10px] text-slate-400 font-bold uppercase">Date of Birth</p>
+                      <p className="text-[10px] text-slate-900 font-bold">{sDob}</p>
+                    </div>
+                  )}
+                  {(sGender || sCategory) && (
+                    <div className="grid grid-cols-2 gap-1 pt-0.5">
+                      {sGender && (
+                        <div>
+                          <p className="text-[10px] text-slate-400 font-bold uppercase">Gender</p>
+                          <p className="text-[10px] text-indigo-600 font-bold uppercase">{sGender}</p>
+                        </div>
+                      )}
+                      {sCategory && (
+                        <div>
+                          <p className="text-[10px] text-slate-400 font-bold uppercase">Category</p>
+                          <p className="text-[10px] text-blue-600 font-bold uppercase">{sCategory}</p>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+
+                {/* Column 2: Hostel & Room */}
+                <div className="space-y-1.5 min-w-0 pl-2 sm:pl-3">
+                  <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest border-b border-slate-100 pb-1">Hostel & Room</p>
+                  <div>
+                    <p className="text-[10px] text-slate-400 font-bold uppercase">Hostel & Room</p>
+                    <p className="text-[10px] text-slate-900 font-bold leading-tight">
+                      {hostelName} <span className="text-slate-400">|</span> Room {sRoom}
+                    </p>
+                  </div>
+                  {sFloor && (
+                    <div>
+                      <p className="text-[10px] text-slate-400 font-bold uppercase">Floor</p>
+                      <p className="text-[10px] text-slate-900 font-bold">{sFloor}</p>
+                    </div>
+                  )}
+                  {sJoined && (
+                    <div>
+                      <p className="text-[10px] text-slate-400 font-bold uppercase">Joined Date</p>
+                      <p className="text-[10px] text-slate-700 font-bold">{sJoined}</p>
+                    </div>
+                  )}
+                </div>
+
+              </div>
+            </div>
+
+            {/* Academic Details */}
+            {(sCollege || sBranch || sYear || sSem || sSec) && (
+              <div className="bg-white p-2.5 sm:p-3 rounded-xl border border-slate-100 shadow-2xs">
+                <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5 border-b border-slate-100 pb-1">Academic Details</p>
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 sm:gap-3">
+                  {sCollege && (
+                    <div className="flex items-center gap-1.5 min-w-0">
+                      <span className="text-[10px] text-slate-400 uppercase font-bold shrink-0">College</span>
+                      <span className="text-[10px] text-slate-900 font-bold truncate">{sCollege}</span>
+                    </div>
+                  )}
+                  {sBranch && (
+                    <div className="flex items-center gap-1.5 min-w-0">
+                      <span className="text-[10px] text-slate-400 uppercase font-bold shrink-0">Branch</span>
+                      <span className="text-[10px] text-slate-900 font-bold truncate">{sBranch}</span>
+                    </div>
+                  )}
+                  {sYear && (
+                    <div className="flex items-center gap-1.5 min-w-0">
+                      <span className="text-[10px] text-slate-400 uppercase font-bold shrink-0">Year</span>
+                      <span className="text-[10px] text-slate-900 font-bold truncate">{sYear}</span>
+                    </div>
+                  )}
+                  {sSem && (
+                    <div className="flex items-center gap-1.5 min-w-0">
+                      <span className="text-[10px] text-slate-400 uppercase font-bold shrink-0">Sem</span>
+                      <span className="text-[10px] text-slate-900 font-bold truncate">{sSem}</span>
+                    </div>
+                  )}
+                  {sSec && (
+                    <div className="flex items-center gap-1.5 min-w-0">
+                      <span className="text-[10px] text-slate-400 uppercase font-bold shrink-0">Section</span>
+                      <span className="text-[10px] text-slate-900 font-bold truncate">{sSec}</span>
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {/* Guardian Information */}
+            {(sFather || sMother || sFatherPhone || sMotherPhone) && (
+              <div className="bg-white p-2.5 sm:p-3 rounded-xl border border-slate-100 shadow-2xs">
+                <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5 border-b border-slate-100 pb-1">Guardian Information</p>
+                <div className="grid grid-cols-2 gap-2 sm:gap-3">
+                  {sFather && (
+                    <div className="bg-slate-50/70 p-2 sm:p-2.5 rounded-lg border border-slate-100 min-w-0">
+                      <p className="text-[10px] text-slate-400 uppercase font-bold">Father</p>
+                      <p className="text-[10px] text-slate-900 font-bold break-words leading-tight">{sFather}</p>
+                      {sFatherPhone && (
+                        <a href={`tel:${sFatherPhone}`} className="text-blue-600 bg-blue-50 px-1.5 py-0.5 rounded text-[10px] font-bold inline-block hover:underline mt-0.5 break-all max-w-full">
+                          {sFatherPhone}
+                        </a>
+                      )}
+                    </div>
+                  )}
+                  {sMother && (
+                    <div className="bg-slate-50/70 p-2 sm:p-2.5 rounded-lg border border-slate-100 min-w-0">
+                      <p className="text-[10px] text-slate-400 uppercase font-bold">Mother</p>
+                      <p className="text-[10px] text-slate-900 font-bold break-words leading-tight">{sMother}</p>
+                      {sMotherPhone && (
+                        <a href={`tel:${sMotherPhone}`} className="text-blue-600 bg-blue-50 px-1.5 py-0.5 rounded text-[10px] font-bold inline-block hover:underline mt-0.5 break-all max-w-full">
+                          {sMotherPhone}
+                        </a>
+                      )}
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {/* Home State & Permanent Address */}
+            {(sState || sAddress) && (
+              <div className="bg-white p-2.5 sm:p-3 rounded-xl border border-slate-100 shadow-2xs">
+                <div className="space-y-1.5">
+                  {sState && (
+                    <div>
+                      <p className="text-[10px] text-slate-400 uppercase font-bold">Home State</p>
+                      <p className="text-[10px] text-slate-900 font-black uppercase">{sState}</p>
+                    </div>
+                  )}
+                  {sAddress && (
+                    <div>
+                      <p className="text-[10px] text-slate-400 uppercase font-bold">Permanent Address</p>
+                      <p className="text-[10px] text-slate-800 font-semibold leading-relaxed">{sAddress}</p>
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+
+          </div>
+
+        </div>
+
+        {/* Modal Action Footer */}
+        <div className="p-3 sm:p-4 bg-slate-50 border-t border-slate-100 flex items-center justify-between gap-2">
+          <button
+            type="button"
+            onClick={onClose}
+            className="px-3.5 py-2 bg-white border border-slate-200 text-slate-600 hover:bg-slate-100 rounded-xl text-xs font-black uppercase tracking-wider transition-all cursor-pointer"
+          >
+            Close
+          </button>
+
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => onRestore(student)}
+              disabled={isProcessingAction}
+              className="px-4 py-2 bg-emerald-600 text-white hover:bg-emerald-700 rounded-xl text-xs font-black uppercase tracking-wider transition-all shadow-sm flex items-center gap-1.5 active:scale-95 cursor-pointer"
+            >
+              🔄 Restore Student
+            </button>
+            <button
+              type="button"
+              onClick={() => onPermanentDelete(student.studentId, student.studentName)}
+              disabled={isProcessingAction}
+              className="px-3.5 py-2 bg-red-600 text-white hover:bg-red-700 rounded-xl text-xs font-black uppercase tracking-wider transition-all shadow-sm flex items-center gap-1.5 active:scale-95 cursor-pointer"
+            >
+              🗑️ Wipe All Records
+            </button>
+          </div>
+        </div>
+
+      </div>
+
+      {/* Image Zoom Modal */}
+      {zoomedImage && (
+        <div className="fixed inset-0 z-[90] bg-black/80 flex items-center justify-center p-4" onClick={() => setZoomedImage(null)}>
+          <div className="relative max-w-md w-full bg-white rounded-2xl overflow-hidden shadow-2xl p-2" onClick={e => e.stopPropagation()}>
+            <img src={zoomedImage} alt="Profile" className="w-full h-auto rounded-xl max-h-[70vh] object-contain" />
+            <button onClick={() => setZoomedImage(null)} className="absolute top-4 right-4 bg-black/60 text-white rounded-full w-8 h-8 flex items-center justify-center font-bold">✕</button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function HostelLogsModal({ hostelName, onClose }: { hostelName: string; onClose: () => void }) {
+  const [activeTab, setActiveTab] = useState<'logs' | 'deleted'>('logs');
   const [logs, setLogs] = useState<HostelLogItem[]>([]);
+  const [deletedStudents, setDeletedStudents] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [isLoadingDeleted, setIsLoadingDeleted] = useState(false);
   const [selectedLogIds, setSelectedLogIds] = useState<Set<string>>(new Set());
+  const [selectedDeletedIds, setSelectedDeletedIds] = useState<Set<string>>(new Set());
   const [isDeleting, setIsDeleting] = useState(false);
+  const [isProcessingAction, setIsProcessingAction] = useState(false);
+  const [searchTerm, setSearchTerm] = useState("");
+  const [viewingProfileStudent, setViewingProfileStudent] = useState<any | null>(null);
 
   const loadLogs = async () => {
     try {
@@ -80,8 +445,29 @@ function HostelLogsModal({ hostelName, onClose }: { hostelName: string; onClose:
     }
   };
 
+  const loadDeletedStudents = async () => {
+    try {
+      setIsLoadingDeleted(true);
+      const res = await fetch(`/api/hostels/deleted-students?hostelName=${encodeURIComponent(hostelName)}`);
+      if (!res.ok) {
+        setDeletedStudents([]);
+        return;
+      }
+      const data = await res.json();
+      if (data && data.success) {
+        setDeletedStudents(data.deletedStudents || []);
+        setSelectedDeletedIds(new Set());
+      }
+    } catch (err) {
+      console.warn("Failed to load deleted students for " + hostelName, err);
+    } finally {
+      setIsLoadingDeleted(false);
+    }
+  };
+
   useEffect(() => {
     loadLogs();
+    loadDeletedStudents();
   }, [hostelName]);
 
   const formatTime = (isoString: string) => {
@@ -122,6 +508,26 @@ function HostelLogsModal({ hostelName, onClose }: { hostelName: string; onClose:
     }
   };
 
+  const handleSelectDeletedToggle = (id: string) => {
+    setSelectedDeletedIds(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) {
+        next.delete(id);
+      } else {
+        next.add(id);
+      }
+      return next;
+    });
+  };
+
+  const handleSelectAllDeletedToggle = () => {
+    if (selectedDeletedIds.size === filteredDeletedStudents.length) {
+      setSelectedDeletedIds(new Set());
+    } else {
+      setSelectedDeletedIds(new Set(filteredDeletedStudents.map(s => s.studentId)));
+    }
+  };
+
   const handleDeleteSelected = async () => {
     if (selectedLogIds.size === 0) return;
     const confirmed = await showConfirm(`Are you sure you want to delete ${selectedLogIds.size} log entries?`);
@@ -148,26 +554,172 @@ function HostelLogsModal({ hostelName, onClose }: { hostelName: string; onClose:
     }
   };
 
+  // Restore Student
+  const handleRestoreStudent = async (student: any) => {
+    const confirmed = await showConfirm(`Restore student "${student.studentName}" back to ${hostelName}?`);
+    if (!confirmed) return;
+
+    try {
+      setIsProcessingAction(true);
+      const res = await fetch(`/api/hostels/deleted-students`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "restore",
+          studentId: student.studentId,
+          snapshot: student.snapshot,
+          hostelName
+        })
+      });
+      const data = await res.json();
+      if (res.ok && data.success) {
+        showToast(data.message || "Student restored successfully!", "success");
+        await loadDeletedStudents();
+        await loadLogs();
+      } else {
+        showToast(data.error || "Failed to restore student", "error");
+      }
+    } catch (err: any) {
+      showToast("Restore failed: " + err.message, "error");
+    } finally {
+      setIsProcessingAction(false);
+    }
+  };
+
+  // Permanent Delete Student
+  const handlePermanentDelete = async (studentId: string, studentName: string) => {
+    const confirmed = await showConfirm(`⚠️ PERMANENT WIPE: Are you sure you want to permanently delete "${studentName}" and ALL their gatepasses, attendance, and logs forever? This cannot be undone!`);
+    if (!confirmed) return;
+
+    try {
+      setIsProcessingAction(true);
+      const res = await fetch(`/api/hostels/deleted-students`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "permanent-delete",
+          studentId,
+          hostelName
+        })
+      });
+      const data = await res.json();
+      if (res.ok && data.success) {
+        showToast("Student records permanently purged from database", "success");
+        await loadDeletedStudents();
+        await loadLogs();
+      } else {
+        showToast(data.error || "Failed to purge student", "error");
+      }
+    } catch (err: any) {
+      showToast("Purge failed: " + err.message, "error");
+    } finally {
+      setIsProcessingAction(false);
+    }
+  };
+
+  // Bulk Permanent Delete
+  const handleBulkPermanentDelete = async () => {
+    if (selectedDeletedIds.size === 0) return;
+    const confirmed = await showConfirm(`⚠️ PERMANENT WIPE: Are you sure you want to permanently delete ${selectedDeletedIds.size} student(s) and ALL their gatepasses & attendance from the database?`);
+    if (!confirmed) return;
+
+    try {
+      setIsProcessingAction(true);
+      const res = await fetch(`/api/hostels/deleted-students`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "permanent-delete",
+          studentIds: Array.from(selectedDeletedIds),
+          hostelName
+        })
+      });
+      const data = await res.json();
+      if (res.ok && data.success) {
+        showToast(data.message || "Selected students purged successfully", "success");
+        await loadDeletedStudents();
+        await loadLogs();
+      } else {
+        showToast(data.error || "Failed to purge students", "error");
+      }
+    } catch (err: any) {
+      showToast("Purge failed: " + err.message, "error");
+    } finally {
+      setIsProcessingAction(false);
+    }
+  };
+
+  const filteredDeletedStudents = deletedStudents.filter(s => {
+    if (!searchTerm.trim()) return true;
+    const q = searchTerm.toLowerCase();
+    return (
+      (s.studentName && s.studentName.toLowerCase().includes(q)) ||
+      (s.registrationId && s.registrationId.toLowerCase().includes(q)) ||
+      (s.erpId && s.erpId.toLowerCase().includes(q)) ||
+      (s.roomNumber && s.roomNumber.toLowerCase().includes(q))
+    );
+  });
+
   return (
     <div className="fixed inset-0 z-[70] bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in duration-200">
       <div className="bg-white rounded-2xl w-full max-w-2xl max-h-[85vh] overflow-hidden flex flex-col shadow-2xl border border-slate-100 animate-in zoom-in-95 duration-200">
         
         {/* Header */}
-        <div className="p-4 md:p-6 border-b border-slate-100 bg-slate-50/50 flex justify-between items-center">
-          <div>
-            <h3 className="font-black text-slate-800 text-lg md:text-xl tracking-tight">📋 Activity Logs</h3>
-            <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider mt-0.5">{hostelName}</p>
+        <div className="p-4 md:p-6 border-b border-slate-100 bg-slate-50/50 flex flex-col gap-3">
+          <div className="flex justify-between items-center">
+            <div>
+              <h3 className="font-black text-slate-800 text-lg md:text-xl tracking-tight">
+                {activeTab === 'logs' ? '📋 Activity Logs' : '🗑️ Deleted Students Archive'}
+              </h3>
+              <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider mt-0.5">{hostelName}</p>
+            </div>
+            <button
+              onClick={onClose}
+              className="w-8 h-8 flex items-center justify-center rounded-lg bg-slate-100 text-slate-500 hover:bg-red-50 hover:text-red-600 transition-all font-bold"
+            >
+              ✕
+            </button>
           </div>
-          <button
-            onClick={onClose}
-            className="w-8 h-8 flex items-center justify-center rounded-lg bg-slate-100 text-slate-500 hover:bg-red-50 hover:text-red-600 transition-all font-bold"
-          >
-            ✕
-          </button>
+
+          {/* Navigation Tabs */}
+          <div className="flex items-center gap-2 bg-slate-200/60 p-1 rounded-xl w-full">
+            <button
+              type="button"
+              onClick={() => setActiveTab('logs')}
+              className={`flex-1 py-1.5 px-3 rounded-lg text-xs font-black uppercase tracking-wider transition-all flex items-center justify-center gap-1.5 ${
+                activeTab === 'logs'
+                  ? 'bg-white text-slate-900 shadow-sm'
+                  : 'text-slate-600 hover:text-slate-900'
+              }`}
+            >
+              <span>📋 Activity Logs</span>
+              {logs.length > 0 && (
+                <span className="px-1.5 py-0.2 rounded-full text-[9px] bg-slate-100 text-slate-700 font-black">
+                  {logs.length}
+                </span>
+              )}
+            </button>
+            <button
+              type="button"
+              onClick={() => setActiveTab('deleted')}
+              className={`flex-1 py-1.5 px-3 rounded-lg text-xs font-black uppercase tracking-wider transition-all flex items-center justify-center gap-1.5 ${
+                activeTab === 'deleted'
+                  ? 'bg-white text-red-600 shadow-sm'
+                  : 'text-slate-600 hover:text-red-600'
+              }`}
+            >
+              <span>🗑️ Deleted Students</span>
+              {deletedStudents.length > 0 && (
+                <span className="px-1.5 py-0.2 rounded-full text-[9px] bg-red-100 text-red-700 font-black">
+                  {deletedStudents.length}
+                </span>
+              )}
+            </button>
+          </div>
         </div>
 
-        {/* Action Bar */}
-        {!isLoading && logs.length > 0 && (
+        {/* Action Bar for Logs Tab */}
+        {activeTab === 'logs' && !isLoading && logs.length > 0 && (
           <div className="px-4 py-3 bg-slate-50/30 border-b border-slate-100 flex items-center justify-between">
             <label className="flex items-center gap-2 cursor-pointer select-none">
               <input
@@ -193,78 +745,232 @@ function HostelLogsModal({ hostelName, onClose }: { hostelName: string; onClose:
           </div>
         )}
 
+        {/* Action Bar for Deleted Students Tab */}
+        {activeTab === 'deleted' && !isLoadingDeleted && deletedStudents.length > 0 && (
+          <div className="px-4 py-2.5 bg-slate-50/50 border-b border-slate-100 flex flex-col sm:flex-row gap-2 items-stretch sm:items-center justify-between">
+            <div className="flex items-center gap-3">
+              <label className="flex items-center gap-2 cursor-pointer select-none">
+                <input
+                  type="checkbox"
+                  checked={filteredDeletedStudents.length > 0 && selectedDeletedIds.size === filteredDeletedStudents.length}
+                  onChange={handleSelectAllDeletedToggle}
+                  className="w-4 h-4 rounded text-red-600 focus:ring-red-500 cursor-pointer border-slate-300"
+                />
+                <span className="text-[10px] font-black text-slate-500 uppercase tracking-widest">
+                  Select All ({selectedDeletedIds.size}/{filteredDeletedStudents.length})
+                </span>
+              </label>
+
+              {selectedDeletedIds.size > 0 && (
+                <button
+                  onClick={handleBulkPermanentDelete}
+                  disabled={isProcessingAction}
+                  className="px-3 py-1 bg-red-600 text-white text-[9px] font-black rounded-lg hover:bg-red-700 transition-all uppercase tracking-wider shadow-sm flex items-center gap-1"
+                >
+                  🗑️ Wipe Selected ({selectedDeletedIds.size})
+                </button>
+              )}
+            </div>
+
+            <input
+              type="text"
+              placeholder="Search deleted student..."
+              value={searchTerm}
+              onChange={e => setSearchTerm(e.target.value)}
+              className="text-xs bg-white border border-slate-200 rounded-lg px-2.5 py-1 text-slate-800 placeholder:text-slate-400 focus:outline-none focus:border-red-400 w-full sm:w-48"
+            />
+          </div>
+        )}
+
         {/* Content */}
         <div className="p-4 overflow-y-auto flex-1 bg-white">
-          {isLoading ? (
-            <div className="py-12 flex flex-col items-center justify-center gap-3">
-              <span className="text-2xl animate-spin">⏳</span>
-              <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider animate-pulse">Loading activity logs...</span>
-            </div>
-          ) : logs.length === 0 ? (
-            <div className="py-12 flex flex-col items-center justify-center text-center">
-              <span className="text-3xl mb-2">📭</span>
-              <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">No recent logs found</span>
-              <p className="text-xs text-slate-400 mt-1 max-w-[280px]">Any student add, edit, or delete actions for this hostel will be recorded here.</p>
-            </div>
-          ) : (
-            <div className="space-y-3">
-              {logs.map((log) => {
-                const isSelfOnboard = log.actionType === 'ONBOARD' || log.operator?.toLowerCase().includes('onboard') || log.operator?.toLowerCase() === 'student' || log.operator?.toLowerCase().includes('self');
-                const emoji = isSelfOnboard ? '🟢' : log.actionType === 'ADD' ? '🟢' : log.actionType === 'DELETE' ? '🔴' : '🟡';
-                const actionText = isSelfOnboard ? 'ONBOARDED' : log.actionType === 'ADD' ? 'ADDED' : log.actionType === 'DELETE' ? 'DELETED' : 'UPDATED';
-                const isSelected = selectedLogIds.has(log.id);
+          {activeTab === 'logs' ? (
+            /* TAB 1: ACTIVITY LOGS */
+            isLoading ? (
+              <div className="py-12 flex flex-col items-center justify-center gap-3">
+                <span className="text-2xl animate-spin">⏳</span>
+                <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider animate-pulse">Loading activity logs...</span>
+              </div>
+            ) : logs.length === 0 ? (
+              <div className="py-12 flex flex-col items-center justify-center text-center">
+                <span className="text-3xl mb-2">📭</span>
+                <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">No recent logs found</span>
+                <p className="text-xs text-slate-400 mt-1 max-w-[280px]">Any student add, edit, or delete actions for this hostel will be recorded here.</p>
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {logs.map((log) => {
+                  const isSelfOnboard = log.actionType === 'ONBOARD' || log.operator?.toLowerCase().includes('onboard') || log.operator?.toLowerCase() === 'student' || log.operator?.toLowerCase().includes('self');
+                  const emoji = isSelfOnboard ? '🟢' : log.actionType === 'ADD' ? '🟢' : log.actionType === 'DELETE' ? '🔴' : '🟡';
+                  const actionText = isSelfOnboard ? 'ONBOARDED' : log.actionType === 'ADD' ? 'ADDED' : log.actionType === 'DELETE' ? 'DELETED' : 'UPDATED';
+                  const isSelected = selectedLogIds.has(log.id);
 
-                return (
-                  <div
-                    key={log.id}
-                    onClick={() => handleSelectToggle(log.id)}
-                    className={`p-3 rounded-xl border transition-all flex items-start gap-3 cursor-pointer ${
-                      isSelected
-                        ? 'border-red-200 bg-red-50/20 shadow-sm'
-                        : 'border-slate-100 hover:border-slate-200 hover:bg-slate-50/30'
-                    }`}
-                  >
-                    {/* Checkbox */}
-                    <input
-                      type="checkbox"
-                      checked={isSelected}
-                      readOnly
-                      className="mt-0.5 w-4 h-4 rounded text-red-600 focus:ring-red-500 cursor-pointer border-slate-300"
-                    />
-
-
-                    {/* Emoji */}
-                    <span className="shrink-0 text-xs mt-0.5">{emoji}</span>
-
-                    {/* Text */}
-                    <div className="flex-1 text-left">
-                      <p className="text-xs font-semibold text-slate-700 leading-relaxed">
-                        <span className={`font-extrabold uppercase tracking-wide ${isSelfOnboard ? 'text-emerald-700' : 'text-slate-900'}`}>{actionText}: </span>
-                        <span>"{log.studentName.toUpperCase()}" </span>
-                        {log.erpId && log.erpId !== 'N/A' && (
-                          <span className="text-[10px] font-black text-slate-500">({log.erpId}) </span>
-                        )}
-                        {isSelfOnboard ? (
-                          <span className="text-emerald-700 font-bold">student registered themselves by onboarding</span>
-                        ) : (
-                          <span>by <span className="font-black text-slate-800">{log.operator}</span></span>
-                        )}
-                      </p>
-                      <p className="text-[10px] text-slate-400 font-semibold mt-1">
-                        ⏱️ {formatTime(log.createdAt)}
-                      </p>
+                  return (
+                    <div
+                      key={log.id}
+                      onClick={() => handleSelectToggle(log.id)}
+                      className={`p-3 rounded-xl border transition-all flex items-start gap-3 cursor-pointer ${
+                        isSelected
+                          ? 'border-red-200 bg-red-50/20 shadow-sm'
+                          : 'border-slate-100 hover:border-slate-200 hover:bg-slate-50/30'
+                      }`}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={isSelected}
+                        readOnly
+                        className="mt-0.5 w-4 h-4 rounded text-red-600 focus:ring-red-500 cursor-pointer border-slate-300"
+                      />
+                      <span className="shrink-0 text-xs mt-0.5">{emoji}</span>
+                      <div className="flex-1 text-left">
+                        <p className="text-xs font-semibold text-slate-700 leading-relaxed">
+                          <span className={`font-extrabold uppercase tracking-wide ${isSelfOnboard ? 'text-emerald-700' : 'text-slate-900'}`}>{actionText}: </span>
+                          <span>"{log.studentName.toUpperCase()}" </span>
+                          {log.erpId && log.erpId !== 'N/A' && (
+                            <span className="text-[10px] font-black text-slate-500">({log.erpId}) </span>
+                          )}
+                          {isSelfOnboard ? (
+                            <span className="text-emerald-700 font-bold">student registered themselves by onboarding</span>
+                          ) : (
+                            <span>by <span className="font-black text-slate-800">{log.operator}</span></span>
+                          )}
+                        </p>
+                        <p className="text-[10px] text-slate-400 font-semibold mt-1">
+                          ⏱️ {formatTime(log.createdAt)}
+                        </p>
+                      </div>
                     </div>
-                  </div>
-                );
-              })}
-            </div>
+                  );
+                })}
+              </div>
+            )
+          ) : (
+            /* TAB 2: DELETED STUDENTS RECYCLE BIN */
+            isLoadingDeleted ? (
+              <div className="py-12 flex flex-col items-center justify-center gap-3">
+                <span className="text-2xl animate-spin">⏳</span>
+                <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider animate-pulse">Loading deleted students...</span>
+              </div>
+            ) : filteredDeletedStudents.length === 0 ? (
+              <div className="py-12 flex flex-col items-center justify-center text-center">
+                <span className="text-3xl mb-2">🎉</span>
+                <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">No deleted students in archive</span>
+                <p className="text-xs text-slate-400 mt-1 max-w-[280px]">When students are removed from this hostel, they are safely archived here before permanent deletion.</p>
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {filteredDeletedStudents.map((student) => {
+                  const isSelected = selectedDeletedIds.has(student.studentId);
+
+                  return (
+                    <div
+                      key={student.logId || student.studentId}
+                      className={`p-3.5 rounded-xl border transition-all flex flex-col sm:flex-row sm:items-center justify-between gap-3 ${
+                        isSelected
+                          ? 'border-red-300 bg-red-50/30 shadow-sm'
+                          : 'border-slate-100 hover:border-slate-200 bg-white'
+                      }`}
+                    >
+                      <div className="flex items-start gap-3 min-w-0 flex-1">
+                        <input
+                          type="checkbox"
+                          checked={isSelected}
+                          onChange={() => handleSelectDeletedToggle(student.studentId)}
+                          className="mt-1 w-4 h-4 rounded text-red-600 focus:ring-red-500 cursor-pointer border-slate-300"
+                        />
+                        <div className="w-8 h-8 rounded-lg bg-red-50 border border-red-200 text-red-600 flex items-center justify-center font-black text-xs shrink-0">
+                          {student.studentName?.charAt(0)?.toUpperCase() || "S"}
+                        </div>
+                        <div className="min-w-0 flex-1">
+                          <div className="flex flex-wrap items-center gap-1.5">
+                            <h4 className="text-xs font-black text-slate-900 uppercase tracking-tight truncate">
+                              {student.studentName}
+                            </h4>
+                            {student.registrationId && student.registrationId !== 'N/A' && (
+                              <span className="px-1.5 py-0.5 bg-slate-100 text-slate-600 text-[9px] font-bold rounded">
+                                {student.registrationId}
+                              </span>
+                            )}
+                            {student.isRestored && (
+                              <span className="px-1.5 py-0.5 bg-emerald-100 text-emerald-800 text-[8px] font-black rounded uppercase">
+                                ✅ Active
+                              </span>
+                            )}
+                          </div>
+                          <p className="text-[10px] text-slate-500 font-semibold mt-0.5 truncate">
+                            Room {student.roomNumber || 'Unassigned'} • ERP: {student.erpId || 'N/A'} • Phone: {student.phoneNumber || 'N/A'}
+                          </p>
+                          <div className="flex flex-wrap items-center gap-2 mt-1 text-[9px] text-slate-400 font-semibold">
+                            <span>🗑️ Deleted: {formatTime(student.deletedAt)} by <strong className="text-slate-600">{student.deletedBy}</strong></span>
+                            {student.gatePassCount > 0 && (
+                              <span className="text-indigo-600 font-bold">• 📜 {student.gatePassCount} past gate pass(es)</span>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Action Buttons */}
+                      <div className="flex items-center gap-1.5 shrink-0 self-end sm:self-center pl-7 sm:pl-0">
+                        <button
+                          type="button"
+                          onClick={() => setViewingProfileStudent(student)}
+                          className="px-2.5 py-1.5 bg-rose-50 text-rose-700 border border-rose-200 hover:bg-rose-600 hover:text-white rounded-lg text-[9px] font-black uppercase tracking-wider transition-all flex items-center gap-1 active:scale-95 cursor-pointer shadow-2xs"
+                          title="View full archived student profile details"
+                        >
+                          👁️ View Profile
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleRestoreStudent(student)}
+                          disabled={isProcessingAction || student.isRestored}
+                          className={`px-3 py-1.5 rounded-lg text-[9px] font-black uppercase tracking-wider transition-all flex items-center gap-1 ${
+                            student.isRestored
+                              ? 'bg-slate-100 text-slate-400 cursor-not-allowed'
+                              : 'bg-emerald-600 text-white hover:bg-emerald-700 shadow-sm shadow-emerald-100 active:scale-95 cursor-pointer'
+                          }`}
+                          title="Restore student back to active hostel roster"
+                        >
+                          🔄 Restore
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handlePermanentDelete(student.studentId, student.studentName)}
+                          disabled={isProcessingAction}
+                          className="px-3 py-1.5 bg-red-50 text-red-600 border border-red-200 hover:bg-red-600 hover:text-white rounded-lg text-[9px] font-black uppercase tracking-wider transition-all flex items-center gap-1 active:scale-95 cursor-pointer"
+                          title="Permanently delete student and all records forever"
+                        >
+                          🗑️ Wipe All
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )
           )}
         </div>
       </div>
+
+      {/* Deleted Student Profile Details Modal */}
+      {viewingProfileStudent && (
+        <DeletedStudentProfileModal
+          student={viewingProfileStudent}
+          hostelName={hostelName}
+          onClose={() => setViewingProfileStudent(null)}
+          onRestore={async (st) => {
+            await handleRestoreStudent(st);
+            setViewingProfileStudent(null);
+          }}
+          onPermanentDelete={async (id, name) => {
+            await handlePermanentDelete(id, name);
+            setViewingProfileStudent(null);
+          }}
+          isProcessingAction={isProcessingAction}
+        />
+      )}
     </div>
   );
 }
-
 
 export default function HostelManagementModal({
   hostels,

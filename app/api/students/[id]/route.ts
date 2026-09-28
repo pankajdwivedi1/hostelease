@@ -35,26 +35,47 @@ export async function DELETE(
       }
     }
 
+    // ⚡ AUTO-CLOSE ACTIVE GATE PASS: If the student currently has an open gate pass, auto-resolve it so it clears from the live gate screen
+    const now = new Date();
+    const istTimeStr = now.toLocaleTimeString("en-IN", { timeZone: "Asia/Kolkata", hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: true });
+    const istDateStr = `${String(now.getDate()).padStart(2, '0')}-${String(now.getMonth() + 1).padStart(2, '0')}-${now.getFullYear()}`;
+    
+    await db.gatePasses.updateOne(
+      { studentId: studentId, status: "out" },
+      {
+        status: "auto-resolved",
+        checkInTime: now,
+        checkInIstTime: istTimeStr,
+        checkInIstDate: istDateStr,
+        qrTokenUsedIn: "STUDENT_DELETED_AUTO_CLOSE"
+      }
+    ).catch(() => {});
+
     // Delete permissions using adapter
     await db.permissions.deleteMany({ studentId: studentId });
 
     // Perform database-aware deletion
     await db.students.delete(studentId);
 
-    // 📝 AUDIT LOG: Record this sensitive action
+    // 📝 AUDIT LOG: Record this sensitive action with complete restorable student snapshot
     const adminEmail = request.headers.get("x-admin-email") || "admin";
+    const studentSnapshot = {
+      ...student,
+      deletedAt: new Date().toISOString(),
+      deletedBy: adminEmail,
+      actionType: 'DELETE',
+      isHostelActivity: true
+    };
+    delete (studentSnapshot as any).faceDescriptor;
+    delete (studentSnapshot as any).webAuthnCredentials;
+    delete (studentSnapshot as any).deviceHistory;
+
     writeAdminAuditLog({
       action: "STUDENT_DELETED",
       entityType: "student",
       entityId: studentId,
       entityName: student.name || "Unknown Student",
-      details: {
-        studentName: student.name,
-        studentPhone: student.phoneNumber,
-        hostelName: student.hostelName,
-        roomNumber: student.roomNumber,
-        deletedAt: new Date().toISOString(),
-      },
+      details: studentSnapshot,
       performedBy: adminEmail,
     }).catch(console.error); // fire-and-forget
 
