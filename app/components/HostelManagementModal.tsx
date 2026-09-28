@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react";
 import Barcode from "react-barcode";
 import { showConfirm, showPrompt, showToast } from "@/lib/toast";
+import { formatDateDDMMYYYY, formatDateTimeDDMMYYYY, formatDateTimeWithSecondsDDMMYYYY } from "@/lib/dateFormat";
 
 interface HostelLogItem {
   id: string;
@@ -198,7 +199,7 @@ function DeletedStudentProfileModal({
 
             {/* Deletion Metadata Banner */}
             <div className="mt-3 pt-2.5 border-t border-rose-200/70 flex flex-wrap items-center justify-between gap-2 text-[10px] text-rose-800 font-semibold bg-rose-100/50 px-3 py-1.5 rounded-lg">
-              <span>🗑️ Deleted: <strong>{student.deletedAt ? new Date(student.deletedAt).toLocaleString('en-IN') : 'N/A'}</strong></span>
+              <span>🗑️ Deleted: <strong>{student.deletedAt ? formatDateTimeWithSecondsDDMMYYYY(student.deletedAt) : 'N/A'}</strong></span>
               <span>Operator: <strong>{student.deletedBy || 'Warden'}</strong></span>
             </div>
           </div>
@@ -226,7 +227,7 @@ function DeletedStudentProfileModal({
                   {sDob && (
                     <div>
                       <p className="text-[10px] text-slate-400 font-bold uppercase">Date of Birth</p>
-                      <p className="text-[10px] text-slate-900 font-bold">{sDob}</p>
+                      <p className="text-[10px] text-slate-900 font-bold">{formatDateDDMMYYYY(sDob) || sDob}</p>
                     </div>
                   )}
                   {(sGender || sCategory) && (
@@ -265,7 +266,7 @@ function DeletedStudentProfileModal({
                   {sJoined && (
                     <div>
                       <p className="text-[10px] text-slate-400 font-bold uppercase">Joined Date</p>
-                      <p className="text-[10px] text-slate-700 font-bold">{sJoined}</p>
+                      <p className="text-[10px] text-slate-700 font-bold">{formatDateDDMMYYYY(sJoined) || sJoined}</p>
                     </div>
                   )}
                 </div>
@@ -471,21 +472,8 @@ function HostelLogsModal({ hostelName, onClose }: { hostelName: string; onClose:
   }, [hostelName]);
 
   const formatTime = (isoString: string) => {
-    try {
-      const d = new Date(isoString);
-      let hours = d.getHours();
-      const minutes = String(d.getMinutes()).padStart(2, '0');
-      const ampm = hours >= 12 ? 'PM' : 'AM';
-      hours = hours % 12;
-      hours = hours ? hours : 12;
-      const timeStr = `${String(hours).padStart(2, '0')}:${minutes} ${ampm}`;
-      const day = String(d.getDate()).padStart(2, '0');
-      const month = String(d.getMonth() + 1).padStart(2, '0');
-      const year = d.getFullYear();
-      return `${timeStr} on ${day}/${month}/${year}`;
-    } catch {
-      return "N/A";
-    }
+    if (!isoString) return "N/A";
+    return formatDateTimeWithSecondsDDMMYYYY(isoString) || "N/A";
   };
 
   const handleSelectToggle = (id: string) => {
@@ -1363,25 +1351,6 @@ export default function HostelManagementModal({
                                   className="sr-only peer"
                                 />
                                 <div className="w-7 h-4 sm:w-9 sm:h-5 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-3 after:w-3 sm:after:h-4 sm:after:w-4 after:transition-all peer-checked:bg-indigo-600"></div>
-                              </label>
-                            </div>
-
-                            {/* Student Alerts */}
-                            <div className="flex items-center justify-between bg-white p-1.5 sm:p-2.5 rounded-lg border border-slate-200 shadow-sm">
-                              <div className="min-w-0 pr-1">
-                                <p className="text-[9px] sm:text-[10px] font-black text-slate-700 uppercase tracking-wider truncate flex items-center gap-1">
-                                  <span>📱</span> Student Alerts
-                                </p>
-                                <p className="text-[7px] sm:text-[8px] text-slate-400 font-bold mt-0.5 uppercase truncate">Hostel student alerts</p>
-                              </div>
-                              <label className="relative inline-flex items-center cursor-pointer shrink-0">
-                                <input
-                                  type="checkbox"
-                                  checked={hostel.allowStudentNotification !== false}
-                                  onChange={(e) => handleUpdateHostelConfig({ ...hostel, id: hostel._id, allowStudentNotification: e.target.checked })}
-                                  className="sr-only peer"
-                                />
-                                <div className="w-7 h-4 sm:w-9 sm:h-5 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-3 after:w-3 sm:after:h-4 sm:after:w-4 after:transition-all peer-checked:bg-emerald-600"></div>
                               </label>
                             </div>
 

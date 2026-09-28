@@ -17,7 +17,13 @@ export const parseFlexibleDate = (dateVal: any): Date | null => {
     const trimmed = dateVal.trim();
     if (!trimmed) return null;
 
-    // Pattern 1: DD-MM-YYYY or DD/MM/YYYY with optional time
+    // Pattern 1: ISO 8601 string with T or Z (e.g. 2026-09-12T09:10:00.000Z or 2026-09-12T14:40:00)
+    if (/^\d{4}-\d{2}-\d{2}T/i.test(trimmed)) {
+      const d = new Date(trimmed);
+      if (!isNaN(d.getTime())) return d;
+    }
+
+    // Pattern 2: DD-MM-YYYY or DD/MM/YYYY with optional time
     const ddmmyyyyMatch = trimmed.match(/^(\d{1,2})[-/](\d{1,2})[-/](\d{4})(?:[,\s]+(\d{1,2}):(\d{2})(?::(\d{2}))?\s*(am|pm)?)?$/i);
     if (ddmmyyyyMatch) {
       const day = parseInt(ddmmyyyyMatch[1], 10);
@@ -35,8 +41,8 @@ export const parseFlexibleDate = (dateVal: any): Date | null => {
       if (!isNaN(d.getTime())) return d;
     }
 
-    // Pattern 2: YYYY-MM-DD with optional time
-    const yyyymmddMatch = trimmed.match(/^(\d{4})[-/](\d{1,2})[-/](\d{1,2})(?:[T\s]+(\d{1,2}):(\d{2})(?::(\d{2}))?\s*(am|pm)?)?/i);
+    // Pattern 3: YYYY-MM-DD or YYYY/MM/DD (without T) with optional time
+    const yyyymmddMatch = trimmed.match(/^(\d{4})[-/](\d{1,2})[-/](\d{1,2})(?:[\s]+(\d{1,2}):(\d{2})(?::(\d{2}))?\s*(am|pm)?)?$/i);
     if (yyyymmddMatch) {
       const year = parseInt(yyyymmddMatch[1], 10);
       const month = parseInt(yyyymmddMatch[2], 10) - 1;
@@ -111,3 +117,54 @@ export const formatToDDMMYYYY = (dateVal: any, includeTime = false): string => {
 
 export const formatDateDDMMYYYY = (dateVal: any): string => formatToDDMMYYYY(dateVal, false);
 export const formatDateTimeDDMMYYYY = (dateVal: any): string => formatToDDMMYYYY(dateVal, true);
+
+export const formatDateTimeWithSecondsDDMMYYYY = (dateVal: any, is24Hour = false): string => {
+  if (!dateVal) return "";
+  const d = parseFlexibleDate(dateVal);
+  if (!d || isNaN(d.getTime())) return String(dateVal);
+
+  try {
+    const parts = new Intl.DateTimeFormat('en-GB', {
+      timeZone: 'Asia/Kolkata',
+      day: '2-digit',
+      month: '2-digit',
+      year: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+      second: '2-digit',
+      hour12: !is24Hour
+    }).formatToParts(d);
+
+    let day = '', month = '', year = '', hour = '', minute = '', second = '', dayPeriod = '';
+    parts.forEach(p => {
+      if (p.type === 'day') day = p.value;
+      else if (p.type === 'month') month = p.value;
+      else if (p.type === 'year') year = p.value;
+      else if (p.type === 'hour') hour = p.value;
+      else if (p.type === 'minute') minute = p.value;
+      else if (p.type === 'second') second = p.value;
+      else if (p.type === 'dayPeriod') dayPeriod = p.value.toUpperCase();
+    });
+
+    const dateStr = `${day}-${month}-${year}`;
+    if (!hour) return dateStr;
+
+    const timeStr = is24Hour ? `${hour}:${minute}:${second}` : `${hour}:${minute}:${second} ${dayPeriod}`.trim();
+    return `${dateStr}, ${timeStr}`;
+  } catch {
+    const day = String(d.getDate()).padStart(2, '0');
+    const month = String(d.getMonth() + 1).padStart(2, '0');
+    const year = d.getFullYear();
+    const dateStr = `${day}-${month}-${year}`;
+    
+    let hours = d.getHours();
+    const minutes = String(d.getMinutes()).padStart(2, '0');
+    const seconds = String(d.getSeconds()).padStart(2, '0');
+    if (is24Hour) {
+      return `${dateStr}, ${String(hours).padStart(2, '0')}:${minutes}:${seconds}`;
+    }
+    const ampm = hours >= 12 ? 'PM' : 'AM';
+    hours = hours % 12 || 12;
+    return `${dateStr}, ${String(hours).padStart(2, '0')}:${minutes}:${seconds} ${ampm}`;
+  }
+};

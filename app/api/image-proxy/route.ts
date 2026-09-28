@@ -7,6 +7,17 @@ const imageMemoryCache = new Map<string, { buffer: Buffer; contentType: string; 
 const MAX_CACHE_ENTRIES = 300;
 const CACHE_TTL_MS = 7 * 24 * 60 * 60 * 1000; // 7 Days
 
+export async function OPTIONS() {
+  return new NextResponse(null, {
+    status: 204,
+    headers: {
+      "Access-Control-Allow-Origin": "*",
+      "Access-Control-Allow-Methods": "GET, OPTIONS",
+      "Access-Control-Allow-Headers": "*",
+    },
+  });
+}
+
 export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);
@@ -24,6 +35,7 @@ export async function GET(request: NextRequest) {
         headers: {
           "Content-Type": cached.contentType,
           "Cache-Control": "public, max-age=31536000, immutable",
+          "Access-Control-Allow-Origin": "*",
           "X-Image-Cache": "HIT-MEMORY",
         },
       });
@@ -67,6 +79,7 @@ export async function GET(request: NextRequest) {
       headers: {
         "Content-Type": contentType,
         "Cache-Control": "public, max-age=31536000, immutable",
+        "Access-Control-Allow-Origin": "*",
         "X-Image-Cache": "MISS",
       },
     });

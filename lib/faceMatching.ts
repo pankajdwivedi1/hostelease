@@ -420,17 +420,17 @@ export function assessPhotoQuality(
 
         // Calibrated sharpness scoring for both desktop webcams (softer ISP) and mobile cameras:
         // Webcam typical: lapVariance: 100-500, p95: 45-120 -> scores 70-90%
-        // Severe blur (out of focus or smeared motion): lapVariance < 45, p95 < 20 -> scores < 20%
+        // Soft focus / blurred: lapVariance < 65, p95 < 24 -> scores < 45%
         let sharpnessScore = 0;
-        if (lapVariance < 60 || p95 < 24) {
-            sharpnessScore = Math.min(20, Math.max(5, Math.round((lapVariance / 60) * 12 + (p95 / 24) * 8)));
+        if (lapVariance < 65 || p95 < 24) {
+            sharpnessScore = Math.min(40, Math.max(5, Math.round((lapVariance / 65) * 22 + (p95 / 24) * 18)));
         } else {
             const edgePart = Math.min(50, (p95 / 100.0) * 50.0);
             const varPart = Math.min(50, (Math.min(2500, lapVariance) / 2500.0) * 50.0);
             sharpnessScore = Math.min(100, Math.max(50, Math.round(edgePart + varPart)));
         }
 
-        const isBlurry = sharpnessScore < 20 || (lapVariance < 45 && p95 < 20);
+        const isBlurry = sharpnessScore < 45 || (lapVariance < 55 && p95 < 22);
 
         let reason = "";
         if (isPhotoOfPhoto) {
@@ -535,13 +535,37 @@ export async function detectFace(
             return box && box.width >= 16 && box.height >= 16 && score >= 0.15;
         });
 
+        // Multi-Face Guard: Run raw bounding-box detection to catch partial/side heads or background photobombers
+        let rawBoxes: any[] = [];
+        try {
+            if (fa.nets.tinyFaceDetector?.isLoaded) {
+                rawBoxes = await fa.detectAllFaces(imageElement, new fa.TinyFaceDetectorOptions({
+                    inputSize: 320,
+                    scoreThreshold: 0.12
+                }));
+            }
+            if ((!rawBoxes || rawBoxes.length === 0) && fa.nets.ssdMobilenetv1?.isLoaded) {
+                rawBoxes = await fa.detectAllFaces(imageElement, new fa.SsdMobilenetv1Options({ minConfidence: 0.20 }));
+            }
+        } catch (e) {
+            console.warn('Multi-face box detector pass exception:', e);
+        }
+
+        const validRawBoxes = (rawBoxes || []).filter((b: any) => {
+            const box = b?.box || b?._box;
+            const score = b?.score !== undefined ? b.score : 1;
+            return box && box.width >= 16 && box.height >= 16 && score >= 0.12;
+        });
+
+        const totalFaceCount = Math.max(validFaces.length, validRawBoxes.length);
+
         return {
             descriptor: withDescriptor ? (mainFace.descriptor || null) : null,
             detection: mainFace.detection,
             landmarks: mainFace.landmarks,
             accurate: accurate,
-            multipleFacesDetected: validFaces.length > 1,
-            faceCount: validFaces.length
+            multipleFacesDetected: totalFaceCount > 1,
+            faceCount: totalFaceCount
         };
     } catch (error) {
         console.error('❌ Face detection failed:', error);
