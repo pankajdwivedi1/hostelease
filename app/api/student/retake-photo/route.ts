@@ -6,11 +6,10 @@ export const dynamic = "force-dynamic";
 export async function POST(req: NextRequest) {
     try {
         const body = await req.json();
-        const { studentId, firebaseUID, profilePicture, faceDescriptor } = body;
+        const { studentId, registrationId, email, firebaseUID, profilePicture, faceDescriptor } = body;
 
-        const targetId = studentId || firebaseUID;
-        if (!targetId) {
-            return NextResponse.json({ success: false, error: "studentId or firebaseUID is required" }, { status: 400 });
+        if (!studentId && !registrationId && !email && !firebaseUID) {
+            return NextResponse.json({ success: false, error: "Registration ID, Email, or Student ID is required" }, { status: 400 });
         }
 
         if (!profilePicture || typeof profilePicture !== 'string' || profilePicture.length < 100) {
@@ -18,13 +17,13 @@ export async function POST(req: NextRequest) {
         }
 
         // 🛡️ ANTI-SPOOF CHECK: Block digital screens, mobile gallery photos, and paper cutouts
-        const { checkLivenessWithAIService } = await import("@/lib/aiAttendanceClient");
-        const liveness = await checkLivenessWithAIService(profilePicture);
+        const { verifyFaceAndLivenessServer } = await import("@/lib/serverAntiSpoof");
+        const liveness = await verifyFaceAndLivenessServer({ liveImage: profilePicture });
         if (liveness.isSpoof) {
             console.warn("❌ Registration Photo Rejected (Spoof):", liveness.reason);
             return NextResponse.json({
                 success: false,
-                error: `Photo Rejected: ${liveness.reason} You must capture a real physical face in person.`
+                error: `Photo Rejected: ${liveness.reason}. You must capture a real physical face in person.`
             }, { status: 400 });
         }
 
@@ -32,13 +31,31 @@ export async function POST(req: NextRequest) {
             return NextResponse.json({ success: false, error: "Valid 128-dimensional face embedding is required" }, { status: 400 });
         }
 
-        // Fetch current student by studentId or firebaseUID
-        let student = await db.students.getById(targetId);
+        // Fetch current student primarily by registrationId or email (User requirement: never depend on firebaseUID)
+        let student: any = null;
+        if (registrationId && typeof registrationId === "string" && registrationId.trim()) {
+            const regClean = registrationId.trim().toUpperCase();
+            student = await db.students.findOne({ registrationId: regClean });
+            if (!student) {
+                student = await db.students.findOne({ registrationId: registrationId.trim() });
+            }
+        }
+        if (!student && email && typeof email === "string" && email.trim()) {
+            const emailClean = email.trim().toLowerCase();
+            student = await db.students.findOne({ email: emailClean });
+            if (!student) {
+                student = await db.students.findOne({ email: email.trim() });
+            }
+        }
+        if (!student && studentId && typeof studentId === "string" && studentId.trim()) {
+            student = await db.students.getById(studentId);
+            if (!student) {
+                student = await db.students.findOne({ registrationId: studentId.trim().toUpperCase() }) ||
+                          await db.students.findOne({ email: studentId.trim().toLowerCase() });
+            }
+        }
         if (!student && firebaseUID) {
             student = await db.students.findOne({ firebaseUID });
-        }
-        if (!student && studentId) {
-            student = await db.students.getById(studentId);
         }
         if (!student) {
             return NextResponse.json({ success: false, error: "Student profile not found" }, { status: 404 });
@@ -52,7 +69,7 @@ export async function POST(req: NextRequest) {
         if (profilePicture && (profilePicture.startsWith("data:image/") || profilePicture.startsWith("data:"))) {
             try {
                 const { saveFileToRailway } = await import("@/lib/fileStorage");
-                const studentUid = (student as any).firebaseUid || student.firebaseUID || firebaseUID || targetId;
+                const studentUid = student.registrationId || student._id || student.id || student.firebaseUID || "student";
                 const tenantFolder = student.tenantId || "default";
                 const filename = `${studentUid}_${Date.now()}`;
                 const savedUrl = await saveFileToRailway(profilePicture, `profile-pictures/${tenantFolder}`, filename);
@@ -73,7 +90,7 @@ export async function POST(req: NextRequest) {
             phoneNumber: student.phoneNumber
         };
 
-        const studentIdToUpdate = student._id || student.id || targetId;
+        const studentIdToUpdate = student._id || student.id;
         const updated = await db.students.update(studentIdToUpdate, updatePayload);
 
 

@@ -4,6 +4,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/dbAdapter";
 import crypto from 'crypto';
 import { broadcastGateEvent } from "@/lib/eventEmitter";
+import { assertTenantActive } from "@/lib/tenant";
+import { parseAsIST } from "@/lib/dateFormat";
 
 /**
  * Helper: Get IST time and date strings
@@ -38,6 +40,14 @@ export async function POST(request: NextRequest) {
         const body = await request.json();
         const { studentId, studentIds, searchId, action, userType = 'admin', requestType = 'HOME-LEAVE', reason = 'Manual Management Override', operator = 'Admin', fromDateTime, toDateTime } = body;
         const targetIds: string[] = studentIds || (studentId ? [studentId] : []);
+
+        // 1. Subscription Guard: Block toggling student status if subscription is expired
+        if (action !== 'find') {
+            const subCheck = await assertTenantActive();
+            if (!subCheck.allowed) {
+                return subCheck.response;
+            }
+        }
 
         // 2. Validate Authorization (Only Admin/Warden/Gatekeeper/SuperAdmin can manually toggle)
         const role = String(userType || 'admin').toLowerCase().trim();
@@ -218,9 +228,9 @@ export async function POST(request: NextRequest) {
                 }
 
                 let permIdToUse = createdPermId;
-                const fromDateToUse = approvedHomeLeave?.fromDateTime ? new Date(approvedHomeLeave.fromDateTime) : (fromDateTime ? new Date(fromDateTime) : initialCheckOutTime);
+                const fromDateToUse = approvedHomeLeave?.fromDateTime ? new Date(approvedHomeLeave.fromDateTime) : (fromDateTime ? (parseAsIST(fromDateTime) || new Date(fromDateTime)) : initialCheckOutTime);
                 const defaultSixDaysLater = new Date(fromDateToUse.getTime() + 6 * 24 * 60 * 60 * 1000);
-                const leaveToDateToUse = approvedHomeLeave?.toDateTime ? new Date(approvedHomeLeave.toDateTime) : (toDateTime ? new Date(toDateTime) : defaultSixDaysLater);
+                const leaveToDateToUse = approvedHomeLeave?.toDateTime ? new Date(approvedHomeLeave.toDateTime) : (toDateTime ? (parseAsIST(toDateTime) || new Date(toDateTime)) : defaultSixDaysLater);
 
                 // Only create a new permission record if an approved home leave didn't already exist!
                 if (!approvedHomeLeave && (targetType === 'HOME-LEAVE' || targetType === 'leave')) {

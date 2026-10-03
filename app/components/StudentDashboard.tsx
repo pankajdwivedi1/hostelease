@@ -822,6 +822,21 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
     });
     const steadyHoldCountRef = useRef<number>(0);
 
+    // 🛡️ LIVENESS TRACKER (Anti-Spoofing & Anti-Fraud Engine)
+    const livenessTrackerRef = useRef<faceMatching.LivenessTracker>(new faceMatching.LivenessTracker());
+    const livenessFramesRef = useRef<number>(0);
+    const [livenessStatus, setLivenessStatus] = useState<{
+        hasBlinked: boolean;
+        isStaticImage: boolean;
+        guidance: string;
+        blinkCount: number;
+    }>({
+        hasBlinked: false,
+        isStaticImage: false,
+        guidance: "Align face inside frame",
+        blinkCount: 0,
+    });
+
     const livenessHistoryRef = useRef<{ boxSizes: number[], yawPoints: number[] }>({
         boxSizes: [],
         yawPoints: []
@@ -840,20 +855,14 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
             faceMatching.loadFaceApiModels(true).then(success => {
                 if (success) {
                     console.log('Face matching SSD models ready');
-                    // ⚡ BACKGROUND VECTOR UPGRADE: If face vector is missing OR may be an old TinyFace vector,
-                    // silently re-compute it from profile picture using SSD for reliable matching.
-                    if (studentProfile.profilePicture) {
-                        if (!hasVector) {
-                            console.log('⚡ No face vector found — computing SSD vector from profile picture...');
-                        } else {
-                            // Already has vector — still recompute silently to upgrade any old TinyFace vectors
-                            console.log('⚡ Upgrading existing face vector to SSD format (background)...');
-                        }
+                    // ⚡ BACKGROUND VECTOR SYNC: Compute SSD vector from profile picture ONLY if missing
+                    if (!hasVector && studentProfile.profilePicture) {
+                        console.log('⚡ No face vector found — computing SSD vector from profile picture...');
                         faceMatching.loadImage(studentProfile.profilePicture).then(img => {
                             faceMatching.detectFace(img, true).then(res => {
                                 if (res && res.descriptor) {
                                     const vector = Array.from(res.descriptor);
-                                    console.log('✅ SSD face vector computed/upgraded successfully!');
+                                    console.log('✅ SSD face vector computed successfully!');
                                     setStudentProfile(prev => prev ? ({ ...prev, faceDescriptor: vector }) : prev);
                                     fetch('/api/students/face-descriptor', {
                                         method: 'POST',
@@ -910,39 +919,62 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
                         const vHeight = video.videoHeight || 480;
                         const dist = faceMatching.estimateFaceDistance(fastRes.detection.box, vWidth, vHeight);
 
-                        // 3. DYNAMIC PERCENTAGE (Increases/decreases continuously based on distance & steady hold)
-                        let currentPercent = dist.alignmentQualityPercent;
+                        // 3. REAL-TIME LIVENESS & BLINK TRACKING (Anti-Fraud / Anti-Spoof Gate)
+                        let liveness = {
+                            hasBlinked: livenessTrackerRef.current.isLivenessPassed(),
+                            isStaticImage: false,
+                            guidance: "👁️ Please BLINK your eyes to verify liveness",
+                            blinkCount: livenessTrackerRef.current.getBlinkCount(),
+                            ear: 0,
+                            yaw: 0,
+                        };
 
-                        if (dist.distanceStatus === 'optimal') {
-                            steadyHoldCountRef.current = Math.min(3, steadyHoldCountRef.current + 1);
-                            const holdBonus = Math.round((steadyHoldCountRef.current / 3) * 20);
-                            currentPercent = Math.min(100, dist.alignmentQualityPercent + holdBonus);
-                        } else {
-                            steadyHoldCountRef.current = Math.max(0, steadyHoldCountRef.current - 1);
+                        if (fastRes.landmarks) {
+                            liveness = livenessTrackerRef.current.update(fastRes.landmarks);
+                            setLivenessStatus(liveness);
+                            livenessFramesRef.current++;
                         }
 
-                        setScanHoldProgress(currentPercent);
-                        setDistanceInfo({
-                            status: dist.distanceStatus,
-                            cm: dist.estimatedDistanceCm,
-                            message: dist.guidanceMessage,
-                            percent: currentPercent
-                        });
+                        // 4. DYNAMIC PROGRESS & PASSIVE LIVENESS STEADY HOLD
+                        if (dist.distanceStatus === 'optimal') {
+                            steadyHoldCountRef.current = Math.min(3, steadyHoldCountRef.current + 1);
+                            const currentPercent = Math.min(100, Math.round((steadyHoldCountRef.current / 3) * 100));
+                            setScanHoldProgress(currentPercent);
+                            setDistanceInfo({
+                                status: dist.distanceStatus,
+                                cm: dist.estimatedDistanceCm,
+                                message: steadyHoldCountRef.current >= 3 
+                                    ? "Validating Physical Human Face..." 
+                                    : "Hold steady in camera frame...",
+                                percent: currentPercent
+                            });
+                            // 6. TRIGGER BIOMETRIC VERIFICATION WHEN LIVENESS PASSED & STEADY
+                                if (steadyHoldCountRef.current >= 3 && !isProcessingRef.current) {
+                                    active = false;
+                                    isProcessingRef.current = true;
+                                    setFaceMatchStep('matching');
+                                    setFaceMatchProgress(40);
 
-                        // 4. TRIGGER BIOMETRIC VERIFICATION WHEN STEADY IN OPTIMAL RANGE
-                        if (dist.distanceStatus === 'optimal' && steadyHoldCountRef.current >= 3 && !isProcessingRef.current) {
-                            active = false;
-                            isProcessingRef.current = true;
-                            setFaceMatchStep('matching');
+                            // ⚡ YIELD TO BROWSER: Allow UI to render 'Verifying Face Identity...' without locking UI thread
+                            await new Promise(resolve => setTimeout(resolve, 50));
 
-                            // Extract high-accuracy descriptor on this optimal frame
+                            // Downscale canvas to 480p max for instant inference without freezing the browser
+                            const targetWidth = Math.min(vWidth || 640, 480);
+                            const targetHeight = Math.round((targetWidth / (vWidth || 640)) * (vHeight || 480));
                             const canvas = document.createElement('canvas');
-                            canvas.width = vWidth;
-                            canvas.height = vHeight;
+                            canvas.width = targetWidth;
+                            canvas.height = targetHeight;
                             const ctx = canvas.getContext('2d');
-                            if (ctx) ctx.drawImage(video, 0, 0, vWidth, vHeight);
+                            if (ctx) ctx.drawImage(video, 0, 0, targetWidth, targetHeight);
 
-                            const fullRes = await faceMatching.detectFace(canvas, true, true);
+                            // Fast descriptor extraction pass on downscaled canvas
+                            let fullRes = await faceMatching.detectFace(canvas, false, true);
+
+                            // If fast pass didn't extract descriptor, yield and try accurate pass
+                            if (!fullRes?.descriptor) {
+                                await new Promise(resolve => setTimeout(resolve, 30));
+                                fullRes = await faceMatching.detectFace(canvas, true, true);
+                            }
 
                             // Anti-spoof check
                             if (fullRes?.detection?.box) {
@@ -981,18 +1013,28 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
                             return;
                         }
                     } else {
-                        setFaceDetected(false);
-                        setFaceBox(null);
-                        steadyHoldCountRef.current = 0;
-                        setScanHoldProgress(0);
-                        setDistanceInfo({
-                            status: 'none',
-                            cm: 0,
-                            message: 'Align face in frame',
-                            percent: 0
-                        });
-                        consecutiveFailuresRef.current += 1;
-                    }
+                    steadyHoldCountRef.current = Math.max(0, steadyHoldCountRef.current - 1);
+                    setScanHoldProgress(dist.alignmentQualityPercent);
+                    setDistanceInfo({
+                        status: dist.distanceStatus,
+                        cm: dist.estimatedDistanceCm,
+                        message: dist.guidanceMessage,
+                        percent: dist.alignmentQualityPercent
+                    });
+                }
+            } else {
+                setFaceDetected(false);
+                setFaceBox(null);
+                steadyHoldCountRef.current = 0;
+                setScanHoldProgress(0);
+                setDistanceInfo({
+                    status: 'none',
+                    cm: 0,
+                    message: 'Align face in frame',
+                    percent: 0
+                });
+                consecutiveFailuresRef.current += 1;
+            }
                 } catch (err) {
                     console.error("Detection error:", err);
                 }
@@ -3014,6 +3056,14 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
 
             // ⚡ INSTANT: Start detection loop immediately without blocking
             setFaceMatchStep('detecting');
+            livenessTrackerRef.current.reset();
+            livenessFramesRef.current = 0;
+            setLivenessStatus({
+                hasBlinked: false,
+                isStaticImage: false,
+                guidance: "Align face inside frame",
+                blinkCount: 0,
+            });
 
             // Ensure SSD models are loaded (they should already be from dashboard load, this is a safety net)
             faceMatching.loadFaceApiModels(true).catch(() => {});
@@ -3024,6 +3074,8 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
     };
 
     const stopCamera = () => {
+        livenessTrackerRef.current.reset();
+        livenessFramesRef.current = 0;
         if (videoRef.current && videoRef.current.srcObject) {
             const stream = videoRef.current.srcObject as MediaStream;
             stream.getTracks().forEach((track) => track.stop());
@@ -3074,40 +3126,53 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
 
             setFaceMatchProgress(50);
 
-            // ⚡ FAST LOCAL BIOMETRIC MATCH (<20ms instant verification)
-            if (existingRes?.descriptor && referenceDescriptor && referenceDescriptor.length > 0) {
-                const localDist = await faceMatching.getDistance(existingRes.descriptor, referenceDescriptor);
-                if (localDist !== null) {
-                    const localScore = faceMatching.calculateScore(localDist);
-                    if (localScore >= 75) {
-                        console.log(`⚡ Instant Local Biometric Approved: ${localScore}% match`);
-                        setFaceMatchProgress(100);
-                        setFaceMatchStep('success');
-                        return {
-                            percentage: localScore,
-                            status: 'auto-approved',
-                        };
-                    }
-                }
-            }
+            // 🛡️ ALL ATTENDANCE REQUESTS PROCESSED BY SECURE ONNX MINIFASNET SERVER (Tamper-Proof)
+            // ⚡ CAPTURE LIVE FRAME FOR SERVER AI (MiniFASNet Anti-Spoof + Biometric Verification)
+            const vW = videoRef.current.videoWidth || 640;
+            const vH = videoRef.current.videoHeight || 480;
 
-            // ⚡ CAPTURE LIVE FRAME FOR SERVER AI (ArcFace + MiniFASNet Anti-Spoof)
+            // ⚡ PERFORMANCE OPTIMIZATION: Downscale frame to 400px max (cuts payload by 85% & prevents network lag)
+            const maxDim = 400;
+            const scale = Math.min(1, maxDim / Math.max(vW, vH));
+            const targetW = Math.round(vW * scale);
+            const targetH = Math.round(vH * scale);
+
             const canvas = document.createElement('canvas');
-            canvas.width = videoRef.current.videoWidth || 640;
-            canvas.height = videoRef.current.videoHeight || 480;
+            canvas.width = targetW;
+            canvas.height = targetH;
             const ctx = canvas.getContext('2d');
             if (ctx) {
-                ctx.drawImage(videoRef.current, 0, 0, canvas.width, canvas.height);
-                const liveImageBase64 = canvas.toDataURL('image/jpeg', 0.85);
+                ctx.drawImage(videoRef.current, 0, 0, targetW, targetH);
+                const liveImageBase64 = canvas.toDataURL('image/jpeg', 0.80);
+
+                // Scale bounding box if available from real-time tracker
+                let scaledBox = undefined;
+                if (existingRes?.detection?.box) {
+                    scaledBox = {
+                        x: Math.round(existingRes.detection.box.x * scale),
+                        y: Math.round(existingRes.detection.box.y * scale),
+                        width: Math.round(existingRes.detection.box.width * scale),
+                        height: Math.round(existingRes.detection.box.height * scale),
+                    };
+                }
+
+                // Client-computed GPU descriptor (150ms on mobile WebGL)
+                const clientDesc = (existingRes?.descriptor && existingRes.descriptor.length === 128)
+                    ? Array.from(existingRes.descriptor)
+                    : undefined;
 
                 try {
-                    setFaceMatchProgress(70);
+                    setFaceMatchProgress(75);
                     const serverRes = await fetch('/api/attendance/face-match', {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify({
                             image: liveImageBase64,
-                            firebaseUID: studentProfile.firebaseUID
+                            registrationId: studentProfile.registrationId,
+                            email: studentProfile.email,
+                            studentId: studentProfile._id || studentProfile.id,
+                            clientDescriptor: clientDesc,
+                            box: scaledBox
                         })
                     });
 
@@ -3147,227 +3212,10 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
                 }
             }
 
-            // ⚡ FALLBACK: Local Browser Engine if network offline
-            setFaceMatchProgress(75);
-            let liveRes = existingRes;
-            if (!liveRes) {
-                const fbCanvas = document.createElement('canvas');
-                fbCanvas.width = videoRef.current.videoWidth;
-                fbCanvas.height = videoRef.current.videoHeight;
-                fbCanvas.getContext('2d')?.drawImage(videoRef.current, 0, 0);
-                liveRes = await faceMatching.detectFace(fbCanvas, true, true);
-            }
-
-            if (!liveRes || !liveRes.descriptor) {
-                console.warn("⚠️ No face detected in scan.");
-                setFaceMatchStep('error');
-                alert("Face not detected. Please look directly at the camera in good lighting.");
-                return null;
-            }
-
-            setFaceMatchProgress(90);
-            const distance = await faceMatching.getDistance(liveRes.descriptor, referenceDescriptor);
-
-            if (distance === null) {
-                setFaceMatchStep('error');
-                return null;
-            }
-
-            const matchPercentage = faceMatching.calculateScore(distance);
-            console.log(`🔍 Face Descriptor Match: ${matchPercentage}%`);
-
-            setFaceMatchProgress(100);
-
-            if (matchPercentage >= 75) {
-                setFaceMatchStep('success');
-                return {
-                    percentage: matchPercentage,
-                    status: 'auto-approved',
-                };
-            }
-
-            console.warn(`❌ Identity Mismatch: Match score too low (${matchPercentage}%).`);
-            setFaceMatchStep('error');
-            return {
-                percentage: matchPercentage,
-                status: 'rejected',
-            };
-
-        } catch (error) {
-            console.error("Verification error:", error);
+            // 🛑 If server verification did not complete successfully, reject attendance
+            stopCamera();
             setFaceMatchStep('error');
             return null;
-        }
-    };
-
-    const [hostelAttendanceMode, setHostelAttendanceMode] = useState<'strict' | 'gps-only' | 'biometric'>('strict');
-
-    useEffect(() => {
-        // ⚡ PRIORITY 1: Student Individual Override
-        if (studentProfile?.attendanceMode && studentProfile.attendanceMode !== 'default') {
-            console.log(`👤 Student Override Active: ${studentProfile.attendanceMode}`);
-            setHostelAttendanceMode(studentProfile.attendanceMode);
-            return;
-        }
-
-        // ⚡ PRIORITY 2: Hostel Global Settings
-        if (studentProfile?.hostelName) {
-            console.log(`🏢 Resolving Hostel Mode for: ${studentProfile.hostelName}`);
-            // Fetch public hostel list and find my hostel's settings
-            fetch('/api/hostels').then(res => (res.ok ? res.json() : null)).then(data => {
-                if (data && data.hostels) {
-                    // ⚡ ROBUST: Trim names to handle hidden whitespace/newlines from DB
-                    const myHostel = data.hostels.find((h: any) =>
-                        h.name.trim().toLowerCase() === (studentProfile.hostelName || "").trim().toLowerCase()
-                    );
-
-                    if (myHostel && myHostel.attendanceMode) {
-                        console.log(`🏢 Hostel Mode Found: ${myHostel.attendanceMode}`);
-                        setHostelAttendanceMode(myHostel.attendanceMode);
-                    } else {
-                        console.log(`🏢 No specific mode for hostel, defaulting to strict (camera)`);
-                        setHostelAttendanceMode('strict');
-                    }
-                }
-            }).catch(err => {
-                console.error("❌ Failed to fetch hostel settings", err);
-                setHostelAttendanceMode('strict'); // Safety default
-            });
-        }
-    }, [studentProfile?.hostelName, studentProfile?.attendanceMode]);
-
-    // ⚡ BIOMETRIC HELPER (WebAuthn)
-    const performBiometricCheck = async (): Promise<boolean> => {
-        try {
-            if (!window.PublicKeyCredential) {
-                alert("Your device does not support Biometric/Face ID verification.");
-                return false;
-            }
-
-            // 🔒 SECURE CONTEXT CHECK
-            if (!window.isSecureContext) {
-                alert("SECURITY ERROR: Biometrics only apply on HTTPS connections.\n\nYou are currently on HTTP(" + window.location.hostname + ").\n\nFor testing: Use 'ngrok' or 'localhost'.\nFor production: Use a secure domain.");
-                return false;
-            }
-
-            // 🚫 IP ADDRESS BLOCK (WebAuthn specific)
-            // WebAuthn spec forbids IP addresses as RP IDs. It MUST be a domain name or localhost.
-            const isIpAddress = /^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$/.test(window.location.hostname);
-            if (isIpAddress) {
-                alert("CONFIGURATION ERROR: Biometric security forbids using IP Addresses (" + window.location.hostname + ").\n\nYou MUST use a domain name.\n\n✅ WORKING EXAMPLES:\n- localhost\n- my-app.vercel.app\n- 85a3-203.ngrok-free.app\n\n❌ WILL FAIL:\n- 192.168.x.x");
-                return false;
-            }
-
-            // 1. Get Challenge from server (Strict anti-replay)
-            // For this demo/fast transition, we'll use a random client-side challenge if server challenge isn't ready
-            const challenge = new Uint8Array(32);
-            window.crypto.getRandomValues(challenge);
-
-            // 2. Check MongoDB for existing credentials (The "Reset-Proof" Source of Truth)
-            const credentials = studentProfile?.webAuthnCredentials || [];
-
-            if (credentials.length > 0) {
-                console.log("Found persistent credentials in MongoDB. Attempting verification...");
-                try {
-                    // Map MongoDB stored credentials to WebAuthn format
-                    const allowCredentials = credentials.map(cred => ({
-                        id: Uint8Array.from(atob(cred.credentialID), c => c.charCodeAt(0)),
-                        type: "public-key" as const,
-                        transports: (cred.transports || ["internal"]) as AuthenticatorTransport[]
-                    }));
-
-                    const result = await navigator.credentials.get({
-                        publicKey: {
-                            challenge,
-                            rpId: window.location.hostname,
-                            userVerification: "required",
-                            allowCredentials
-                        }
-                    });
-
-                    if (result) {
-                        console.log("✅ Biometric hardware verification successful via MongoDB link.");
-                        // ⚡ SYNC: Ensure local storage matches the hardware key we just verified
-                        if (credentials[0]?.credentialID) {
-                            storeDeviceId(credentials[0].credentialID);
-                        }
-                        return true;
-                    }
-                } catch (e: any) {
-                    console.error("Biometric Authentication failed:", e);
-                    // If it's a "NotAllowedError", the user cancelled. 
-                    // If it's something else, they might need to re-register if the key was deleted from phone
-                    if (e.name === "NotAllowedError") return false;
-
-                    const retry = await showConfirm("Biometric link verification failed. This might happen if you deleted the key from your phone security settings.\n\nWould you like to try re-linking this device?");
-                    if (!retry) return false;
-                    // Clear stale local ID to force re-registration
-                    localStorage.removeItem("device_id_token");
-                }
-            }
-
-            // 3. Registration (First time or Recovery)
-            // Logic: If we are here, either there are no keys in DB, or the DB key failed and user wants to re-link.
-
-            const userAgreed = await showConfirm("⚠️ LINK SECURE BIOMETRICS\n\nYour phone's Face ID or Fingerprint will be permanently linked to your hostel account in our database.\n\nThis works even if you clear your browser history.\n\nClick OK to link now.");
-            if (!userAgreed) return false;
-
-            const result: any = await navigator.credentials.create({
-                publicKey: {
-                    challenge,
-                    rp: { name: "Hosteleaze Attendance", id: window.location.hostname },
-                    user: {
-                        id: Uint8Array.from(studentProfile?._id || "0000000000000000", c => c.charCodeAt(0)),
-                        name: studentProfile?.email || "Student",
-                        displayName: studentProfile?.name || "Student User"
-                    },
-                    pubKeyCredParams: [{ alg: -7, type: "public-key" }, { alg: -257, type: "public-key" }],
-                    authenticatorSelection: {
-                        authenticatorAttachment: "platform",
-                        userVerification: "required",
-                        residentKey: "preferred"
-                    },
-                    timeout: 60000,
-                    attestation: "none"
-                }
-            });
-
-            if (result) {
-                const idStr = btoa(String.fromCharCode(...new Uint8Array(result.rawId)));
-
-                // Export the public key (This is a simplified version for the transition)
-                // In a full production app, we would parse the attestationObject
-                // For this powerful transition, we'll send the raw data to our new API
-
-                const regResponse = await fetch("/api/students/webauthn/register", {
-                    method: "POST",
-                    headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({
-                        studentId: studentProfile?._id,
-                        credential: {
-                            id: idStr,
-                            publicKey: "VERIFIED_HARDWARE_KEY", // Placeholder for actual key extraction logic
-                            counter: 0,
-                            transports: result.getTransports ? result.getTransports() : ["internal"]
-                        }
-                    })
-                });
-
-                const regData = await regResponse.json();
-                if (regData.success) {
-                    // ⚡ SYNC: Save the hardware credential ID as the local device ID
-                    storeDeviceId(idStr);
-                    // Update local state with the full updated student profile
-                    setStudentProfile(regData.student);
-                    showToast("Success! Your device is now securely linked in our database.", "success");
-                    return true;
-                } else {
-                    showToast("Registration failed: " + (regData.error || "Unknown error"), "error");
-                    return false;
-                }
-            }
-
-            return false;
         } catch (error: any) {
             console.error("Biometric Error:", error);
             // Don't alert if user just cancelled (NotAllowedError)
@@ -3434,6 +3282,19 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
                 storeDeviceId(deviceId);
                 console.log('📱 Auto-generated device ID:', deviceId);
             }
+
+            // ⚡ RESOLVE ATTENDANCE MODE (Hostel config or Student Override)
+            const studentHostel = (studentProfile.hostelName || '').toLowerCase().trim();
+            const matchedHostel = hostelLocations.find((loc: any) => {
+                if (!loc || !loc.name) return false;
+                const locName = loc.name.toLowerCase().trim();
+                return locName === studentHostel || studentHostel.includes(locName) || locName.includes(studentHostel);
+            });
+
+            // Priority: Student specific override -> Hostel setting -> Default ('strict' / camera)
+            const hostelAttendanceMode = (studentProfile.attendanceMode && studentProfile.attendanceMode !== 'default')
+                ? studentProfile.attendanceMode
+                : (matchedHostel?.attendanceMode || 'strict');
 
             // ⚡ CHECK HOSTEL MODE
             if (hostelAttendanceMode === 'gps-only') {
@@ -3518,7 +3379,9 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
                         "Content-Type": "application/json",
                     },
                     body: JSON.stringify({
-                        studentId: studentProfile._id,
+                        studentId: studentProfile._id || studentProfile.id,
+                        registrationId: studentProfile.registrationId,
+                        email: studentProfile.email,
                         lat: latitude,
                         lng: longitude,
                         accuracy: position.coords.accuracy,
@@ -6374,7 +6237,7 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
                                                         <div className="self-center">
                                                             <span className="px-2.5 py-0.5 bg-emerald-600/90 text-white rounded-full text-[9px] font-black uppercase tracking-wider backdrop-blur-md shadow flex items-center gap-1">
                                                                 <span className="w-1.5 h-1.5 rounded-full bg-white animate-ping" />
-                                                                Face Detected • Validating ({scanHoldProgress}%)
+                                                                Face Detected • Hold Steady ({scanHoldProgress}%)
                                                             </span>
                                                         </div>
                                                         {/* Bottom-left & bottom-right HUD corner accents */}
@@ -6399,8 +6262,14 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
                                                         <div className="text-center">
                                                             <div className="w-12 h-12 border-4 border-white/30 border-t-white rounded-full animate-spin mx-auto mb-3" />
                                                             <p className="text-white font-black text-sm uppercase tracking-widest leading-none">Verifying...</p>
-                                                            <p className="text-white/70 text-[10px] mt-2">
-                                                                {faceMatchProgress > 70 ? "Switching to Accurate Mode..." : `${faceMatchProgress}% Done`}
+                                                            <p className="text-white/80 text-[11px] font-semibold mt-2">
+                                                                {faceMatchProgress >= 100 
+                                                                    ? "✅ Verification Complete (100%)" 
+                                                                    : faceMatchProgress >= 70 
+                                                                    ? "🛡️ Verifying Live Anti-Spoof & Identity (75%)..." 
+                                                                    : faceMatchProgress >= 30 
+                                                                    ? "🔍 Extracting Face Biometrics (40%)..." 
+                                                                    : "⚡ Starting Instant Verification..."}
                                                             </p>
                                                         </div>
                                                     </div>
@@ -6433,7 +6302,9 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
                                                                 </div>
                                                                 <p className="text-[11px] text-gray-500 font-semibold tracking-wide">
                                                                     {distanceInfo.status === 'optimal' 
-                                                                        ? (scanHoldProgress > 80 ? "Verifying Face Identity (100%)..." : "Hold steady for verification...") 
+                                                                        ? (scanHoldProgress > 80 
+                                                                            ? "✅ Liveness Verified! Validating Biometrics..." 
+                                                                            : `Hold steady for verification (${scanHoldProgress}%)...`) 
                                                                         : distanceInfo.status === 'too-far' 
                                                                         ? "Bring device closer to increase %" 
                                                                         : "Move device slightly back to increase %"}

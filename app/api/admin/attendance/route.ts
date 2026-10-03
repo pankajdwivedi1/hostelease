@@ -1,10 +1,11 @@
 export const dynamic = "force-dynamic";
 
-import { NextResponse } from "next/server";
+import { NextResponse, NextRequest } from "next/server";
 import { db } from "@/lib/dbAdapter";
 import { cookies } from "next/headers";
+import { createCachedResponse } from "@/lib/cacheHelper";
 
-export async function GET(request: Request) {
+export async function GET(request: NextRequest) {
     try {
         const { searchParams } = new URL(request.url);
         const date = searchParams.get("date"); // Format: YYYY-MM-DD
@@ -36,7 +37,7 @@ export async function GET(request: Request) {
 
         const attendance = await db.attendance.list(filters, { limit });
 
-        return NextResponse.json({ success: true, attendance });
+        return createCachedResponse({ success: true, attendance }, request, 15);
     } catch (error: any) {
         console.error("Error fetching attendance logs:", error);
         return NextResponse.json({ error: error.message }, { status: 500 });

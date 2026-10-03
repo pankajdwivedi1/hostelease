@@ -290,6 +290,20 @@ export async function PUT(request: NextRequest) {
     try {
         const updateData = await request.json();
 
+        // 0. Support custom manual reordering of the billing ledger
+        if (updateData.action === "reorder" && Array.isArray(updateData.logs)) {
+            const reorderedLogs = updateData.logs;
+            await Promise.allSettled([
+                saveBillingLedgerToR2(reorderedLogs),
+                prisma.platformSetting.upsert({
+                    where: { id: 'super_admin_billing_ledger' },
+                    update: { settings: reorderedLogs as any, updatedAt: new Date() },
+                    create: { id: 'super_admin_billing_ledger', settings: reorderedLogs as any, updatedAt: new Date() }
+                })
+            ]);
+            return NextResponse.json({ success: true, logs: reorderedLogs });
+        }
+
         if (!updateData.id) {
             return NextResponse.json({ success: false, error: "Missing invoice ID" }, { status: 400 });
         }
@@ -451,4 +465,8 @@ export async function DELETE(request: NextRequest) {
     } catch (error: any) {
         return NextResponse.json({ success: false, error: error.message }, { status: 500 });
     }
+}
+
+export async function PATCH(request: NextRequest) {
+    return PUT(request);
 }

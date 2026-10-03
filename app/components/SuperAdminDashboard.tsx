@@ -29,7 +29,11 @@ import {
     Loader2,
     Edit3,
     FileText,
-    Cloud
+    Cloud,
+    ArrowUp,
+    ArrowDown,
+    ArrowUpDown,
+    GripVertical
 } from "lucide-react";
 import { generateOfficialInvoicePDF } from "@/lib/invoicePdfGenerator";
 import { formatToDDMMYYYY, formatDateDDMMYYYY, formatDateTimeDDMMYYYY } from "@/lib/dateFormat";
@@ -71,17 +75,16 @@ const LiveDbSwitch = () => {
     useEffect(() => {
         fetch('/api/admin/active-db')
             .then(res => {
-                if (!res.ok) throw new Error("Server returned error");
+                if (!res.ok) return { source: 'RAILWAY' as const };
                 const contentType = res.headers.get("content-type");
                 if (!contentType || !contentType.includes("application/json")) {
-                    throw new Error("Server returned non-JSON response");
+                    return { source: 'RAILWAY' as const };
                 }
                 return res.json();
             })
-            .then(data => setSource(data.source))
-            .catch(err => {
-                console.error("Failed to load active db source, falling back to SUPABASE:", err);
-                setSource('SUPABASE');
+            .then(data => setSource(data?.source || 'RAILWAY'))
+            .catch(() => {
+                setSource('RAILWAY');
             });
     }, []);
 
@@ -640,6 +643,53 @@ export default function SuperAdminDashboard() {
         } finally {
             setLoadingBilling(false);
         }
+    };
+
+    const [isReorderingLedger, setIsReorderingLedger] = useState(false);
+
+    const handleReorderLedger = async (newLogs: any[]) => {
+        setBillingLogs(newLogs);
+        setIsReorderingLedger(true);
+        try {
+            const res = await fetch("/api/super-admin/billing-ledger", {
+                method: "PUT",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ action: "reorder", logs: newLogs })
+            });
+            const data = await res.json();
+            if (data.success) {
+                showToast("Ledger transaction order updated and saved!", "success");
+            } else {
+                showToast(data.error || "Failed to save order", "error");
+                fetchBillingLedger();
+            }
+        } catch (error) {
+            console.error("Failed to reorder ledger", error);
+            showToast("Failed to save ledger order", "error");
+            fetchBillingLedger();
+        } finally {
+            setIsReorderingLedger(false);
+        }
+    };
+
+    const handleMoveRow = (fromIndex: number, toIndex: number) => {
+        if (toIndex < 0 || toIndex >= billingLogs.length || fromIndex === toIndex) return;
+        const updated = [...billingLogs];
+        const [moved] = updated.splice(fromIndex, 1);
+        updated.splice(toIndex, 0, moved);
+        handleReorderLedger(updated);
+    };
+
+    const handleQuickSort = (type: 'date-desc' | 'date-asc' | 'amount-desc') => {
+        const updated = [...billingLogs];
+        if (type === 'date-desc') {
+            updated.sort((a, b) => new Date(b.date || b.createdAt || 0).getTime() - new Date(a.date || a.createdAt || 0).getTime());
+        } else if (type === 'date-asc') {
+            updated.sort((a, b) => new Date(a.date || a.createdAt || 0).getTime() - new Date(b.date || b.createdAt || 0).getTime());
+        } else if (type === 'amount-desc') {
+            updated.sort((a, b) => Number(b.amount || 0) - Number(a.amount || 0));
+        }
+        handleReorderLedger(updated);
     };
 
     // Manual Invoice Generation & Editing State (Boss Control)
@@ -1622,6 +1672,28 @@ export default function SuperAdminDashboard() {
                                         <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest mt-0.5">Logs of all approved payments, complimentary setups, and deferred credits</p>
                                     </div>
                                     <div className="flex flex-wrap items-center gap-2">
+                                        {isReorderingLedger && (
+                                            <span className="text-[9px] font-black text-indigo-600 bg-indigo-50 border border-indigo-100 px-2.5 py-1.5 rounded-lg animate-pulse flex items-center gap-1">
+                                                <Loader2 className="w-3 h-3 animate-spin" /> Saving order...
+                                            </span>
+                                        )}
+                                        <select
+                                            defaultValue=""
+                                            disabled={isReorderingLedger || billingLogs.length <= 1}
+                                            onChange={(e) => {
+                                                if (e.target.value) {
+                                                    handleQuickSort(e.target.value as any);
+                                                    e.target.value = "";
+                                                }
+                                            }}
+                                            className="bg-slate-50 hover:bg-slate-100 text-slate-700 border border-slate-200 px-3 py-2 rounded-xl text-[9px] font-black uppercase tracking-wider transition-all cursor-pointer focus:outline-none"
+                                            title="Quick sort transactions"
+                                        >
+                                            <option value="" disabled>↕ Sort Transactions</option>
+                                            <option value="date-desc">📅 Date: Newest First</option>
+                                            <option value="date-asc">📅 Date: Oldest First</option>
+                                            <option value="amount-desc">💰 Amount: Highest First</option>
+                                        </select>
                                         <button 
                                             onClick={handleRetrieveAllInvoicesFromR2}
                                             disabled={isRetrievingR2}
@@ -1658,6 +1730,7 @@ export default function SuperAdminDashboard() {
                                     <table className="w-full text-left border-collapse text-[10px]">
                                         <thead>
                                             <tr className="border-b border-slate-100 text-slate-400 font-black uppercase tracking-wider text-[8px]">
+                                                <th className="py-3 px-4 w-32">Order / Move</th>
                                                 <th className="py-3 px-4">Date</th>
                                                 <th className="py-3 px-4">College/University</th>
                                                 <th className="py-3 px-4">Students</th>
@@ -1673,10 +1746,71 @@ export default function SuperAdminDashboard() {
                                         <tbody className="divide-y divide-slate-50 font-bold">
                                             {billingLogs.length === 0 ? (
                                                 <tr>
-                                                    <td colSpan={10} className="py-12 text-center text-slate-400 italic">No billing records found.</td>
+                                                    <td colSpan={11} className="py-12 text-center text-slate-400 italic">No billing records found.</td>
                                                 </tr>
                                             ) : billingLogs.map((log: any, idx: number) => (
-                                                <tr key={log.id || idx} className="hover:bg-slate-50 transition-colors">
+                                                <tr 
+                                                    key={log.id || idx} 
+                                                    draggable
+                                                    onDragStart={(e) => { e.dataTransfer.setData("text/plain", idx.toString()); }}
+                                                    onDragOver={(e) => e.preventDefault()}
+                                                    onDrop={(e) => {
+                                                        e.preventDefault();
+                                                        const sourceIdx = parseInt(e.dataTransfer.getData("text/plain"), 10);
+                                                        if (!isNaN(sourceIdx) && sourceIdx !== idx) {
+                                                            handleMoveRow(sourceIdx, idx);
+                                                        }
+                                                    }}
+                                                    className="hover:bg-slate-50 transition-colors group cursor-default"
+                                                >
+                                                    <td className="py-3 px-4 whitespace-nowrap">
+                                                        <div className="flex items-center gap-1.5 bg-slate-50/80 p-1 rounded-lg border border-slate-200/60 w-fit">
+                                                            <div 
+                                                                className="cursor-grab active:cursor-grabbing text-slate-300 hover:text-slate-600 p-0.5" 
+                                                                title="Drag to reorder row"
+                                                            >
+                                                                <GripVertical className="w-3.5 h-3.5" />
+                                                            </div>
+                                                            <div className="flex flex-col gap-0.5">
+                                                                <button
+                                                                    type="button"
+                                                                    onClick={() => handleMoveRow(idx, idx - 1)}
+                                                                    disabled={idx === 0 || isReorderingLedger}
+                                                                    className="p-0.5 rounded hover:bg-slate-200 text-slate-600 disabled:opacity-20 cursor-pointer disabled:cursor-not-allowed transition-all"
+                                                                    title="Move Up (Swap with row above)"
+                                                                >
+                                                                    <ArrowUp className="w-3 h-3" />
+                                                                </button>
+                                                                <button
+                                                                    type="button"
+                                                                    onClick={() => handleMoveRow(idx, idx + 1)}
+                                                                    disabled={idx === billingLogs.length - 1 || isReorderingLedger}
+                                                                    className="p-0.5 rounded hover:bg-slate-200 text-slate-600 disabled:opacity-20 cursor-pointer disabled:cursor-not-allowed transition-all"
+                                                                    title="Move Down (Swap with row below)"
+                                                                >
+                                                                    <ArrowDown className="w-3 h-3" />
+                                                                </button>
+                                                            </div>
+                                                            <select
+                                                                value={idx + 1}
+                                                                disabled={isReorderingLedger}
+                                                                onChange={(e) => {
+                                                                    const targetPos = parseInt(e.target.value, 10);
+                                                                    if (!isNaN(targetPos)) {
+                                                                        handleMoveRow(idx, targetPos - 1);
+                                                                    }
+                                                                }}
+                                                                className="bg-white border border-slate-200 rounded px-1.5 py-0.5 text-[9px] font-black text-indigo-700 focus:outline-none focus:ring-1 focus:ring-indigo-500 cursor-pointer shadow-2xs"
+                                                                title={`Change position (Currently #${idx + 1})`}
+                                                            >
+                                                                {billingLogs.map((_: any, pIdx: number) => (
+                                                                    <option key={pIdx + 1} value={pIdx + 1}>
+                                                                        #{pIdx + 1}
+                                                                    </option>
+                                                                ))}
+                                                            </select>
+                                                        </div>
+                                                    </td>
                                                     <td className="py-3 px-4 text-slate-500 whitespace-nowrap">{formatDateDDMMYYYY(log.date)}</td>
                                                     <td className="py-3 px-4 text-slate-900 font-extrabold">
                                                         <div className="flex items-center gap-1.5">

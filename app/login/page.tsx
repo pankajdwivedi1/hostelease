@@ -637,6 +637,7 @@ function LoginForm() {
 
       if (data.success) {
         document.cookie = "userType=superadmin; path=/; max-age=86400; SameSite=Lax";
+        document.cookie = "tenant-expired=false; path=/; max-age=86400; SameSite=Lax";
         localStorage.setItem("userType", "superadmin");
         router.push("/");
       }

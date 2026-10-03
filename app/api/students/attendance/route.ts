@@ -4,6 +4,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/dbAdapter";
 import { checkRateLimit } from "@/lib/requestLimiter";
 import { formatDateTimeDDMMYYYY } from "@/lib/dateFormat";
+import { assertTenantActive } from "@/lib/tenant";
 
 // Cache for AdminSettings to reduce DB load during peak times
 let cachedAdminSettings: any = null;
@@ -33,12 +34,20 @@ function calculateDistance(
 
 export async function POST(request: NextRequest) {
     try {
+        // 🔒 Subscription Guard: Prevent recording attendance if subscription has ended
+        const subCheck = await assertTenantActive();
+        if (!subCheck.allowed) {
+            return subCheck.response;
+        }
 
         const body = await request.json();
         const {
             studentId,
+            registrationId,
+            email,
             lat,
             lng,
+            accuracy,
             deviceId,
             wifiBSSID,
             verificationMethod,
@@ -49,22 +58,25 @@ export async function POST(request: NextRequest) {
 
         console.log('📥 Attendance Request Received:', {
             studentId,
+            registrationId,
+            email,
             hasWiFi: !!wifiBSSID,
             hasGPS: !!(lat !== undefined && lng !== undefined),
             faceMatch: faceMatchPercentage ? `${faceMatchPercentage}%` : 'N/A',
             deviceId
         });
 
-        // Basic required fields
-        if (!studentId) {
+        // Basic required fields - never strictly depend on firebaseUID or internal ID alone
+        if (!studentId && !registrationId && !email) {
             return NextResponse.json(
-                { error: "Student ID is missing. Please log in again." },
+                { error: "Student identification (Registration ID or Email) is missing. Please log in again." },
                 { status: 400 }
             );
         }
 
         // 🔥 RATE LIMIT CHECK: Prevent connection exhaustion during peak times
-        const { allowed, retryAfter } = checkRateLimit(studentId);
+        const rateLimitKey = registrationId || email || studentId;
+        const { allowed, retryAfter } = checkRateLimit(rateLimitKey);
         if (!allowed) {
             return NextResponse.json(
                 {
@@ -98,20 +110,41 @@ export async function POST(request: NextRequest) {
 
 
         // 1. Fetch Student and Verify Device (⚡ Database Aware)
-        // Using dbAdapter to fetch from active source (Supabase or MongoDB)
-        // We fetch the full student object because getById returns mapped camelCase data
-        const student = await db.students.getById(studentId);
-
-        if (!student) {
-            return NextResponse.json({ error: "Student not found" }, { status: 404 });
+        // User Requirement: Support Registration ID (e.g. BOYS-0001) and Email ID directly
+        let student: any = null;
+        if (registrationId && typeof registrationId === "string" && registrationId.trim()) {
+            const regClean = registrationId.trim().toUpperCase();
+            student = await db.students.findOne({ registrationId: regClean });
+            if (!student) {
+                student = await db.students.findOne({ registrationId: registrationId.trim() });
+            }
+        }
+        if (!student && email && typeof email === "string" && email.trim()) {
+            const emailClean = email.trim().toLowerCase();
+            student = await db.students.findOne({ email: emailClean });
+            if (!student) {
+                student = await db.students.findOne({ email: email.trim() });
+            }
+        }
+        if (!student && studentId && typeof studentId === "string" && studentId.trim()) {
+            student = await db.students.getById(studentId);
+            if (!student) {
+                student = await db.students.findOne({ registrationId: studentId.trim().toUpperCase() }) ||
+                          await db.students.findOne({ email: studentId.trim().toLowerCase() });
+            }
         }
 
+        if (!student) {
+            return NextResponse.json({ error: `Student not found for Registration ID: "${registrationId || 'N/A'}" or Email: "${email || 'N/A'}"` }, { status: 404 });
+        }
+
+        const actualStudentId = (student._id || student.id || studentId).toString();
         const isTester = false;
 
         // 🔥 SECURITY RESTRICTION: Mandatory Check-In First
         // If a student is marked as "out" in the gate system, they must scan the entry QR code 
         // to come "inside" before the daily attendance can be marked.
-        const openGatePass = await db.gatePasses.findOne({ studentId, status: "out" });
+        const openGatePass = await db.gatePasses.findOne({ studentId: actualStudentId, status: "out" });
         const isActuallyOut = student.studentStatus === 'out' || !!openGatePass;
 
         if (!isTester && isActuallyOut) {
@@ -160,7 +193,7 @@ export async function POST(request: NextRequest) {
         }).split('/').reverse().join('-'); // YYYY-MM-DD
 
         // Check for existing attendance in database
-        const existingAttendance = await db.attendance.checkToday(studentId, today);
+        const existingAttendance = await db.attendance.checkToday(actualStudentId, today);
         if (existingAttendance) {
             if (isTester) {
                 // Delete existing attendance for tester to allow re-marking multiple times
@@ -266,7 +299,7 @@ export async function POST(request: NextRequest) {
         const hostelLocations = adminSettings?.hostelLocations || [];
 
         // ✅ FIX: Improved GPS Accuracy Handling
-        const bodyAccuracy = Math.round(body.accuracy || 0);
+        const bodyAccuracy = Math.round(accuracy ?? body.accuracy ?? 0);
         const GPS_ACCURACY_THRESHOLD = 300; // Increased from 200m to 300m for better compatibility
 
         // Check Time Window (IST)
@@ -433,8 +466,10 @@ export async function POST(request: NextRequest) {
 
         // Prepare data (camelCase for internal app usage)
         const attendanceData = {
-            studentId: student._id.toString(), // Ensure string for Supabase
-            firebaseUID: student.firebaseUID,
+            studentId: actualStudentId,
+            registrationId: student.registrationId || registrationId || "",
+            email: student.email || email || "",
+            firebaseUID: student.firebaseUID || "",
             name: student.name,
             hostelName: student.hostelName,
             roomNumber: student.roomNumber,

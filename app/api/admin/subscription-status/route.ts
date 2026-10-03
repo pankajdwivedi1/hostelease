@@ -46,13 +46,22 @@ export async function GET(request: NextRequest) {
         delete safePaymentSettings.razorpayKeySecret;
 
         if (!status) {
-            return NextResponse.json({ success: true, isDefault: true, paymentSettings: safePaymentSettings }, {
+            const res = NextResponse.json({ success: true, isDefault: true, paymentSettings: safePaymentSettings }, {
                 headers: { "Cache-Control": "no-store, max-age=0" }
             });
+            res.cookies.set('tenant-expired', 'false', { path: '/', maxAge: 60 * 60 * 24 * 7, sameSite: 'lax' });
+            return res;
         }
-        return NextResponse.json({ success: true, ...status, paymentSettings: safePaymentSettings }, {
+
+        const res = NextResponse.json({ success: true, ...status, paymentSettings: safePaymentSettings }, {
             headers: { "Cache-Control": "no-store, max-age=0" }
         });
+        res.cookies.set('tenant-expired', status.isExpired ? 'true' : 'false', {
+            path: '/',
+            maxAge: 60 * 60 * 24 * 7,
+            sameSite: 'lax'
+        });
+        return res;
     } catch (error: any) {
         console.error("Subscription status error:", error);
         return NextResponse.json({ success: false, error: error.message }, { status: 500 });

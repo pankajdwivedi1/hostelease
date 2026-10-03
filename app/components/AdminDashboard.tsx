@@ -3479,9 +3479,24 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
   const openHomeLeaveModal = (student: any) => {
     setHomeLeaveModalStudent(student);
     const now = new Date();
-    const tzOffset = now.getTimezoneOffset() * 60000;
-    const localNow = new Date(now.getTime() - tzOffset);
-    const sixDaysLater = new Date(now.getTime() + 6 * 24 * 60 * 60 * 1000 - tzOffset);
+    const sixDaysLater = new Date(now.getTime() + 6 * 24 * 60 * 60 * 1000);
+
+    const formatForInputIST = (d: Date) => {
+      try {
+        const parts = new Intl.DateTimeFormat('en-CA', {
+          timeZone: 'Asia/Kolkata',
+          year: 'numeric', month: '2-digit', day: '2-digit',
+          hour: '2-digit', minute: '2-digit', hour12: false
+        }).formatToParts(d);
+        const get = (type: string) => parts.find(p => p.type === type)?.value || '';
+        return `${get('year')}-${get('month')}-${get('day')}T${get('hour')}:${get('minute')}`;
+      } catch {
+        return d.toISOString().slice(0, 16);
+      }
+    };
+
+    const localNowStr = formatForInputIST(now);
+    const sixDaysLaterStr = formatForInputIST(sixDaysLater);
 
     // ⚡ Pre-populate with student's active approved leave permission if available
     const sId = (student?.id || student?._id)?.toString();
@@ -3493,16 +3508,16 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
     });
 
     if (matchingPerm) {
-      if (matchingPerm.fromDateTime) setHomeLeaveFromDate(new Date(new Date(matchingPerm.fromDateTime).getTime() - tzOffset).toISOString().slice(0, 16));
-      else setHomeLeaveFromDate(localNow.toISOString().slice(0, 16));
+      if (matchingPerm.fromDateTime) setHomeLeaveFromDate(formatForInputIST(new Date(matchingPerm.fromDateTime)));
+      else setHomeLeaveFromDate(localNowStr);
 
-      if (matchingPerm.toDateTime) setHomeLeaveToDate(new Date(new Date(matchingPerm.toDateTime).getTime() - tzOffset).toISOString().slice(0, 16));
-      else setHomeLeaveToDate(sixDaysLater.toISOString().slice(0, 16));
+      if (matchingPerm.toDateTime) setHomeLeaveToDate(formatForInputIST(new Date(matchingPerm.toDateTime)));
+      else setHomeLeaveToDate(sixDaysLaterStr);
 
       setHomeLeaveReason(matchingPerm.reason || "Home Leave");
     } else {
-      setHomeLeaveFromDate(localNow.toISOString().slice(0, 16));
-      setHomeLeaveToDate(sixDaysLater.toISOString().slice(0, 16));
+      setHomeLeaveFromDate(localNowStr);
+      setHomeLeaveToDate(sixDaysLaterStr);
       setHomeLeaveReason(student?.leaveReason || "Home Leave");
     }
     setShowHomeLeaveModal(true);
@@ -6100,7 +6115,7 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
 
   const fetchAttendanceSummary = async () => {
     try {
-      const url = new URL(`/api/admin/attendance-summary?date=${selectedDate}&_t=${Date.now()}`, window.location.origin);
+      const url = new URL(`/api/admin/attendance-summary?date=${selectedDate}`, window.location.origin);
       
       // ⚡ WARDEN FILTER: Automatically scope summary stats to warden's assigned hostels
       if (isWarden) {
@@ -6142,7 +6157,7 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
       const activeFilter = currentTab === "rooms" ? "all" : attendanceHostelFilter;
       
       // Fetch default attendance logs and render instantly
-      const logsUrl = new URL(`/api/admin/attendance?date=${selectedDate}&hostelName=${activeFilter}&_t=${Date.now()}`, window.location.origin);
+      const logsUrl = new URL(`/api/admin/attendance?date=${selectedDate}&hostelName=${activeFilter}`, window.location.origin);
       const logsRes = await fetch(logsUrl.href);
 
       if (logsRes.ok) {
@@ -6164,7 +6179,7 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
   const fetchAnomalyAlertsInBackground = async () => {
     try {
       const activeFilter = currentTab === "rooms" ? "all" : attendanceHostelFilter;
-      const url = new URL(`/api/admin/anomaly-alerts?_t=${Date.now()}`, window.location.origin);
+      const url = new URL('/api/admin/anomaly-alerts', window.location.origin);
       if (isWarden) {
         if (wardenHostelName) url.searchParams.set("hostelName", wardenHostelName);
         if (authorizedHostels && authorizedHostels.length > 0) {
@@ -6189,7 +6204,7 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
     try {
       setAnomalyAlertsLoading(true);
       const activeFilter = currentTab === "rooms" ? "all" : attendanceHostelFilter;
-      const url = new URL(`/api/admin/anomaly-alerts?_t=${Date.now()}`, window.location.origin);
+      const url = new URL('/api/admin/anomaly-alerts', window.location.origin);
       if (isWarden) {
         if (wardenHostelName) url.searchParams.set("hostelName", wardenHostelName);
         if (authorizedHostels && authorizedHostels.length > 0) {
@@ -7131,7 +7146,7 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
           curr.setDate(curr.getDate() + 1);
         }
 
-        const res = await fetch(`/api/admin/attendance?startDate=${selectedDate}&endDate=${selectedEndDate}&hostelName=${attendanceHostelFilter}&limit=50000&_t=${Date.now()}`);
+        const res = await fetch(`/api/admin/attendance?startDate=${selectedDate}&endDate=${selectedEndDate}&hostelName=${attendanceHostelFilter}&limit=50000`);
         const dataJson = await res.json();
         const logs: any[] = dataJson.attendance || [];
 

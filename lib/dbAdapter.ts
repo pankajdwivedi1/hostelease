@@ -955,7 +955,7 @@ export const db = {
             return student ? mapStudentToCamelCase(student) : null;
         },
 
-        list: async (filter: any = {}, options: { light?: boolean; limit?: number; offset?: number; select?: string } = {}) => {
+        list: async (filter: any = {}, options: { light?: boolean; limit?: number; offset?: number; select?: string; includeBiometrics?: boolean } = {}) => {
             let tenantId: string | null = null;
             try {
                 tenantId = await getTenantIdOrThrow();
@@ -1009,9 +1009,9 @@ export const db = {
                 ];
             }
 
-            // ⚡ BANDWIDTH OPTIMIZATION: In light mode (or default list queries), exclude heavy Base64 profile photos and face vectors!
-            const isLight = options.light !== false;
-            const selectFields = isLight ? {
+            // ⚡ BANDWIDTH OPTIMIZATION: Always exclude heavy face vectors and device histories from list queries!
+            // Face vectors are only fetched on-demand when a camera is actively scanning.
+            const selectFields = {
                 id: true,
                 name: true,
                 email: true,
@@ -1049,7 +1049,8 @@ export const db = {
                 tenantId: true,
                 createdAt: true,
                 updatedAt: true,
-            } : undefined;
+                ...(options.includeBiometrics ? { faceDescriptor: true } : {})
+            };
 
 
             let students = await prisma.student.findMany({

@@ -1,4 +1,5 @@
 import { headers } from 'next/headers';
+import { NextResponse } from 'next/server';
 import { cache } from 'react';
 import { prisma } from './prisma';
 
@@ -103,7 +104,7 @@ export const getTenantFromRequest = cache(async () => {
             name: "ORIENTAL GROUP OF INSTITUTES",
             slug: "ogi",
             subscriptionStatus: "active",
-            subscriptionEndDate: "2026-09-01T00:00:00.000Z",
+            subscriptionEndDate: "2028-12-31T23:59:59.999Z",
             isActive: true
         };
     }
@@ -207,10 +208,15 @@ export async function getSubscriptionStatus() {
     let daysRemaining = null;
 
     if (rawEndDate && !isNaN(rawEndDate.getTime())) {
-        // Convert to YYYY-MM-DD in Indian Standard Time (Asia/Kolkata)
-        const istDateStr = rawEndDate.toLocaleDateString("en-CA", { timeZone: "Asia/Kolkata" });
-        // The expiration timestamp is 23:59:59.999 IST (+05:30) of that date
-        endOfDayDate = new Date(`${istDateStr}T23:59:59.999+05:30`);
+        // Extract the calendar date string (YYYY-MM-DD)
+        const iso = rawEndDate.toISOString();
+        const datePart = iso.split('T')[0];
+        // In Indian Standard Time (Asia/Kolkata, +05:30), the subscription expires strictly at 23:59:59.999 IST of that date
+        const istEndOfDay = new Date(`${datePart}T23:59:59.999+05:30`);
+        // If the stored date has non-zero UTC hours (e.g. an exact renewal timestamp later than midnight), use the later of the two
+        endOfDayDate = (rawEndDate.getUTCHours() === 0 && rawEndDate.getUTCMinutes() === 0)
+            ? istEndOfDay
+            : (istEndOfDay.getTime() > rawEndDate.getTime() ? istEndOfDay : rawEndDate);
 
         const diffTime = endOfDayDate.getTime() - now.getTime();
         daysRemaining = Math.max(0, Math.ceil(diffTime / (1000 * 60 * 60 * 24)));
@@ -256,6 +262,29 @@ export async function getSubscriptionStatus() {
         renewalStatus,
         renewalSubmittedAt
     };
+}
+
+/**
+ * Asserts that the current tenant's subscription is active.
+ * Returns an HTTP 403 Forbidden Response if the subscription has ended.
+ */
+export async function assertTenantActive() {
+    const status = await getSubscriptionStatus();
+    if (status && status.isExpired) {
+        return {
+            allowed: false,
+            response: NextResponse.json(
+                {
+                    error: "College subscription has ended. Please contact your administration to renew the service.",
+                    isExpired: true,
+                    subscriptionStatus: status.status,
+                    daysRemaining: 0
+                },
+                { status: 403 }
+            )
+        };
+    }
+    return { allowed: true, status };
 }
 
 /**

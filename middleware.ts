@@ -5,6 +5,27 @@ export function middleware(request: NextRequest) {
     const url = new URL(request.url);
     const pathname = url.pathname;
 
+    // ⚡ BOT & SCRAPER BLOCKING:
+    // Drop aggressive commercial crawlers that waste bandwidth (exempting webhooks and legitimate traffic)
+    const userAgent = (request.headers.get('user-agent') || '').toLowerCase();
+    if (!pathname.startsWith('/api/webhooks')) {
+        const isCommercialBot = 
+            userAgent.includes('ahrefsbot') ||
+            userAgent.includes('semrushbot') ||
+            userAgent.includes('dotbot') ||
+            userAgent.includes('petalbot') ||
+            userAgent.includes('mj12bot') ||
+            userAgent.includes('bytespider') ||
+            userAgent.includes('zoominfobot') ||
+            userAgent.includes('megaindex') ||
+            userAgent.includes('blexbot') ||
+            userAgent.includes('seekport');
+            
+        if (isCommercialBot) {
+            return new NextResponse('Access denied', { status: 403 });
+        }
+    }
+
     const tenantParam = url.searchParams.get('tenant');
     const tenantCookie = request.cookies.get('tenant-slug')?.value;
 
@@ -64,6 +85,40 @@ export function middleware(request: NextRequest) {
         tenantSlug = process.env.NEXT_PUBLIC_TENANT_SLUG || 'ogi';
     }
 
+    // ⚡ 5. GLOBAL EXPIRY INTERCEPTOR:
+    // If the tenant subscription is flagged as expired, immediately block operational APIs for regular users
+    const isExemptRoute =
+        pathname.startsWith('/superadmin') ||
+        pathname.startsWith('/login') ||
+        pathname.startsWith('/auth') ||
+        pathname.startsWith('/api/developer/auth') ||
+        pathname.startsWith('/api/super-admin') ||
+        pathname.startsWith('/api/superadmin') ||
+        pathname.startsWith('/api/admin/active-db') ||
+        pathname.startsWith('/api/admin/subscription-status') ||
+        pathname.startsWith('/api/admin/create-razorpay-order') ||
+        pathname.startsWith('/api/admin/verify-razorpay-payment') ||
+        pathname.startsWith('/api/admin/submit-direct-payment') ||
+        pathname.startsWith('/api/admin/upload-payment-proof') ||
+        pathname.startsWith('/api/admin/billing-history') ||
+        pathname.startsWith('/api/admin/auth') ||
+        pathname.startsWith('/api/bootstrap') ||
+        pathname.startsWith('/api/tenant/config');
+
+    const isExpiredCookie = request.cookies.get('tenant-expired')?.value === 'true';
+    const isSuperAdmin = request.cookies.get('userType')?.value === 'superadmin';
+
+    if (isExpiredCookie && !isSuperAdmin && !isExemptRoute && pathname.startsWith('/api/')) {
+        return NextResponse.json(
+            {
+                error: "College subscription has ended. Please contact your college administration to renew.",
+                isExpired: true,
+                blockedByMiddleware: true
+            },
+            { status: 403 }
+        );
+    }
+
     const requestHeaders = new Headers(request.headers);
     requestHeaders.set('x-tenant-slug', tenantSlug);
     requestHeaders.set('x-url', request.url);
@@ -72,8 +127,8 @@ export function middleware(request: NextRequest) {
         request: { headers: requestHeaders },
     });
 
-    // Persist valid slugs in a cookie (30-day expiry)
-    if (tenantSlug && tenantSlug !== 'default') {
+    // Persist valid slugs in a cookie only if not already set (prevents redundant Set-Cookie headers that break CDN caching)
+    if (tenantSlug && tenantSlug !== 'default' && tenantCookie !== tenantSlug) {
         response.cookies.set('tenant-slug', tenantSlug, {
             path: '/',
             maxAge: 60 * 60 * 24 * 180, // 6 months

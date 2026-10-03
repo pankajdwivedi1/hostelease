@@ -1,11 +1,19 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/dbAdapter";
 import { triggerLeaveVoiceCall } from "@/lib/msg91";
+import { assertTenantActive } from "@/lib/tenant";
+import { parseAsIST } from "@/lib/dateFormat";
 
 export const dynamic = "force-dynamic";
 
 export async function POST(request: NextRequest) {
   try {
+    // 🔒 0. Subscription Guard: Prevent applying for leaves if subscription has ended
+    const subCheck = await assertTenantActive();
+    if (!subCheck.allowed) {
+      return subCheck.response;
+    }
+
     const body = await request.json();
     const { studentId, fromDateTime, toDateTime, reason, requestType } = body;
 
@@ -16,9 +24,9 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Validate that toDateTime is after fromDateTime
-    const fromDate = new Date(fromDateTime);
-    const toDate = new Date(toDateTime);
+    // Validate that toDateTime is after fromDateTime (parsed strictly as IST)
+    const fromDate = parseAsIST(fromDateTime) || new Date(fromDateTime);
+    const toDate = parseAsIST(toDateTime) || new Date(toDateTime);
 
     if (toDate <= fromDate) {
       return NextResponse.json(
@@ -259,6 +267,12 @@ export async function GET(request: NextRequest) {
 
 export async function PATCH(request: NextRequest) {
   try {
+    // 🔒 Subscription Guard: Prevent approvals or edits if subscription has ended
+    const subCheck = await assertTenantActive();
+    if (!subCheck.allowed) {
+      return subCheck.response;
+    }
+
     const body = await request.json();
     const { permissionId, permissionIds, action, isHidden, status, wardenStatus, deanStatus, parentStatus, fromDateTime, toDateTime, reason, role, userType } = body;
 
@@ -306,8 +320,8 @@ export async function PATCH(request: NextRequest) {
         );
       }
 
-      if (fromDateTime) update.fromDateTime = new Date(fromDateTime);
-      if (toDateTime) update.toDateTime = new Date(toDateTime);
+      if (fromDateTime) update.fromDateTime = parseAsIST(fromDateTime) || new Date(fromDateTime);
+      if (toDateTime) update.toDateTime = parseAsIST(toDateTime) || new Date(toDateTime);
       if (reason) update.reason = reason;
 
       const checkFrom = update.fromDateTime || currentPermission.fromDateTime;

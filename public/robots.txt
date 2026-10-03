@@ -1,4 +1,53 @@
+# Allow legitimate search engines to discover the public homepage & policies,
+# but strictly forbid them from crawling private internal app portals and APIs.
+User-agent: Googlebot
+Allow: /
+Allow: /privacy
+Allow: /terms
+Disallow: /api/
+Disallow: /student/
+Disallow: /admin/
+Disallow: /getpass/
+Disallow: /superadmin/
+
+User-agent: Bingbot
+Allow: /
+Allow: /privacy
+Allow: /terms
+Disallow: /api/
+Disallow: /student/
+Disallow: /admin/
+Disallow: /getpass/
+Disallow: /superadmin/
+
+# Block commercial SEO scrapers and bandwidth miners completely
+User-agent: AhrefsBot
+Disallow: /
+
+User-agent: SemrushBot
+Disallow: /
+
+User-agent: DotBot
+Disallow: /
+
+User-agent: Bytespider
+Disallow: /
+
+User-agent: PetalBot
+Disallow: /
+
+User-agent: MJ12bot
+Disallow: /
+
+# General default rule: Disallow access to all private student & admin portals
 User-agent: *
 Allow: /
+Allow: /privacy
+Allow: /terms
+Disallow: /api/
+Disallow: /student/
+Disallow: /admin/
+Disallow: /getpass/
+Disallow: /superadmin/
 
 Sitemap: https://www.hosteleaze.com/sitemap.xml

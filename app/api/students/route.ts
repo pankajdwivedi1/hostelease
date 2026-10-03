@@ -4,11 +4,17 @@ import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/dbAdapter";
 import { jsonWithEtag } from "@/lib/etag";
 import { validators, validateStudentRegistration } from "@/lib/validation";
-import { getCurrentTenantId, getTenantById } from "@/lib/tenant";
+import { getCurrentTenantId, getTenantById, assertTenantActive } from "@/lib/tenant";
 import { writeHostelActivityLog } from "@/lib/auditLog";
 
 export async function POST(request: NextRequest) {
   try {
+    // 🔒 Subscription Guard: Prevent student registration if subscription has ended
+    const subCheck = await assertTenantActive();
+    if (!subCheck.allowed) {
+      return subCheck.response;
+    }
+
     const body = await request.json();
     const tenantId = await getCurrentTenantId();
     const { firebaseUID, supabase_id, name, email, phoneNumber, hostelName, roomNumber, profilePicture, fatherName, fatherNumber, motherName, motherNumber, permanentAddress, homeState, erpInformation, joiningDate, branch, collegeName, year, semester, section, localGuardianAddress, localGuardianPhoneNumber, dob, category, deviceId, faceDescriptor, floorNumber } = body;
@@ -674,11 +680,10 @@ export async function GET(request: NextRequest) {
         if (s.profilePicture && typeof s.profilePicture === 'string' && s.profilePicture.startsWith('data:')) {
           delete s.profilePicture;
         }
-        if (light) {
-          delete s.faceDescriptor;
-          delete s.webAuthnCredentials;
-          delete s.deviceHistory;
-        }
+        // ⚡ CRITICAL BANDWIDTH FIX: Never send heavy 128-float face vectors in general student lists!
+        delete s.faceDescriptor;
+        delete s.webAuthnCredentials;
+        delete s.deviceHistory;
 
       });
 

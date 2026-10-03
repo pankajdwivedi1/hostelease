@@ -5,6 +5,7 @@ import { db, supabase } from "@/lib/dbAdapter";
 import { sendMSG91_GatepassAlert } from "@/lib/msg91";
 import { validators } from "@/lib/validation";
 import { broadcastGateEvent } from "@/lib/eventEmitter";
+import { assertTenantActive } from "@/lib/tenant";
 
 /**
  * Helper: Get IST time and date strings
@@ -35,6 +36,12 @@ function getISTStrings(date: Date) {
  */
 export async function POST(request: NextRequest) {
     try {
+        // 🔒 Subscription Guard: Prevent gate scans if subscription has ended
+        const subCheck = await assertTenantActive();
+        if (!subCheck.allowed) {
+            return subCheck.response;
+        }
+
         const body = await request.json();
         const { qrData, firebaseUID, email, phoneNumber, registrationId, deviceId } = body;
 

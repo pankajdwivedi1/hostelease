@@ -67,25 +67,46 @@ export async function loadFaceApiModels(accurate: boolean = false): Promise<bool
                 return false;
             }
 
-            const MODEL_URL = '/models';
+            // ⚡ CLOUDFLARE R2 CDN OFFLOADING ($0 Railway Bandwidth):
+            // Load Face-API models directly from Cloudflare R2 edge CDN with automatic fallback to local /models
+            const R2_MODELS_URL = 'https://pub-754ab0d29b3a43b69d79a461c85d3056.r2.dev/models';
+            const MODEL_URL = process.env.NEXT_PUBLIC_MODELS_CDN_URL || R2_MODELS_URL;
 
             // Always ensure basic models are there
             if (!liteModelsLoaded) {
-                await fa.nets.tinyFaceDetector.loadFromUri(MODEL_URL);
-                await new Promise(resolve => setTimeout(resolve, 50));
-                await fa.nets.faceLandmark68TinyNet.loadFromUri(MODEL_URL);
-                await new Promise(resolve => setTimeout(resolve, 50));
-                await fa.nets.faceRecognitionNet.loadFromUri(MODEL_URL);
-                await new Promise(resolve => setTimeout(resolve, 50));
+                try {
+                    await fa.nets.tinyFaceDetector.loadFromUri(MODEL_URL);
+                    await new Promise(resolve => setTimeout(resolve, 50));
+                    await fa.nets.faceLandmark68TinyNet.loadFromUri(MODEL_URL);
+                    await new Promise(resolve => setTimeout(resolve, 50));
+                    await fa.nets.faceRecognitionNet.loadFromUri(MODEL_URL);
+                    await new Promise(resolve => setTimeout(resolve, 50));
+                } catch (cdnErr) {
+                    console.warn('⚠️ [Face-API] CDN model load failed, falling back to local /models:', cdnErr);
+                    await fa.nets.tinyFaceDetector.loadFromUri('/models');
+                    await new Promise(resolve => setTimeout(resolve, 50));
+                    await fa.nets.faceLandmark68TinyNet.loadFromUri('/models');
+                    await new Promise(resolve => setTimeout(resolve, 50));
+                    await fa.nets.faceRecognitionNet.loadFromUri('/models');
+                    await new Promise(resolve => setTimeout(resolve, 50));
+                }
                 liteModelsLoaded = true;
             }
 
             if (accurate && !proModelsLoaded) {
                 console.log('💎 Loading High-Accuracy (Pro) Models...');
-                await fa.nets.ssdMobilenetv1.loadFromUri(MODEL_URL);
-                await new Promise(resolve => setTimeout(resolve, 50));
-                await fa.nets.faceLandmark68Net.loadFromUri(MODEL_URL);
-                await new Promise(resolve => setTimeout(resolve, 50));
+                try {
+                    await fa.nets.ssdMobilenetv1.loadFromUri(MODEL_URL);
+                    await new Promise(resolve => setTimeout(resolve, 50));
+                    await fa.nets.faceLandmark68Net.loadFromUri(MODEL_URL);
+                    await new Promise(resolve => setTimeout(resolve, 50));
+                } catch (cdnErr) {
+                    console.warn('⚠️ [Face-API] CDN Pro model load failed, falling back to local /models:', cdnErr);
+                    await fa.nets.ssdMobilenetv1.loadFromUri('/models');
+                    await new Promise(resolve => setTimeout(resolve, 50));
+                    await fa.nets.faceLandmark68Net.loadFromUri('/models');
+                    await new Promise(resolve => setTimeout(resolve, 50));
+                }
                 proModelsLoaded = true;
             }
 
@@ -257,7 +278,7 @@ export function detectMobileScreenDisplay(
                 const prevB = data[i - 2];
                 const prevBrightness = 0.299 * prevR + 0.587 * prevG + 0.114 * prevB;
                 const diff = Math.abs(brightness - prevBrightness);
-                if (diff > 35) {
+                if (diff > 25) {
                     highFreqGridDiffs++;
                 }
             }
@@ -266,14 +287,47 @@ export function detectMobileScreenDisplay(
         const glareRatio = saturatedPixelCount / totalPixels;
         const moireRatio = highFreqGridDiffs / totalPixels;
 
-        // Calibrated threshold: Real skin highlights under ceiling bulbs usually occupy 2-5%. Flat screen glare occupies > 9.5%.
-        if (glareRatio > 0.095) {
+        // Calibrated threshold: Real skin highlights under ceiling bulbs occupy 0.5-2%. Flat glass screen glare occupies > 4.5%.
+        if (glareRatio > 0.045) {
             return { isSpoof: true, reason: "Mobile Device Screen Glare Detected. Please present your real physical face." };
         }
 
-        // Calibrated threshold: Natural facial hair/edges stay below 18%. Digital LCD/OLED raster grid patterns exceed 22%.
-        if (moireRatio > 0.22) {
+        // Calibrated threshold: Natural facial skin stays below 10%. Digital LCD/OLED raster grid patterns exceed 12%.
+        if (moireRatio > 0.12) {
             return { isSpoof: true, reason: "Digital Display / Screen Grid Pattern Detected. Please present your real physical face." };
+        }
+
+        // 🛡️ MOBILE PHONE BEZEL / CASING DETECTION:
+        // Analyzes the margin surrounding the face to detect dark phone borders/hand enclosing the screen
+        const marginX = Math.floor(bw * 0.22);
+        const marginY = Math.floor(bh * 0.22);
+        const outerX = Math.max(0, bx - marginX);
+        const outerY = Math.max(0, by - marginY);
+        const outerW = Math.min(width - outerX, bw + marginX * 2);
+        const outerH = Math.min(height - outerY, bh + marginY * 2);
+
+        if (outerW > bw + 10 && outerH > bh + 10) {
+            const outerData = ctx.getImageData(outerX, outerY, outerW, outerH).data;
+            let darkBorderPixels = 0;
+            let totalBorderPixels = 0;
+
+            for (let y = 0; y < outerH; y++) {
+                for (let x = 0; x < outerW; x++) {
+                    const isBorderRegion = (x < marginX || x >= outerW - marginX || y < marginY || y >= outerH - marginY);
+                    if (isBorderRegion) {
+                        const idx = (y * outerW + x) * 4;
+                        const br = 0.299 * outerData[idx] + 0.587 * outerData[idx + 1] + 0.114 * outerData[idx + 2];
+                        if (br < 40) darkBorderPixels++;
+                        totalBorderPixels++;
+                    }
+                }
+            }
+
+            const borderDarkRatio = totalBorderPixels > 0 ? darkBorderPixels / totalBorderPixels : 0;
+            // Phone casing/bezels are dark (> 48% dark border pixels around an illuminated face)
+            if (borderDarkRatio > 0.48) {
+                return { isSpoof: true, reason: "Mobile Phone Border / Case Detected! Please present your real physical face directly." };
+            }
         }
 
         return { isSpoof: false };
@@ -695,6 +749,121 @@ export function analyzeLiveness(landmarks: any) {
 }
 
 /**
+ * Liveness Tracker: Detects natural eye blinks and static 2D images
+ * Distinguishes living humans from printed photos, mobile screens, and static proxies.
+ */
+export class LivenessTracker {
+    private earHistory: number[] = [];
+    private blinkCount: number = 0;
+    private eyeClosedStart: number | null = null;
+    private hasValidBlink: boolean = false;
+    private baselineEAR: number = 0.30;
+    private frameCount: number = 0;
+
+    public reset() {
+        this.earHistory = [];
+        this.blinkCount = 0;
+        this.eyeClosedStart = null;
+        this.hasValidBlink = false;
+        this.baselineEAR = 0.30;
+        this.frameCount = 0;
+    }
+
+    public update(landmarks: any): {
+        hasBlinked: boolean;
+        isStaticImage: boolean;
+        ear: number;
+        yaw: number;
+        guidance: string;
+        blinkCount: number;
+    } {
+        this.frameCount++;
+        const data = analyzeLiveness(landmarks);
+        if (!data) {
+            return {
+                hasBlinked: this.hasValidBlink,
+                isStaticImage: false,
+                ear: 0,
+                yaw: 0,
+                guidance: "Align face inside camera view",
+                blinkCount: this.blinkCount
+            };
+        }
+
+        const now = Date.now();
+        const { ear, yaw } = data;
+
+        this.earHistory.push(ear);
+        if (this.earHistory.length > 50) this.earHistory.shift();
+
+        // Dynamically calibrate open eye baseline EAR from highest non-erratic readings
+        if (this.earHistory.length >= 5) {
+            const sorted = [...this.earHistory].filter(e => e > 0.22 && e < 0.45).sort((a, b) => a - b);
+            if (sorted.length > 0) {
+                this.baselineEAR = sorted[Math.floor(sorted.length * 0.75)];
+            }
+        }
+
+        // Blink Detection Logic:
+        // Eye is closed if EAR drops below 0.21 OR below 68% of the baseline open-eye EAR
+        const closeThreshold = Math.min(0.21, this.baselineEAR * 0.68);
+        const openThreshold = Math.max(0.24, this.baselineEAR * 0.85);
+
+        if (ear < closeThreshold) {
+            if (this.eyeClosedStart === null) {
+                this.eyeClosedStart = now;
+            }
+        } else if (ear > openThreshold && this.eyeClosedStart !== null) {
+            const closureDuration = now - this.eyeClosedStart;
+            // Real human blink duration is 70ms - 600ms
+            if (closureDuration >= 70 && closureDuration <= 600) {
+                this.blinkCount++;
+                this.hasValidBlink = true;
+            }
+            this.eyeClosedStart = null;
+        }
+
+        // Static 2D Image Check:
+        // A printed photo or phone screen held still has mathematically near-zero variance in EAR over 2+ seconds
+        let isStaticImage = false;
+        if (this.earHistory.length >= 22 && !this.hasValidBlink) {
+            const minEAR = Math.min(...this.earHistory);
+            const maxEAR = Math.max(...this.earHistory);
+            const earVariance = maxEAR - minEAR;
+
+            // If eye aspect ratio has practically zero deviation across 22+ frames
+            if (earVariance < 0.016) {
+                isStaticImage = true;
+            }
+        }
+
+        let guidance = "👁️ Please BLINK your eyes to verify liveness";
+        if (this.hasValidBlink) {
+            guidance = "✅ Liveness Verified! Validating...";
+        } else if (isStaticImage) {
+            guidance = "⚠️ Static photo detected! Please blink naturally.";
+        }
+
+        return {
+            hasBlinked: this.hasValidBlink,
+            isStaticImage,
+            ear,
+            yaw,
+            guidance,
+            blinkCount: this.blinkCount
+        };
+    }
+
+    public isLivenessPassed(): boolean {
+        return this.hasValidBlink;
+    }
+
+    public getBlinkCount(): number {
+        return this.blinkCount;
+    }
+}
+
+/**
  * Export raw distance calculator with length validation
  */
 export async function getDistance(descriptor1: any, descriptor2: any): Promise<number | null> {
@@ -725,27 +894,50 @@ export async function getDistance(descriptor1: any, descriptor2: any): Promise<n
  */
 export async function loadImage(source: string | File): Promise<HTMLImageElement> {
     return new Promise((resolve, reject) => {
-        const img = new Image();
-        img.crossOrigin = 'anonymous';
+        const tryLoad = (srcUrl: string | File, isRetry = false) => {
+            const img = new Image();
+            img.crossOrigin = 'anonymous';
 
-        img.onload = () => resolve(img);
-        img.onerror = (err) => {
-            console.error("Failed to load image:", source);
-            reject(err);
+            img.onload = () => resolve(img);
+            img.onerror = (err) => {
+                // If direct load or cache collision fails, retry via /api/image-proxy
+                if (typeof srcUrl === 'string' && !isRetry && !srcUrl.startsWith('data:') && !srcUrl.startsWith('blob:')) {
+                    const cleanUrl = srcUrl.split('?cors=')[0].split('&cors=')[0];
+                    const proxyUrl = `/api/image-proxy?url=${encodeURIComponent(cleanUrl)}`;
+                    console.warn(`🔄 Direct image load failed, retrying via secure image proxy: ${proxyUrl}`);
+                    tryLoad(proxyUrl, true);
+                    return;
+                }
+                console.error("Failed to load image:", source);
+                reject(err);
+            };
+
+            if (typeof srcUrl === 'string') {
+                if (srcUrl.startsWith('http://') || srcUrl.startsWith('https://')) {
+                    // Prevent Chrome's "cached without CORS" collision by appending ?cors=true
+                    // If it's already a proxy URL, use as is
+                    if (!srcUrl.includes('/api/image-proxy') && !srcUrl.includes('cors=')) {
+                        const separator = srcUrl.includes('?') ? '&' : '?';
+                        img.src = `${srcUrl}${separator}cors=true`;
+                    } else {
+                        img.src = srcUrl;
+                    }
+                } else {
+                    img.src = srcUrl;
+                }
+            } else {
+                const reader = new FileReader();
+                reader.onload = (e) => {
+                    if (e.target?.result) {
+                        img.src = e.target.result as string;
+                    }
+                };
+                reader.onerror = reject;
+                reader.readAsDataURL(srcUrl);
+            }
         };
 
-        if (typeof source === 'string') {
-            img.src = source;
-        } else {
-            const reader = new FileReader();
-            reader.onload = (e) => {
-                if (e.target?.result) {
-                    img.src = e.target.result as string;
-                }
-            };
-            reader.onerror = reject;
-            reader.readAsDataURL(source);
-        }
+        tryLoad(source);
     });
 }
 

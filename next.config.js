@@ -134,6 +134,36 @@ const nextConfig = {
                     },
                 ],
             },
+            {
+                // ⚡ Public legal / policy pages
+                source: '/:path(terms|privacy)',
+                headers: [
+                    {
+                        key: 'Cache-Control',
+                        value: 'public, max-age=86400, stale-while-revalidate=604800',
+                    },
+                ],
+            },
+            {
+                // ⚡ Client App Shell for root homepage: Cache at CDN edge while revalidating
+                source: '/',
+                headers: [
+                    {
+                        key: 'Cache-Control',
+                        value: 'public, max-age=0, s-maxage=86400, stale-while-revalidate=86400',
+                    },
+                ],
+            },
+            {
+                // ⚡ Client App Shell for login page: Cache at CDN edge while revalidating
+                source: '/login',
+                headers: [
+                    {
+                        key: 'Cache-Control',
+                        value: 'public, max-age=0, s-maxage=86400, stale-while-revalidate=86400',
+                    },
+                ],
+            },
         ];
     },
     webpack: (config, { isServer }) => {
@@ -142,6 +172,14 @@ const nextConfig = {
                 ...config.output,
                 chunkLoadTimeout: 300000, // 5 minutes timeout for async chunks (avoids ChunkLoadError on slow WiFi/hotspot dev)
             };
+            config.resolve.fallback = {
+                ...(config.resolve.fallback || {}),
+                canvas: false,
+                'onnxruntime-node': false,
+                encoding: false,
+            };
+        } else {
+            config.externals = [...(config.externals || []), 'canvas', 'onnxruntime-node', 'face-api.js'];
         }
         return config;
     },

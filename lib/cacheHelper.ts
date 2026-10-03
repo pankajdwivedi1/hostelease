@@ -32,7 +32,7 @@ export function createCachedResponse(
                         status: 304,
                         headers: {
                             "ETag": etag,
-                            "Cache-Control": `private, max-age=${maxAgeSeconds}, stale-while-revalidate=${maxAgeSeconds * 2}`,
+                            "Cache-Control": "private, no-cache, must-revalidate",
                             "Access-Control-Allow-Origin": "*",
                         },
                     });
@@ -45,7 +45,7 @@ export function createCachedResponse(
             headers: {
                 "Content-Type": "application/json",
                 "ETag": etag,
-                "Cache-Control": `private, max-age=${maxAgeSeconds}, stale-while-revalidate=${maxAgeSeconds * 2}`,
+                "Cache-Control": "private, no-cache, must-revalidate",
                 "Access-Control-Allow-Origin": "*",
             },
         });

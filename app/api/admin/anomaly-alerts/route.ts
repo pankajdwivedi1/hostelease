@@ -13,6 +13,7 @@ export const dynamic = "force-dynamic";
 
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/dbAdapter";
+import { createCachedResponse } from "@/lib/cacheHelper";
 
 const CONSECUTIVE_ABSENT_THRESHOLD = 3; // Alert after 3 consecutive absences
 
@@ -132,7 +133,7 @@ export async function GET(request: NextRequest) {
             }
         }
 
-        return NextResponse.json({
+        return createCachedResponse({
             success: true,
             alerts,
             checkedStudents: students.length,
@@ -140,7 +141,7 @@ export async function GET(request: NextRequest) {
             message: alerts.length === 0
                 ? "✅ No attendance anomalies detected"
                 : `⚠️ ${alerts.length} student(s) absent for ${CONSECUTIVE_ABSENT_THRESHOLD}+ consecutive days`,
-        });
+        }, request, 30);
 
     } catch (error: any) {
         console.error("[ANOMALY ALERTS] Error:", error);

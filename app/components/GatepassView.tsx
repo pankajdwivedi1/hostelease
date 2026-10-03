@@ -494,7 +494,7 @@ export default function GatepassView({ onClose }: { onClose?: () => void }) {
 
     const fetchLiveData = useCallback(async (isMinimal = false) => {
         try {
-            const res = await fetch(`/api/getpass/live?minimal=${isMinimal}&t=${Date.now()}`);
+            const res = await fetch(`/api/getpass/live?minimal=${isMinimal}`);
             if (!res.ok) return;
             const data = await res.json();
 

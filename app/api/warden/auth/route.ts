@@ -2,11 +2,18 @@ export const dynamic = "force-dynamic";
 
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/dbAdapter";
+import { assertTenantActive } from "@/lib/tenant";
 
 const DEFAULT_WARDEN_PASSWORD = "warden456";
 
 export async function POST(request: NextRequest) {
     try {
+        // 🔒 Subscription Guard: Prevent warden login if subscription has ended
+        const subCheck = await assertTenantActive();
+        if (!subCheck.allowed) {
+            return subCheck.response;
+        }
+
         const body = await request.json();
         const { password, hostelId } = body;
 
