@@ -2152,14 +2152,11 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
   // Audit States
   const [auditResults, setAuditResults] = useState<any[]>([]);
   const [isAuditing, setIsAuditing] = useState(false);
-  const [activeAuditType, setActiveAuditType] = useState<"phone" | "regid" | "erpid" | "gibberish" | "face" | null>(null);
-  const [selectedFaceAuditIds, setSelectedFaceAuditIds] = useState<string[]>([]);
-  const [faceAuditFilter, setFaceAuditFilter] = useState<"all" | "blank" | "no_face" | "multiple_faces" | "missing_vector" | "photo_of_photo" | "blurry" | "flagged">("all");
-  const [isFlaggingRetake, setIsFlaggingRetake] = useState(false);
-  const [isBackfillingVectors, setIsBackfillingVectors] = useState(false);
-  const [isScanningBlur, setIsScanningBlur] = useState(false);
-  const [blurScanProgress, setBlurScanProgress] = useState(0);
-  const [blurThreshold, setBlurThreshold] = useState(85);
+  const [activeAuditType, setActiveAuditType] = useState<"phone" | "regid" | "erpid" | "gibberish" | "biometrics" | null>(null);
+  const [biometricAuditHostel, setBiometricAuditHostel] = useState<string>("ALL");
+  const [biometricAuditSemester, setBiometricAuditSemester] = useState<string>("ALL");
+  const [selectedBiometricStudentIds, setSelectedBiometricStudentIds] = useState<string[]>([]);
+  const [isFlaggingBiometricRetake, setIsFlaggingBiometricRetake] = useState(false);
 
   // MERGED WARDEN ACCOUNTS STATE
   const [wardenAccounts, setWardenAccounts] = useState<{ _id?: string, username: string, password?: string, hostels: string[] }[]>([]);
@@ -4626,555 +4623,45 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
     }
   };
 
-  const analyzeImageQuality = async (imgSrc: string, hasVector: boolean): Promise<{
-    isPoorQuality: boolean;
-    issueType: "BLANK_PHOTO" | "MISSING_VECTOR" | "PHOTO_OF_PHOTO" | "BLURRY_PHOTO" | "CLEAN";
-    issueLabel: string;
-    sharpnessScore: number;
-    borderScore: number;
-    isPhotoOfPhoto: boolean;
-    isBlurry: boolean;
-    canvasElement: HTMLCanvasElement | null;
-  }> => {
-    const trimmed = (imgSrc || "").trim();
-    const isBlankInput = !trimmed || trimmed === "null" || trimmed === "undefined" || trimmed === "data:," || trimmed.length < 15;
-
-    if (isBlankInput) {
-      return {
-        isPoorQuality: true,
-        issueType: "BLANK_PHOTO",
-        issueLabel: "Blank / Missing Photo",
-        sharpnessScore: 0,
-        borderScore: 0,
-        isPhotoOfPhoto: false,
-        isBlurry: false,
-        canvasElement: null
-      };
-    }
-
-    // Helper to load image directly into clean browser memory as a Blob URL (Guarantees untainted canvas & 0 WebGL security errors)
-    const loadBrowserImage = async (): Promise<HTMLImageElement | null> => {
-      // 1. Helper to load a Blob URL into an Image
-      const loadFromBlobUrl = (blobUrl: string): Promise<HTMLImageElement | null> => {
-        return new Promise((resolve) => {
-          const img = new Image();
-          img.onload = () => resolve(img);
-          img.onerror = () => resolve(null);
-          img.src = blobUrl;
-        });
-      };
-
-      // 2. If base64 data URL (inherently same-origin, untainted)
-      if (trimmed.startsWith('data:image')) {
-        return new Promise((resolve) => {
-          const img = new Image();
-          img.onload = () => resolve(img);
-          img.onerror = () => resolve(null);
-          img.src = trimmed;
-        });
-      }
-
-      // 3. If remote HTTP/HTTPS (e.g. Cloudflare R2 bucket)
-      if (trimmed.startsWith('http://') || trimmed.startsWith('https://')) {
-        // Step A: Direct browser fetch with CORS (Zero Server Bandwidth, direct from Cloudflare)
-        try {
-          const res = await fetch(trimmed, { mode: 'cors' });
-          if (res.ok) {
-            const blob = await res.blob();
-            if (blob.size > 50) {
-              const blobUrl = URL.createObjectURL(blob);
-              const img = await loadFromBlobUrl(blobUrl);
-              if (img) return img;
-            }
-          }
-        } catch {
-          // Direct fetch had CORS header mismatch on client; fallback to Step B & C
-        }
-
-        // Step B: Direct Image object with crossOrigin = "anonymous"
-        try {
-          const img = await new Promise<HTMLImageElement | null>((resolve) => {
-            const i = new Image();
-            i.crossOrigin = "anonymous";
-            i.onload = () => resolve(i);
-            i.onerror = () => resolve(null);
-            i.src = trimmed;
-          });
-          if (img) return img;
-        } catch {}
-
-        // Step C: Fallback to same-origin image proxy as a clean Blob (Guarantees untainted canvas on localhost)
-        try {
-          const proxyUrl = `/api/image-proxy?url=${encodeURIComponent(trimmed)}`;
-          const res = await fetch(proxyUrl);
-          if (res.ok) {
-            const blob = await res.blob();
-            if (blob.size > 50) {
-              const blobUrl = URL.createObjectURL(blob);
-              const img = await loadFromBlobUrl(blobUrl);
-              if (img) return img;
-            }
-          }
-        } catch {}
-
-        return null;
-      }
-
-      // 4. Relative URLs like /api/uploads/
-      try {
-        const res = await fetch(trimmed);
-        if (res.ok) {
-          const blob = await res.blob();
-          if (blob.size > 50) {
-            const blobUrl = URL.createObjectURL(blob);
-            const img = await loadFromBlobUrl(blobUrl);
-            if (img) return img;
-          }
-        }
-      } catch {}
-
-      return new Promise<HTMLImageElement | null>((resolve) => {
-        const img = new Image();
-        img.onload = () => resolve(img);
-        img.onerror = () => resolve(null);
-        img.src = trimmed;
-      });
-    };
-
-    const img = await loadBrowserImage();
-
-    if (!img || img.width === 0 || img.height === 0) {
-      return {
-        isPoorQuality: true,
-        issueType: "BLANK_PHOTO",
-        issueLabel: "Missing / Broken Photo",
-        sharpnessScore: 0,
-        borderScore: 0,
-        isPhotoOfPhoto: false,
-        isBlurry: false,
-        canvasElement: null
-      };
-    }
-
+  const handleAudit = async (type: "duplicates-phone" | "duplicates-regid" | "duplicates-erpid" | "gibberish-names" | "biometrics") => {
     try {
-      const canvas = document.createElement("canvas");
-      const w = 320;
-      const h = 320;
-      canvas.width = w;
-      canvas.height = h;
-      const ctx = canvas.getContext("2d", { willReadFrequently: true });
-      if (!ctx) {
-        return {
-          isPoorQuality: !hasVector,
-          issueType: hasVector ? "CLEAN" : "MISSING_VECTOR",
-          issueLabel: hasVector ? "Clean" : "Missing Vector",
-          sharpnessScore: 85,
-          borderScore: 0,
-          isPhotoOfPhoto: false,
-          isBlurry: false,
-          canvasElement: null
-        };
-      }
-
-      ctx.drawImage(img, 0, 0, w, h);
-
-      let imgData: ImageData;
-      try {
-        imgData = ctx.getImageData(0, 0, w, h);
-      } catch {
-        // If canvas is tainted by browser security policy on external domain, 
-        // the photo is visibly valid (not blank!), so we return it safely as a valid photo
-        return {
-          isPoorQuality: !hasVector,
-          issueType: hasVector ? "CLEAN" : "MISSING_VECTOR",
-          issueLabel: hasVector ? "✓ Clean (Cloudflare Direct)" : "Missing Vector",
-          sharpnessScore: 80,
-          borderScore: 0,
-          isPhotoOfPhoto: false,
-          isBlurry: false,
-          canvasElement: canvas
-        };
-      }
-
-      const data = imgData.data;
-
-      // 1. Grayscale & Global Statistical Analysis (Blank/Solid Check)
-      const gray = new Float32Array(w * h);
-      let sumLuma = 0;
-      let sumSqLuma = 0;
-      let darkPixels = 0;
-      let blownPixels = 0;
-
-      for (let i = 0; i < data.length; i += 4) {
-        const r = data[i];
-        const g = data[i + 1];
-        const b = data[i + 2];
-        const luma = 0.299 * r + 0.587 * g + 0.114 * b;
-        const idx = i >> 2;
-        gray[idx] = luma;
-        sumLuma += luma;
-        sumSqLuma += luma * luma;
-        if (luma < 10) darkPixels++;
-        if (luma > 248) blownPixels++;
-      }
-
-      const totalPixels = w * h;
-      const meanLuma = sumLuma / totalPixels;
-      const lumaVariance = Math.max(0, (sumSqLuma / totalPixels) - (meanLuma * meanLuma));
-      const lumaStdDev = Math.sqrt(lumaVariance);
-
-      // Check for entirely blank / solid black / solid white frame
-      if (lumaStdDev < 6.0 || (darkPixels > (totalPixels * 0.92) && meanLuma < 10) || (blownPixels > (totalPixels * 0.92) && meanLuma > 248)) {
-        return {
-          isPoorQuality: true,
-          issueType: "BLANK_PHOTO",
-          issueLabel: "Blank / Solid Frame",
-          sharpnessScore: 0,
-          borderScore: 0,
-          isPhotoOfPhoto: false,
-          isBlurry: false,
-          canvasElement: canvas
-        };
-      }
-
-      // 2. "Photo of a Photo" Detection (Phone screen bezel and physical held card borders)
-      const margin = 20;
-      let topLuma = 0, bottomLuma = 0, leftLuma = 0, rightLuma = 0;
-      let topCount = 0, bottomCount = 0, leftCount = 0, rightCount = 0;
-
-      for (let y = 0; y < margin; y++) {
-        for (let x = 0; x < w; x++) { topLuma += gray[y * w + x]; topCount++; }
-      }
-      for (let y = h - margin; y < h; y++) {
-        for (let x = 0; x < w; x++) { bottomLuma += gray[y * w + x]; bottomCount++; }
-      }
-      for (let x = 0; x < margin; x++) {
-        for (let y = margin; y < h - margin; y++) { leftLuma += gray[y * w + x]; leftCount++; }
-      }
-      for (let x = w - margin; x < w; x++) {
-        for (let y = margin; y < h - margin; y++) { rightLuma += gray[y * w + x]; rightCount++; }
-      }
-
-      const avgTop = topLuma / topCount;
-      const avgBottom = bottomLuma / bottomCount;
-      const avgLeft = leftLuma / leftCount;
-      const avgRight = rightLuma / rightCount;
-
-      let centerLuma = 0, centerCount = 0;
-      for (let y = Math.floor(h * 0.25); y < Math.floor(h * 0.75); y++) {
-        for (let x = Math.floor(w * 0.25); x < Math.floor(w * 0.75); x++) {
-          centerLuma += gray[y * w + x];
-          centerCount++;
-        }
-      }
-      const avgCenter = centerLuma / centerCount;
-
-      // 1. Phone Bezel Framing:
-      // Dark phone chassis on at least 3 outer margins (< 40 luma) with bright inner display (> 50 luma contrast)
-      const isDarkPhoneBezel = (
-        ((avgTop < 40 ? 1 : 0) + (avgBottom < 40 ? 1 : 0) + (avgLeft < 40 ? 1 : 0) + (avgRight < 40 ? 1 : 0) >= 3) &&
-        (avgCenter - Math.min(avgTop, avgLeft, avgRight, avgBottom) > 50)
-      );
-
-      // 2. Physical Card Border Detection:
-      // A physical passport photo held by fingers has continuous border lines on both sides and top
-      let topCardLines = 0;
-      for (let y = 25; y < 80; y++) {
-        let count = 0;
-        for (let x = 35; x < w - 35; x++) {
-          if (Math.abs(gray[y * w + x] - gray[(y - 3) * w + x]) > 20) count++;
-        }
-        if (count > (w - 70) * 0.45) topCardLines++;
-      }
-
-      let leftCardLines = 0;
-      for (let x = 14; x < 55; x++) {
-        let count = 0;
-        for (let y = 35; y < h - 35; y++) {
-          if (Math.abs(gray[y * w + x] - gray[y * w + (x - 3)]) > 20) count++;
-        }
-        if (count > (h - 70) * 0.45) leftCardLines++;
-      }
-
-      let rightCardLines = 0;
-      for (let x = w - 55; x < w - 14; x++) {
-        let count = 0;
-        for (let y = 35; y < h - 35; y++) {
-          if (Math.abs(gray[y * w + x] - gray[y * w + (x + 3)]) > 20) count++;
-        }
-        if (count > (h - 70) * 0.45) rightCardLines++;
-      }
-
-      const isPhysicalCardInHand = topCardLines >= 2 && leftCardLines >= 2 && rightCardLines >= 2;
-      const isPhotoOfPhoto = isDarkPhoneBezel || isPhysicalCardInHand;
-      const borderScore = isPhotoOfPhoto ? 95 : 0;
-
-      // 3. Calibrated Facial Core Micro-Sharpness
-      const startY = Math.floor(h * 0.20);
-      const endY = Math.floor(h * 0.70);
-      const startX = Math.floor(w * 0.20);
-      const endX = Math.floor(w * 0.80);
-
-      let lapSum = 0;
-      let lapSumSq = 0;
-      let lapCount = 0;
-      const edgeHist = new Uint16Array(512);
-      let totalEdgeCount = 0;
-
-      for (let y = startY; y < endY; y++) {
-        const yw = y * w;
-        for (let x = startX; x < endX; x++) {
-          const idx = yw + x;
-          const lap = (
-            8 * gray[idx] -
-            gray[idx - w - 1] - gray[idx - w] - gray[idx - w + 1] -
-            gray[idx - 1] - gray[idx + 1] -
-            gray[idx + w - 1] - gray[idx + w] - gray[idx + w + 1]
-          );
-          lapSum += lap;
-          lapSumSq += lap * lap;
-          lapCount++;
-
-          const gx = (
-            gray[idx - w + 1] + 2 * gray[idx + 1] + gray[idx + w + 1] -
-            (gray[idx - w - 1] + 2 * gray[idx - 1] + gray[idx + w - 1])
-          );
-          const gy = (
-            gray[idx + w - 1] + 2 * gray[idx + w] + gray[idx + w + 1] -
-            (gray[idx - w - 1] + 2 * gray[idx - 1] + gray[idx - w + 1])
-          );
-          const edgeMag = Math.min(511, Math.round(Math.sqrt(gx * gx + gy * gy)));
-          edgeHist[edgeMag]++;
-          totalEdgeCount++;
-        }
-      }
-
-      const lapMean = lapSum / Math.max(1, lapCount);
-      const lapVariance = Math.max(0, (lapSumSq / Math.max(1, lapCount)) - (lapMean * lapMean));
-
-      let cumulative = 0;
-      const p95Threshold = totalEdgeCount * 0.95;
-      let p95 = 0;
-      for (let k = 0; k < 512; k++) {
-        cumulative += edgeHist[k];
-        if (cumulative >= p95Threshold) {
-          p95 = k;
-          break;
-        }
-      }
-
-      // Calibrated Sharpness Score (0-100%) according to ISO/IEC biometric face quality guidelines
-      let sharpnessScore = 0;
-      if (lapVariance < 55 || p95 < 20) {
-        sharpnessScore = Math.min(35, Math.max(5, Math.round((lapVariance / 55) * 20 + (p95 / 20) * 15)));
-      } else {
-        const edgePart = Math.min(50, (p95 / 90.0) * 50.0);
-        const varPart = Math.min(50, (Math.min(1800, lapVariance) / 1800.0) * 50.0);
-        sharpnessScore = Math.min(100, Math.max(45, Math.round(edgePart + varPart)));
-      }
-
-      const isBlurry = sharpnessScore < 45 || (lapVariance < 50 && p95 < 22);
-
-      let issueType: "BLANK_PHOTO" | "MISSING_VECTOR" | "PHOTO_OF_PHOTO" | "BLURRY_PHOTO" | "CLEAN" = "CLEAN";
-      let issueLabel = `✓ Sharp (${sharpnessScore}%)`;
-      let isPoorQuality = false;
-
-      if (isPhotoOfPhoto) {
-        issueType = "PHOTO_OF_PHOTO";
-        issueLabel = "📷 Photo of a Photo / Recapture";
-        isPoorQuality = true;
-      } else if (isBlurry) {
-        issueType = "BLURRY_PHOTO";
-        issueLabel = `Blurry / Low Sharpness (${sharpnessScore}%)`;
-        isPoorQuality = true;
-      } else if (!hasVector) {
-        issueType = "MISSING_VECTOR";
-        issueLabel = "Missing 128-D Vector";
-        isPoorQuality = true;
-      }
-
-      return {
-        isPoorQuality,
-        issueType,
-        issueLabel,
-        sharpnessScore,
-        borderScore,
-        isPhotoOfPhoto,
-        isBlurry,
-        canvasElement: canvas
-      };
-    } catch {
-      return {
-        isPoorQuality: !hasVector,
-        issueType: hasVector ? "CLEAN" : "MISSING_VECTOR",
-        issueLabel: hasVector ? "Clean" : "Missing Vector",
-        sharpnessScore: 85,
-        borderScore: 0,
-        isPhotoOfPhoto: false,
-        isBlurry: false,
-        canvasElement: null
-      };
-    }
-  };
-
-  const runQualityScanOnStudents = async (studentList: any[]) => {
-    setIsScanningBlur(true);
-    setBlurScanProgress(0);
-    const updated = [...studentList];
-    const total = updated.length;
-
-    // Load full Face-API AI detection module on all viewports
-    let faceApiModule: any = null;
-    try {
-      faceApiModule = await import("@/lib/faceMatching");
-      await faceApiModule.loadFaceApiModels(false);
-    } catch (err) {
-      console.warn("Face-API loader warning in audit:", err);
-    }
-
-    // Process in smooth parallel batches: 4 students concurrently
-    const batchSize = 4;
-    for (let i = 0; i < total; i += batchSize) {
-      const batch = updated.slice(i, i + batchSize);
-      await Promise.all(batch.map(async (s) => {
-        const pic = (s.profilePicture || "").trim();
-        const isBlank = !pic || pic === "null" || pic === "undefined" || pic === "data:," || pic.length < 15;
-
-        if (isBlank) {
-          s.issueType = "BLANK_PHOTO";
-          s.isBlurry = false;
-          s.isPhotoOfPhoto = false;
-          s.faceMissing = true;
-          s.multipleFaces = false;
-          s.sharpnessScore = 0;
-          s.qualityIssueLabel = "Blank / Missing Photo";
-        } else {
-          const res = await analyzeImageQuality(pic, s.hasVector);
-          s.sharpnessScore = res.sharpnessScore;
-          s.borderScore = res.borderScore;
-          s.isPhotoOfPhoto = res.isPhotoOfPhoto;
-          s.isBlurry = res.isBlurry;
-          s.qualityIssueLabel = res.issueLabel;
-          s.faceMissing = false;
-          s.multipleFaces = false;
-
-          // AI Face Presence, Multiple Faces & Vector Extraction via face-api using 320x320 canvas
-          if (faceApiModule && res.canvasElement && res.issueType !== "BLANK_PHOTO") {
-            try {
-              const faceRes = await faceApiModule.detectFace(res.canvasElement, false, !s.hasVector);
-              if (!faceRes) {
-                s.faceMissing = true;
-                s.multipleFaces = false;
-                s.isBlurry = false;
-                s.isPhotoOfPhoto = false;
-                s.issueType = "NO_FACE";
-                s.qualityIssueLabel = "⚠️ No Face Detected";
-              } else {
-                s.faceMissing = false;
-                if (faceRes.multipleFacesDetected || (faceRes.faceCount && faceRes.faceCount > 1)) {
-                  s.multipleFaces = true;
-                  s.isBlurry = false;
-                  s.issueType = "MULTIPLE_FACES";
-                  s.qualityIssueLabel = `👥 Multiple Faces (${faceRes.faceCount || '2+'} detected)`;
-                } else {
-                  s.multipleFaces = false;
-                  if (faceRes.descriptor) {
-                    s.extractedDescriptor = Array.from(faceRes.descriptor);
-                  }
-                  if (res.isPhotoOfPhoto) {
-                    s.isPhotoOfPhoto = true;
-                    s.isBlurry = false;
-                    s.issueType = "PHOTO_OF_PHOTO";
-                    s.qualityIssueLabel = "📷 Photo of a Photo / Recapture";
-                  } else if (res.isBlurry) {
-                    s.isBlurry = true;
-                    s.issueType = "BLURRY_PHOTO";
-                    s.qualityIssueLabel = `Blurry / Low Sharpness (${res.sharpnessScore}%)`;
-                  } else if (!s.hasVector) {
-                    s.isBlurry = false;
-                    s.issueType = "MISSING_VECTOR";
-                    s.qualityIssueLabel = "Missing 128-D Vector";
-                  } else if (s.isFlagged) {
-                    s.isBlurry = false;
-                    s.issueType = "FLAGGED_RETAKE";
-                    s.qualityIssueLabel = "Flagged for Retake";
-                  } else {
-                    s.isBlurry = false;
-                    s.issueType = "CLEAN";
-                    s.qualityIssueLabel = `✓ Sharp (${res.sharpnessScore}%)`;
-                  }
-                }
-              }
-            } catch (err) {
-              console.warn("Face presence detection warning:", err);
-            }
-          }
-
-          if (res.issueType === "BLANK_PHOTO") {
-            s.issueType = "BLANK_PHOTO";
-            s.faceMissing = true;
-            s.isBlurry = false;
-            s.isPhotoOfPhoto = false;
-            s.multipleFaces = false;
-            s.qualityIssueLabel = "Blank / Missing Photo";
-          } else if (s.faceMissing || s.issueType === "NO_FACE") {
-            s.issueType = "NO_FACE";
-            s.isBlurry = false;
-            s.isPhotoOfPhoto = false;
-            s.multipleFaces = false;
-            s.qualityIssueLabel = "⚠️ No Face Detected";
-          } else if (s.multipleFaces || s.issueType === "MULTIPLE_FACES") {
-            s.issueType = "MULTIPLE_FACES";
-            s.isBlurry = false;
-          } else if (s.isPhotoOfPhoto || s.issueType === "PHOTO_OF_PHOTO") {
-            s.issueType = "PHOTO_OF_PHOTO";
-            s.isBlurry = false;
-          } else if (s.isBlurry || s.issueType === "BLURRY_PHOTO") {
-            s.issueType = "BLURRY_PHOTO";
-          } else if (!s.hasVector || s.issueType === "MISSING_VECTOR") {
-            s.issueType = "MISSING_VECTOR";
-          } else if (s.isFlagged || s.issueType === "FLAGGED_RETAKE") {
-            s.issueType = "FLAGGED_RETAKE";
-          } else {
-            s.issueType = "CLEAN";
-          }
-        }
-      }));
-      setBlurScanProgress(Math.min(100, Math.round(((i + batch.length) / total) * 100)));
-      setAuditResults([...updated]);
-      // Yield to browser UI thread to maintain 60 FPS
-      await new Promise(r => setTimeout(r, 5));
-    }
-    setIsScanningBlur(false);
-  };
-
-
-  const handleAudit = async (type: "duplicates-phone" | "duplicates-regid" | "duplicates-erpid" | "gibberish-names" | "face-audit") => {
-    try {
-      setSelectedFaceAuditIds([]);
-      const typeLabel = type === 'face-audit' ? 'face' : (type.includes('phone') ? 'phone' : (type.includes('regid') ? 'regid' : (type.includes('erpid') ? 'erpid' : 'gibberish')));
+      setSelectedBiometricStudentIds([]);
+      setBiometricAuditHostel("ALL");
+      setBiometricAuditSemester("ALL");
+      const typeLabel = type === 'biometrics' ? 'biometrics' : (type.includes('phone') ? 'phone' : (type.includes('regid') ? 'regid' : (type.includes('erpid') ? 'erpid' : 'gibberish')));
       setActiveAuditType(typeLabel as any);
 
-      if (type === "face-audit") {
-        setIsAuditing(false);
-        setIsScanningBlur(true);
-        setBlurScanProgress(0);
+      setIsAuditing(true);
+      setAuditResults([]);
 
-        const response = await fetch('/api/admin/face-audit');
+      if (type === "biometrics") {
+        const tenantQuery = typeof window !== 'undefined' && window.location.search ? window.location.search : '';
+        const response = await fetch(`/api/admin/face-audit${tenantQuery}`);
+        if (!response.ok) {
+          throw new Error(`Server returned HTTP ${response.status}`);
+        }
         const data = await response.json();
         if (data.success) {
-          const list = data.students || [];
+          const list = (data.students || []).map((s: any) => {
+            const pic = (s.profilePicture || "").trim();
+            const hasPhoto = Boolean(pic && pic !== "null" && pic !== "undefined" && pic !== "data:," && pic.length > 20);
+            const hasVector = Boolean(Array.isArray(s.faceDescriptor) && s.faceDescriptor.length > 0);
+            return {
+              ...s,
+              hasPhoto,
+              hasVector
+            };
+          });
           setAuditResults(list);
-          // Run AI quality, blur & printed-photo scan in background
-          runQualityScanOnStudents(list);
         } else {
-          setIsScanningBlur(false);
-          alert(data.error || "Face Audit failed");
+          alert(data.error || "Biometric audit failed");
         }
       } else {
-        setIsAuditing(true);
-        setAuditResults([]);
-        const response = await fetch(`/api/developer/audit?type=${type}`);
+        const tenantQuery = typeof window !== 'undefined' && window.location.search ? `&${window.location.search.replace(/^\?/, '')}` : '';
+        const response = await fetch(`/api/developer/audit?type=${type}${tenantQuery}`);
+        if (!response.ok) {
+          throw new Error(`Server returned HTTP ${response.status}`);
+        }
         const data = await response.json();
 
         if (data.success) {
@@ -5183,25 +4670,25 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
           alert(data.error || "Audit failed");
         }
       }
-    } catch (e) {
+    } catch (e: any) {
       console.error(e);
-      alert("Error performing audit");
-      setIsScanningBlur(false);
+      alert("Error performing audit: " + (e?.message || "Check network / server"));
     } finally {
       setIsAuditing(false);
     }
   };
 
-  const handleBulkFlagFaceRetake = async (requiresFaceRecapture: boolean, customIds?: string[]) => {
-    const targetIds = customIds || selectedFaceAuditIds;
+  const handleToggleBiometricRetake = async (requiresFaceRecapture: boolean, customIds?: string[]) => {
+    const targetIds = customIds || selectedBiometricStudentIds;
     if (targetIds.length === 0) {
       alert("Please select at least one student.");
       return;
     }
 
     try {
-      setIsFlaggingRetake(true);
-      const res = await fetch("/api/admin/face-audit", {
+      setIsFlaggingBiometricRetake(true);
+      const tenantQuery = typeof window !== 'undefined' && window.location.search ? window.location.search : '';
+      const res = await fetch(`/api/admin/face-audit${tenantQuery}`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -5209,31 +4696,22 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
           requiresFaceRecapture
         })
       });
+      if (!res.ok) {
+        throw new Error(`Server returned HTTP ${res.status}`);
+      }
       const data = await res.json();
       if (data.success) {
-        // Fast in-memory state update without 686-photo re-scan lag
         setAuditResults(prev => prev.map(s => {
           const sid = s.id || s._id;
           if (targetIds.includes(sid)) {
-            let newIssueType = s.issueType;
-            if (requiresFaceRecapture) {
-              if (newIssueType === "CLEAN") newIssueType = "FLAGGED_RETAKE";
-            } else {
-              if (newIssueType === "FLAGGED_RETAKE") {
-                newIssueType = (!s.hasVector && s.issueType !== "BLANK_PHOTO" && s.issueType !== "NO_FACE") 
-                  ? "MISSING_VECTOR" 
-                  : (s.isBlurry ? "BLURRY_PHOTO" : (s.isPhotoOfPhoto ? "PHOTO_OF_PHOTO" : "CLEAN"));
-              }
-            }
             return {
               ...s,
-              isFlagged: requiresFaceRecapture,
-              issueType: newIssueType
+              isFlagged: requiresFaceRecapture
             };
           }
           return s;
         }));
-        setSelectedFaceAuditIds(prev => prev.filter(id => !targetIds.includes(id)));
+        setSelectedBiometricStudentIds(prev => prev.filter(id => !targetIds.includes(id)));
         alert(data.message);
       } else {
         alert("Failed: " + (data.error || "Unknown error"));
@@ -5241,54 +4719,7 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
     } catch (err: any) {
       alert("Error: " + err.message);
     } finally {
-      setIsFlaggingRetake(false);
-    }
-  };
-
-  const handleBulkBackfillVectors = async (customIds?: string[]) => {
-    const targetIds = customIds || selectedFaceAuditIds;
-    const targets = auditResults.filter(s => targetIds.includes(s.id || s._id) && Array.isArray(s.extractedDescriptor) && s.extractedDescriptor.length > 0);
-    if (targets.length === 0) {
-      alert("No extracted biometric face vectors available for the selected student(s).");
-      return;
-    }
-
-    try {
-      setIsBackfillingVectors(true);
-      const updates = targets.map(s => ({
-        studentId: s.id || s._id,
-        faceDescriptor: s.extractedDescriptor
-      }));
-
-      const res = await fetch("/api/admin/face-audit", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ vectorUpdates: updates })
-      });
-      const data = await res.json();
-      if (data.success) {
-        // Fast in-memory state update
-        setAuditResults(prev => prev.map(s => {
-          const sid = s.id || s._id;
-          if (targetIds.includes(sid) && Array.isArray(s.extractedDescriptor) && s.extractedDescriptor.length > 0) {
-            return {
-              ...s,
-              hasVector: true,
-              faceDescriptor: s.extractedDescriptor,
-              issueType: s.isFlagged ? "FLAGGED_RETAKE" : (s.isBlurry ? "BLURRY_PHOTO" : (s.isPhotoOfPhoto ? "PHOTO_OF_PHOTO" : "CLEAN"))
-            };
-          }
-          return s;
-        }));
-        setSelectedFaceAuditIds(prev => prev.filter(id => !targetIds.includes(id)));
-        alert(data.message || `Successfully backfilled vectors for ${updates.length} student(s).`);
-      } else {
-        alert("Failed: " + (data.error || "Unknown error"));
-      }
-    } catch (err: any) {
-      alert("Error backfilling vectors: " + err.message);
-    } finally {
-      setIsBackfillingVectors(false);
+      setIsFlaggingBiometricRetake(false);
     }
   };
 
@@ -18245,300 +17676,277 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                       </button>
 
                       <button
-                        onClick={() => handleAudit("face-audit")}
+                        onClick={() => handleAudit("biometrics")}
                         disabled={isAuditing}
                         className="p-3 sm:p-6 bg-white border-2 border-slate-100 rounded-2xl hover:border-pink-500 hover:shadow-xl transition-all group flex flex-col items-center text-center gap-2 sm:gap-3 col-span-2 sm:col-span-1"
                       >
                         <div className="w-8 h-8 sm:w-12 sm:h-12 bg-pink-50 text-pink-600 rounded-xl flex items-center justify-center group-hover:scale-110 transition-transform">
                           <svg className="w-4 h-4 sm:w-6 sm:h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5.121 17.804A13.937 13.937 0 0112 16c2.5 0 4.847.655 6.879 1.804M15 10a3 3 0 11-6 0 3 3 0 016 0zm6 2a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
                         </div>
-                        <span className="text-[7px] sm:text-xs font-black uppercase tracking-tight sm:tracking-widest text-slate-900">Face & Photo Audit</span>
+                        <span className="text-[7px] sm:text-xs font-black uppercase tracking-tight sm:tracking-widest text-slate-900">Biometric Audit</span>
                       </button>
                     </div>
 
-                    {isAuditing && activeAuditType !== "face" && (
+                    {isAuditing && (
                       <div className="py-12 flex flex-col items-center justify-center gap-4">
                         <div className="w-12 h-12 border-4 border-indigo-600 border-t-transparent rounded-full animate-spin"></div>
-                        <p className="text-xs font-black text-slate-400 uppercase tracking-widest animate-pulse">Running Deep Scan...</p>
+                        <p className="text-xs font-black text-slate-400 uppercase tracking-widest animate-pulse">Running Fast DB Check...</p>
                       </div>
                     )}
 
-                    {activeAuditType === "face" && (
-                      <div className="mt-8 space-y-4">
-                        {/* Blur Scan Progress Banner */}
-                        {isScanningBlur && (
-                          <div className="bg-amber-50 border border-amber-200 rounded-2xl p-3 flex flex-col gap-2 text-xs text-amber-900 font-bold animate-in fade-in">
-                            <div className="flex items-center justify-between gap-3">
-                              <div className="flex items-center gap-2.5">
-                                <div className="w-4 h-4 border-2 border-amber-600 border-t-transparent rounded-full animate-spin"></div>
-                                <span>{auditResults.length === 0 ? "⚡ Fetching student photo records from database..." : "AI Deep Scanning photos for quality & biometric compliance..."}</span>
-                              </div>
-                              <span className="text-[10px] uppercase tracking-wider bg-amber-200/60 px-2.5 py-0.5 rounded-full font-black text-amber-800">
-                                {blurScanProgress}% Complete
-                              </span>
-                            </div>
-                            <div className="w-full bg-amber-200/70 h-2 rounded-full overflow-hidden">
-                              <div 
-                                className="bg-amber-600 h-full transition-all duration-200 rounded-full" 
-                                style={{ width: `${Math.max(4, blurScanProgress)}%` }} 
-                              />
-                            </div>
-                          </div>
-                        )}
+                    {/* Biometric Status Audit View (Hostel & Semester Dropdown with Enforcement Toggle) */}
+                    {!isAuditing && activeAuditType === "biometrics" && (() => {
+                      // Extract unique hostels dynamically from database records
+                      const uniqueHostels = Array.from(new Set(auditResults.map(s => (s.hostelName || "UNASSIGNED").trim()).filter(Boolean))).sort();
 
-                        {/* Filter Chips & Summary */}
-                        <div className="flex flex-wrap items-center justify-between gap-1.5 sm:gap-2.5 bg-slate-50 border border-slate-200 p-2 sm:p-3 rounded-xl sm:rounded-2xl">
-                          <div className="flex flex-wrap items-center gap-1 sm:gap-1.5">
-                            <button
-                              onClick={() => setFaceAuditFilter("all")}
-                              className={`px-2 py-1 sm:px-2.5 sm:py-1.5 rounded-lg sm:rounded-xl text-[9px] sm:text-[10px] md:text-xs font-black uppercase tracking-tight sm:tracking-wider transition-all ${faceAuditFilter === "all" ? "bg-slate-900 text-white shadow" : "bg-white text-slate-600 border border-slate-200 hover:bg-slate-100"}`}
-                            >
-                              All Issues ({auditResults.filter(s => s.issueType !== "CLEAN" || s.isFlagged).length})
-                            </button>
-                            <button
-                              onClick={() => setFaceAuditFilter("blank")}
-                              className={`px-2 py-1 sm:px-2.5 sm:py-1.5 rounded-lg sm:rounded-xl text-[9px] sm:text-[10px] md:text-xs font-black uppercase tracking-tight sm:tracking-wider transition-all ${faceAuditFilter === "blank" ? "bg-rose-600 text-white shadow" : "bg-white text-rose-600 border border-rose-200 hover:bg-rose-50"}`}
-                            >
-                              Blank Photos ({auditResults.filter(s => s.issueType === "BLANK_PHOTO").length})
-                            </button>
-                            <button
-                              onClick={() => setFaceAuditFilter("no_face")}
-                              className={`px-2 py-1 sm:px-2.5 sm:py-1.5 rounded-lg sm:rounded-xl text-[9px] sm:text-[10px] md:text-xs font-black uppercase tracking-tight sm:tracking-wider transition-all ${faceAuditFilter === "no_face" ? "bg-rose-700 text-white shadow" : "bg-white text-rose-700 border border-rose-200 hover:bg-rose-50"}`}
-                            >
-                              ⚠️ No Face ({auditResults.filter(s => s.issueType === "NO_FACE").length})
-                            </button>
-                            <button
-                              onClick={() => setFaceAuditFilter("multiple_faces")}
-                              className={`px-2 py-1 sm:px-2.5 sm:py-1.5 rounded-lg sm:rounded-xl text-[9px] sm:text-[10px] md:text-xs font-black uppercase tracking-tight sm:tracking-wider transition-all ${faceAuditFilter === "multiple_faces" ? "bg-purple-700 text-white shadow" : "bg-white text-purple-700 border border-purple-200 hover:bg-purple-50"}`}
-                            >
-                              👥 Multiple Faces ({auditResults.filter(s => s.issueType === "MULTIPLE_FACES").length})
-                            </button>
-                            <button
-                              onClick={() => setFaceAuditFilter("missing_vector")}
-                              className={`px-2 py-1 sm:px-2.5 sm:py-1.5 rounded-lg sm:rounded-xl text-[9px] sm:text-[10px] md:text-xs font-black uppercase tracking-tight sm:tracking-wider transition-all ${faceAuditFilter === "missing_vector" ? "bg-amber-600 text-white shadow" : "bg-white text-amber-600 border border-amber-200 hover:bg-amber-50"}`}
-                            >
-                              Missing Vectors ({auditResults.filter(s => s.issueType === "MISSING_VECTOR").length})
-                            </button>
-                            <button
-                              onClick={() => setFaceAuditFilter("photo_of_photo")}
-                              className={`px-2 py-1 sm:px-2.5 sm:py-1.5 rounded-lg sm:rounded-xl text-[9px] sm:text-[10px] md:text-xs font-black uppercase tracking-tight sm:tracking-wider transition-all ${faceAuditFilter === "photo_of_photo" ? "bg-red-600 text-white shadow" : "bg-white text-red-600 border border-red-200 hover:bg-red-50"}`}
-                            >
-                              📷 Photo of a Photo ({auditResults.filter(s => s.issueType === "PHOTO_OF_PHOTO").length})
-                            </button>
-                            <button
-                              onClick={() => setFaceAuditFilter("blurry")}
-                              className={`px-2 py-1 sm:px-2.5 sm:py-1.5 rounded-lg sm:rounded-xl text-[9px] sm:text-[10px] md:text-xs font-black uppercase tracking-tight sm:tracking-wider transition-all ${faceAuditFilter === "blurry" ? "bg-orange-600 text-white shadow" : "bg-white text-orange-600 border border-orange-200 hover:bg-orange-50"}`}
-                            >
-                              Blurry Photos ({auditResults.filter(s => s.issueType === "BLURRY_PHOTO").length})
-                            </button>
-                            <button
-                              onClick={() => setFaceAuditFilter("flagged")}
-                              className={`px-2 py-1 sm:px-2.5 sm:py-1.5 rounded-lg sm:rounded-xl text-[9px] sm:text-[10px] md:text-xs font-black uppercase tracking-tight sm:tracking-wider transition-all ${faceAuditFilter === "flagged" ? "bg-purple-600 text-white shadow" : "bg-white text-purple-600 border border-purple-200 hover:bg-purple-50"}`}
-                            >
-                              Flagged for Retake ({auditResults.filter(s => s.isFlagged || s.issueType === "FLAGGED_RETAKE").length})
-                            </button>
-                          </div>
+                      // Always provide standard semesters 1-8 plus any additional semester values in the data
+                      const standardSemesters = ["1", "2", "3", "4", "5", "6", "7", "8"];
+                      const customSemesters = Array.from(new Set(auditResults.map(s => {
+                        const dyn = typeof s.dynamicFields === 'object' && s.dynamicFields !== null ? s.dynamicFields : {};
+                        const val = String(s.semester || dyn.semester || dyn.Semester || "").trim();
+                        return val ? val.replace(/^semester\s*/i, '').replace(/^sem\s*/i, '').trim() : "";
+                      }).filter(Boolean)));
 
-                          <div className="flex items-center gap-1 sm:gap-2">
-                            <button
-                              onClick={() => {
-                                const filtered = auditResults.filter(s => {
-                                  if (faceAuditFilter === "blank") return s.issueType === "BLANK_PHOTO";
-                                  if (faceAuditFilter === "no_face") return s.issueType === "NO_FACE";
-                                  if (faceAuditFilter === "multiple_faces") return s.issueType === "MULTIPLE_FACES";
-                                  if (faceAuditFilter === "missing_vector") return s.issueType === "MISSING_VECTOR";
-                                  if (faceAuditFilter === "photo_of_photo") return s.issueType === "PHOTO_OF_PHOTO";
-                                  if (faceAuditFilter === "blurry") return s.issueType === "BLURRY_PHOTO";
-                                  if (faceAuditFilter === "flagged") return s.isFlagged || s.issueType === "FLAGGED_RETAKE";
-                                  return s.issueType !== "CLEAN" || s.isFlagged;
-                                });
-                                if (selectedFaceAuditIds.length === filtered.length && filtered.length > 0) {
-                                  setSelectedFaceAuditIds([]);
-                                } else {
-                                  setSelectedFaceAuditIds(filtered.map(s => s.id || s._id));
-                                }
-                              }}
-                              className="px-2 py-1 sm:px-3 sm:py-1.5 bg-white border border-slate-300 text-slate-700 rounded-lg sm:rounded-xl text-[9px] sm:text-[10px] md:text-xs font-black uppercase tracking-tight sm:tracking-wider hover:bg-slate-50 transition-all"
-                            >
-                              {selectedFaceAuditIds.length > 0 ? "Deselect All" : "Select All"}
-                            </button>
-                          </div>
-                        </div>
+                      const allSemesterList = Array.from(new Set([...standardSemesters, ...customSemesters])).sort((a, b) => {
+                        const numA = parseInt(a, 10);
+                        const numB = parseInt(b, 10);
+                        if (!isNaN(numA) && !isNaN(numB)) return numA - numB;
+                        return a.localeCompare(b);
+                      });
 
-                        {/* Bulk Action Controls */}
-                        {selectedFaceAuditIds.length > 0 && (
-                          <div className="bg-indigo-50 border-2 border-indigo-200 p-2 sm:p-3 rounded-xl sm:rounded-2xl flex flex-wrap items-center justify-between gap-2 sm:gap-3 animate-in fade-in slide-in-from-top-2">
-                            <span className="text-[9px] sm:text-xs font-black text-indigo-900 uppercase tracking-wider px-1">
-                              {selectedFaceAuditIds.length} Student(s) Selected
-                            </span>
-                            <div className="flex items-center gap-1.5 sm:gap-2">
-                              {selectedFaceAuditIds.some(sid => {
-                                const s = auditResults.find(item => (item.id || item._id) === sid);
-                                return s && Array.isArray(s.extractedDescriptor) && s.extractedDescriptor.length > 0 && !s.hasVector;
-                              }) && (
-                                <button
-                                  onClick={() => handleBulkBackfillVectors()}
-                                  disabled={isBackfillingVectors}
-                                  className="px-2.5 py-1.5 sm:px-3 sm:py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg sm:rounded-xl text-[8px] sm:text-xs font-black uppercase tracking-tight sm:tracking-wider shadow-md transition-all flex items-center gap-1"
+                      const filteredStudents = auditResults.filter(s => {
+                        const sHostel = (s.hostelName || "UNASSIGNED").trim().toUpperCase();
+                        const dyn = typeof s.dynamicFields === 'object' && s.dynamicFields !== null ? s.dynamicFields : {};
+                        const rawSem = String(s.semester || dyn.semester || dyn.Semester || "").trim();
+                        const semNormalized = rawSem.replace(/^semester\s*/i, '').replace(/^sem\s*/i, '').trim().toUpperCase();
+
+                        if (biometricAuditHostel !== "ALL" && sHostel !== biometricAuditHostel.toUpperCase()) return false;
+                        if (biometricAuditSemester !== "ALL") {
+                          const selectedNorm = biometricAuditSemester.replace(/^semester\s*/i, '').replace(/^sem\s*/i, '').trim().toUpperCase();
+                          if (semNormalized !== selectedNorm && rawSem.toUpperCase() !== biometricAuditSemester.toUpperCase()) {
+                            return false;
+                          }
+                        }
+                        return true;
+                      });
+
+                      const allFilteredSelected = filteredStudents.length > 0 && filteredStudents.every(s => selectedBiometricStudentIds.includes(s.id || s._id));
+
+                      return (
+                        <div className="mt-8 space-y-4">
+                          {/* Dropdowns for Hostel and Semester */}
+                          <div className="bg-slate-50 border border-slate-200 p-3 sm:p-4 rounded-xl sm:rounded-2xl space-y-3">
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                              {/* 1. Select Hostel Dropdown */}
+                              <div className="space-y-1">
+                                <label className="block text-[10px] sm:text-xs font-black uppercase tracking-wider text-slate-700">
+                                  🏢 Select Hostel
+                                </label>
+                                <select
+                                  value={biometricAuditHostel}
+                                  onChange={(e) => {
+                                    setBiometricAuditHostel(e.target.value);
+                                    setSelectedBiometricStudentIds([]);
+                                  }}
+                                  className="w-full bg-white border-2 border-slate-200 rounded-xl px-3 py-2 text-xs font-bold text-slate-800 outline-none focus:border-pink-500 transition-all cursor-pointer"
                                 >
-                                  ⚡ {isBackfillingVectors ? "Saving..." : "Auto-Backfill Vectors"}
-                                </button>
-                              )}
+                                  <option value="ALL">ALL HOSTELS ({auditResults.length} Students)</option>
+                                  {uniqueHostels.map(h => {
+                                    const count = auditResults.filter(s => (s.hostelName || "UNASSIGNED").trim().toUpperCase() === h.toUpperCase()).length;
+                                    return (
+                                      <option key={h} value={h}>{h} ({count})</option>
+                                    );
+                                  })}
+                                </select>
+                              </div>
+
+                              {/* 2. Select Semester Dropdown */}
+                              <div className="space-y-1">
+                                <label className="block text-[10px] sm:text-xs font-black uppercase tracking-wider text-slate-700">
+                                  🎓 Select Semester
+                                </label>
+                                <select
+                                  value={biometricAuditSemester}
+                                  onChange={(e) => {
+                                    setBiometricAuditSemester(e.target.value);
+                                    setSelectedBiometricStudentIds([]);
+                                  }}
+                                  className="w-full bg-white border-2 border-slate-200 rounded-xl px-3 py-2 text-xs font-bold text-slate-800 outline-none focus:border-pink-500 transition-all cursor-pointer"
+                                >
+                                  <option value="ALL">ALL SEMESTERS</option>
+                                  {allSemesterList.map(sem => {
+                                    const semNorm = sem.replace(/^semester\s*/i, '').replace(/^sem\s*/i, '').trim().toUpperCase();
+                                    const count = auditResults.filter(s => {
+                                      const sHostel = (s.hostelName || "UNASSIGNED").trim().toUpperCase();
+                                      if (biometricAuditHostel !== "ALL" && sHostel !== biometricAuditHostel.toUpperCase()) return false;
+                                      const dyn = typeof s.dynamicFields === 'object' && s.dynamicFields !== null ? s.dynamicFields : {};
+                                      const rawSem = String(s.semester || dyn.semester || dyn.Semester || "").trim();
+                                      const sSemNorm = rawSem.replace(/^semester\s*/i, '').replace(/^sem\s*/i, '').trim().toUpperCase();
+                                      return sSemNorm === semNorm || rawSem.toUpperCase() === sem.toUpperCase();
+                                    }).length;
+
+                                    const label = isNaN(Number(sem)) ? (sem.toUpperCase().startsWith("SEM") ? sem : `Semester ${sem}`) : `Semester ${sem}`;
+                                    return (
+                                      <option key={sem} value={sem}>{label} {count > 0 ? `(${count})` : ''}</option>
+                                    );
+                                  })}
+                                </select>
+                              </div>
+                            </div>
+
+                            {/* Header Status & Select All Checkbox */}
+                            <div className="flex flex-wrap items-center justify-between gap-2 pt-2 border-t border-slate-200">
+                              <span className="text-[10px] sm:text-xs font-bold text-slate-600">
+                                Showing <strong className="text-slate-900">{filteredStudents.length}</strong> Student(s)
+                              </span>
                               <button
-                                onClick={() => handleBulkFlagFaceRetake(true)}
-                                disabled={isFlaggingRetake}
-                                className="px-2.5 py-1.5 sm:px-4 sm:py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg sm:rounded-xl text-[8px] sm:text-xs font-black uppercase tracking-tight sm:tracking-wider shadow-md transition-all flex items-center gap-1"
+                                type="button"
+                                onClick={() => {
+                                  if (allFilteredSelected) {
+                                    const currentFilteredIds = filteredStudents.map(s => s.id || s._id);
+                                    setSelectedBiometricStudentIds(prev => prev.filter(id => !currentFilteredIds.includes(id)));
+                                  } else {
+                                    const currentFilteredIds = filteredStudents.map(s => s.id || s._id);
+                                    setSelectedBiometricStudentIds(prev => Array.from(new Set([...prev, ...currentFilteredIds])));
+                                  }
+                                }}
+                                className="px-3 py-1 bg-white border border-slate-300 hover:bg-slate-100 text-slate-800 rounded-lg text-[9px] sm:text-xs font-black uppercase tracking-tight transition-all"
                               >
-                                🔒 Enforce Live Retake
-                              </button>
-                              <button
-                                onClick={() => handleBulkFlagFaceRetake(false)}
-                                disabled={isFlaggingRetake}
-                                className="px-2 py-1 sm:px-3 sm:py-2 bg-white border border-slate-300 hover:bg-slate-100 text-slate-700 rounded-lg sm:rounded-xl text-[8px] sm:text-xs font-black uppercase tracking-tight sm:tracking-wider transition-all"
-                              >
-                                ✓ Clear Flag
+                                {allFilteredSelected ? "Deselect All" : "Select All"}
                               </button>
                             </div>
                           </div>
-                        )}
 
-                        {/* Students List */}
-                        <div className="space-y-2 max-h-[460px] overflow-y-auto pr-1">
-                          {auditResults
-                            .filter(s => {
-                              if (faceAuditFilter === "blank") return s.issueType === "BLANK_PHOTO";
-                              if (faceAuditFilter === "no_face") return s.issueType === "NO_FACE";
-                              if (faceAuditFilter === "multiple_faces") return s.issueType === "MULTIPLE_FACES";
-                              if (faceAuditFilter === "missing_vector") return s.issueType === "MISSING_VECTOR";
-                              if (faceAuditFilter === "photo_of_photo") return s.issueType === "PHOTO_OF_PHOTO";
-                              if (faceAuditFilter === "blurry") return s.issueType === "BLURRY_PHOTO";
-                              if (faceAuditFilter === "flagged") return s.isFlagged || s.issueType === "FLAGGED_RETAKE";
-                              return s.issueType !== "CLEAN" || s.isFlagged;
-                            })
-                            .map((s, sIdx) => {
-                              const isSelected = selectedFaceAuditIds.includes(s.id || s._id);
+                          {/* Enforcement Action Toggle Bar (Pops up when 1+ students are selected) */}
+                          {selectedBiometricStudentIds.length > 0 && (
+                            <div className="bg-pink-50 border-2 border-pink-200 p-3 sm:p-4 rounded-xl sm:rounded-2xl flex flex-wrap items-center justify-between gap-3 animate-in fade-in slide-in-from-top-2">
+                              <div className="flex items-center gap-2">
+                                <span className="w-2.5 h-2.5 bg-pink-600 rounded-full animate-pulse"></span>
+                                <span className="text-xs font-black text-pink-950 uppercase tracking-wider">
+                                  {selectedBiometricStudentIds.length} Student(s) Selected
+                                </span>
+                              </div>
+                              <div className="flex items-center gap-2">
+                                <button
+                                  type="button"
+                                  onClick={() => handleToggleBiometricRetake(true)}
+                                  disabled={isFlaggingBiometricRetake}
+                                  className="px-3 py-2 bg-pink-600 hover:bg-pink-700 disabled:opacity-50 text-white rounded-xl text-[9px] sm:text-xs font-black uppercase tracking-wider shadow-md transition-all flex items-center gap-1.5"
+                                >
+                                  🔒 {isFlaggingBiometricRetake ? "Updating..." : "Enforce Live Face Retake"}
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => handleToggleBiometricRetake(false)}
+                                  disabled={isFlaggingBiometricRetake}
+                                  className="px-3 py-2 bg-white border border-slate-300 hover:bg-slate-100 disabled:opacity-50 text-slate-700 rounded-xl text-[9px] sm:text-xs font-black uppercase tracking-wider transition-all"
+                                >
+                                  ✓ Clear Enforcement
+                                </button>
+                              </div>
+                            </div>
+                          )}
+
+                          {/* Student Biometric List with Checkboxes */}
+                          <div className="space-y-2 max-h-[460px] overflow-y-auto pr-1">
+                            {filteredStudents.map((s, sIdx) => {
+                              const sid = s.id || s._id;
+                              const isChecked = selectedBiometricStudentIds.includes(sid);
                               return (
                                 <div
                                   key={sIdx}
-                                  className={`p-2 sm:p-3 rounded-xl sm:rounded-2xl border transition-all flex items-center justify-between gap-2 sm:gap-3 ${isSelected ? "bg-indigo-50/70 border-indigo-400 shadow-sm" : "bg-white border-slate-100 hover:border-slate-300"}`}
+                                  className={`p-2.5 sm:p-3 border rounded-xl sm:rounded-2xl transition-all flex items-center justify-between gap-2 sm:gap-3 ${isChecked ? "bg-pink-50/70 border-pink-400 shadow-sm" : "bg-white border-slate-100 hover:border-slate-300"}`}
                                 >
-                                  <div className="flex items-center gap-2 sm:gap-3 min-w-0 flex-1">
+                                  <div className="flex items-center gap-2.5 sm:gap-3 min-w-0 flex-1">
+                                    {/* Selection Checkbox */}
                                     <input
                                       type="checkbox"
-                                      checked={isSelected}
+                                      checked={isChecked}
                                       onChange={(e) => {
-                                        const sid = s.id || s._id;
                                         if (e.target.checked) {
-                                          setSelectedFaceAuditIds(prev => [...prev, sid]);
+                                          setSelectedBiometricStudentIds(prev => [...prev, sid]);
                                         } else {
-                                          setSelectedFaceAuditIds(prev => prev.filter(id => id !== sid));
+                                          setSelectedBiometricStudentIds(prev => prev.filter(id => id !== sid));
                                         }
                                       }}
-                                      className="w-3.5 h-3.5 sm:w-4 sm:h-4 shrink-0 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500 cursor-pointer"
+                                      className="w-4 h-4 rounded border-slate-300 text-pink-600 focus:ring-pink-500 cursor-pointer shrink-0"
                                     />
 
-                                    {/* Profile thumbnail */}
-                                    <div className="w-8 h-8 sm:w-10 sm:h-10 rounded-lg sm:rounded-xl overflow-hidden bg-slate-100 border border-slate-200 shrink-0 flex items-center justify-center">
-                                      {s.profilePicture && s.profilePicture.length > 50 ? (
+                                    {/* Photo Thumbnail */}
+                                    <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl overflow-hidden bg-slate-100 border border-slate-200 shrink-0 flex items-center justify-center">
+                                      {s.profilePicture && s.profilePicture.length > 20 ? (
                                         <img src={s.profilePicture} alt={s.name} className="w-full h-full object-cover" />
                                       ) : (
-                                        <span className="text-[8px] sm:text-[9px] font-black text-slate-400">NO PIC</span>
+                                        <span className="text-[8px] font-black text-slate-400">NO PIC</span>
                                       )}
                                     </div>
 
                                     <div className="min-w-0 flex-1">
-                                      <div className="flex items-center gap-1.5 min-w-0">
-                                        <p className="text-[11px] sm:text-xs font-black text-slate-900 uppercase truncate leading-tight">{s.name}</p>
-                                      </div>
-                                      <div className="flex flex-wrap items-center gap-1 mt-0.5">
+                                      <p className="text-[11px] sm:text-xs font-black text-slate-900 uppercase truncate leading-tight">{s.name}</p>
+                                      <div className="flex flex-wrap items-center gap-1.5 mt-1">
+                                        {/* Photo Status Badge */}
+                                        <span className={`px-2 py-0.5 rounded text-[8px] sm:text-[9px] font-black uppercase tracking-tight flex items-center gap-1 ${s.hasPhoto ? "bg-emerald-50 text-emerald-700 border border-emerald-200" : "bg-rose-50 text-rose-700 border border-rose-200"}`}>
+                                          {s.hasPhoto ? "✓ Photo Available" : "✗ No Photo"}
+                                        </span>
+
+                                        {/* Face Vector Status Badge */}
+                                        <span className={`px-2 py-0.5 rounded text-[8px] sm:text-[9px] font-black uppercase tracking-tight flex items-center gap-1 ${s.hasVector ? "bg-emerald-50 text-emerald-700 border border-emerald-200" : "bg-amber-50 text-amber-700 border border-amber-200"}`}>
+                                          {s.hasVector ? "✓ Vector Ready" : "⚠️ Missing Face Vector"}
+                                        </span>
+
                                         {s.isFlagged && (
-                                          <span className="px-1.5 py-0.5 bg-purple-100 text-purple-700 border border-purple-200 rounded text-[7.5px] sm:text-[8px] font-black uppercase tracking-tight shrink-0">
-                                            🔒 Flagged
-                                          </span>
-                                        )}
-                                        {s.issueType === "BLANK_PHOTO" && (
-                                          <span className="px-1.5 py-0.5 bg-rose-100 text-rose-700 border border-rose-200 rounded text-[7.5px] sm:text-[8px] font-black uppercase tracking-tight shrink-0">
-                                            Blank Photo
-                                          </span>
-                                        )}
-                                        {s.issueType === "NO_FACE" && (
-                                          <span className="px-1.5 py-0.5 bg-rose-100 text-rose-800 border border-rose-300 rounded text-[7.5px] sm:text-[8px] font-black uppercase tracking-tight shrink-0">
-                                            ⚠️ No Face Detected
-                                          </span>
-                                        )}
-                                        {s.issueType === "MULTIPLE_FACES" && (
-                                          <span className="px-1.5 py-0.5 bg-purple-100 text-purple-800 border border-purple-300 rounded text-[7.5px] sm:text-[8px] font-black uppercase tracking-tight shrink-0">
-                                            👥 Multiple Faces
-                                          </span>
-                                        )}
-                                        {s.issueType === "MISSING_VECTOR" && (
-                                          <span className="px-1.5 py-0.5 bg-amber-100 text-amber-700 border border-amber-200 rounded text-[7.5px] sm:text-[8px] font-black uppercase tracking-tight shrink-0 flex items-center gap-1">
-                                            Missing Vector {Array.isArray(s.extractedDescriptor) && s.extractedDescriptor.length > 0 && <span className="text-[7px] text-emerald-700 font-black">⚡ Ready</span>}
-                                          </span>
-                                        )}
-                                        {s.issueType === "PHOTO_OF_PHOTO" && (
-                                          <span className="px-1.5 py-0.5 bg-red-100 text-red-700 border border-red-300 rounded text-[7.5px] sm:text-[8px] font-black uppercase tracking-tight shrink-0">
-                                            📷 Photo of Photo
-                                          </span>
-                                        )}
-                                        {s.issueType === "BLURRY_PHOTO" && (
-                                          <span className="px-1.5 py-0.5 bg-orange-100 text-orange-800 border border-orange-200 rounded text-[7.5px] sm:text-[8px] font-black uppercase tracking-tight shrink-0">
-                                            📷 Blurry {s.sharpnessScore !== undefined ? `(${s.sharpnessScore}%)` : ''}
-                                          </span>
-                                        )}
-                                        {s.issueType === "CLEAN" && s.sharpnessScore !== undefined && s.sharpnessScore > 0 && (
-                                          <span className="px-1.5 py-0.5 bg-emerald-50 text-emerald-700 border border-emerald-200 rounded text-[7.5px] sm:text-[8px] font-bold uppercase tracking-tight shrink-0">
-                                            ✓ Sharp ({s.sharpnessScore}%)
+                                          <span className="px-2 py-0.5 bg-purple-100 text-purple-800 border border-purple-300 rounded text-[8px] sm:text-[9px] font-black uppercase tracking-tight flex items-center gap-1">
+                                            🔒 Enforcement Active
                                           </span>
                                         )}
                                       </div>
-                                      <p className="text-[8px] sm:text-[9px] font-bold text-slate-400 uppercase tracking-tight truncate mt-0.5">
-                                        {s.hostelName} • ROOM {s.roomNumber || "N/A"} • {s.registrationId || s.erpId || s.phoneNumber}
+                                      <p className="text-[8px] sm:text-[9px] font-bold text-slate-400 uppercase tracking-tight truncate mt-1">
+                                        {s.hostelName} • ROOM {s.roomNumber || "N/A"} • {s.registrationId || s.phoneNumber}
                                       </p>
                                     </div>
                                   </div>
 
-                                  <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
+                                  <div className="shrink-0 flex items-center gap-1.5">
                                     <button
-                                      onClick={() => handleBulkFlagFaceRetake(!s.isFlagged, [s.id || s._id])}
-                                      disabled={isFlaggingRetake}
-                                      className={`px-2 py-1 sm:px-3 sm:py-1.5 rounded-lg text-[8px] sm:text-[9px] font-black uppercase tracking-tight sm:tracking-wider whitespace-nowrap transition-all ${s.isFlagged ? "bg-amber-50 text-amber-700 border border-amber-200 hover:bg-amber-100" : "bg-indigo-50 text-indigo-700 border border-indigo-200 hover:bg-indigo-100"}`}
+                                      type="button"
+                                      onClick={() => handleToggleBiometricRetake(!s.isFlagged, [sid])}
+                                      disabled={isFlaggingBiometricRetake}
+                                      className={`px-2.5 py-1.5 rounded-lg text-[8px] sm:text-[9px] font-black uppercase tracking-tight transition-all ${s.isFlagged ? "bg-amber-50 text-amber-700 border border-amber-200 hover:bg-amber-100" : "bg-pink-50 text-pink-700 border border-pink-200 hover:bg-pink-100"}`}
                                     >
-                                      {s.isFlagged ? "Unflag" : "Flag for Retake"}
+                                      {s.isFlagged ? "Unflag" : "Enforce Retake"}
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        const student = students.find(std => std.id === sid);
+                                        if (student) {
+                                          setSelectedStudent(student);
+                                          setShowSystemSettingsModal(false);
+                                        } else {
+                                          setShowSystemSettingsModal(false);
+                                          setSearchQuery(s.name);
+                                        }
+                                      }}
+                                      className="px-2.5 py-1.5 bg-slate-50 text-slate-700 hover:bg-slate-100 border border-slate-200 rounded-lg text-[8px] sm:text-[9px] font-black uppercase tracking-tight transition-colors"
+                                    >
+                                      View
                                     </button>
                                   </div>
                                 </div>
                               );
                             })}
-                          {auditResults.filter(s => {
-                            if (faceAuditFilter === "blank") return s.issueType === "BLANK_PHOTO";
-                            if (faceAuditFilter === "no_face") return s.issueType === "NO_FACE";
-                            if (faceAuditFilter === "multiple_faces") return s.issueType === "MULTIPLE_FACES";
-                            if (faceAuditFilter === "missing_vector") return s.issueType === "MISSING_VECTOR";
-                            if (faceAuditFilter === "photo_of_photo") return s.issueType === "PHOTO_OF_PHOTO";
-                            if (faceAuditFilter === "blurry") return s.issueType === "BLURRY_PHOTO";
-                            if (faceAuditFilter === "flagged") return s.isFlagged || s.issueType === "FLAGGED_RETAKE";
-                            return s.issueType !== "CLEAN" || s.isFlagged;
-                          }).length === 0 && (
-                            isScanningBlur ? (
-                              <div className="py-12 text-center bg-amber-50/50 border border-amber-200/80 rounded-2xl flex flex-col items-center justify-center gap-3">
-                                <div className="w-8 h-8 border-2 border-amber-600 border-t-transparent rounded-full animate-spin"></div>
-                                <div>
-                                  <p className="text-xs font-black text-amber-900 uppercase tracking-wider">AI Deep Scanning Photos ({blurScanProgress}% Complete)...</p>
-                                  <p className="text-[10px] text-amber-700 font-medium mt-0.5">Analyzing facial clarity, multi-face presence, and biometric vectors</p>
-                                </div>
-                              </div>
-                            ) : (
-                              <div className="py-8 text-center bg-slate-50 border border-slate-100 rounded-2xl">
-                                <p className="text-xs font-black text-slate-700 uppercase tracking-wider">No issues found in this category!</p>
-                              </div>
-                            )
-                          )}
-                        </div>
-                      </div>
-                    )}
 
-                    {!isAuditing && activeAuditType !== "face" && auditResults.length > 0 && (
+                            {filteredStudents.length === 0 && (
+                              <div className="py-8 text-center bg-slate-50 border border-slate-100 rounded-2xl">
+                                <p className="text-xs font-black text-slate-700 uppercase tracking-wider">No students found matching selected Hostel / Semester!</p>
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })()}
+
+                    {!isAuditing && activeAuditType && activeAuditType !== "biometrics" && auditResults.length > 0 && (
                       <div className="mt-8 space-y-4">
                         <h4 className="text-sm font-black text-slate-900 uppercase tracking-widest px-1">Potential Issues Found ({auditResults.length})</h4>
                         <div className="space-y-3">
@@ -18606,7 +18014,7 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                       </div>
                     )}
 
-                    {!isAuditing && !isScanningBlur && activeAuditType && activeAuditType !== "face" && auditResults.length === 0 && (
+                    {!isAuditing && activeAuditType && activeAuditType !== "biometrics" && auditResults.length === 0 && (
                       <div className="py-12 text-center">
                         <div className="w-16 h-16 bg-green-50 text-green-500 rounded-full flex items-center justify-center mx-auto mb-4">
                           <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" /></svg>

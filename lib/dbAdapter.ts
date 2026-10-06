@@ -1324,7 +1324,11 @@ export const db = {
                                 email: true,
                                 phoneNumber: true,
                                 studentStatus: true,
-                                dynamicFields: true
+                                dynamicFields: true,
+                                semester: true,
+                                year: true,
+                                branch: true,
+                                section: true
                             }
                         })
                     );

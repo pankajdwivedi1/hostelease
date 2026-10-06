@@ -397,20 +397,60 @@ const FieldEnforcementComponent: React.FC<FieldEnforcementProps> = ({
                 🚫 Deactivate All Enforcement
               </button>
             </div>
-            <div className="grid grid-cols-2 sm:grid-cols-2 md:grid-cols-4 gap-1.5 sm:gap-2.5">
-              {hostels.map((hostel) => (
-                <button
-                  key={hostel}
-                  onClick={() => handleHostelSelect(hostel)}
-                  className={`p-1.5 sm:p-2.5 rounded-lg font-bold transition text-center text-[10px] sm:text-xs uppercase tracking-tight ${selectedHostels.includes(hostel)
-                    ? "bg-blue-600 text-white border-2 border-blue-700"
-                    : "bg-slate-100 text-slate-900 border-2 border-slate-200 hover:bg-blue-50"
-                    }`}
+            <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 sm:gap-3">
+              <div className="flex-1">
+                <select
+                  value=""
+                  onChange={(e) => {
+                    const h = e.target.value;
+                    if (h && !selectedHostels.includes(h)) {
+                      setSelectedHostels([...selectedHostels, h]);
+                    }
+                  }}
+                  className="w-full bg-slate-50 border-2 border-slate-200 rounded-lg px-3 py-2 text-xs font-bold text-slate-800 outline-none focus:border-blue-500 transition cursor-pointer"
                 >
-                  {hostel}
-                </button>
-              ))}
+                  <option value="">-- Choose a Hostel to Add --</option>
+                  {hostels.map(h => (
+                    <option key={h} value={h} disabled={selectedHostels.includes(h)}>
+                      {h} {selectedHostels.includes(h) ? "(Already Selected)" : ""}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  if (selectedHostels.length === hostels.length) {
+                    setSelectedHostels([]);
+                  } else {
+                    setSelectedHostels([...hostels]);
+                  }
+                }}
+                className="px-3 py-2 bg-slate-100 hover:bg-slate-200 text-slate-800 font-bold text-[10px] sm:text-xs rounded-lg transition whitespace-nowrap"
+              >
+                {selectedHostels.length === hostels.length ? "Deselect All" : "Select All Hostels"}
+              </button>
             </div>
+
+            {selectedHostels.length > 0 && (
+              <div className="flex flex-wrap items-center gap-1.5 mt-2.5">
+                {selectedHostels.map(h => (
+                  <span
+                    key={h}
+                    className="inline-flex items-center gap-1 px-2.5 py-1 bg-blue-50 border border-blue-200 text-blue-800 rounded-lg text-[9px] sm:text-xs font-bold"
+                  >
+                    {h}
+                    <button
+                      type="button"
+                      onClick={() => setSelectedHostels(selectedHostels.filter(item => item !== h))}
+                      className="text-blue-500 hover:text-blue-700 font-black ml-1"
+                    >
+                      ×
+                    </button>
+                  </span>
+                ))}
+              </div>
+            )}
             <p className="text-[9px] sm:text-[11px] text-slate-500 mt-1.5 sm:mt-2">
               {selectedHostels.length > 0
                 ? `${selectedHostels.length} hostel(s) selected`
@@ -605,19 +645,38 @@ const FieldEnforcementComponent: React.FC<FieldEnforcementProps> = ({
       {/* Status View Tab */}
       {activeTab === "status" && (
         <div className="space-y-4 sm:space-y-6">
-          <div className="grid grid-cols-2 sm:grid-cols-2 md:grid-cols-4 gap-2 sm:gap-3">
-            {hostels.map((hostel) => (
-              <button
-                key={hostel}
-                onClick={() => loadCompletionStatus(hostel)}
-                className={`p-2 sm:p-4 rounded-lg font-semibold transition text-xs sm:text-sm border ${selectedStatusHostels.includes(hostel)
-                  ? "bg-blue-600 text-white border-blue-700 shadow-md"
-                  : "bg-blue-50 text-blue-900 border-blue-200 hover:bg-blue-100"
-                  }`}
+          <div className="bg-white p-3 sm:p-4 rounded-xl border border-slate-200 flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
+            <div className="flex-1">
+              <label className="block text-[10px] sm:text-xs font-black uppercase tracking-wider text-slate-700 mb-1">
+                🏢 Select Hostel to Inspect Status
+              </label>
+              <select
+                value=""
+                onChange={(e) => {
+                  const h = e.target.value;
+                  if (h) {
+                    loadCompletionStatus(h);
+                  }
+                }}
+                className="w-full bg-slate-50 border-2 border-slate-200 rounded-lg px-3 py-2 text-xs font-bold text-slate-800 outline-none focus:border-blue-500 transition cursor-pointer"
               >
-                {hostel}
-              </button>
-            ))}
+                <option value="">-- Choose a Hostel --</option>
+                {hostels.map(h => (
+                  <option key={h} value={h}>
+                    {h} {selectedStatusHostels.includes(h) ? "(Viewing)" : ""}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <button
+              type="button"
+              onClick={() => {
+                hostels.forEach(h => loadCompletionStatus(h));
+              }}
+              className="px-4 py-2 bg-blue-50 hover:bg-blue-100 text-blue-800 font-bold text-[10px] sm:text-xs rounded-lg border border-blue-200 transition self-end sm:self-auto"
+            >
+              Load All Hostels
+            </button>
           </div>
 
           {selectedStatusHostels.map((hostel) => {
