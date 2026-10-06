@@ -8630,6 +8630,9 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
 
                     <div className="flex items-center gap-2 flex-1 max-w-sm md:max-w-md w-full">
                       <select
+                        name="admin_hostel_filter_dropdown"
+                        autoComplete="off"
+                        data-form-type="other"
                         value={hostelFilter}
                         onChange={(e) => {
                           setHostelFilter(e.target.value);
@@ -8652,6 +8655,10 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                         </div>
                         <input
                           type="text"
+                          name="admin_student_permission_search"
+                          autoComplete="off"
+                          data-form-type="other"
+                          data-lpignore="true"
                           placeholder="Search student..."
                           value={searchQuery}
                           onChange={(e) => {
@@ -17743,6 +17750,9 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                                   🏢 Select Hostel
                                 </label>
                                 <select
+                                  name="audit_hostel_select"
+                                  autoComplete="off"
+                                  data-form-type="other"
                                   value={biometricAuditHostel}
                                   onChange={(e) => {
                                     setBiometricAuditHostel(e.target.value);
@@ -17766,6 +17776,9 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                                   🎓 Select Semester
                                 </label>
                                 <select
+                                  name="audit_semester_select"
+                                  autoComplete="off"
+                                  data-form-type="other"
                                   value={biometricAuditSemester}
                                   onChange={(e) => {
                                     setBiometricAuditSemester(e.target.value);

@@ -67,52 +67,50 @@ export async function loadFaceApiModels(accurate: boolean = false): Promise<bool
                 return false;
             }
 
-            // ⚡ CLOUDFLARE R2 CDN OFFLOADING ($0 Railway Bandwidth):
-            // Load Face-API models directly from Cloudflare R2 edge CDN with automatic fallback to local /models
-            const R2_MODELS_URL = 'https://pub-754ab0d29b3a43b69d79a461c85d3056.r2.dev/models';
-            const MODEL_URL = process.env.NEXT_PUBLIC_MODELS_CDN_URL || R2_MODELS_URL;
+            // ⚡ FAST PARALLEL MODEL LOADING from local /models with browser Cache-Control:
+            // Loading in parallel (Promise.all) eliminates sequential network bottlenecks (takes ~200ms instead of 30s)
+            const MODEL_PATH = '/models';
 
-            // Always ensure basic models are there
+            // Always ensure basic models are loaded in parallel
             if (!liteModelsLoaded) {
                 try {
-                    await fa.nets.tinyFaceDetector.loadFromUri(MODEL_URL);
-                    await new Promise(resolve => setTimeout(resolve, 50));
-                    await fa.nets.faceLandmark68TinyNet.loadFromUri(MODEL_URL);
-                    await new Promise(resolve => setTimeout(resolve, 50));
-                    await fa.nets.faceRecognitionNet.loadFromUri(MODEL_URL);
-                    await new Promise(resolve => setTimeout(resolve, 50));
-                } catch (cdnErr) {
-                    console.warn('⚠️ [Face-API] CDN model load failed, falling back to local /models:', cdnErr);
-                    await fa.nets.tinyFaceDetector.loadFromUri('/models');
-                    await new Promise(resolve => setTimeout(resolve, 50));
-                    await fa.nets.faceLandmark68TinyNet.loadFromUri('/models');
-                    await new Promise(resolve => setTimeout(resolve, 50));
-                    await fa.nets.faceRecognitionNet.loadFromUri('/models');
-                    await new Promise(resolve => setTimeout(resolve, 50));
+                    await Promise.all([
+                        fa.nets.tinyFaceDetector.loadFromUri(MODEL_PATH),
+                        fa.nets.faceLandmark68TinyNet.loadFromUri(MODEL_PATH),
+                        fa.nets.faceRecognitionNet.loadFromUri(MODEL_PATH)
+                    ]);
+                    liteModelsLoaded = true;
+                } catch (err) {
+                    console.warn('⚠️ [Face-API] Local /models load failed, trying CDN fallback:', err);
+                    const CDN_URL = process.env.NEXT_PUBLIC_MODELS_CDN_URL || 'https://pub-754ab0d29b3a43b69d79a461c85d3056.r2.dev/models';
+                    await Promise.all([
+                        fa.nets.tinyFaceDetector.loadFromUri(CDN_URL),
+                        fa.nets.faceLandmark68TinyNet.loadFromUri(CDN_URL),
+                        fa.nets.faceRecognitionNet.loadFromUri(CDN_URL)
+                    ]);
+                    liteModelsLoaded = true;
                 }
-                liteModelsLoaded = true;
             }
 
             if (accurate && !proModelsLoaded) {
-                console.log('💎 Loading High-Accuracy (Pro) Models...');
                 try {
-                    await fa.nets.ssdMobilenetv1.loadFromUri(MODEL_URL);
-                    await new Promise(resolve => setTimeout(resolve, 50));
-                    await fa.nets.faceLandmark68Net.loadFromUri(MODEL_URL);
-                    await new Promise(resolve => setTimeout(resolve, 50));
-                } catch (cdnErr) {
-                    console.warn('⚠️ [Face-API] CDN Pro model load failed, falling back to local /models:', cdnErr);
-                    await fa.nets.ssdMobilenetv1.loadFromUri('/models');
-                    await new Promise(resolve => setTimeout(resolve, 50));
-                    await fa.nets.faceLandmark68Net.loadFromUri('/models');
-                    await new Promise(resolve => setTimeout(resolve, 50));
+                    await Promise.all([
+                        fa.nets.ssdMobilenetv1.loadFromUri(MODEL_PATH),
+                        fa.nets.faceLandmark68Net.loadFromUri(MODEL_PATH)
+                    ]);
+                    proModelsLoaded = true;
+                } catch (err) {
+                    console.warn('⚠️ [Face-API] Local Pro models load failed, trying CDN fallback:', err);
+                    const CDN_URL = process.env.NEXT_PUBLIC_MODELS_CDN_URL || 'https://pub-754ab0d29b3a43b69d79a461c85d3056.r2.dev/models';
+                    await Promise.all([
+                        fa.nets.ssdMobilenetv1.loadFromUri(CDN_URL),
+                        fa.nets.faceLandmark68Net.loadFromUri(CDN_URL)
+                    ]);
+                    proModelsLoaded = true;
                 }
-                proModelsLoaded = true;
             }
 
-            // Removed WARMUP to prevent synchronous WebGL blocking of the main thread
-
-            console.log(`✅ Face-api models ready and warmed up (${accurate ? 'PRO' : 'LITE'})`);
+            console.log(`✅ Face-api models ready (${accurate ? 'PRO' : 'LITE'})`);
             return true;
         } catch (error) {
             console.error('❌ Failed to load face-api models.', error);

@@ -253,7 +253,11 @@ export async function POST(request: NextRequest) {
       ...(faceDescriptor && { faceDescriptor }),
       ...(supabase_id && { supabaseId: supabase_id }),
       authProvider: supabase_id ? 'supabase' : 'firebase',
-      dynamicFields: body.dynamicFields || {}, // Preserve all form data
+      dynamicFields: {
+        ...(existingStudent?.dynamicFields && typeof existingStudent.dynamicFields === 'object' ? existingStudent.dynamicFields : {}),
+        ...(body.dynamicFields && typeof body.dynamicFields === 'object' ? body.dynamicFields : {}),
+        ...(Array.isArray(faceDescriptor) && faceDescriptor.length >= 68 ? { requiresFaceRecapture: false } : {})
+      },
     };
 
     if (deviceId) {

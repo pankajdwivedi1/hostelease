@@ -65,6 +65,9 @@ export async function POST(req: NextRequest) {
             ? { ...student.dynamicFields } 
             : {};
 
+        // Explicitly clear the enforcement retake flag upon successful capture
+        dynamicFields.requiresFaceRecapture = false;
+
         let finalProfilePicture = profilePicture;
         if (profilePicture && (profilePicture.startsWith("data:image/") || profilePicture.startsWith("data:"))) {
             try {

@@ -199,8 +199,15 @@ export async function PATCH(
     }
 
 
-    // 🔒 OPTION A ENFORCEMENT: If profile picture is updated without explicit new faceDescriptor, clear old vector array
-    if (body.profilePicture && (!body.faceDescriptor || !Array.isArray(body.faceDescriptor) || body.faceDescriptor.length === 0)) {
+    // 🔒 If profile picture is updated with a valid faceDescriptor, immediately stop and clear enforcement
+    if (body.profilePicture && Array.isArray(body.faceDescriptor) && body.faceDescriptor.length >= 68) {
+      const currentDyn = typeof body.dynamicFields === 'object' && body.dynamicFields !== null 
+        ? { ...body.dynamicFields } 
+        : (typeof (await db.students.getById(studentId))?.dynamicFields === 'object' ? { ...(await db.students.getById(studentId))?.dynamicFields } : {});
+      currentDyn.requiresFaceRecapture = false;
+      body.dynamicFields = currentDyn;
+      console.log(`✅ [Face Recapture Complete] Cleared requiresFaceRecapture for ${studentId}`);
+    } else if (body.profilePicture && (!body.faceDescriptor || !Array.isArray(body.faceDescriptor) || body.faceDescriptor.length === 0)) {
       body.faceDescriptor = [];
       console.log(`🔒 [Option A Enforcement] Profile picture updated for ${studentId}. Cleared old faceDescriptor vector array.`);
     }
