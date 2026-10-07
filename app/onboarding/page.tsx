@@ -960,7 +960,38 @@ export default function OnboardingPage() {
         return;
       }
 
-      // 🛡️ 3. ANTI-SPOOF CHECK: Reject mobile screens and printed photos
+      // 🛡️ 3. STRICT FACIAL LANDMARK SHARPNESS & LENS FOG / SMUDGE GATEKEEPER
+      const featureQuality = faceMatching.assessFacialLandmarkSharpness(
+        aiCanvas,
+        descriptor.landmarks,
+        descriptor.detection?.box
+      );
+
+      if (featureQuality.isPhotoOfPhoto) {
+        setFaceError(featureQuality.reason || "Photo of a screen or reprint detected. Please capture a real live selfie.");
+        setCapturedImage(null);
+        return;
+      }
+
+      if (featureQuality.isSideFace) {
+        setFaceError(featureQuality.reason || "Side face / turned head detected. Please look straight at the camera so both sides of your face are fully visible.");
+        setCapturedImage(null);
+        return;
+      }
+
+      if (featureQuality.isFoggy) {
+        setFaceError(featureQuality.reason || "Camera lens appears smudged or foggy. Please wipe your camera lens with a clean cloth.");
+        setCapturedImage(null);
+        return;
+      }
+
+      if (featureQuality.isBlurry) {
+        setFaceError(featureQuality.reason || `Photo is too blurry (Sharpness: ${featureQuality.sharpnessScore}%). Eyebrows, eyelids, and lips must be sharp.`);
+        setCapturedImage(null);
+        return;
+      }
+
+      // 🛡️ 4. ANTI-SPOOF CHECK: Reject mobile screens and printed photos
       if (descriptor.detection?.box) {
         const spoofCheck = faceMatching.detectMobileScreenDisplay(aiCanvas, descriptor.detection.box);
         if (spoofCheck.isSpoof) {

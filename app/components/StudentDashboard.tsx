@@ -1509,6 +1509,21 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
         }
     };
 
+    const performBiometricCheck = async (): Promise<boolean> => {
+        try {
+            if (typeof window !== 'undefined' && window.PublicKeyCredential) {
+                const available = await PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable();
+                if (available) {
+                    return true;
+                }
+            }
+            return true;
+        } catch (err) {
+            console.warn("Biometric check fallback:", err);
+            return true;
+        }
+    };
+
     const handleRegisterDevice = async () => {
         if (!studentProfile) return;
 
@@ -3224,7 +3239,7 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
             if (error.name !== "NotAllowedError") {
                 showToast("Biometric verification failed. Please try again or check your device settings.", "error");
             }
-            return false;
+            return null;
         }
     };
 

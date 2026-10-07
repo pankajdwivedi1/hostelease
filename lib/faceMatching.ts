@@ -514,6 +514,361 @@ export function assessPhotoQuality(
 }
 
 /**
+ * Facial Landmark Micro-ROI Sharpness & Lens Fog / Smudge Quality Analyzer
+ * Evaluates high-frequency micro-textures specifically across:
+ * - Eyebrows (hair follicles)
+ * - Eyelid margins & Iris borders
+ * - Lips & Mouth contours
+ * - Beard / Jawline hair texture
+ * - Smudged / Foggy camera lens haze (Dark channel prior & dynamic contrast)
+ */
+export function assessFacialLandmarkSharpness(
+    inputElement: HTMLVideoElement | HTMLCanvasElement | HTMLImageElement,
+    landmarks?: any,
+    box?: { x: number; y: number; width: number; height: number }
+): {
+    isBlurry: boolean;
+    isFoggy: boolean;
+    isPhotoOfPhoto: boolean;
+    sharpnessScore: number;
+    fogScore: number;
+    featureScores: {
+        eyebrows: number;
+        eyes: number;
+        lips: number;
+        jawBeard: number;
+    };
+    reason?: string;
+} {
+    try {
+        if (!inputElement) {
+            return {
+                isBlurry: true,
+                isFoggy: false,
+                isPhotoOfPhoto: false,
+                sharpnessScore: 0,
+                fogScore: 100,
+                featureScores: { eyebrows: 0, eyes: 0, lips: 0, jawBeard: 0 },
+                reason: "No image provided."
+            };
+        }
+
+        // Global base quality (screen bezel, global blur)
+        const baseQuality = assessPhotoQuality(inputElement);
+        if (baseQuality.isPhotoOfPhoto) {
+            return {
+                isBlurry: false,
+                isFoggy: false,
+                isPhotoOfPhoto: true,
+                sharpnessScore: baseQuality.sharpnessScore,
+                fogScore: 0,
+                featureScores: { eyebrows: 50, eyes: 50, lips: 50, jawBeard: 50 },
+                reason: baseQuality.reason || "Device bezel / screen border detected. Please capture a direct live selfie."
+            };
+        }
+
+        const width = (inputElement as HTMLVideoElement).videoWidth || inputElement.width || 0;
+        const height = (inputElement as HTMLVideoElement).videoHeight || inputElement.height || 0;
+
+        if (width === 0 || height === 0) {
+            return {
+                isBlurry: true,
+                isFoggy: false,
+                isPhotoOfPhoto: false,
+                sharpnessScore: 0,
+                fogScore: 100,
+                featureScores: { eyebrows: 0, eyes: 0, lips: 0, jawBeard: 0 },
+                reason: "Invalid image dimensions."
+            };
+        }
+
+        const canvas = document.createElement('canvas');
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext('2d', { willReadFrequently: true });
+        if (!ctx) {
+            return {
+                isBlurry: baseQuality.isBlurry,
+                isFoggy: false,
+                isPhotoOfPhoto: false,
+                sharpnessScore: baseQuality.sharpnessScore,
+                fogScore: 0,
+                featureScores: { eyebrows: baseQuality.sharpnessScore, eyes: baseQuality.sharpnessScore, lips: baseQuality.sharpnessScore, jawBeard: baseQuality.sharpnessScore }
+            };
+        }
+
+        ctx.drawImage(inputElement, 0, 0, width, height);
+
+        // Extract face bounding area
+        let faceX = 0, faceY = 0, faceW = width, faceH = height;
+        if (box) {
+            faceX = Math.max(0, Math.floor(box.x));
+            faceY = Math.max(0, Math.floor(box.y));
+            faceW = Math.min(width - faceX, Math.floor(box.width));
+            faceH = Math.min(height - faceY, Math.floor(box.height));
+        }
+
+        // 1. 🌫️ CAMERA LENS FOG / SMUDGE / GLARE DETECTOR
+        // When a phone lens is greasy/smudged with fingerprints, scattered light creates a foggy haze.
+        // Dark areas (pupils, nostrils, hair) lose depth (dark channel shifts up) and dynamic contrast collapses.
+        const faceImgData = ctx.getImageData(faceX, faceY, faceW, faceH);
+        const facePixels = faceImgData.data;
+        const faceLuminance: number[] = [];
+
+        for (let i = 0; i < facePixels.length; i += 4) {
+            const lum = 0.299 * facePixels[i] + 0.587 * facePixels[i + 1] + 0.114 * facePixels[i + 2];
+            faceLuminance.push(lum);
+        }
+
+        faceLuminance.sort((a, b) => a - b);
+        const p05 = faceLuminance[Math.floor(faceLuminance.length * 0.05)] || 0; // Dark channel floor
+        const p95 = faceLuminance[Math.floor(faceLuminance.length * 0.95)] || 255; // Highlights
+        const dynamicContrast = p95 - p05;
+
+        // Count overblown/milky diffuse glow pixels (190 - 245)
+        let milkyGlowCount = 0;
+        for (let i = 0; i < faceLuminance.length; i++) {
+            if (faceLuminance[i] >= 190 && faceLuminance[i] <= 245) milkyGlowCount++;
+        }
+        const milkyRatio = faceLuminance.length > 0 ? milkyGlowCount / faceLuminance.length : 0;
+
+        // Smudge/Fog metric: High dark floor (> 68), compressed dynamic contrast (< 62), or excessive milky haze (> 40%)
+        let isFoggy = false;
+        let fogScore = 0;
+        if (dynamicContrast < 55 && p05 > 55) {
+            isFoggy = true;
+            fogScore = 85;
+        } else if (dynamicContrast < 48) {
+            isFoggy = true;
+            fogScore = 90;
+        } else if (p05 > 72 && milkyRatio > 0.35) {
+            isFoggy = true;
+            fogScore = 80;
+        }
+
+        // 2. 🔍 FACIAL LANDMARK MICRO-ROI SHARPNESS (Eyebrows, Eyes, Lips, Jawline/Beard)
+        const computePatchSharpness = (pts: Array<{ x: number; y: number }>, pad = 6): number => {
+            if (!pts || pts.length === 0) return 60; // fallback
+
+            let minX = width, maxX = 0, minY = height, maxY = 0;
+            for (const p of pts) {
+                if (p.x < minX) minX = p.x;
+                if (p.x > maxX) maxX = p.x;
+                if (p.y < minY) minY = p.y;
+                if (p.y > maxY) maxY = p.y;
+            }
+
+            const px = Math.max(1, Math.floor(minX - pad));
+            const py = Math.max(1, Math.floor(minY - pad));
+            const pw = Math.min(width - px - 1, Math.ceil(maxX - minX + pad * 2));
+            const ph = Math.min(height - py - 1, Math.ceil(maxY - minY + pad * 2));
+
+            if (pw < 6 || ph < 6) return 50;
+
+            const patchData = ctx.getImageData(px, py, pw, ph).data;
+            const gray = new Float32Array(pw * ph);
+            for (let i = 0; i < patchData.length; i += 4) {
+                gray[i / 4] = 0.299 * patchData[i] + 0.587 * patchData[i + 1] + 0.114 * patchData[i + 2];
+            }
+
+            // 8-neighbor Laplacian on ROI
+            let sumLap = 0, sumLapSq = 0, count = 0;
+            const edgeList: number[] = [];
+
+            for (let y = 1; y < ph - 1; y++) {
+                for (let x = 1; x < pw - 1; x++) {
+                    const idx = y * pw + x;
+                    const lap = (
+                        gray[idx - pw - 1] + gray[idx - pw] + gray[idx - pw + 1] +
+                        gray[idx - 1] - 8 * gray[idx] + gray[idx + 1] +
+                        gray[idx + pw - 1] + gray[idx + pw] + gray[idx + pw + 1]
+                    );
+                    sumLap += lap;
+                    sumLapSq += lap * lap;
+                    count++;
+
+                    const gx = gray[idx - pw + 1] + 2 * gray[idx + 1] + gray[idx + pw + 1] -
+                               (gray[idx - pw - 1] + 2 * gray[idx - 1] + gray[idx + pw - 1]);
+                    const gy = gray[idx + pw - 1] + 2 * gray[idx + pw] + gray[idx + pw + 1] -
+                               (gray[idx - pw - 1] + 2 * gray[idx - 1] + gray[idx - pw + 1]);
+                    edgeList.push(Math.sqrt(gx * gx + gy * gy));
+                }
+            }
+
+            if (count === 0) return 50;
+            const mean = sumLap / count;
+            const variance = Math.max(0, (sumLapSq / count) - (mean * mean));
+
+            edgeList.sort((a, b) => a - b);
+            const p90Edge = edgeList[Math.floor(edgeList.length * 0.90)] || 0;
+
+            // Score mapping calibrated for facial micro-features:
+            // Crisp eyebrows/eyelids: variance 120-600+, p90Edge 30-80+ -> 75-100%
+            // Soft focus / blurred: variance < 45, p90Edge < 18 -> < 45%
+            let score = 0;
+            if (variance < 45 || p90Edge < 18) {
+                score = Math.min(42, Math.max(10, Math.round((variance / 45) * 25 + (p90Edge / 18) * 17)));
+            } else {
+                const edgeComponent = Math.min(50, (p90Edge / 70.0) * 50.0);
+                const varComponent = Math.min(50, (Math.min(1500, variance) / 1500.0) * 50.0);
+                score = Math.min(100, Math.max(48, Math.round(edgeComponent + varComponent)));
+            }
+            return score;
+        };
+
+        // Extract landmark coordinates
+        let eyebrowScore = 0;
+        let eyeScore = 0;
+        let lipScore = 0;
+        let jawBeardScore = 0;
+        let isSideFace = false;
+
+        const pts = landmarks?.positions || (Array.isArray(landmarks) ? landmarks : null);
+
+        if (pts && pts.length >= 68) {
+            // 👤 3. POSE & FRONTAL SYMMETRY ANALYSIS (Reject Side-Face / Profile Views)
+            const leftEyeCenter = { x: (pts[36].x + pts[39].x) / 2, y: (pts[36].y + pts[39].y) / 2 };
+            const rightEyeCenter = { x: (pts[42].x + pts[45].x) / 2, y: (pts[42].y + pts[45].y) / 2 };
+            const noseTip = pts[30] || pts[33];
+            const leftJaw = pts[0];
+            const rightJaw = pts[16];
+
+            const distToLeftEye = Math.abs(noseTip.x - leftEyeCenter.x);
+            const distToRightEye = Math.abs(noseTip.x - rightEyeCenter.x);
+            const maxEyeDist = Math.max(distToLeftEye, distToRightEye, 1);
+            const minEyeDist = Math.min(distToLeftEye, distToRightEye);
+            const eyeYawRatio = minEyeDist / maxEyeDist;
+
+            const leftCheekDist = Math.abs(noseTip.x - leftJaw.x);
+            const rightCheekDist = Math.abs(noseTip.x - rightJaw.x);
+            const maxCheekDist = Math.max(leftCheekDist, rightCheekDist, 1);
+            const minCheekDist = Math.min(leftCheekDist, rightCheekDist);
+            const cheekYawRatio = minCheekDist / maxCheekDist;
+
+            const leftEyeW = Math.abs(pts[39].x - pts[36].x);
+            const rightEyeW = Math.abs(pts[45].x - pts[42].x);
+            const eyeWidthRatio = Math.min(leftEyeW, rightEyeW) / Math.max(leftEyeW, rightEyeW, 1);
+
+            const leftEbW = Math.abs(pts[21].x - pts[17].x);
+            const rightEbW = Math.abs(pts[26].x - pts[22].x);
+            const ebWidthRatio = Math.min(leftEbW, rightEbW) / Math.max(leftEbW, rightEbW, 1);
+
+            // If head is turned sideways (Yaw > 20 deg), one eye/cheek is compressed
+            if (eyeYawRatio < 0.48 || cheekYawRatio < 0.40 || (eyeWidthRatio < 0.42 && ebWidthRatio < 0.45)) {
+                isSideFace = true;
+            }
+
+            // Eyebrows (pts 17-26)
+            const eyebrowPts = pts.slice(17, 27);
+            eyebrowScore = computePatchSharpness(eyebrowPts, 8);
+
+            // Eyes & Eyelids (pts 36-47)
+            const eyePts = pts.slice(36, 48);
+            eyeScore = computePatchSharpness(eyePts, 8);
+
+            // Lips & Mouth (pts 48-68)
+            const lipPts = pts.slice(48, 68);
+            lipScore = computePatchSharpness(lipPts, 8);
+
+            // Jawline / Chin & Beard region (pts 4-12)
+            const jawPts = pts.slice(4, 13);
+            jawBeardScore = computePatchSharpness(jawPts, 10);
+        } else if (landmarks?.getLeftEye && landmarks?.getRightEye) {
+            // High-level landmark methods
+            const leftEye = landmarks.getLeftEye() || [];
+            const rightEye = landmarks.getRightEye() || [];
+            const nose = landmarks.getNose() || [];
+            const jaw = landmarks.getJawOutline() || [];
+
+            if (leftEye.length > 0 && rightEye.length > 0 && nose.length > 0 && jaw.length > 0) {
+                const noseTip = nose[nose.length - 1] || nose[3];
+                const leftEyeCenterX = (leftEye[0].x + leftEye[leftEye.length - 1].x) / 2;
+                const rightEyeCenterX = (rightEye[0].x + rightEye[rightEye.length - 1].x) / 2;
+                const dL = Math.abs(noseTip.x - leftEyeCenterX);
+                const dR = Math.abs(noseTip.x - rightEyeCenterX);
+                if (Math.min(dL, dR) / Math.max(dL, dR, 1) < 0.48) {
+                    isSideFace = true;
+                }
+            }
+
+            const eb = [...(landmarks.getLeftEyeBrow() || []), ...(landmarks.getRightEyeBrow() || [])];
+            const ey = [...(landmarks.getLeftEye() || []), ...(landmarks.getRightEye() || [])];
+            const mo = landmarks.getMouth() || [];
+            const jw = landmarks.getJawOutline() || [];
+
+            eyebrowScore = computePatchSharpness(eb, 8);
+            eyeScore = computePatchSharpness(ey, 8);
+            lipScore = computePatchSharpness(mo, 8);
+            jawBeardScore = computePatchSharpness(jw, 10);
+        } else {
+            // If landmarks not available, inherit base quality
+            eyebrowScore = baseQuality.sharpnessScore;
+            eyeScore = baseQuality.sharpnessScore;
+            lipScore = baseQuality.sharpnessScore;
+            jawBeardScore = baseQuality.sharpnessScore;
+        }
+
+        // Weighted feature sharpness score
+        const featureSharpnessScore = Math.round(
+            eyebrowScore * 0.35 +
+            eyeScore * 0.35 +
+            lipScore * 0.20 +
+            jawBeardScore * 0.10
+        );
+
+        // Combine overall sharpness with base global sharpness
+        const finalSharpnessScore = Math.min(100, Math.max(0, Math.round(featureSharpnessScore * 0.70 + baseQuality.sharpnessScore * 0.30)));
+
+        // Strict rejection conditions:
+        // 1. Side face / turned head
+        // 2. Overall sharpness < 48%
+        // 3. Both eyebrows & eyes are blurry (< 38%)
+        // 4. Global blur is triggered
+        const isBlurry = finalSharpnessScore < 48 || (eyebrowScore < 38 && eyeScore < 38) || baseQuality.isBlurry;
+
+        let reason = "";
+        if (isSideFace) {
+            reason = "Side face / turned head detected. Please look straight at the camera so both sides of your face are fully visible.";
+        } else if (isFoggy) {
+            reason = "Camera lens appears smudged or foggy. Please wipe your camera lens with a clean cloth.";
+        } else if (isBlurry) {
+            if (eyebrowScore < 40 || eyeScore < 40) {
+                reason = `Photo is too blurry (Sharpness: ${finalSharpnessScore}%). Eyebrows, eyelids, and facial details are not clear. Please hold camera steady in good lighting.`;
+            } else {
+                reason = `Photo is too blurry (Sharpness: ${finalSharpnessScore}%). Please hold camera steady in good lighting and capture again.`;
+            }
+        }
+
+        return {
+            isBlurry,
+            isFoggy,
+            isSideFace,
+            isPhotoOfPhoto: false,
+            sharpnessScore: finalSharpnessScore,
+            fogScore,
+            featureScores: {
+                eyebrows: eyebrowScore,
+                eyes: eyeScore,
+                lips: lipScore,
+                jawBeard: jawBeardScore
+            },
+            reason: reason || undefined
+        };
+    } catch (err) {
+        console.error("Facial landmark sharpness analysis error:", err);
+        return {
+            isBlurry: false,
+            isFoggy: false,
+            isSideFace: false,
+            isPhotoOfPhoto: false,
+            sharpnessScore: 75,
+            fogScore: 0,
+            featureScores: { eyebrows: 75, eyes: 75, lips: 75, jawBeard: 75 }
+        };
+    }
+}
+
+/**
  * Detect face in an image
  */
 export async function detectFace(

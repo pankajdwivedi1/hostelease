@@ -261,7 +261,38 @@ export default function LiveFaceCaptureModal({
                 return;
             }
 
-            // 🛡️ 3. Anti-Spoof Screen Verification
+            // 🛡️ 3. Strict Facial Landmark Sharpness & Lens Fog / Smudge Gatekeeper
+            const featureQuality = faceMatching.assessFacialLandmarkSharpness(
+                aiCanvas,
+                descriptor.landmarks,
+                descriptor.detection?.box
+            );
+
+            if (featureQuality.isPhotoOfPhoto) {
+                setFaceError(featureQuality.reason || "Photo of a screen or reprint detected. Please take a live direct selfie.");
+                setIsProcessing(false);
+                return;
+            }
+
+            if (featureQuality.isSideFace) {
+                setFaceError(featureQuality.reason || "Side face / turned head detected. Please look straight at the camera so both sides of your face are fully visible.");
+                setIsProcessing(false);
+                return;
+            }
+
+            if (featureQuality.isFoggy) {
+                setFaceError(featureQuality.reason || "Camera lens appears smudged or foggy. Please wipe your camera lens with a clean cloth.");
+                setIsProcessing(false);
+                return;
+            }
+
+            if (featureQuality.isBlurry) {
+                setFaceError(featureQuality.reason || `Photo is too blurry (Sharpness: ${featureQuality.sharpnessScore}%). Eyebrows, eyelids, and lips must be sharp.`);
+                setIsProcessing(false);
+                return;
+            }
+
+            // 🛡️ 4. Anti-Spoof Screen Verification
             if (descriptor.detection?.box) {
                 const spoofCheck = faceMatching.detectMobileScreenDisplay(aiCanvas, descriptor.detection.box);
                 if (spoofCheck.isSpoof) {

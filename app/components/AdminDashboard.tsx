@@ -4010,7 +4010,7 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
     canvasOrImg: HTMLCanvasElement | HTMLImageElement
   ): Promise<{ valid: boolean; descriptor?: number[]; error?: string; score?: number }> => {
     try {
-      const { assessPhotoQuality, detectFace, loadFaceApiModels, detectMobileScreenDisplay } = await import("@/lib/faceMatching");
+      const { assessPhotoQuality, assessFacialLandmarkSharpness, detectFace, loadFaceApiModels, detectMobileScreenDisplay } = await import("@/lib/faceMatching");
       
       // 🛡️ 1. Photo Quality & Re-Capture Check
       const quality = assessPhotoQuality(canvasOrImg);
@@ -4038,6 +4038,31 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
       if (res.multipleFacesDetected) {
         return { valid: false, error: "Multiple faces detected! Please ensure ONLY the student is in frame." };
       }
+
+      // 🛡️ 3. Strict Facial Landmark Sharpness & Lens Fog / Smudge Gatekeeper
+      const featureQuality = assessFacialLandmarkSharpness(canvasOrImg, res.landmarks, res.detection?.box);
+      if (featureQuality.isSideFace) {
+        return {
+          valid: false,
+          error: featureQuality.reason || "Side face / turned head detected. Please face the camera directly so both sides of your face are fully visible.",
+          score: featureQuality.sharpnessScore
+        };
+      }
+      if (featureQuality.isFoggy) {
+        return {
+          valid: false,
+          error: featureQuality.reason || "Camera lens appears smudged or foggy. Please wipe camera lens with a clean cloth.",
+          score: featureQuality.sharpnessScore
+        };
+      }
+      if (featureQuality.isBlurry) {
+        return {
+          valid: false,
+          error: featureQuality.reason || `Photo is too blurry (Sharpness: ${featureQuality.sharpnessScore}%). Eyebrows, eyelids, and lips must be sharp.`,
+          score: featureQuality.sharpnessScore
+        };
+      }
+
       if (res.detection?.box) {
         const spoof = detectMobileScreenDisplay(canvasOrImg, res.detection.box);
         if (spoof.isSpoof) {
