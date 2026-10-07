@@ -2161,18 +2161,28 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
   const [isFlaggingBiometricRetake, setIsFlaggingBiometricRetake] = useState(false);
 
   // ⚡ MEMOIZED BIOMETRIC AUDIT SELECTORS (Zero CPU Spikes & 60 FPS Smooth UI)
-  const { uniqueBiometricHostels, allBiometricSemesterList } = useMemo(() => {
+  const { uniqueBiometricHostels, allBiometricSemesterList, biometricHostelCounts } = useMemo(() => {
     const hostelsSet = new Set<string>();
+    // Always include all 8 standard academic semesters (1, 2, 3, 4, 5, 6, 7, 8 - both odd and even)
     const semestersSet = new Set<string>(["1", "2", "3", "4", "5", "6", "7", "8"]);
+    const hCounts: Record<string, number> = {};
 
     for (const s of auditResults) {
       const h = (s.hostelName || "UNASSIGNED").trim();
-      if (h) hostelsSet.add(h);
+      if (h) {
+        hostelsSet.add(h);
+        const hKey = h.toUpperCase();
+        hCounts[hKey] = (hCounts[hKey] || 0) + 1;
+      }
 
       const dyn = typeof s.dynamicFields === 'object' && s.dynamicFields !== null ? s.dynamicFields : {};
       const rawSem = String(s.semester || dyn.semester || dyn.Semester || "").trim();
-      const semNorm = rawSem.replace(/^semester\s*/i, '').replace(/^sem\s*/i, '').trim();
-      if (semNorm) semestersSet.add(semNorm);
+      if (rawSem) {
+        // Extract semester number or custom label
+        const numMatch = rawSem.match(/^(\d+)(?:st|nd|rd|th)?(?:\s*sem|\s*semester)?$/i) || rawSem.match(/^(?:semester|sem)\s*(\d+)/i);
+        const semKey = numMatch ? numMatch[1] : rawSem.replace(/^semester\s*/i, '').replace(/^sem\s*/i, '').trim();
+        if (semKey) semestersSet.add(semKey);
+      }
     }
 
     return {
@@ -2182,14 +2192,50 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
         const numB = parseInt(b, 10);
         if (!isNaN(numA) && !isNaN(numB)) return numA - numB;
         return a.localeCompare(b);
-      })
+      }),
+      biometricHostelCounts: hCounts
     };
   }, [auditResults]);
+
+  // Helper to normalize any semester representation to its canonical key
+  const normalizeSemesterKey = (raw: string): string => {
+    if (!raw) return "";
+    const cleaned = raw.trim();
+    const numMatch = cleaned.match(/^(\d+)(?:st|nd|rd|th)?(?:\s*sem|\s*semester)?$/i) || cleaned.match(/^(?:semester|sem)\s*(\d+)/i);
+    if (numMatch) return numMatch[1];
+    return cleaned.replace(/^semester\s*/i, '').replace(/^sem\s*/i, '').trim().toUpperCase();
+  };
+
+  // Compute semester counts dynamically based on selected hostel
+  const biometricSemesterStats = useMemo(() => {
+    const sCounts: Record<string, number> = {};
+    const selectedHostelUpper = biometricAuditHostel.toUpperCase();
+
+    const relevantStudents = auditResults.filter(s => {
+      if (biometricAuditHostel === "ALL") return true;
+      const sHostel = (s.hostelName || "UNASSIGNED").trim().toUpperCase();
+      return sHostel === selectedHostelUpper;
+    });
+
+    for (const s of relevantStudents) {
+      const dyn = typeof s.dynamicFields === 'object' && s.dynamicFields !== null ? s.dynamicFields : {};
+      const rawSem = String(s.semester || dyn.semester || dyn.Semester || "").trim();
+      const semKey = normalizeSemesterKey(rawSem);
+      if (semKey) {
+        sCounts[semKey] = (sCounts[semKey] || 0) + 1;
+      }
+    }
+
+    return {
+      counts: sCounts,
+      total: relevantStudents.length
+    };
+  }, [auditResults, biometricAuditHostel]);
 
   const filteredBiometricStudents = useMemo(() => {
     if (activeAuditType !== "biometrics" || auditResults.length === 0) return [];
     const selectedHostelUpper = biometricAuditHostel.toUpperCase();
-    const selectedSemUpper = biometricAuditSemester.replace(/^semester\s*/i, '').replace(/^sem\s*/i, '').trim().toUpperCase();
+    const selectedSemKey = normalizeSemesterKey(biometricAuditSemester);
     const searchQuery = biometricAuditSearch.trim().toLowerCase();
 
     return auditResults.filter(s => {
@@ -2199,8 +2245,10 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
       if (biometricAuditSemester !== "ALL") {
         const dyn = typeof s.dynamicFields === 'object' && s.dynamicFields !== null ? s.dynamicFields : {};
         const rawSem = String(s.semester || dyn.semester || dyn.Semester || "").trim();
-        const semNorm = rawSem.replace(/^semester\s*/i, '').replace(/^sem\s*/i, '').trim().toUpperCase();
-        if (semNorm !== selectedSemUpper && rawSem.toUpperCase() !== selectedSemUpper) return false;
+        const studentSemKey = normalizeSemesterKey(rawSem);
+        if (studentSemKey !== selectedSemKey && rawSem.toUpperCase() !== biometricAuditSemester.toUpperCase()) {
+          return false;
+        }
       }
 
       if (searchQuery) {
@@ -17712,60 +17760,60 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                       </p>
                     </div>
 
-                    <div className="grid grid-cols-2 sm:grid-cols-5 gap-2 sm:gap-4">
+                    <div className="grid grid-cols-2 sm:grid-cols-5 gap-1.5 sm:gap-2.5">
                       <button
                         onClick={() => handleAudit("duplicates-phone")}
                         disabled={isAuditing}
-                        className="p-3 sm:p-6 bg-white border-2 border-slate-100 rounded-2xl hover:border-indigo-500 hover:shadow-xl transition-all group flex flex-col items-center text-center gap-2 sm:gap-3"
+                        className={`p-2 sm:p-3 bg-white border-2 rounded-xl sm:rounded-2xl transition-all group flex flex-col items-center text-center gap-1 sm:gap-1.5 ${activeAuditType === "phone" ? "border-indigo-500 shadow-md shadow-indigo-100" : "border-slate-100 hover:border-indigo-400 hover:shadow-md"}`}
                       >
-                        <div className="w-8 h-8 sm:w-12 sm:h-12 bg-indigo-50 text-indigo-600 rounded-xl flex items-center justify-center group-hover:scale-110 transition-transform">
-                          <svg className="w-4 h-4 sm:w-6 sm:h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z" /></svg>
+                        <div className="w-6 h-6 sm:w-8 sm:h-8 bg-indigo-50 text-indigo-600 rounded-lg sm:rounded-xl flex items-center justify-center group-hover:scale-105 transition-transform">
+                          <svg className="w-3.5 h-3.5 sm:w-4 sm:h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z" /></svg>
                         </div>
-                        <span className="text-[7px] sm:text-xs font-black uppercase tracking-tight sm:tracking-widest text-slate-900">Duplicate Phones</span>
+                        <span className="text-[7.5px] sm:text-[9.5px] font-black uppercase tracking-tight text-slate-800 leading-tight">Duplicate Phones</span>
                       </button>
 
                       <button
                         onClick={() => handleAudit("duplicates-regid")}
                         disabled={isAuditing}
-                        className="p-3 sm:p-6 bg-white border-2 border-slate-100 rounded-2xl hover:border-purple-500 hover:shadow-xl transition-all group flex flex-col items-center text-center gap-2 sm:gap-3"
+                        className={`p-2 sm:p-3 bg-white border-2 rounded-xl sm:rounded-2xl transition-all group flex flex-col items-center text-center gap-1 sm:gap-1.5 ${activeAuditType === "regid" ? "border-purple-500 shadow-md shadow-purple-100" : "border-slate-100 hover:border-purple-400 hover:shadow-md"}`}
                       >
-                        <div className="w-8 h-8 sm:w-12 sm:h-12 bg-purple-50 text-purple-600 rounded-xl flex items-center justify-center group-hover:scale-110 transition-transform">
-                          <svg className="w-4 h-4 sm:w-6 sm:h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V8a2 2 0 00-2-2h-5m-4 0V5a2 2 0 012-2h2a2 2 0 012 2v1m-4 0h4m-7 6h6m-6 3h6m-6 3h6" /></svg>
+                        <div className="w-6 h-6 sm:w-8 sm:h-8 bg-purple-50 text-purple-600 rounded-lg sm:rounded-xl flex items-center justify-center group-hover:scale-105 transition-transform">
+                          <svg className="w-3.5 h-3.5 sm:w-4 sm:h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V8a2 2 0 00-2-2h-5m-4 0V5a2 2 0 012-2h2a2 2 0 012 2v1m-4 0h4m-7 6h6m-6 3h6m-6 3h6" /></svg>
                         </div>
-                        <span className="text-[7px] sm:text-xs font-black uppercase tracking-tight sm:tracking-widest text-slate-900">Duplicate Reg IDs</span>
+                        <span className="text-[7.5px] sm:text-[9.5px] font-black uppercase tracking-tight text-slate-800 leading-tight">Duplicate Reg IDs</span>
                       </button>
 
                       <button
                         onClick={() => handleAudit("duplicates-erpid")}
                         disabled={isAuditing}
-                        className="p-3 sm:p-6 bg-white border-2 border-slate-100 rounded-2xl hover:border-emerald-500 hover:shadow-xl transition-all group flex flex-col items-center text-center gap-2 sm:gap-3"
+                        className={`p-2 sm:p-3 bg-white border-2 rounded-xl sm:rounded-2xl transition-all group flex flex-col items-center text-center gap-1 sm:gap-1.5 ${activeAuditType === "erpid" ? "border-emerald-500 shadow-md shadow-emerald-100" : "border-slate-100 hover:border-emerald-400 hover:shadow-md"}`}
                       >
-                        <div className="w-8 h-8 sm:w-12 sm:h-12 bg-emerald-50 text-emerald-600 rounded-xl flex items-center justify-center group-hover:scale-110 transition-transform">
-                          <svg className="w-4 h-4 sm:w-6 sm:h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>
+                        <div className="w-6 h-6 sm:w-8 sm:h-8 bg-emerald-50 text-emerald-600 rounded-lg sm:rounded-xl flex items-center justify-center group-hover:scale-105 transition-transform">
+                          <svg className="w-3.5 h-3.5 sm:w-4 sm:h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>
                         </div>
-                        <span className="text-[7px] sm:text-xs font-black uppercase tracking-tight sm:tracking-widest text-slate-900">Duplicate ERP IDs</span>
+                        <span className="text-[7.5px] sm:text-[9.5px] font-black uppercase tracking-tight text-slate-800 leading-tight">Duplicate ERP IDs</span>
                       </button>
 
                       <button
                         onClick={() => handleAudit("gibberish-names")}
                         disabled={isAuditing}
-                        className="p-3 sm:p-6 bg-white border-2 border-slate-100 rounded-2xl hover:border-orange-500 hover:shadow-xl transition-all group flex flex-col items-center text-center gap-2 sm:gap-3"
+                        className={`p-2 sm:p-3 bg-white border-2 rounded-xl sm:rounded-2xl transition-all group flex flex-col items-center text-center gap-1 sm:gap-1.5 ${activeAuditType === "gibberish" ? "border-orange-500 shadow-md shadow-orange-100" : "border-slate-100 hover:border-orange-400 hover:shadow-md"}`}
                       >
-                        <div className="w-8 h-8 sm:w-12 sm:h-12 bg-orange-50 text-orange-600 rounded-xl flex items-center justify-center group-hover:scale-110 transition-transform">
-                          <svg className="w-4 h-4 sm:w-6 sm:h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" /></svg>
+                        <div className="w-6 h-6 sm:w-8 sm:h-8 bg-orange-50 text-orange-600 rounded-lg sm:rounded-xl flex items-center justify-center group-hover:scale-105 transition-transform">
+                          <svg className="w-3.5 h-3.5 sm:w-4 sm:h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" /></svg>
                         </div>
-                        <span className="text-[7px] sm:text-xs font-black uppercase tracking-tight sm:tracking-widest text-slate-900">Invalid Names</span>
+                        <span className="text-[7.5px] sm:text-[9.5px] font-black uppercase tracking-tight text-slate-800 leading-tight">Invalid Names</span>
                       </button>
 
                       <button
                         onClick={() => handleAudit("biometrics")}
                         disabled={isAuditing}
-                        className="p-3 sm:p-6 bg-white border-2 border-slate-100 rounded-2xl hover:border-pink-500 hover:shadow-xl transition-all group flex flex-col items-center text-center gap-2 sm:gap-3 col-span-2 sm:col-span-1"
+                        className={`p-2 sm:p-3 bg-white border-2 rounded-xl sm:rounded-2xl transition-all group flex flex-col items-center text-center gap-1 sm:gap-1.5 col-span-2 sm:col-span-1 ${activeAuditType === "biometrics" ? "border-pink-500 shadow-md shadow-pink-100 ring-2 ring-pink-500/10" : "border-slate-100 hover:border-pink-400 hover:shadow-md"}`}
                       >
-                        <div className="w-8 h-8 sm:w-12 sm:h-12 bg-pink-50 text-pink-600 rounded-xl flex items-center justify-center group-hover:scale-110 transition-transform">
-                          <svg className="w-4 h-4 sm:w-6 sm:h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5.121 17.804A13.937 13.937 0 0112 16c2.5 0 4.847.655 6.879 1.804M15 10a3 3 0 11-6 0 3 3 0 016 0zm6 2a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+                        <div className="w-6 h-6 sm:w-8 sm:h-8 bg-pink-50 text-pink-600 rounded-lg sm:rounded-xl flex items-center justify-center group-hover:scale-105 transition-transform">
+                          <svg className="w-3.5 h-3.5 sm:w-4 sm:h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5.121 17.804A13.937 13.937 0 0112 16c2.5 0 4.847.655 6.879 1.804M15 10a3 3 0 11-6 0 3 3 0 016 0zm6 2a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
                         </div>
-                        <span className="text-[7px] sm:text-xs font-black uppercase tracking-tight sm:tracking-widest text-slate-900">Biometric Audit</span>
+                        <span className="text-[7.5px] sm:text-[9.5px] font-black uppercase tracking-tight text-slate-800 leading-tight">Biometric Audit</span>
                       </button>
                     </div>
 
@@ -17804,9 +17852,14 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                                   className="w-full bg-white border-2 border-slate-200 rounded-xl px-2.5 py-1.5 sm:px-3 sm:py-2 text-[11px] sm:text-xs font-bold text-slate-800 outline-none focus:border-pink-500 transition-all cursor-pointer"
                                 >
                                   <option value="ALL">ALL HOSTELS ({auditResults.length} Students)</option>
-                                  {uniqueBiometricHostels.map(h => (
-                                    <option key={h} value={h}>{h}</option>
-                                  ))}
+                                  {uniqueBiometricHostels.map(h => {
+                                    const count = biometricHostelCounts[h.toUpperCase()] || 0;
+                                    return (
+                                      <option key={h} value={h}>
+                                        {h} ({count} Student{count === 1 ? '' : 's'})
+                                      </option>
+                                    );
+                                  })}
                                 </select>
                               </div>
 
@@ -17827,11 +17880,14 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                                   }}
                                   className="w-full bg-white border-2 border-slate-200 rounded-xl px-2.5 py-1.5 sm:px-3 sm:py-2 text-[11px] sm:text-xs font-bold text-slate-800 outline-none focus:border-pink-500 transition-all cursor-pointer"
                                 >
-                                  <option value="ALL">ALL SEMESTERS</option>
+                                  <option value="ALL">ALL SEMESTERS ({biometricSemesterStats.total} Students)</option>
                                   {allBiometricSemesterList.map(sem => {
+                                    const count = biometricSemesterStats.counts[sem] || 0;
                                     const label = isNaN(Number(sem)) ? (sem.toUpperCase().startsWith("SEM") ? sem : `Semester ${sem}`) : `Semester ${sem}`;
                                     return (
-                                      <option key={sem} value={sem}>{label}</option>
+                                      <option key={sem} value={sem}>
+                                        {label} ({count} Student{count === 1 ? '' : 's'})
+                                      </option>
                                     );
                                   })}
                                 </select>

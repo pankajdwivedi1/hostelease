@@ -399,10 +399,16 @@ export async function GET(request: NextRequest) {
     const minimal = searchParams.get("minimal") === "true";
     const versionCheck = searchParams.get("versionCheck") === "true";
     const cachedUpdatedAt = searchParams.get("updatedAt");
+    const cachedFlagParam = searchParams.get("cachedRequiresFaceRecapture");
 
     const isNotModified = (student: any) => {
-      // ⚡ If the student is flagged for face recapture, never send notModified (force fresh profile sync)
-      if (student?.dynamicFields && typeof student.dynamicFields === 'object' && student.dynamicFields.requiresFaceRecapture) {
+      const serverFlag = !!(student?.dynamicFields && typeof student.dynamicFields === 'object' && student.dynamicFields.requiresFaceRecapture);
+      // ⚡ If the student is flagged for face recapture on server, never send notModified (force fresh profile sync)
+      if (serverFlag) {
+        return false;
+      }
+      // ⚡ If client cached that it was flagged, but server is now UNFLAGGED, force fresh sync to dismiss student modal!
+      if (cachedFlagParam === "true" && !serverFlag) {
         return false;
       }
       if (!versionCheck || !cachedUpdatedAt || !student?.updatedAt) return false;

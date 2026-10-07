@@ -1571,10 +1571,8 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
             if (!isParentView && isFullProfileLoaded) {
                 const isFlagged = !!(studentProfile?.dynamicFields && typeof studentProfile.dynamicFields === 'object' && studentProfile.dynamicFields.requiresFaceRecapture);
                 
-                // Enforce live selfie recapture whenever explicitly flagged by admin
-                if (isFlagged) {
-                    setShowLiveFaceRecaptureModal(true);
-                }
+                // Enforce live selfie recapture whenever explicitly flagged by admin, dismiss when unflagged
+                setShowLiveFaceRecaptureModal(isFlagged);
             }
 
             // ⚡ FIELD ENFORCEMENT: Check for admin-enforced missing fields (replaces old hardcoded check)
@@ -2076,7 +2074,8 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
                         : `firebaseUID=${user.uid}${user.email ? `&email=${encodeURIComponent(user.email)}` : ''}`;
 
                         const cachedUpdatedAt = currentStudent?.updatedAt || "";
-                        const versionCheckParam = cachedUpdatedAt ? `&versionCheck=true&updatedAt=${encodeURIComponent(cachedUpdatedAt)}` : "";
+                        const cachedFlag = !!(currentStudent?.dynamicFields && typeof currentStudent.dynamicFields === 'object' && currentStudent.dynamicFields.requiresFaceRecapture);
+                        const versionCheckParam = cachedUpdatedAt ? `&versionCheck=true&updatedAt=${encodeURIComponent(cachedUpdatedAt)}&cachedRequiresFaceRecapture=${cachedFlag}` : `&cachedRequiresFaceRecapture=${cachedFlag}`;
                         let fullResponse = await fetch(`/api/students?${queryParam}${versionCheckParam}${getTenantParam(false)}`, { cache: 'no-store' });
                         
                         // ⚡ LIVE WIPE: If server returns 404 during background check, purge local cache immediately!
@@ -2120,6 +2119,8 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
                                         } catch(e){}
                                     }
                                 }
+                                const isFlaggedNow = !!(currentStudent?.dynamicFields?.requiresFaceRecapture);
+                                setShowLiveFaceRecaptureModal(isFlaggedNow);
                                 setIsFullProfileLoaded(true);
                                 setLoading(false);
                             }
@@ -2132,6 +2133,8 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
                                 studentStatus: fullData.student.studentStatus || "in",
                                 outingType: fullData.student.outingType
                             };
+                            const isNowFlagged = !!(fullStudentData.dynamicFields && typeof fullStudentData.dynamicFields === 'object' && fullStudentData.dynamicFields.requiresFaceRecapture);
+                            setShowLiveFaceRecaptureModal(isNowFlagged);
                             setStudentProfile(fullStudentData);
                             setIsFullProfileLoaded(true);
                             localStorage.setItem("cachedStudentData", JSON.stringify(fullStudentData));
