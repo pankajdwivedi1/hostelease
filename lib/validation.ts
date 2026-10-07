@@ -214,11 +214,9 @@ export const validators = {
 export function validateStudentRegistration(body: any): { valid: boolean; errors: string[] } {
   const errors: string[] = [];
 
-  // Auto fallback for missing firebaseUID
-  if (!body.firebaseUID) {
-    body.firebaseUID = `uid_${Date.now()}`;
-  } else if (!validators.isValidFirebaseUID(body.firebaseUID)) {
-    errors.push('Invalid Firebase UID');
+  // Auto fallback for missing or custom firebaseUID format
+  if (!body.firebaseUID || typeof body.firebaseUID !== 'string' || !body.firebaseUID.trim()) {
+    body.firebaseUID = String(body.registrationId || body.phoneNumber || body.email || `uid_${Date.now()}`);
   }
 
   if (body.email && body.email.trim() !== "" && !validators.isValidEmail(body.email.trim())) {

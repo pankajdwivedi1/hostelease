@@ -16948,10 +16948,10 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                 )}
 
                 {activeSettingsTab === "system" && (
-                  <div className="space-y-6">
-                    <div className="bg-slate-50 border-2 border-slate-100 p-4 rounded-2xl flex items-start gap-4 mb-4">
-                      <span className="text-xl sm:text-2xl">⚙️</span>
-                      <p className="text-xs sm:text-sm text-slate-800 font-medium">
+                  <div className="space-y-3.5 sm:space-y-6">
+                    <div className="bg-slate-50 border border-slate-200/80 px-3 py-2 sm:px-4 sm:py-2.5 rounded-xl sm:rounded-2xl flex items-center gap-2.5 sm:gap-3">
+                      <span className="text-sm sm:text-base leading-none">⚙️</span>
+                      <p className="text-[9.5px] sm:text-xs text-slate-800 font-medium leading-tight">
                         Global system controls. Manage student access and payments here.
                       </p>
                     </div>
@@ -16960,24 +16960,24 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                       <button
                         onClick={() => handleBulkProfileLock(true)}
                         disabled={isUpdatingSettings}
-                        className="flex flex-col items-center justify-center gap-1.5 p-3 sm:p-6 bg-red-50 text-red-700 border-2 border-red-100 rounded-2xl hover:bg-red-100 transition-all font-bold text-[10px] xs:text-[11px] sm:text-xs shadow-sm hover:shadow-lg disabled:opacity-50 group text-center"
+                        className="flex flex-col items-center justify-center gap-1 sm:gap-1.5 p-2 sm:p-3.5 bg-red-50 text-red-700 border-2 border-red-100 rounded-xl sm:rounded-2xl hover:bg-red-100 transition-all font-bold text-[8.5px] sm:text-xs shadow-sm hover:shadow-md disabled:opacity-50 group text-center"
                       >
-                        <div className="p-2 sm:p-3 bg-red-200 rounded-full text-red-700 group-hover:scale-110 transition-transform shadow-sm">
-                          <svg className="w-4 h-4 sm:w-6 sm:h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" /></svg>
+                        <div className="p-1.5 sm:p-2 bg-red-200/80 rounded-full text-red-700 group-hover:scale-110 transition-transform shadow-sm">
+                          <svg className="w-3.5 h-3.5 sm:w-5 sm:h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" /></svg>
                         </div>
-                        <span>Lock All Profiles for Students</span>
-                        <span className="hidden sm:block text-[7px] sm:text-[9px] text-red-500/70 font-bold normal-case mt-0.5 sm:mt-1">Prevents all students from editing their profiles</span>
+                        <span className="leading-tight">Lock All Profiles for Students</span>
+                        <span className="hidden sm:block text-[8px] text-red-500/70 font-medium normal-case mt-0.5">Prevents all students from editing their profiles</span>
                       </button>
                       <button
                         onClick={() => handleBulkProfileLock(false)}
                         disabled={isUpdatingSettings}
-                        className="flex flex-col items-center justify-center gap-1.5 p-3 sm:p-6 bg-blue-50 text-blue-700 border-2 border-blue-100 rounded-2xl hover:bg-blue-100 transition-all font-bold text-[10px] xs:text-[11px] sm:text-xs shadow-sm hover:shadow-lg disabled:opacity-50 group text-center"
+                        className="flex flex-col items-center justify-center gap-1 sm:gap-1.5 p-2 sm:p-3.5 bg-blue-50 text-blue-700 border-2 border-blue-100 rounded-xl sm:rounded-2xl hover:bg-blue-100 transition-all font-bold text-[8.5px] sm:text-xs shadow-sm hover:shadow-md disabled:opacity-50 group text-center"
                       >
-                        <div className="p-2 sm:p-3 bg-blue-200 rounded-full text-blue-700 group-hover:scale-110 transition-transform shadow-sm">
-                          <svg className="w-4 h-4 sm:w-6 sm:h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M8 11V7a4 4 0 118 0m-4 8v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2z" /></svg>
+                        <div className="p-1.5 sm:p-2 bg-blue-200/80 rounded-full text-blue-700 group-hover:scale-110 transition-transform shadow-sm">
+                          <svg className="w-3.5 h-3.5 sm:w-5 sm:h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M8 11V7a4 4 0 118 0m-4 8v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2z" /></svg>
                         </div>
-                        <span>Unlock All Profiles for Students</span>
-                        <span className="hidden sm:block text-[7px] sm:text-[9px] text-blue-500/70 font-bold normal-case mt-0.5 sm:mt-1">Allows students to update their details</span>
+                        <span className="leading-tight">Unlock All Profiles for Students</span>
+                        <span className="hidden sm:block text-[8px] text-blue-500/70 font-medium normal-case mt-0.5">Allows students to update their details</span>
                       </button>
                     </div>
 
@@ -17833,10 +17833,10 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                         <div className="mt-4 sm:mt-8 space-y-3 sm:space-y-4">
                           {/* Dropdowns for Hostel and Semester + Search Box */}
                           <div className="bg-slate-50 border border-slate-200 p-2.5 sm:p-4 rounded-xl sm:rounded-2xl space-y-2.5 sm:space-y-3">
-                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 sm:gap-3">
+                            <div className="grid grid-cols-2 gap-2 sm:gap-3">
                               {/* 1. Select Hostel Dropdown */}
                               <div className="space-y-1">
-                                <label className="block text-[10px] sm:text-xs font-black uppercase tracking-wider text-slate-700">
+                                <label className="block text-[9.5px] sm:text-xs font-black uppercase tracking-wider text-slate-700 truncate">
                                   🏢 Select Hostel
                                 </label>
                                 <select
@@ -17849,14 +17849,14 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                                     setSelectedBiometricStudentIds([]);
                                     setBiometricAuditDisplayLimit(30);
                                   }}
-                                  className="w-full bg-white border-2 border-slate-200 rounded-xl px-2.5 py-1.5 sm:px-3 sm:py-2 text-[11px] sm:text-xs font-bold text-slate-800 outline-none focus:border-pink-500 transition-all cursor-pointer"
+                                  className="w-full bg-white border-2 border-slate-200 rounded-xl px-2 py-1.5 sm:px-3 sm:py-2 text-[10px] sm:text-xs font-bold text-slate-800 outline-none focus:border-pink-500 transition-all cursor-pointer truncate"
                                 >
-                                  <option value="ALL">ALL HOSTELS ({auditResults.length} Students)</option>
+                                  <option value="ALL">ALL HOSTELS ({auditResults.length})</option>
                                   {uniqueBiometricHostels.map(h => {
                                     const count = biometricHostelCounts[h.toUpperCase()] || 0;
                                     return (
                                       <option key={h} value={h}>
-                                        {h} ({count} Student{count === 1 ? '' : 's'})
+                                        {h} ({count})
                                       </option>
                                     );
                                   })}
@@ -17865,7 +17865,7 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
 
                               {/* 2. Select Semester Dropdown */}
                               <div className="space-y-1">
-                                <label className="block text-[10px] sm:text-xs font-black uppercase tracking-wider text-slate-700">
+                                <label className="block text-[9.5px] sm:text-xs font-black uppercase tracking-wider text-slate-700 truncate">
                                   🎓 Select Semester
                                 </label>
                                 <select
@@ -17878,15 +17878,15 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                                     setSelectedBiometricStudentIds([]);
                                     setBiometricAuditDisplayLimit(30);
                                   }}
-                                  className="w-full bg-white border-2 border-slate-200 rounded-xl px-2.5 py-1.5 sm:px-3 sm:py-2 text-[11px] sm:text-xs font-bold text-slate-800 outline-none focus:border-pink-500 transition-all cursor-pointer"
+                                  className="w-full bg-white border-2 border-slate-200 rounded-xl px-2 py-1.5 sm:px-3 sm:py-2 text-[10px] sm:text-xs font-bold text-slate-800 outline-none focus:border-pink-500 transition-all cursor-pointer truncate"
                                 >
-                                  <option value="ALL">ALL SEMESTERS ({biometricSemesterStats.total} Students)</option>
+                                  <option value="ALL">ALL SEMESTERS ({biometricSemesterStats.total})</option>
                                   {allBiometricSemesterList.map(sem => {
                                     const count = biometricSemesterStats.counts[sem] || 0;
                                     const label = isNaN(Number(sem)) ? (sem.toUpperCase().startsWith("SEM") ? sem : `Semester ${sem}`) : `Semester ${sem}`;
                                     return (
                                       <option key={sem} value={sem}>
-                                        {label} ({count} Student{count === 1 ? '' : 's'})
+                                        {label} ({count})
                                       </option>
                                     );
                                   })}
@@ -18193,141 +18193,141 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                   </div>
                 )}
                 {activeSettingsTab === "password" && (
-                  <div className="space-y-6">
-                    <div className="bg-blue-50 border-2 border-blue-100 p-4 rounded-2xl flex items-start gap-4">
-                      <span className="text-xl sm:text-2xl">🔑</span>
-                      <p className="text-xs sm:text-sm text-blue-800 font-medium font-sans">
+                  <div className="space-y-4 sm:space-y-6">
+                    <div className="bg-blue-50/80 border border-blue-100 px-3 py-2 sm:px-4 sm:py-2.5 rounded-xl sm:rounded-2xl flex items-center gap-2.5 sm:gap-3">
+                      <span className="text-sm sm:text-base leading-none">🔑</span>
+                      <p className="text-[9.5px] sm:text-xs text-blue-800 font-medium font-sans leading-tight">
                         Configure your campus authentication keys and gatepass access passwords.
                       </p>
                     </div>
 
-                    <div className={showRemoveButton ? "grid grid-cols-1 lg:grid-cols-3 gap-6" : "grid grid-cols-1 md:grid-cols-2 gap-6"}>
+                    <div className={showRemoveButton ? "grid grid-cols-1 lg:grid-cols-3 gap-3.5 sm:gap-5" : "grid grid-cols-1 md:grid-cols-2 gap-3.5 sm:gap-5"}>
                       {/* 1. Dean Credentials */}
-                      <div className="p-6 rounded-3xl border-2 border-gray-100 bg-gray-50/30 flex flex-col space-y-4">
-                        <div className="space-y-4">
-                          <h4 className="font-black text-gray-900 uppercase tracking-tighter text-[10px] sm:text-xs whitespace-nowrap mb-2">Dean Credentials</h4>
-                          <p className="text-[10px] text-gray-500 font-medium leading-relaxed font-sans">
-                            Change the dean password to update the login credentials for the Dean account.
-                          </p>
-                          <div className="space-y-2">
-                            <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest">New Password</label>
-                            <div className="relative">
+                      <div className="p-3 sm:p-5 rounded-2xl sm:rounded-3xl border-2 border-gray-100 bg-gray-50/30 flex flex-col space-y-2 sm:space-y-3">
+                        <div className="flex items-baseline flex-wrap gap-1">
+                          <h4 className="font-black text-gray-900 uppercase tracking-tight text-[10px] sm:text-xs whitespace-nowrap">Dean Credentials :</h4>
+                          <span className="text-[9px] sm:text-[10.5px] text-gray-500 font-medium font-sans">Change the dean password</span>
+                        </div>
+                        <div className="space-y-1">
+                          <label className="block text-[8.5px] sm:text-[9.5px] font-black text-gray-400 uppercase tracking-wider">New Password</label>
+                          <div className="flex flex-row sm:flex-col items-center sm:items-stretch gap-2">
+                            <div className="relative flex-1 sm:w-full min-w-0">
                               <input
                                 type={showPassword ? "text" : "password"}
                                 value={newPassword}
                                 onChange={(e) => setNewPassword(e.target.value)}
                                 autoComplete="new-password"
-                                className="w-full p-4 rounded-2xl bg-white border-2 border-gray-100 font-bold text-gray-800 outline-none focus:border-purple-500 focus:shadow-lg focus:shadow-purple-100 transition-all pr-12 text-sm"
+                                className="w-full px-3 py-1.5 sm:px-3.5 sm:py-2.5 rounded-xl bg-white border-2 border-gray-100 font-bold text-gray-800 outline-none focus:border-purple-500 focus:shadow-md focus:shadow-purple-100 transition-all pr-8 text-xs sm:text-sm"
                                 placeholder="••••••••"
                               />
                               <button
                                 type="button"
                                 onClick={() => setShowPassword(!showPassword)}
-                                className="absolute right-4 top-4 text-gray-400 hover:text-purple-600 transition-colors"
+                                className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-purple-600 transition-colors"
                               >
                                 {showPassword ? (
-                                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.88 9.88l-3.29-3.29m7.532 7.532l3.29 3.29M3 3l3.59 3.59m0 0A9.953 9.953 0 0112 5c4.478 0 8.268 2.943 9.543 7a10.025 10.025 0 01-4.132 5.411m0 0L21 21" /></svg>
+                                  <svg className="w-3.5 h-3.5 sm:w-4 sm:h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.88 9.88l-3.29-3.29m7.532 7.532l3.29 3.29M3 3l3.59 3.59m0 0A9.953 9.953 0 0112 5c4.478 0 8.268 2.943 9.543 7a10.025 10.025 0 01-4.132 5.411m0 0L21 21" /></svg>
                                 ) : (
-                                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" /></svg>
+                                  <svg className="w-3.5 h-3.5 sm:w-4 sm:h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" /></svg>
                                 )}
                               </button>
                             </div>
+                            <button
+                              onClick={handleChangePassword}
+                              disabled={!newPassword || newPassword.length < 6}
+                              className="shrink-0 sm:w-full px-3 py-1.5 sm:px-4 sm:py-2.5 bg-purple-600 text-white font-black text-[9.5px] sm:text-xs uppercase tracking-wider rounded-xl hover:bg-purple-700 transition-all shadow-md shadow-purple-200 disabled:opacity-50 disabled:shadow-none whitespace-nowrap text-center"
+                            >
+                              Update Password
+                            </button>
                           </div>
                         </div>
-                        <button
-                          onClick={handleChangePassword}
-                          disabled={!newPassword || newPassword.length < 6}
-                          className="w-full mt-4 py-3.5 bg-purple-600 text-white font-black text-xs uppercase tracking-widest rounded-xl hover:bg-purple-700 transition-colors shadow-lg shadow-purple-200 disabled:opacity-50 disabled:shadow-none"
-                        >
-                          Update Password
-                        </button>
                       </div>
 
                       {/* 2. Super Admin Credentials */}
                       {showRemoveButton && (
-                        <div className="p-6 rounded-3xl border-2 border-gray-100 bg-gray-50/30 flex flex-col space-y-4">
-                          <div className="space-y-4">
-                            <h4 className="font-black text-gray-900 uppercase tracking-tighter text-[10px] sm:text-xs whitespace-nowrap mb-2">Super Admin Credentials</h4>
-                            <p className="text-[10px] text-gray-500 font-medium leading-relaxed font-sans">
-                              Change the master password to update the Super Admin login credentials.
-                            </p>
-                            <div className="space-y-2">
-                              <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest">New Master Password</label>
-                              <div className="relative">
+                        <div className="p-3 sm:p-5 rounded-2xl sm:rounded-3xl border-2 border-gray-100 bg-gray-50/30 flex flex-col space-y-2 sm:space-y-3">
+                          <div className="flex items-baseline flex-wrap gap-1">
+                            <h4 className="font-black text-gray-900 uppercase tracking-tight text-[10px] sm:text-xs whitespace-nowrap">Super Admin Credentials :</h4>
+                            <span className="text-[9px] sm:text-[10.5px] text-gray-500 font-medium font-sans">Change the master password</span>
+                          </div>
+                          <div className="space-y-1">
+                            <label className="block text-[8.5px] sm:text-[9.5px] font-black text-gray-400 uppercase tracking-wider">New Master Password</label>
+                            <div className="flex flex-row sm:flex-col items-center sm:items-stretch gap-2">
+                              <div className="relative flex-1 sm:w-full min-w-0">
                                 <input
                                   type={showDeveloperPassword ? "text" : "password"}
                                   value={newDeveloperPassword}
                                   onChange={(e) => setNewDeveloperPassword(e.target.value)}
-                                  className="w-full p-4 rounded-2xl bg-white border-2 border-gray-100 font-bold text-gray-800 outline-none focus:border-red-500 focus:shadow-lg focus:shadow-red-100 transition-all pr-12 text-sm"
+                                  className="w-full px-3 py-1.5 sm:px-3.5 sm:py-2.5 rounded-xl bg-white border-2 border-gray-100 font-bold text-gray-800 outline-none focus:border-red-500 focus:shadow-md focus:shadow-red-100 transition-all pr-8 text-xs sm:text-sm"
                                   placeholder="••••••••"
                                 />
                                 <button
                                   type="button"
                                   onClick={() => setShowDeveloperPassword(!showDeveloperPassword)}
-                                  className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-400 hover:text-red-600 transition-colors"
+                                  className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-red-600 transition-colors"
                                 >
                                   {showDeveloperPassword ? (
-                                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.88 9.88l-3.29-3.29m7.532 7.532l3.29 3.29M3 3l3.59 3.59m0 0A9.953 9.953 0 0112 5c4.478 0 8.268 2.943 9.543 7a10.025 10.025 0 01-4.132 5.411m0 0L21 21" /></svg>
+                                    <svg className="w-3.5 h-3.5 sm:w-4 sm:h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.88 9.88l-3.29-3.29m7.532 7.532l3.29 3.29M3 3l3.59 3.59m0 0A9.953 9.953 0 0112 5c4.478 0 8.268 2.943 9.543 7a10.025 10.025 0 01-4.132 5.411m0 0L21 21" /></svg>
                                   ) : (
-                                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" /></svg>
+                                    <svg className="w-3.5 h-3.5 sm:w-4 sm:h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" /></svg>
                                   )}
                                 </button>
                               </div>
+                              <button
+                                onClick={async () => {
+                                  if (!newDeveloperPassword || newDeveloperPassword.length < 6) return alert("Password must be at least 6 characters");
+                                  await handleUpdateSettings({ developerPassword: newDeveloperPassword });
+                                  setDeveloperPassword(newDeveloperPassword);
+                                  setNewDeveloperPassword("");
+                                  alert("Developer master password updated!");
+                                }}
+                                disabled={isUpdatingSettings || !newDeveloperPassword}
+                                className="shrink-0 sm:w-full px-3 py-1.5 sm:px-4 sm:py-2.5 bg-red-600 text-white font-black text-[9.5px] sm:text-xs uppercase tracking-wider rounded-xl hover:bg-red-700 transition-all shadow-md shadow-red-200 disabled:opacity-50 whitespace-nowrap text-center"
+                              >
+                                Update Password
+                              </button>
                             </div>
                           </div>
-                          <button
-                            onClick={async () => {
-                              if (!newDeveloperPassword || newDeveloperPassword.length < 6) return alert("Password must be at least 6 characters");
-                              await handleUpdateSettings({ developerPassword: newDeveloperPassword });
-                              setDeveloperPassword(newDeveloperPassword);
-                              setNewDeveloperPassword("");
-                              alert("Developer master password updated!");
-                            }}
-                            disabled={isUpdatingSettings || !newDeveloperPassword}
-                            className="w-full mt-4 py-3.5 bg-red-600 text-white font-black text-xs uppercase tracking-widest rounded-xl hover:bg-red-700 transition-colors shadow-lg shadow-red-200 disabled:opacity-50"
-                          >
-                            Update Password
-                          </button>
                         </div>
                       )}
 
                       {/* 3. Gatepass Credentials */}
-                      <div className="p-6 rounded-3xl border-2 border-gray-100 bg-gray-50/30 flex flex-col space-y-4">
-                        <div className="space-y-4">
-                          <h4 className="font-black text-gray-900 uppercase tracking-tighter text-[10px] sm:text-xs whitespace-nowrap mb-2">Gatepass Credentials</h4>
-                          <p className="text-[10px] text-gray-500 font-medium leading-relaxed font-sans">
-                            Set an independent access password for the Gatepass scanning and monitoring link.
-                          </p>
-                          <div className="space-y-2">
-                            <label className="block text-[10px] font-black text-emerald-600/60 uppercase tracking-widest">Independent Password</label>
+                      <div className="p-3 sm:p-5 rounded-2xl sm:rounded-3xl border-2 border-gray-100 bg-gray-50/30 flex flex-col space-y-2 sm:space-y-3">
+                        <div className="flex items-baseline flex-wrap gap-1">
+                          <h4 className="font-black text-gray-900 uppercase tracking-tight text-[10px] sm:text-xs whitespace-nowrap">Gatepass Credentials :</h4>
+                          <span className="text-[9px] sm:text-[10.5px] text-gray-500 font-medium font-sans">Set an independent access password</span>
+                        </div>
+                        <div className="space-y-1">
+                          <label className="block text-[8.5px] sm:text-[9.5px] font-black text-emerald-600/70 uppercase tracking-wider">Independent Password</label>
+                          <div className="flex flex-row sm:flex-col items-center sm:items-stretch gap-2">
                             <input
                               type="text"
                               value={getpassPassword}
                               onChange={(e) => setGetpassPassword(e.target.value)}
-                              className="w-full p-4 rounded-2xl bg-white border-2 border-gray-100 font-bold text-gray-800 outline-none focus:border-emerald-500 transition-all text-sm"
+                              className="w-full px-3 py-1.5 sm:px-3.5 sm:py-2.5 rounded-xl bg-white border-2 border-gray-100 font-bold text-gray-800 outline-none focus:border-emerald-500 transition-all text-xs sm:text-sm flex-1 sm:w-full min-w-0"
                               placeholder="GET456"
                             />
+                            <button
+                              onClick={async () => {
+                                try {
+                                  const res = await fetch("/api/admin/passwords", {
+                                    method: "PATCH",
+                                    headers: { "Content-Type": "application/json" },
+                                    body: JSON.stringify({ newPassword: getpassPassword, type: "getpass" })
+                                  });
+                                  const data = await res.json();
+                                  if (data.success) alert("✅ GATEPASS password updated successfully!");
+                                  else alert("Error: " + data.error);
+                                } catch (e) {
+                                  alert("Failed to update password");
+                                }
+                              }}
+                              className="shrink-0 sm:w-full px-3 py-1.5 sm:px-4 sm:py-2.5 bg-emerald-600 text-white font-black text-[9.5px] sm:text-xs uppercase tracking-wider rounded-xl hover:bg-emerald-700 transition-all shadow-md shadow-emerald-100 active:scale-95 whitespace-nowrap text-center"
+                            >
+                              Update Password
+                            </button>
                           </div>
                         </div>
-                        <button
-                          onClick={async () => {
-                            try {
-                              const res = await fetch("/api/admin/passwords", {
-                                method: "PATCH",
-                                headers: { "Content-Type": "application/json" },
-                                body: JSON.stringify({ newPassword: getpassPassword, type: "getpass" })
-                              });
-                              const data = await res.json();
-                              if (data.success) alert("✅ GATEPASS password updated successfully!");
-                              else alert("Error: " + data.error);
-                            } catch (e) {
-                              alert("Failed to update password");
-                            }
-                          }}
-                          className="w-full mt-4 py-3.5 bg-emerald-600 text-white font-black text-xs uppercase tracking-widest rounded-xl hover:bg-emerald-700 transition-colors shadow-lg shadow-emerald-100 active:scale-95"
-                        >
-                          Update Password
-                        </button>
                       </div>
                     </div>
                   </div>
