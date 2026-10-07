@@ -1340,11 +1340,27 @@ export const db = {
                 return students.map((s: any) => {
                     const dyn = typeof s.dynamicFields === 'object' && s.dynamicFields !== null ? s.dynamicFields : {};
                     const isRetakeFlagged = Boolean(dyn.requiresFaceRecapture || s.requiresFaceRecapture);
+                    const pic = (s.profilePicture || "").trim();
+                    const hasPhoto = Boolean(pic && pic !== "null" && pic !== "undefined" && pic !== "data:," && pic.length > 20);
+                    const hasVector = Array.isArray(s.faceDescriptor) && s.faceDescriptor.length > 0;
+
                     return {
-                        ...s,
+                        id: s.id,
                         _id: s.id,
-                        hasVector: Array.isArray(s.faceDescriptor) && s.faceDescriptor.length > 0,
-                        isFlagged: isRetakeFlagged
+                        name: s.name,
+                        registrationId: s.registrationId,
+                        hostelName: s.hostelName,
+                        roomNumber: s.roomNumber,
+                        profilePicture: s.profilePicture,
+                        hasPhoto,
+                        hasVector,
+                        isFlagged: isRetakeFlagged,
+                        semester: s.semester,
+                        dynamicFields: {
+                            semester: dyn.semester || dyn.Semester || ""
+                        },
+                        phoneNumber: s.phoneNumber,
+                        email: s.email
                     };
                 });
             }

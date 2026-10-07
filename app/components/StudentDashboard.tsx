@@ -571,7 +571,7 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
         } finally {
             setIsLoadingStudentHistory(false);
         }
-    }, [studentProfile, permissions]);
+    }, [studentProfile?._id, (studentProfile as any)?.id, studentProfile?.firebaseUID, studentProfile?.registrationId, permissions]);
 
     // Outing Calendar Helpers and Fetch Logic
     const monthNames = [
@@ -850,36 +850,35 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
     useEffect(() => {
         if (studentProfile) {
             const hasVector = Array.isArray(studentProfile.faceDescriptor) && studentProfile.faceDescriptor.length > 0;
-            // ⚠️ Always pre-load SSD (pro) models — attendance verification always uses SSD.
-            // Old TinyFace vectors (loaded=false) would never match SSD at attendance time.
-            faceMatching.loadFaceApiModels(true).then(success => {
-                if (success) {
-                    console.log('Face matching SSD models ready');
-                    // ⚡ BACKGROUND VECTOR SYNC: Compute SSD vector from profile picture ONLY if missing
-                    if (!hasVector && studentProfile.profilePicture) {
-                        console.log('⚡ No face vector found — computing SSD vector from profile picture...');
-                        faceMatching.loadImage(studentProfile.profilePicture).then(img => {
-                            faceMatching.detectFace(img, true).then(res => {
-                                if (res && res.descriptor) {
-                                    const vector = Array.from(res.descriptor);
-                                    console.log('✅ SSD face vector computed successfully!');
-                                    setStudentProfile(prev => prev ? ({ ...prev, faceDescriptor: vector }) : prev);
-                                    fetch('/api/students/face-descriptor', {
-                                        method: 'POST',
-                                        headers: { 'Content-Type': 'application/json' },
-                                        body: JSON.stringify({
-                                            firebaseUID: studentProfile.firebaseUID,
-                                            faceDescriptor: vector
-                                        })
-                                    }).catch(e => console.warn('Background vector sync error:', e));
-                                }
+            // ⚡ BACKGROUND VECTOR SYNC: Compute SSD vector ONLY if missing from profile
+            if (!hasVector && studentProfile.profilePicture) {
+                const timer = setTimeout(() => {
+                    faceMatching.loadFaceApiModels(true).then(success => {
+                        if (success && studentProfile.profilePicture) {
+                            faceMatching.loadImage(studentProfile.profilePicture).then(img => {
+                                faceMatching.detectFace(img, true).then(res => {
+                                    if (res && res.descriptor) {
+                                        const vector = Array.from(res.descriptor);
+                                        console.log('✅ SSD face vector computed successfully!');
+                                        setStudentProfile(prev => prev ? ({ ...prev, faceDescriptor: vector }) : prev);
+                                        fetch('/api/students/face-descriptor', {
+                                            method: 'POST',
+                                            headers: { 'Content-Type': 'application/json' },
+                                            body: JSON.stringify({
+                                                firebaseUID: studentProfile.firebaseUID,
+                                                faceDescriptor: vector
+                                            })
+                                        }).catch(e => console.warn('Background vector sync error:', e));
+                                    }
+                                }).catch(() => {});
                             }).catch(() => {});
-                        }).catch(() => {});
-                    }
-                }
-            }).catch(err => {
-                console.warn('⚠️ Face matching models pre-load deferred:', err);
-            });
+                        }
+                    }).catch(err => {
+                        console.warn('⚠️ Face matching models pre-load deferred:', err);
+                    });
+                }, 3000); // 3-second gentle idle delay to keep UI 100% interactive
+                return () => clearTimeout(timer);
+            }
         }
     }, [studentProfile?.profilePicture, studentProfile?.firebaseUID]);
 

@@ -43,84 +43,93 @@ export async function getFaceApi() {
     return faceapi;
 }
 
+let loadingPromiseLite: Promise<boolean> | null = null;
+let loadingPromisePro: Promise<boolean> | null = null;
+
 /**
- * Load face-api.js models with industrial-grade locking
+ * Load face-api.js models with clean non-blocking mutex and micro-yields to prevent browser freezes
  */
 export async function loadFaceApiModels(accurate: boolean = false): Promise<boolean> {
-    // 1. Check if already loaded
+    if (typeof window === 'undefined') return false;
+
+    // 1. Fast path: return immediately if already loaded in memory
     if (accurate && proModelsLoaded) return true;
     if (!accurate && liteModelsLoaded) return true;
 
-    // 2. If already loading, wait for it
-    if (loadingPromise) {
-        await loadingPromise;
-        // Re-check after waiting
-        return loadFaceApiModels(accurate);
-    }
+    const MODEL_PATH = '/models';
 
-    // 3. Start loading
-    loadingPromise = (async () => {
-        try {
-            const fa = await getFaceApi();
-            if (!fa) {
-                console.warn('⚠️ [Face-API] Cannot load models: face-api module is not available.');
+    if (accurate) {
+        if (loadingPromisePro) return loadingPromisePro;
+        loadingPromisePro = (async () => {
+            try {
+                const fa = await getFaceApi();
+                if (!fa) return false;
+
+                if (!fa.nets.tinyFaceDetector.isLoaded) {
+                    await fa.nets.tinyFaceDetector.loadFromUri(MODEL_PATH);
+                    await new Promise(r => setTimeout(r, 10));
+                }
+                if (!fa.nets.faceLandmark68TinyNet.isLoaded) {
+                    await fa.nets.faceLandmark68TinyNet.loadFromUri(MODEL_PATH);
+                    await new Promise(r => setTimeout(r, 10));
+                }
+                if (!fa.nets.faceRecognitionNet.isLoaded) {
+                    await fa.nets.faceRecognitionNet.loadFromUri(MODEL_PATH);
+                    await new Promise(r => setTimeout(r, 10));
+                }
+                if (!fa.nets.ssdMobilenetv1.isLoaded) {
+                    await fa.nets.ssdMobilenetv1.loadFromUri(MODEL_PATH);
+                    await new Promise(r => setTimeout(r, 10));
+                }
+                if (!fa.nets.faceLandmark68Net.isLoaded) {
+                    await fa.nets.faceLandmark68Net.loadFromUri(MODEL_PATH);
+                    await new Promise(r => setTimeout(r, 10));
+                }
+
+                liteModelsLoaded = true;
+                proModelsLoaded = true;
+                console.log('✅ [Face-API] PRO models ready');
+                return true;
+            } catch (err) {
+                console.error('❌ [Face-API] Pro model load failed:', err);
                 return false;
+            } finally {
+                loadingPromisePro = null;
             }
+        })();
+        return loadingPromisePro;
+    } else {
+        if (loadingPromiseLite) return loadingPromiseLite;
+        loadingPromiseLite = (async () => {
+            try {
+                const fa = await getFaceApi();
+                if (!fa) return false;
 
-            // ⚡ FAST PARALLEL MODEL LOADING from local /models with browser Cache-Control:
-            // Loading in parallel (Promise.all) eliminates sequential network bottlenecks (takes ~200ms instead of 30s)
-            const MODEL_PATH = '/models';
-
-            // Always ensure basic models are loaded in parallel
-            if (!liteModelsLoaded) {
-                try {
-                    await Promise.all([
-                        fa.nets.tinyFaceDetector.loadFromUri(MODEL_PATH),
-                        fa.nets.faceLandmark68TinyNet.loadFromUri(MODEL_PATH),
-                        fa.nets.faceRecognitionNet.loadFromUri(MODEL_PATH)
-                    ]);
-                    liteModelsLoaded = true;
-                } catch (err) {
-                    console.warn('⚠️ [Face-API] Local /models load failed, trying CDN fallback:', err);
-                    const CDN_URL = process.env.NEXT_PUBLIC_MODELS_CDN_URL || 'https://pub-754ab0d29b3a43b69d79a461c85d3056.r2.dev/models';
-                    await Promise.all([
-                        fa.nets.tinyFaceDetector.loadFromUri(CDN_URL),
-                        fa.nets.faceLandmark68TinyNet.loadFromUri(CDN_URL),
-                        fa.nets.faceRecognitionNet.loadFromUri(CDN_URL)
-                    ]);
-                    liteModelsLoaded = true;
+                if (!fa.nets.tinyFaceDetector.isLoaded) {
+                    await fa.nets.tinyFaceDetector.loadFromUri(MODEL_PATH);
+                    await new Promise(r => setTimeout(r, 10));
                 }
-            }
-
-            if (accurate && !proModelsLoaded) {
-                try {
-                    await Promise.all([
-                        fa.nets.ssdMobilenetv1.loadFromUri(MODEL_PATH),
-                        fa.nets.faceLandmark68Net.loadFromUri(MODEL_PATH)
-                    ]);
-                    proModelsLoaded = true;
-                } catch (err) {
-                    console.warn('⚠️ [Face-API] Local Pro models load failed, trying CDN fallback:', err);
-                    const CDN_URL = process.env.NEXT_PUBLIC_MODELS_CDN_URL || 'https://pub-754ab0d29b3a43b69d79a461c85d3056.r2.dev/models';
-                    await Promise.all([
-                        fa.nets.ssdMobilenetv1.loadFromUri(CDN_URL),
-                        fa.nets.faceLandmark68Net.loadFromUri(CDN_URL)
-                    ]);
-                    proModelsLoaded = true;
+                if (!fa.nets.faceLandmark68TinyNet.isLoaded) {
+                    await fa.nets.faceLandmark68TinyNet.loadFromUri(MODEL_PATH);
+                    await new Promise(r => setTimeout(r, 10));
                 }
+                if (!fa.nets.faceRecognitionNet.isLoaded) {
+                    await fa.nets.faceRecognitionNet.loadFromUri(MODEL_PATH);
+                    await new Promise(r => setTimeout(r, 10));
+                }
+
+                liteModelsLoaded = true;
+                console.log('✅ [Face-API] LITE models ready');
+                return true;
+            } catch (err) {
+                console.error('❌ [Face-API] Lite model load failed:', err);
+                return false;
+            } finally {
+                loadingPromiseLite = null;
             }
-
-            console.log(`✅ Face-api models ready (${accurate ? 'PRO' : 'LITE'})`);
-            return true;
-        } catch (error) {
-            console.error('❌ Failed to load face-api models.', error);
-            return false;
-        } finally {
-            loadingPromise = null;
-        }
-    })();
-
-    return loadingPromise;
+        })();
+        return loadingPromiseLite;
+    }
 }
 
 /**
