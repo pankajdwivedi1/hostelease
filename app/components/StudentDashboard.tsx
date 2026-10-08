@@ -2005,6 +2005,15 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
                 const { Capacitor } = await import("@capacitor/core");
                 if (Capacitor.isNativePlatform()) {
                     const { GoogleAuth } = await import("@codetrix-studio/capacitor-google-auth");
+                    try {
+                        await GoogleAuth.initialize({
+                            clientId: '729813273338-btdk8vrja4u1eqmba6hdi3cicp0d4n4h.apps.googleusercontent.com',
+                            scopes: ['profile', 'email'],
+                            grantOfflineAccess: true,
+                        });
+                    } catch (initErr) {
+                        console.warn("GoogleAuth init before signOut:", initErr);
+                    }
                     await GoogleAuth.signOut();
                 }
             } catch (nativeSignOutErr) {

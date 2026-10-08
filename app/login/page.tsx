@@ -86,8 +86,15 @@ function LoginForm() {
       setTimeout(() => setShowLogoutToast(false), 5000);
       try {
         if (typeof window !== 'undefined' && (Capacitor.isNativePlatform() || (window as any).Capacitor?.isNativePlatform?.())) {
-          import('@codetrix-studio/capacitor-google-auth').then(({ GoogleAuth }) => {
-            GoogleAuth.signOut().catch(() => {});
+          import('@codetrix-studio/capacitor-google-auth').then(async ({ GoogleAuth }) => {
+            try {
+              await GoogleAuth.initialize({
+                clientId: '729813273338-btdk8vrja4u1eqmba6hdi3cicp0d4n4h.apps.googleusercontent.com',
+                scopes: ['profile', 'email'],
+                grantOfflineAccess: true,
+              });
+            } catch (e) {}
+            await GoogleAuth.signOut().catch(() => {});
           }).catch(() => {});
         }
       } catch (e) {}
