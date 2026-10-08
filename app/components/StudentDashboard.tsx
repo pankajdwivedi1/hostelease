@@ -2001,6 +2001,15 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
             } catch (e) {
                 console.warn("Firebase sign out error:", e);
             }
+            try {
+                const { Capacitor } = await import("@capacitor/core");
+                if (Capacitor.isNativePlatform()) {
+                    const { GoogleAuth } = await import("@codetrix-studio/capacitor-google-auth");
+                    await GoogleAuth.signOut();
+                }
+            } catch (nativeSignOutErr) {
+                console.warn("Native Google sign out error:", nativeSignOutErr);
+            }
             localStorage.clear();
             router.push("/login?logout=success");
         } catch (error) {

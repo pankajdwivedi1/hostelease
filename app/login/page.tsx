@@ -84,6 +84,13 @@ function LoginForm() {
       setShowLogoutToast(true);
       showToast("You have successfully logged out.", "success");
       setTimeout(() => setShowLogoutToast(false), 5000);
+      try {
+        if (typeof window !== 'undefined' && (Capacitor.isNativePlatform() || (window as any).Capacitor?.isNativePlatform?.())) {
+          import('@codetrix-studio/capacitor-google-auth').then(({ GoogleAuth }) => {
+            GoogleAuth.signOut().catch(() => {});
+          }).catch(() => {});
+        }
+      } catch (e) {}
       // Clean up the URL
       window.history.replaceState({}, '', '/login');
     }
@@ -425,6 +432,12 @@ function LoginForm() {
             });
           } catch (initErr) {
             console.warn("GoogleAuth init notice:", initErr);
+          }
+
+          try {
+            await GoogleAuth.signOut();
+          } catch (signOutErr) {
+            console.log("No previous active Google session to clear:", signOutErr);
           }
 
           const googleUser = await GoogleAuth.signIn();

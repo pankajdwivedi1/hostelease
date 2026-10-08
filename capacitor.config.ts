@@ -5,7 +5,22 @@ const config: CapacitorConfig = {
   appName: 'HostelEaze',
   webDir: 'public',
   server: {
-    url: 'https://www.hosteleaze.com'
+    url: 'https://www.hosteleaze.com',
+    cleartext: true,
+    allowNavigation: [
+      'https://www.hosteleaze.com',
+      '*.hosteleaze.com',
+      'accounts.google.com',
+      '*.google.com',
+      '*.googleapis.com',
+      'api.razorpay.com',
+      '*.razorpay.com',
+      'checkout.razorpay.com'
+    ]
+  },
+  android: {
+    allowMixedContent: true,
+    captureInput: true
   },
   plugins: {
     GoogleAuth: {
