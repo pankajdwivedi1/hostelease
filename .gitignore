@@ -68,3 +68,8 @@ ai-attendance-service/venv/
 ai-attendance-service/models/
 *.pyc
 __pycache__/
+
+# Binaries
+*.apk
+*.exe
+

@@ -49,7 +49,6 @@ function LoginForm() {
   const [superAdminResetLoading, setSuperAdminResetLoading] = useState(false);
   const [loadingText, setLoadingText] = useState("");
   const [showIosGuideModal, setShowIosGuideModal] = useState(false);
-  const [showWindowsGuideModal, setShowWindowsGuideModal] = useState(false);
 
   // ⚡ INSTANT BRANDING SYNC: Initialize from URL or Local Storage to prevent flickering
   const [tenantName, setTenantName] = useState("Hosteleaze");
@@ -825,7 +824,7 @@ function LoginForm() {
   };
 
   return (
-    <div className="relative flex h-[100dvh] w-full items-center justify-center overflow-hidden bg-[#fafafa] font-sans selection:bg-blue-100 p-2 sm:p-4 lg:p-6">
+    <div className="relative flex min-h-[100dvh] lg:h-[100dvh] w-full items-start lg:items-center justify-center overflow-y-auto lg:overflow-hidden bg-[#fafafa] font-sans selection:bg-blue-100 pt-5 pb-6 px-2 sm:p-4 lg:p-6">
       {loading && (
         <div className="fixed inset-0 z-[9999] bg-[#050510]/80 backdrop-blur-md flex items-center justify-center p-4 text-white">
           <div className="flex flex-col items-center justify-center gap-4 animate-in fade-in zoom-in duration-300 max-w-xs text-center">
@@ -852,9 +851,13 @@ function LoginForm() {
         </div>
       )}
       <style jsx global>{`
-        html, body {
-          height: 100%;
-          overflow: hidden !important;
+        @media (min-width: 1024px) {
+          html, body {
+            height: 100%;
+            overflow: hidden !important;
+          }
+        }
+        body {
           margin: 0;
           padding: 0;
         }
@@ -878,12 +881,12 @@ function LoginForm() {
 
       <main className="relative z-10 w-full max-w-lg lg:max-w-5xl flex flex-col justify-center max-h-full py-1 sm:py-2">
         <div className={`transition-all duration-1000 transform ${mounted ? 'translate-y-0 opacity-100' : 'translate-y-8 opacity-0'} flex flex-col justify-center w-full`}>
-          <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 lg:gap-16 items-center lg:items-start w-full">
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-2 sm:gap-4 lg:gap-16 items-center lg:items-start w-full">
             {/* Left Column: Logo, Title, and Features (Desktop only showcase) */}
-            <div className="flex flex-col items-center space-y-3 sm:space-y-4 text-center lg:col-span-5 w-full lg:pt-4">
+            <div className="flex flex-col items-center space-y-1 sm:space-y-3 text-center lg:col-span-5 w-full lg:pt-4">
               
               {/* Logo and Title */}
-              <div className="flex flex-col items-center space-y-2.5">
+              <div className="flex flex-col items-center space-y-1 sm:space-y-2">
                 <div
                   className="group relative cursor-pointer"
                   onClick={() => {
@@ -913,12 +916,12 @@ function LoginForm() {
                     </div>
                   )}
                 </div>
-                <div className="space-y-1 sm:space-y-2 text-center flex flex-col items-center w-full">
+                <div className="space-y-0.5 sm:space-y-1.5 text-center flex flex-col items-center w-full">
                   <h1 className="text-2xl sm:text-4xl font-black tracking-tight text-slate-900 transition-all duration-500 text-center w-full">
                     {tenantName}
-                    {tenantName !== "Hosteleaze" && <span className="block text-[8px] sm:text-[10px] text-slate-400 font-bold tracking-widest mt-1 text-center w-full">POWERED BY HOSTELEAZE</span>}
+                    {tenantName !== "Hosteleaze" && <span className="block text-[8px] sm:text-[10px] text-slate-400 font-bold tracking-widest mt-0.5 text-center w-full">POWERED BY HOSTELEAZE</span>}
                   </h1>
-                  <div className="flex flex-col items-center space-y-2 sm:space-y-2.5 w-full">
+                  <div className="flex flex-col items-center space-y-1 sm:space-y-2 w-full">
                     {showLogoutToast && (
                       <div className="w-full max-w-[280px] sm:max-w-[320px] animate-in fade-in slide-in-from-top-2 duration-500 my-0.5 sm:my-1">
                         <div className="flex items-center gap-2 sm:gap-3 rounded-lg sm:rounded-xl border border-emerald-100 bg-[#e6fcf5] pr-3 sm:pr-4 shadow-sm overflow-hidden min-h-[40px] sm:min-h-[48px]">
@@ -956,7 +959,7 @@ function LoginForm() {
                     </div>
 
                     {!showAdminPassword && !showWardenPassword && !showDeveloperPassword && (
-                      <div className="pt-1.5 flex items-center justify-center">
+                      <div className="pt-0.5 sm:pt-1.5 flex items-center justify-center">
                         <button 
                           onClick={async () => {
                             const slug = await showPrompt("Enter Campus Slug (e.g. ogi, oist) or type 'home' for Main Portal:");
@@ -1065,15 +1068,15 @@ function LoginForm() {
             </div>
 
             {/* Right Column: Login Card & Footer */}
-            <div className="flex flex-col items-center lg:col-span-7 w-full space-y-3 sm:space-y-4">
+            <div className="flex flex-col items-center lg:col-span-7 w-full space-y-2 sm:space-y-4">
               <div className="w-full max-w-[420px] relative group">
                 <div className="absolute -inset-1 rounded-[24px] bg-gradient-to-b from-gray-200/50 to-transparent opacity-50 blur-sm transition duration-500 group-hover:opacity-100" />
 
                 <div className="relative overflow-hidden rounded-[20px] sm:rounded-[24px] border border-white bg-white/80 backdrop-blur-xl p-1 shadow-[0_16px_32px_-10px_rgba(0,0,0,0.06)] transition-all duration-500">
-                  <div className="rounded-[16px] sm:rounded-[20px] bg-slate-50/40 p-3 sm:p-5">
+                  <div className="rounded-[16px] sm:rounded-[20px] bg-slate-50/40 p-2.5 sm:p-5">
 
                     {error && (
-                      <div className="mb-6 flex animate-in fade-in slide-in-from-top-4 items-center gap-3 rounded-xl border border-red-100 bg-red-50/50 p-4 text-sm text-red-600 backdrop-blur-md">
+                      <div className="mb-4 sm:mb-6 flex animate-in fade-in slide-in-from-top-4 items-center gap-3 rounded-xl border border-red-100 bg-red-50/50 p-3 sm:p-4 text-sm text-red-600 backdrop-blur-md">
                         <svg className="h-5 w-5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
                         </svg>
@@ -1081,7 +1084,7 @@ function LoginForm() {
                       </div>
                     )}
 
-                    <div className="space-y-4 sm:space-y-6">
+                    <div className="space-y-2.5 sm:space-y-5">
                       {showParentLogin ? (
                         <div className="space-y-4 animate-in fade-in zoom-in-95 duration-300">
                           <div className="flex items-center justify-between pb-2 border-b border-slate-100">
@@ -1264,14 +1267,14 @@ function LoginForm() {
                         </div>
                       )}
 
-                      <div className="py-1.5 relative flex items-center transition-all">
+                      <div className="py-0.5 sm:py-1.5 relative flex items-center transition-all">
                         <div className="grow border-t border-slate-100"></div>
                         <span className="mx-4 text-[10px] font-black uppercase tracking-[0.2em] text-slate-300">Staff Portal</span>
                         <div className="grow border-t border-slate-100"></div>
                       </div>
 
                       {/* Staff Selection */}
-                      <div className="grid grid-cols-2 gap-3">
+                      <div className="grid grid-cols-2 gap-2 sm:gap-3">
                         <button
                           onClick={handleAdminLogin}
                           className={`group flex flex-col items-center justify-center gap-1.5 sm:gap-2.5 rounded-xl border-2 p-2 sm:p-3.5 transition-all duration-500 active:scale-95 ${showAdminPassword
@@ -1610,18 +1613,18 @@ function LoginForm() {
                   </svg>
                 </button>
 
-                {/* Windows Desktop Guide Modal */}
-                <button
-                  type="button"
-                  onClick={() => setShowWindowsGuideModal(true)}
+                {/* Windows Direct .exe Download */}
+                <a
+                  href="/api/download/windows"
+                  download="HostelEaze-Setup.exe"
                   className="w-10 h-10 rounded-2xl bg-white/90 hover:bg-white border border-slate-200/90 hover:border-blue-500 shadow-2xs hover:shadow-xs hover:-translate-y-0.5 flex items-center justify-center transition-all group cursor-pointer"
-                  title="HostelEaze for Windows PC"
-                  aria-label="HostelEaze for Windows PC"
+                  title="Download HostelEaze for Windows (.exe)"
+                  aria-label="Download HostelEaze for Windows"
                 >
                   <svg className="w-4 h-4 text-blue-600 group-hover:scale-110 transition-transform" viewBox="0 0 24 24" fill="currentColor">
                     <path d="M0 3.449L9.75 2.1v9.451H0m10.949-9.602L24 0v11.551H10.949M0 12.6h9.75v9.451L0 20.699M10.949 12.6H24V24l-13.051-1.8"/>
                   </svg>
-                </button>
+                </a>
               </div>
 
               {/* Premium Refined Footer */}
@@ -1709,61 +1712,6 @@ function LoginForm() {
                 type="button"
                 onClick={() => setShowIosGuideModal(false)}
                 className="flex-1 py-2.5 rounded-xl bg-slate-900 font-bold text-xs text-white hover:bg-slate-800 transition-all cursor-pointer shadow-md"
-              >
-                Got It
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* 🪟 Windows PC Installation Guide Modal */}
-      {showWindowsGuideModal && (
-        <div className="fixed inset-0 z-[9999] bg-[#050510]/80 backdrop-blur-md flex items-center justify-center p-4 text-slate-900 animate-in fade-in duration-200">
-          <div className="bg-white rounded-3xl p-6 max-w-sm w-full shadow-2xl border border-slate-100 flex flex-col items-center text-center relative animate-in zoom-in-95 duration-200">
-            <button
-              onClick={() => setShowWindowsGuideModal(false)}
-              className="absolute top-4 right-4 w-8 h-8 rounded-full bg-slate-100 hover:bg-slate-200 flex items-center justify-center text-slate-500 font-bold transition-colors cursor-pointer"
-            >
-              ✕
-            </button>
-            <div className="w-14 h-14 rounded-2xl bg-blue-50 flex items-center justify-center mb-3">
-              <svg className="w-7 h-7 text-blue-600" viewBox="0 0 24 24" fill="currentColor">
-                <path d="M0 3.449L9.75 2.1v9.451H0m10.949-9.602L24 0v11.551H10.949M0 12.6h9.75v9.451L0 20.699M10.949 12.6H24V24l-13.051-1.8"/>
-              </svg>
-            </div>
-            <h3 className="text-base font-black text-slate-900 tracking-tight">HostelEaze for Windows</h3>
-            <p className="text-xs text-slate-500 mt-1 mb-4 leading-relaxed">
-              Run HostelEaze in dedicated Fullscreen Mode on Campus Gate & Administrative PCs:
-            </p>
-            <div className="w-full space-y-2.5 text-left mb-5">
-              <div className="flex items-start gap-3 p-2.5 rounded-xl bg-slate-50 border border-slate-100">
-                <span className="w-6 h-6 rounded-full bg-blue-600 text-white font-bold text-xs flex items-center justify-center shrink-0 mt-0.5">1</span>
-                <p className="text-xs text-slate-700 leading-snug">Open <b>hosteleaze.com</b> in <b>Microsoft Edge</b> or <b>Chrome</b></p>
-              </div>
-              <div className="flex items-start gap-3 p-2.5 rounded-xl bg-slate-50 border border-slate-100">
-                <span className="w-6 h-6 rounded-full bg-blue-600 text-white font-bold text-xs flex items-center justify-center shrink-0 mt-0.5">2</span>
-                <p className="text-xs text-slate-700 leading-snug">Click the <b>Install App icon (⊕)</b> inside the address bar</p>
-              </div>
-              <div className="flex items-start gap-3 p-2.5 rounded-xl bg-slate-50 border border-slate-100">
-                <span className="w-6 h-6 rounded-full bg-blue-600 text-white font-bold text-xs flex items-center justify-center shrink-0 mt-0.5">3</span>
-                <p className="text-xs text-slate-700 leading-snug">Check <b>"Create Desktop shortcut"</b> and click <b>Install</b></p>
-              </div>
-            </div>
-            <div className="w-full flex gap-2">
-              <button
-                type="button"
-                onClick={() => {
-                  window.open("https://www.hosteleaze.com", "_blank");
-                }}
-                className="flex-1 py-2.5 rounded-xl border border-slate-200 font-bold text-xs text-slate-600 hover:bg-slate-50 transition-all cursor-pointer"
-              >
-                Open in Edge
-              </button>
-              <button
-                type="button"
-                onClick={() => setShowWindowsGuideModal(false)}
-                className="flex-1 py-2.5 rounded-xl bg-blue-600 font-bold text-xs text-white hover:bg-blue-700 transition-all cursor-pointer shadow-md"
               >
                 Got It
               </button>
