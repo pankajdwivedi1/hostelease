@@ -73,7 +73,8 @@ export function generateViewport() {
     maximumScale: 5, // Allows zooming up to 5x
     userScalable: true, // Enables user zooming
     themeColor: "#2563eb",
-    viewportFit: "cover", // Ensures content fills the screen including the notch area
+    colorScheme: "light" as const,
+    viewportFit: "cover" as const, // Ensures content fills the screen including the notch area
   };
 }
 
@@ -83,7 +84,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en">
+    <html lang="en" style={{ colorScheme: "light" }}>
       <head>
         <link rel="icon" href="/apple-touch-icon.png" type="image/png" />
         <link rel="shortcut icon" href="/apple-touch-icon.png" type="image/png" />
