@@ -124,6 +124,39 @@ function LoginForm() {
     checkRedirectLogin();
   }, [searchParams]);
 
+  // 📱 Handle Android Hardware / System Navigation Back Button (marked by blue pen)
+  useEffect(() => {
+    let backListener: any = null;
+    const setupBackButton = async () => {
+      try {
+        const { Capacitor } = await import('@capacitor/core');
+        if (Capacitor.isNativePlatform()) {
+          const { App } = await import('@capacitor/app');
+          backListener = await App.addListener('backButton', ({ canGoBack }) => {
+            if (loading) {
+              setLoading(false);
+              setLoadingText("");
+              return;
+            }
+            if (canGoBack) {
+              window.history.back();
+            } else {
+              App.exitApp();
+            }
+          });
+        }
+      } catch (e) {
+        console.warn("Back button registration note:", e);
+      }
+    };
+    setupBackButton();
+    return () => {
+      if (backListener?.remove) {
+        backListener.remove();
+      }
+    };
+  }, [loading]);
+
   const fetchTenantConfig = async () => {
     try {
       let tenant = searchParams.get('tenant');
@@ -403,10 +436,16 @@ function LoginForm() {
   };
 
   const handleGoogleLogin = async () => {
+    let safetyTimer: any = null;
     try {
       setLoading(true);
       setLoadingText("Connecting to Google...");
       setError("");
+
+      safetyTimer = setTimeout(() => {
+        setLoading(false);
+        setLoadingText("");
+      }, 25000);
 
       const isNative = typeof window !== 'undefined' && (
         Capacitor.isNativePlatform() ||
@@ -441,10 +480,14 @@ function LoginForm() {
             console.warn("GoogleAuth init notice:", initErr);
           }
 
+          // Fast non-blocking session reset (max 800ms)
           try {
-            await GoogleAuth.signOut();
+            await Promise.race([
+              GoogleAuth.signOut(),
+              new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 800))
+            ]);
           } catch (signOutErr) {
-            console.log("No previous active Google session to clear:", signOutErr);
+            // Safe to proceed even if no session was active
           }
 
           const googleUser = await GoogleAuth.signIn();
@@ -455,16 +498,27 @@ function LoginForm() {
             const result = await signInWithCredential(auth, credential);
             await handleStudentUserAuth(result.user);
             return;
+          } else {
+            throw new Error("No Google user received from native auth");
           }
         } catch (nativeErr: any) {
-          console.warn("Native GoogleAuth fallback:", nativeErr);
-          if (nativeErr?.message?.includes('cancel') || nativeErr === 'USER_CANCELLED' || nativeErr?.code === '12501') {
-            setLoading(false);
-            return;
+          console.warn("Native GoogleAuth notice:", nativeErr);
+          const errStr = String(nativeErr?.message || nativeErr || '').toLowerCase();
+          const isCancelled =
+            errStr.includes('cancel') ||
+            errStr.includes('12501') ||
+            nativeErr === 'USER_CANCELLED';
+
+          if (!isCancelled) {
+            const msg = nativeErr?.message || "Google sign-in could not be completed. Please try again.";
+            setError(msg);
+            showToast(msg, "error");
           }
-          // ✅ FIX: Native fallback uses popup (not redirect) — redirect silently fails when session is cleared
-          console.log("Native auth failed, falling back to popup...");
+          setLoading(false);
+          setLoadingText("");
         }
+        // ⛔ CRITICAL: On native Capacitor, NEVER fall through to signInWithPopup!
+        return;
       }
 
       // 2. 📱 iOS HOME-SCREEN PWA ONLY: Use redirect (popup is blocked by iOS WKWebView in standalone)
@@ -489,6 +543,8 @@ function LoginForm() {
       setError(errMsg);
       showToast(errMsg, "error");
       setLoading(false);
+    } finally {
+      if (safetyTimer) clearTimeout(safetyTimer);
     }
   };
 
@@ -770,16 +826,26 @@ function LoginForm() {
     <div className="relative flex h-[100dvh] w-full items-center justify-center overflow-hidden bg-[#fafafa] font-sans selection:bg-blue-100 p-2 sm:p-4 lg:p-6">
       {loading && (
         <div className="fixed inset-0 z-[9999] bg-[#050510]/80 backdrop-blur-md flex items-center justify-center p-4 text-white">
-          <div className="flex flex-col items-center justify-center gap-4 animate-in fade-in zoom-in duration-300">
+          <div className="flex flex-col items-center justify-center gap-4 animate-in fade-in zoom-in duration-300 max-w-xs text-center">
             <div className="w-16 h-16 bg-blue-500/10 border border-blue-500/20 rounded-2xl flex items-center justify-center shadow-lg shadow-blue-500/5">
               <Loader2 className="w-8 h-8 text-blue-500 animate-spin" />
             </div>
-            <p className="text-gray-400 text-xs font-black uppercase tracking-widest animate-pulse">
+            <p className="text-gray-300 text-xs font-bold uppercase tracking-widest animate-pulse">
               {loadingText || "Connecting to Google..."}
             </p>
-            <p className="text-gray-500 text-[10px] uppercase tracking-wider font-semibold">
-              {loadingText ? "Checking database for student records" : "Please select your account in the popup"}
+            <p className="text-gray-400 text-[11px] leading-relaxed">
+              {loadingText ? "Checking database for student records" : "Please select your account in the Google prompt"}
             </p>
+            <button
+              type="button"
+              onClick={() => {
+                setLoading(false);
+                setLoadingText("");
+              }}
+              className="mt-2 px-5 py-2 text-xs font-semibold text-gray-300 hover:text-white bg-white/10 hover:bg-white/20 active:scale-95 border border-white/15 rounded-xl transition-all cursor-pointer shadow-sm"
+            >
+              Cancel
+            </button>
           </div>
         </div>
       )}
