@@ -60,7 +60,7 @@ hosteleaze_mobile/android/app/build/
 **/.gradle/
 
 # Android build
-android/
+/android/
 
 # Python Virtual Environment & AI models
 venv/
