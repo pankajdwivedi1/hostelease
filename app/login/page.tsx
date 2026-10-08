@@ -49,6 +49,8 @@ function LoginForm() {
   const [superAdminResetLoading, setSuperAdminResetLoading] = useState(false);
   const [loadingText, setLoadingText] = useState("");
   const [showIosGuideModal, setShowIosGuideModal] = useState(false);
+  const [showWindowsGuideModal, setShowWindowsGuideModal] = useState(false);
+  const [windowsInstallPrompt, setWindowsInstallPrompt] = useState<any>(null);
 
   // ⚡ INSTANT BRANDING SYNC: Initialize from URL or Local Storage to prevent flickering
   const [tenantName, setTenantName] = useState("Hosteleaze");
@@ -157,6 +159,38 @@ function LoginForm() {
       }
     };
   }, [loading]);
+
+  // 💻 Capture Windows / Desktop PWA native installation prompt (0 warnings)
+  useEffect(() => {
+    const handleBeforeInstall = (e: any) => {
+      e.preventDefault();
+      setWindowsInstallPrompt(e);
+    };
+    window.addEventListener('beforeinstallprompt', handleBeforeInstall);
+    return () => {
+      window.removeEventListener('beforeinstallprompt', handleBeforeInstall);
+    };
+  }, []);
+
+  const handleWindowsInstall = async () => {
+    if (windowsInstallPrompt) {
+      try {
+        windowsInstallPrompt.prompt();
+        const { outcome } = await windowsInstallPrompt.userChoice;
+        if (outcome === 'accepted') {
+          showToast("HostelEaze installed successfully on Windows!", "success");
+        }
+        setWindowsInstallPrompt(null);
+      } catch (e) {
+        setShowWindowsGuideModal(true);
+      }
+    } else {
+      try {
+        window.dispatchEvent(new CustomEvent('open-pwa-install'));
+      } catch (e) {}
+      setShowWindowsGuideModal(true);
+    }
+  };
 
   const fetchTenantConfig = async () => {
     try {
@@ -1613,18 +1647,18 @@ function LoginForm() {
                   </svg>
                 </button>
 
-                {/* Windows Direct .exe Download */}
-                <a
-                  href="/api/download/windows"
-                  download="HostelEaze-Setup.exe"
+                {/* Windows 1-Click Native App Install (0 Warnings) */}
+                <button
+                  type="button"
+                  onClick={handleWindowsInstall}
                   className="w-10 h-10 rounded-2xl bg-white/90 hover:bg-white border border-slate-200/90 hover:border-blue-500 shadow-2xs hover:shadow-xs hover:-translate-y-0.5 flex items-center justify-center transition-all group cursor-pointer"
-                  title="Download HostelEaze for Windows (.exe)"
-                  aria-label="Download HostelEaze for Windows"
+                  title="Install HostelEaze on Windows PC"
+                  aria-label="Install HostelEaze on Windows PC"
                 >
                   <svg className="w-4 h-4 text-blue-600 group-hover:scale-110 transition-transform" viewBox="0 0 24 24" fill="currentColor">
                     <path d="M0 3.449L9.75 2.1v9.451H0m10.949-9.602L24 0v11.551H10.949M0 12.6h9.75v9.451L0 20.699M10.949 12.6H24V24l-13.051-1.8"/>
                   </svg>
-                </a>
+                </button>
               </div>
 
               {/* Premium Refined Footer */}
@@ -1715,6 +1749,74 @@ function LoginForm() {
               >
                 Got It
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 🪟 Windows PC 1-Click Native App Guide Modal */}
+      {showWindowsGuideModal && (
+        <div className="fixed inset-0 z-[9999] bg-[#050510]/80 backdrop-blur-md flex items-center justify-center p-4 text-slate-900 animate-in fade-in duration-200">
+          <div className="bg-white rounded-3xl p-6 max-w-sm w-full shadow-2xl border border-slate-100 flex flex-col items-center text-center relative animate-in zoom-in-95 duration-200">
+            <button
+              onClick={() => setShowWindowsGuideModal(false)}
+              className="absolute top-4 right-4 w-8 h-8 rounded-full bg-slate-100 hover:bg-slate-200 flex items-center justify-center text-slate-500 font-bold transition-colors cursor-pointer"
+            >
+              ✕
+            </button>
+            <div className="w-14 h-14 rounded-2xl bg-blue-50 flex items-center justify-center mb-3">
+              <svg className="w-7 h-7 text-blue-600" viewBox="0 0 24 24" fill="currentColor">
+                <path d="M0 3.449L9.75 2.1v9.451H0m10.949-9.602L24 0v11.551H10.949M0 12.6h9.75v9.451L0 20.699M10.949 12.6H24V24l-13.051-1.8"/>
+              </svg>
+            </div>
+            <h3 className="text-base font-black text-slate-900 tracking-tight">HostelEaze for Windows</h3>
+            <p className="text-xs text-slate-500 mt-1 mb-4 leading-relaxed">
+              Install as a native application with <b>Zero Warnings</b> and permanent desktop access:
+            </p>
+            <div className="w-full space-y-2.5 text-left mb-5">
+              <div className="flex items-start gap-3 p-2.5 rounded-xl bg-slate-50 border border-slate-100">
+                <span className="w-6 h-6 rounded-full bg-blue-600 text-white font-bold text-xs flex items-center justify-center shrink-0 mt-0.5">1</span>
+                <p className="text-xs text-slate-700 leading-snug">In <b>Edge</b> or <b>Chrome</b>, look at the top address bar</p>
+              </div>
+              <div className="flex items-start gap-3 p-2.5 rounded-xl bg-slate-50 border border-slate-100">
+                <span className="w-6 h-6 rounded-full bg-blue-600 text-white font-bold text-xs flex items-center justify-center shrink-0 mt-0.5">2</span>
+                <p className="text-xs text-slate-700 leading-snug">Click the <b>Install App icon (⊕ or 💻)</b> on the right</p>
+              </div>
+              <div className="flex items-start gap-3 p-2.5 rounded-xl bg-slate-50 border border-slate-100">
+                <span className="w-6 h-6 rounded-full bg-blue-600 text-white font-bold text-xs flex items-center justify-center shrink-0 mt-0.5">3</span>
+                <p className="text-xs text-slate-700 leading-snug">Click <b>Install</b> &mdash; desktop shortcut is created with 0 warnings!</p>
+              </div>
+            </div>
+            <div className="w-full flex flex-col gap-2">
+              <button
+                type="button"
+                onClick={() => {
+                  try {
+                    window.dispatchEvent(new CustomEvent('open-pwa-install'));
+                  } catch (e) {}
+                  setShowWindowsGuideModal(false);
+                }}
+                className="w-full py-2.5 rounded-xl bg-blue-600 font-bold text-xs text-white hover:bg-blue-700 transition-all cursor-pointer shadow-md"
+              >
+                Install Native App Now
+              </button>
+              <div className="flex items-center justify-between pt-1">
+                <a
+                  href="/api/download/windows"
+                  download="HostelEaze-Setup.exe"
+                  className="text-[10px] font-bold text-slate-400 hover:text-slate-600 underline"
+                  title="Download standalone installer file"
+                >
+                  Download .exe setup file instead
+                </a>
+                <button
+                  type="button"
+                  onClick={() => setShowWindowsGuideModal(false)}
+                  className="text-[10px] font-bold text-slate-400 hover:text-slate-600"
+                >
+                  Dismiss
+                </button>
+              </div>
             </div>
           </div>
         </div>
