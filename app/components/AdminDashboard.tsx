@@ -5194,8 +5194,9 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
       const hostelToUpdate = hostels.find(h => h._id === hostelId || h.id === hostelId);
       if (!hostelToUpdate) throw new Error("Hostel not found");
 
-      setHostels(prev => prev.map(h => ((h._id === hostelId || h.id === hostelId) ? { ...h, attendanceMode: mode } : h)));
-      setHostelsConfig(prev => prev.map(h => ((h._id === hostelId || h.id === hostelId) ? { ...h, attendanceMode: mode } : h)));
+      const updateList = (prev: any[]) => prev.map(h => ((h._id === hostelId || h.id === hostelId) ? { ...h, attendanceMode: mode } : h));
+      setHostels(updateList);
+      setHostelsConfig(updateList);
 
       const res = await fetch('/api/admin/hostels', {
         method: 'POST',
@@ -5211,8 +5212,12 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
 
       const data = await res.json();
       if (data.success) {
-        setHostels(prev => prev.map(h => ((h._id === hostelId || h.id === hostelId) ? { ...h, attendanceMode: mode } : h)));
-        setHostelsConfig(prev => prev.map(h => ((h._id === hostelId || h.id === hostelId) ? { ...h, attendanceMode: mode } : h)));
+        setHostels(updateList);
+        setHostelsConfig(updateList);
+        try {
+          const fresh = hostels.map(h => ((h._id === hostelId || h.id === hostelId) ? { ...h, attendanceMode: mode } : h));
+          localStorage.setItem(CACHE_KEYS.HOSTELS, JSON.stringify(fresh));
+        } catch (e) {}
       }
     } catch (e) {
       console.error(e);
@@ -5491,29 +5496,46 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
 
   const fetchHostels = async (forceRefresh = false) => {
     try {
-      if (!forceRefresh) {
-        const cached = localStorage.getItem(CACHE_KEYS.HOSTELS);
-        if (cached) {
-          try {
-            const parsed = JSON.parse(cached);
-            if (Array.isArray(parsed) && parsed.length > 0) {
-              setHostels(parsed);
-              return;
-            }
-          } catch (e) {
-            localStorage.removeItem(CACHE_KEYS.HOSTELS);
+      // 1. Initial fast display from cache (prevents blank/stutter on load)
+      const cached = localStorage.getItem(CACHE_KEYS.HOSTELS);
+      if (cached) {
+        try {
+          const parsed = JSON.parse(cached);
+          if (Array.isArray(parsed) && parsed.length > 0) {
+            setHostels(parsed);
+            setHostelsConfig(parsed);
           }
+        } catch (e) {
+          localStorage.removeItem(CACHE_KEYS.HOSTELS);
         }
       }
 
-      const url = new URL("/api/hostels", window.location.origin);
-      const response = await fetch(url.href, { cache: "no-store" });
-      if (!response.ok) throw new Error(`Failed to fetch hostels: ${response.status}`);
-      const data = await response.json();
-      if (data.hostels) {
-        setHostels(data.hostels);
+      // 2. ALWAYS query live server database with no-store to keep settings 100% synchronized
+      const [adminRes, publicRes] = await Promise.allSettled([
+        fetch("/api/admin/hostels", { cache: "no-store" }),
+        fetch("/api/hostels", { cache: "no-store" })
+      ]);
+
+      let freshHostels: any[] = [];
+      if (adminRes.status === 'fulfilled' && adminRes.value.ok) {
+        const aData = await adminRes.value.json();
+        if (aData.success && Array.isArray(aData.hostels) && aData.hostels.length > 0) {
+          freshHostels = aData.hostels;
+        }
+      }
+
+      if (freshHostels.length === 0 && publicRes.status === 'fulfilled' && publicRes.value.ok) {
+        const pData = await publicRes.value.json();
+        if (Array.isArray(pData.hostels) && pData.hostels.length > 0) {
+          freshHostels = pData.hostels;
+        }
+      }
+
+      if (freshHostels.length > 0) {
+        setHostels(freshHostels);
+        setHostelsConfig(freshHostels);
         try {
-          localStorage.setItem(CACHE_KEYS.HOSTELS, JSON.stringify(data.hostels));
+          localStorage.setItem(CACHE_KEYS.HOSTELS, JSON.stringify(freshHostels));
         } catch (e) {
           console.warn("Failed to cache hostels");
         }

@@ -74,7 +74,7 @@ export async function GET(request: NextRequest) {
         }
 
         if (!student && studentId) {
-            student = await db.students.findById(studentId);
+            student = await db.students.getById(studentId);
         }
 
         if (!student) {

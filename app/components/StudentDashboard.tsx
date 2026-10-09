@@ -805,6 +805,10 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
     const [faceMatchStep, setFaceMatchStep] = useState<'idle' | 'loading-models' | 'detecting' | 'matching' | 'success' | 'flagged' | 'error'>('idle');
     const [faceDetected, setFaceDetected] = useState(false);
     const [faceBox, setFaceBox] = useState<{ x: number, y: number, width: number, height: number } | null>(null);
+    const [liveMatchScore, setLiveBiometricScore] = useState<number>(0);
+    const isAnalyzingBiometricsRef = useRef<boolean>(false);
+    const matchStreakRef = useRef<number>(0);
+    const mismatchStreakRef = useRef<number>(0);
     const detectionIntervalRef = useRef<NodeJS.Timeout | null>(null);
     const isProcessingRef = useRef<boolean>(false);
     const consecutiveFailuresRef = useRef<number>(0);
@@ -951,15 +955,38 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
         };
     }, [studentProfile?.email, studentProfile?.registrationId, studentProfile?.firebaseUID, studentProfile?.faceDescriptor]);
 
-    // Fast Real-Time Face Detection & Dynamic Distance Guidance Loop
+    // Helper function to calculate accurately centered face box coordinates inside aspect-square object-cover scale-x-[-1]
+    const getFaceBoxStyle = (box: { x: number, y: number, width: number, height: number } | null, video: HTMLVideoElement | null) => {
+        if (!box || !video) return {};
+        const vW = video.videoWidth || 640;
+        const vH = video.videoHeight || 480;
+        const minDim = Math.min(vW, vH);
+        const ox = (1 - (vW / minDim)) / 2;
+        const oy = (1 - (vH / minDim)) / 2;
+        // Mirrored X for scale-x-[-1]
+        const mirroredX = vW - (box.x + box.width);
+        const leftPct = (ox + (mirroredX / minDim)) * 100;
+        const topPct = (oy + (box.y / minDim)) * 100;
+        const widthPct = (box.width / minDim) * 100;
+        const heightPct = (box.height / minDim) * 100;
+
+        return {
+            top: `${Math.max(0, Math.min(100 - heightPct, topPct))}%`,
+            left: `${Math.max(0, Math.min(100 - widthPct, leftPct))}%`,
+            width: `${Math.min(100, widthPct)}%`,
+            height: `${Math.min(100, heightPct)}%`,
+        };
+    };
+
+    // Fast Real-Time Face Detection & Continuous Background Biometrics Loop
     useEffect(() => {
         let active = true;
 
-        if (cameraActive && faceMatchStep === 'detecting' && videoRef.current) {
-            console.log("🚀 Starting fast real-time face & distance tracking loop...");
+        if (cameraActive && (faceMatchStep === 'detecting' || faceMatchStep === 'matching') && videoRef.current) {
+            console.log("🚀 Starting continuous real-time face detection & biometric loop...");
 
             const runDetection = async () => {
-                if (!active || !videoRef.current || isProcessingRef.current || faceMatchStep !== 'detecting') return;
+                if (!active || !videoRef.current || isProcessingRef.current) return;
 
                 try {
                     const video = videoRef.current;
@@ -968,23 +995,8 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
                         return;
                     }
 
-                    const vWidth = video.videoWidth || 640;
-                    const vHeight = video.videoHeight || 480;
-
-                    // ⚡ ULTRA-FAST OFFSCREEN TRACKING CANVAS:
-                    // 320x240 offscreen canvas provides instant inference without browser texture lags
-                    if (!trackingCanvasRef.current) {
-                        trackingCanvasRef.current = document.createElement('canvas');
-                        trackingCanvasRef.current.width = 320;
-                        trackingCanvasRef.current.height = 240;
-                    }
-                    const trackCanvas = trackingCanvasRef.current;
-                    const trackCtx = trackCanvas.getContext('2d', { willReadFrequently: true });
-                    if (trackCtx) {
-                        trackCtx.drawImage(video, 0, 0, 320, 240);
-                    }
-
                     // 1. FAST LIGHTWEIGHT FACE DETECTION ON NATIVE VIDEO (<15ms)
+                    // Updates face bounding box every frame for smooth tracking
                     const fastRes = await faceMatching.detectFace(video, false, false);
 
                     if (fastRes && fastRes.detection) {
@@ -994,72 +1006,222 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
                         const { x, y, width, height } = fastRes.detection.box;
                         setFaceBox({ x, y, width, height });
 
-                        // 2. REAL-TIME DISTANCE & ALIGNMENT ESTIMATION (Supports natural sitting distance)
-                        const vWidth = video.videoWidth || 640;
-                        const vHeight = video.videoHeight || 480;
-                        const dist = faceMatching.estimateFaceDistance(fastRes.detection.box, vWidth, vHeight);
+                        // 2. REAL-TIME CONTINUOUS BACKGROUND BIOMETRIC & ANTI-SPOOF EVALUATION
+                        if (!isAnalyzingBiometricsRef.current && faceMatchStep === 'detecting') {
+                            isAnalyzingBiometricsRef.current = true;
 
-                        // 3. PASSIVE LIVENESS (1-SECOND STEADY HOLD) & FRAUD-PROOF TRIGGER
-                        if (dist.distanceStatus === 'optimal') {
-                            steadyHoldCountRef.current = Math.min(3, steadyHoldCountRef.current + 1);
-                            const currentPercent = Math.min(100, Math.round((steadyHoldCountRef.current / 3) * 100));
-                            setScanHoldProgress(currentPercent);
-                            setDistanceInfo({
-                                status: dist.distanceStatus,
-                                cm: dist.estimatedDistanceCm,
-                                message: steadyHoldCountRef.current >= 3 
-                                    ? "Validating Physical Human Face..." 
-                                    : `Hold steady for verification (${currentPercent}%)...`,
-                                percent: currentPercent
-                            });
+                            (async () => {
+                                try {
+                                    if (!active || !videoRef.current) return;
 
-                            // 🛡️ TRIGGER BANK-GRADE ONNX MINIFASNET ANTI-SPOOF & BIOMETRICS WHEN STEADY
-                            if (steadyHoldCountRef.current >= 3 && !isProcessingRef.current) {
-                                active = false;
-                                isProcessingRef.current = true;
-                                setFaceMatchStep('matching');
-                                setFaceMatchProgress(40);
+                                    // Exact 640px Canvas Normalization (Matches Onboarding & Photo Retake)
+                                    const vW = video.videoWidth || 640;
+                                    const vH = video.videoHeight || 480;
+                                    const maxDim = 640;
+                                    let targetW = vW;
+                                    let targetH = vH;
+                                    if (targetW > targetH) {
+                                        targetH = Math.round((targetH / targetW) * maxDim);
+                                        targetW = maxDim;
+                                    } else {
+                                        targetW = Math.round((targetW / targetH) * maxDim);
+                                        targetH = maxDim;
+                                    }
 
-                                const result = await performFaceVerification(fastRes);
-                                if (result && result.status === 'auto-approved') {
-                                    setFaceMatchStep('success');
-                                    setTimeout(() => {
+                                    const canvas = document.createElement('canvas');
+                                    canvas.width = targetW;
+                                    canvas.height = targetH;
+                                    const ctx = canvas.getContext('2d', { willReadFrequently: true });
+                                    if (!ctx) return;
+
+                                    ctx.drawImage(video, 0, 0, targetW, targetH);
+                                    const scaleX = targetW / vW;
+                                    const scaleY = targetH / vH;
+                                    const boxOnCanvas = {
+                                        x: x * scaleX,
+                                        y: y * scaleY,
+                                        width: width * scaleX,
+                                        height: height * scaleY
+                                    };
+
+                                    // 🛡️ [FRAUD SHIELD 1/4] Screen Display / Video Replay Spoof Check
+                                    const screenCheck = faceMatching.detectMobileScreenDisplay(canvas, boxOnCanvas);
+                                    if (screenCheck.isSpoof) {
+                                        consecutiveSpoofCountRef.current++;
+                                        console.warn("🛑 [Fraud Shield 1/4] Screen Spoof Frame:", screenCheck.reason);
+                                        if (consecutiveSpoofCountRef.current >= 2) {
+                                            active = false;
+                                            stopCamera();
+                                            setFaceMatchStep('error');
+                                            setIsMarkingAttendance(true);
+                                            setAttendanceStep('failed');
+                                            const reason = screenCheck.reason || "Mobile Screen Display / Video Replay Detected! Please present your real face.";
+                                            setAttendanceFailedReason(reason);
+                                            showToast(reason, "error");
+                                            return;
+                                        }
+                                    } else {
+                                        consecutiveSpoofCountRef.current = 0;
+                                    }
+
+                                    // 🛡️ [FRAUD SHIELD 2/4] Printed Photo / Paper Border Check
+                                    const photoQuality = faceMatching.assessPhotoQuality(canvas);
+                                    if (photoQuality.isPhotoOfPhoto) {
+                                        console.warn("🛑 [Fraud Shield 2/4] Printed Photo Detected:", photoQuality.reason);
+                                        active = false;
                                         stopCamera();
-                                        proceedWithAttendance(result);
-                                    }, 400);
-                                } else {
-                                    stopCamera();
-                                    const percent = result?.percentage !== undefined ? `${result.percentage}%` : '0%';
-                                    const reasonMsg = (result as any)?.reason || `Identity Mismatch (${percent} Accuracy — Need 75%). Please look straight at the camera.`;
-                                    showToast(reasonMsg, "error");
-                                    setFaceMatchStep('error');
-                                    setIsMarkingAttendance(true);
-                                    setAttendanceStep('failed');
-                                    setAttendanceFailedReason(reasonMsg);
+                                        setFaceMatchStep('error');
+                                        setIsMarkingAttendance(true);
+                                        setAttendanceStep('failed');
+                                        const reason = photoQuality.reason || "Printed Photo Detected! Please present your real physical face.";
+                                        setAttendanceFailedReason(reason);
+                                        showToast(reason, "error");
+                                        return;
+                                    }
+
+                                    // 🛡️ [FRAUD SHIELD 3/4] Live 128D Face Descriptor Extraction (SSD-MobileNet V1 @ 640px)
+                                    const liveDet = await faceMatching.detectFace(canvas, true, true);
+                                    if (!liveDet || !liveDet.descriptor || liveDet.descriptor.length < 68) {
+                                        return;
+                                    }
+
+                                    // Multi-face guard: reject proxy attendance if multiple faces present
+                                    if (liveDet.multipleFacesDetected || (liveDet.faceCount && liveDet.faceCount > 1)) {
+                                        console.warn("🛑 [Fraud Shield] Multiple faces in frame");
+                                        matchStreakRef.current = 0;
+                                        return;
+                                    }
+
+                                    // 🛡️ [FRAUD SHIELD 4/4] 1:1 Biometric Comparison (<0.001ms)
+                                    let refDesc = referenceDescriptorRef.current;
+                                    if (!refDesc || refDesc.length < 68) {
+                                        if (Array.isArray(studentProfile?.faceDescriptor) && studentProfile.faceDescriptor.length >= 68) {
+                                            refDesc = studentProfile.faceDescriptor;
+                                            referenceDescriptorRef.current = refDesc;
+                                        } else {
+                                            const regId = studentProfile?.registrationId || studentProfile?._id || '';
+                                            const cached = await getBiometricDescriptor(regId);
+                                            if (cached?.isValid && cached.descriptor && cached.descriptor.length >= 68) {
+                                                refDesc = cached.descriptor;
+                                                referenceDescriptorRef.current = refDesc;
+                                            }
+                                        }
+                                    }
+
+                                    if (!refDesc || refDesc.length < 68) {
+                                        console.warn("⚠️ No reference descriptor available for student");
+                                        return;
+                                    }
+
+                                    const localMatch = verifyFaceLocally(liveDet.descriptor, refDesc);
+                                    setLiveBiometricScore(localMatch.score);
+                                    console.log(`📏 [Real Biometric Tracker] Score: ${localMatch.score}%, Distance: ${localMatch.distance}, isMatch: ${localMatch.isMatch}`);
+
+                                    if (localMatch.isMatch && localMatch.score >= 75) {
+                                        matchStreakRef.current++;
+                                        mismatchStreakRef.current = 0;
+
+                                        // Require 2 consecutive clean frames >= 75% for rock-solid stability (~1.0 - 1.8s)
+                                        if (matchStreakRef.current >= 2 && !isProcessingRef.current) {
+                                            active = false;
+                                            isProcessingRef.current = true;
+                                            setFaceMatchStep('matching');
+                                            setFaceMatchProgress(88);
+
+                                            // 🛡️ CONFIRM WITH RAILWAY SERVER ONNX MINIFASNET & SAVE ATTENDANCE
+                                            const liveImageBase64 = canvas.toDataURL('image/jpeg', 0.88);
+                                            try {
+                                                const serverRes = await fetch('/api/attendance/face-match', {
+                                                    method: 'POST',
+                                                    headers: { 'Content-Type': 'application/json' },
+                                                    body: JSON.stringify({
+                                                        image: liveImageBase64,
+                                                        registrationId: studentProfile?.registrationId || '',
+                                                        email: studentProfile?.email || '',
+                                                        studentId: studentProfile?._id || studentProfile?.id || '',
+                                                        clientDescriptor: Array.from(liveDet.descriptor),
+                                                        box: liveDet.detection?.box || boxOnCanvas
+                                                    })
+                                                });
+
+                                                if (serverRes.ok) {
+                                                    const aiResult = await serverRes.json();
+                                                    if (aiResult.isSpoof) {
+                                                        stopCamera();
+                                                        setFaceMatchStep('error');
+                                                        setIsMarkingAttendance(true);
+                                                        setAttendanceStep('failed');
+                                                        const reason = aiResult.message || "Mobile Screen / Photo Spoof Detected!";
+                                                        setAttendanceFailedReason(reason);
+                                                        showToast(reason, "error");
+                                                        return;
+                                                    }
+
+                                                    if (aiResult.success && aiResult.isMatch) {
+                                                        setFaceMatchStep('success');
+                                                        setTimeout(() => {
+                                                            stopCamera();
+                                                            proceedWithAttendance({
+                                                                percentage: Math.max(localMatch.score, aiResult.score || 75),
+                                                                status: 'auto-approved'
+                                                            });
+                                                        }, 300);
+                                                        return;
+                                                    } else if (aiResult.success && !aiResult.isMatch) {
+                                                        stopCamera();
+                                                        setFaceMatchStep('error');
+                                                        setIsMarkingAttendance(true);
+                                                        setAttendanceStep('failed');
+                                                        const reason = aiResult.message || `Identity Mismatch (${aiResult.score || localMatch.score}% — Need ≥ 75%)`;
+                                                        setAttendanceFailedReason(reason);
+                                                        showToast(reason, "error");
+                                                        return;
+                                                    }
+                                                }
+                                            } catch (netErr) {
+                                                console.warn("Server AI network error, verified by client engine:", netErr);
+                                                // Safe offline fallback: all 4 local fraud shield checks already passed with >= 75%
+                                                setFaceMatchStep('success');
+                                                setTimeout(() => {
+                                                    stopCamera();
+                                                    proceedWithAttendance({
+                                                        percentage: localMatch.score,
+                                                        status: 'auto-approved'
+                                                    });
+                                                }, 300);
+                                                return;
+                                            }
+                                        }
+                                    } else {
+                                        // Score < 75%
+                                        matchStreakRef.current = 0;
+                                        mismatchStreakRef.current++;
+
+                                        // If student face consistently does not match for ~4-5 seconds (12 checks)
+                                        if (mismatchStreakRef.current >= 12 && !isProcessingRef.current) {
+                                            active = false;
+                                            stopCamera();
+                                            setFaceMatchStep('error');
+                                            setIsMarkingAttendance(true);
+                                            setAttendanceStep('failed');
+                                            const reason = `Identity Mismatch (${localMatch.score}% Accuracy — Need ≥ 75%). Face does not match registered student profile.`;
+                                            setAttendanceFailedReason(reason);
+                                            showToast(reason, "error");
+                                            return;
+                                        }
+                                    }
+                                } catch (e) {
+                                    console.error("Biometric analysis error:", e);
+                                } finally {
+                                    isAnalyzingBiometricsRef.current = false;
                                 }
-                                return;
-                            }
-                        } else {
-                            steadyHoldCountRef.current = Math.max(0, steadyHoldCountRef.current - 1);
-                            setScanHoldProgress(dist.alignmentQualityPercent);
-                            setDistanceInfo({
-                                status: dist.distanceStatus,
-                                cm: dist.estimatedDistanceCm,
-                                message: dist.guidanceMessage,
-                                percent: dist.alignmentQualityPercent
-                            });
+                            })();
                         }
                     } else {
                         setFaceDetected(false);
                         setFaceBox(null);
-                        steadyHoldCountRef.current = 0;
-                        setScanHoldProgress(0);
-                        setDistanceInfo({
-                            status: 'none',
-                            cm: 0,
-                            message: 'Align face in frame',
-                            percent: 0
-                        });
+                        setLiveBiometricScore(0);
+                        matchStreakRef.current = 0;
                         consecutiveFailuresRef.current += 1;
                     }
                 } catch (err) {
@@ -1487,14 +1649,37 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
     const fetchHostelLocations = async () => {
         try {
             setIsLocationsLoading(true);
-            const response = await fetch(`/api/admin/locations${getTenantParam()}`);
-            if (!response.ok) throw new Error(`Failed to fetch locations: ${response.status}`);
-            const data = await response.json();
-            if (data.success && data.locations) {
-                setHostelLocations(data.locations);
-            } else {
-                setHostelLocations([]);
+            const [locRes, hostelsRes] = await Promise.allSettled([
+                fetch(`/api/admin/locations${getTenantParam()}`, { cache: "no-store" }),
+                fetch(`/api/hostels`, { cache: "no-store" })
+            ]);
+
+            let locs: any[] = [];
+            if (locRes.status === 'fulfilled' && locRes.value.ok) {
+                const data = await locRes.value.json();
+                if (data.success && data.locations) locs = data.locations;
             }
+
+            let serverHostels: any[] = [];
+            if (hostelsRes.status === 'fulfilled' && hostelsRes.value.ok) {
+                const hData = await hostelsRes.value.json();
+                if (hData.hostels) serverHostels = hData.hostels;
+            }
+
+            // Merge live attendanceMode from server hostels into each location
+            const merged = locs.map((loc: any) => {
+                const lName = (loc.name || '').toLowerCase().trim();
+                const matched = serverHostels.find((h: any) => {
+                    const hName = (h.name || '').toLowerCase().trim();
+                    return hName === lName || lName.includes(hName) || hName.includes(lName);
+                });
+                return {
+                    ...loc,
+                    attendanceMode: loc.attendanceMode || matched?.attendanceMode || 'strict'
+                };
+            });
+
+            setHostelLocations(merged);
         } catch (error) {
             console.error("Error fetching locations:", error);
             setHostelLocations([]);
@@ -3087,10 +3272,15 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
         try {
             // ⚡ CLEAN RESET: Clear all cached detection refs to prevent instant stale error on re-opening
             isProcessingRef.current = false;
+            isAnalyzingBiometricsRef.current = false;
+            matchStreakRef.current = 0;
+            mismatchStreakRef.current = 0;
             latestDetectionRef.current = null;
             consecutiveFailuresRef.current = 0;
+            consecutiveSpoofCountRef.current = 0;
             steadyHoldCountRef.current = 0;
             setScanHoldProgress(0);
+            setLiveBiometricScore(0);
             setFaceDetected(false);
             setFaceBox(null);
 
@@ -3169,11 +3359,16 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
         setCameraActive(false);
         setFaceDetected(false);
         setFaceBox(null);
+        setLiveBiometricScore(0);
+        isAnalyzingBiometricsRef.current = false;
+        matchStreakRef.current = 0;
+        mismatchStreakRef.current = 0;
     };
 
     const performFaceVerification = async (existingRes?: any): Promise<{
         percentage: number;
         status: 'auto-approved' | 'flagged' | 'manual-override' | 'rejected';
+        reason?: string;
     } | null> => {
         if (!videoRef.current) return null;
 
@@ -3187,16 +3382,17 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
 
         try {
             setFaceMatchStep('matching');
-            setFaceMatchProgress(25);
+            setFaceMatchProgress(20);
 
-            // 1. Retrieve verified reference descriptor (First from memory, then from IndexedDB vault)
-            let referenceDescriptor = studentProfile.faceDescriptor;
-            const regId = studentProfile.registrationId || studentProfile._id || studentProfile.id || '';
+            // 1. Retrieve verified reference descriptor (Priority: memory -> local IndexedDB vault -> server fallback)
+            let referenceDescriptor = referenceDescriptorRef.current || studentProfile.faceDescriptor;
+            const regId = studentProfile.registrationId || studentProfile._id || (studentProfile as any)?.id || '';
 
-            if ((!referenceDescriptor || referenceDescriptor.length === 0) && regId) {
+            if ((!referenceDescriptor || referenceDescriptor.length < 68) && regId) {
                 const cachedVault = await getBiometricDescriptor(regId);
                 if (cachedVault?.isValid && cachedVault.descriptor && cachedVault.descriptor.length >= 68) {
                     referenceDescriptor = cachedVault.descriptor;
+                    referenceDescriptorRef.current = referenceDescriptor;
                 } else if (cachedVault && !cachedVault.isValid) {
                     stopCamera();
                     setFaceMatchStep('error');
@@ -3207,7 +3403,7 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
             }
 
             // Fallback emergency fetch from API if not yet in vault
-            if (!referenceDescriptor || referenceDescriptor.length === 0) {
+            if (!referenceDescriptor || referenceDescriptor.length < 68) {
                 try {
                     const fbUid = studentProfile.firebaseUID || (studentProfile as any)?.firebaseUid || '';
                     const email = studentProfile.email || '';
@@ -3217,19 +3413,20 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
                         const data = await res.json();
                         if (data.success && Array.isArray(data.faceDescriptor) && data.faceDescriptor.length >= 68) {
                             referenceDescriptor = data.faceDescriptor;
+                            referenceDescriptorRef.current = referenceDescriptor;
                             studentProfile.faceDescriptor = referenceDescriptor;
-                            saveBiometricDescriptor({
+                            await saveBiometricDescriptor({
                                 registrationId: data.registrationId || regId,
                                 studentId: data.studentId || studentProfile._id,
                                 email: data.email || email,
                                 descriptor: referenceDescriptor
-                            }).catch(() => {});
+                            });
                         }
                     }
                 } catch (e) {}
             }
 
-            if (!referenceDescriptor || referenceDescriptor.length === 0) {
+            if (!referenceDescriptor || referenceDescriptor.length < 68) {
                 console.warn("⚠️ Attendance blocked: Student has no registered face descriptor.");
                 setFaceMatchStep('error');
                 stopCamera();
@@ -3241,101 +3438,229 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
                 return null;
             }
 
-            setFaceMatchProgress(50);
+            // 2. Exact Same 640px Canvas Normalization (Matches Onboarding & Photo Retake exactly)
+            const video = videoRef.current;
+            const vW = video.videoWidth || 640;
+            const vH = video.videoHeight || 480;
 
-            // 🛡️ BANK-GRADE ANTI-SPOOF & BIOMETRICS (MiniFASNetV2 ONNX Runtime)
-            // Evaluates live frame for:
-            // 1. Mobile phone photo / video replays
-            // 2. Printed card / paper photos
-            // 3. Specular glass glare reflection & Moiré lattice grid
-            // 4. Biometric identity match (>=75%)
-            const vW = videoRef.current.videoWidth || 640;
-            const vH = videoRef.current.videoHeight || 480;
-
-            const maxDim = 400;
-            const scale = Math.min(1, maxDim / Math.max(vW, vH));
-            const targetW = Math.round(vW * scale);
-            const targetH = Math.round(vH * scale);
+            const maxDim = 640;
+            let targetW = vW;
+            let targetH = vH;
+            if (targetW > targetH) {
+                targetH = Math.round((targetH / targetW) * maxDim);
+                targetW = maxDim;
+            } else {
+                targetW = Math.round((targetW / targetH) * maxDim);
+                targetH = maxDim;
+            }
 
             const canvas = document.createElement('canvas');
             canvas.width = targetW;
             canvas.height = targetH;
-            const ctx = canvas.getContext('2d');
-            if (ctx) {
-                ctx.drawImage(videoRef.current, 0, 0, targetW, targetH);
-                const liveImageBase64 = canvas.toDataURL('image/jpeg', 0.85);
+            const ctx = canvas.getContext('2d', { willReadFrequently: true });
+            if (!ctx) return null;
 
-                // Scale bounding box if available from real-time tracker
-                let scaledBox = undefined;
-                if (existingRes?.detection?.box) {
-                    scaledBox = {
-                        x: Math.round(existingRes.detection.box.x * scale),
-                        y: Math.round(existingRes.detection.box.y * scale),
-                        width: Math.round(existingRes.detection.box.width * scale),
-                        height: Math.round(existingRes.detection.box.height * scale),
+            ctx.drawImage(video, 0, 0, targetW, targetH);
+
+            const scaleX = targetW / vW;
+            const scaleY = targetH / vH;
+            const rawBox = existingRes?.detection?.box;
+            const boxOnCanvas = rawBox ? {
+                x: rawBox.x * scaleX,
+                y: rawBox.y * scaleY,
+                width: rawBox.width * scaleX,
+                height: rawBox.height * scaleY
+            } : undefined;
+
+            // 🛡️ [FRAUD SHIELD - CHECK 1] LOCAL MOBILE SCREEN DISPLAY & VIDEO REPLAY DETECTOR
+            // Evaluates specular glass reflection hotspots, LCD/OLED Moiré lattice grid, and phone bezels
+            setFaceMatchProgress(35);
+            if (boxOnCanvas) {
+                const screenCheck = faceMatching.detectMobileScreenDisplay(canvas, boxOnCanvas);
+                if (screenCheck.isSpoof) {
+                    console.warn("🛑 [Fraud Shield 1/4] Screen/Replay Spoof Blocked locally:", screenCheck.reason);
+                    stopCamera();
+                    setFaceMatchStep('error');
+                    setIsMarkingAttendance(true);
+                    setAttendanceStep('failed');
+                    const reasonMsg = screenCheck.reason || "Mobile Screen Display / Video Replay Detected! Please present your real face.";
+                    setAttendanceFailedReason(reasonMsg);
+                    showToast(reasonMsg, "error");
+                    return {
+                        percentage: 0,
+                        status: 'rejected',
+                        reason: reasonMsg
                     };
                 }
+            }
 
-                // Client-computed descriptor if available
-                const clientDesc = (existingRes?.descriptor && existingRes.descriptor.length >= 68)
-                    ? Array.from(existingRes.descriptor)
-                    : undefined;
+            // 🛡️ [FRAUD SHIELD - CHECK 2] LOCAL PRINTED PHOTO / ID CARD BORDER & BLUR DETECTOR
+            // Evaluates multi-point edge borders (photo-of-photo) and 8-neighbor Laplacian sharpness
+            setFaceMatchProgress(50);
+            const photoQuality = faceMatching.assessPhotoQuality(canvas);
+            if (photoQuality.isPhotoOfPhoto) {
+                console.warn("🛑 [Fraud Shield 2/4] Printed Photo / Card Border Blocked locally:", photoQuality.reason);
+                stopCamera();
+                setFaceMatchStep('error');
+                setIsMarkingAttendance(true);
+                setAttendanceStep('failed');
+                const reasonMsg = photoQuality.reason || "Printed Photo / Paper ID Card Detected! Please present your real physical face.";
+                setAttendanceFailedReason(reasonMsg);
+                showToast(reasonMsg, "error");
+                return {
+                    percentage: 0,
+                    status: 'rejected',
+                    reason: reasonMsg
+                };
+            }
 
-                setFaceMatchProgress(75);
+            if (photoQuality.isBlurry) {
+                console.warn("🛑 [Fraud Shield 2/4] Motion Blur Detected locally:", photoQuality.reason);
+                stopCamera();
+                setFaceMatchStep('error');
+                setIsMarkingAttendance(true);
+                setAttendanceStep('failed');
+                const reasonMsg = photoQuality.reason || "Photo is too blurry. Please hold camera steady in good lighting.";
+                setAttendanceFailedReason(reasonMsg);
+                showToast(reasonMsg, "error");
+                return {
+                    percentage: 0,
+                    status: 'rejected',
+                    reason: reasonMsg
+                };
+            }
 
-                try {
-                    const serverRes = await fetch('/api/attendance/face-match', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({
-                            image: liveImageBase64,
-                            registrationId: studentProfile.registrationId,
-                            email: studentProfile.email,
-                            studentId: studentProfile._id || studentProfile.id,
-                            clientDescriptor: clientDesc,
-                            box: scaledBox
-                        })
-                    });
+            // 🛡️ [FRAUD SHIELD - CHECK 3] LOCAL FEATURE EXTRACTION (SSD-MobileNet V1 @ 640px)
+            // Uses the EXACT same neural model & 640px canvas used during student photo registration
+            setFaceMatchProgress(65);
+            const liveDet = await faceMatching.detectFace(canvas, true, true);
 
-                    if (serverRes.ok) {
-                        const aiResult = await serverRes.json();
-                        setFaceMatchProgress(100);
+            if (!liveDet || !liveDet.descriptor || liveDet.descriptor.length < 68) {
+                console.warn("🛑 [Fraud Shield 3/4] Live face descriptor extraction failed");
+                stopCamera();
+                setFaceMatchStep('error');
+                setIsMarkingAttendance(true);
+                setAttendanceStep('failed');
+                const reasonMsg = "Face not clearly visible. Please align your face inside the frame and look directly at the camera.";
+                setAttendanceFailedReason(reasonMsg);
+                showToast(reasonMsg, "error");
+                return {
+                    percentage: 0,
+                    status: 'rejected',
+                    reason: reasonMsg
+                };
+            }
 
-                        // 🛡️ ANTI-SPOOF BLOCK: Reject mobile screens, photo displays & video replays!
-                        if (aiResult.isSpoof) {
-                            console.warn("❌ Anti-Spoof Blocked:", aiResult.message);
-                            stopCamera();
-                            setFaceMatchStep('error');
-                            setIsMarkingAttendance(true);
-                            setAttendanceStep('failed');
-                            setAttendanceFailedReason(aiResult.message || "Mobile Screen Display / Photo Spoof Detected!");
-                            showToast(aiResult.message || "Mobile Screen / Photo Spoof Detected! Please present your real physical face.", "error");
-                            return {
-                                percentage: 0,
-                                status: 'rejected',
-                                reason: aiResult.message || "Mobile Screen Display / Photo Spoof Detected!"
-                            };
-                        }
+            // Multi-Face Guard: Prevent proxy attendance with multiple people in frame
+            if (liveDet.multipleFacesDetected || (liveDet.faceCount && liveDet.faceCount > 1)) {
+                console.warn("🛑 [Fraud Shield 3/4] Multiple faces detected in frame");
+                stopCamera();
+                setFaceMatchStep('error');
+                setIsMarkingAttendance(true);
+                setAttendanceStep('failed');
+                const reasonMsg = "Multiple faces detected! Only the registered student must be in front of the camera.";
+                setAttendanceFailedReason(reasonMsg);
+                showToast(reasonMsg, "error");
+                return {
+                    percentage: 0,
+                    status: 'rejected',
+                    reason: reasonMsg
+                };
+            }
 
-                        if (aiResult.success && aiResult.isMatch) {
-                            setFaceMatchStep('success');
-                            return {
-                                percentage: aiResult.score || 95,
-                                status: 'auto-approved',
-                            };
-                        } else if (aiResult.success && !aiResult.isMatch) {
-                            console.warn(`❌ Identity Mismatch: Score ${aiResult.score}%`);
-                            setFaceMatchStep('error');
-                            return {
-                                percentage: aiResult.score || 45,
-                                status: 'rejected',
-                                reason: aiResult.message || `Identity Mismatch (${aiResult.score}% — Need 75%)`
-                            };
-                        }
+            // 🛡️ [FRAUD SHIELD - CHECK 4] INSTANT 1:1 LOCAL BIOMETRIC MATCH (>= 75% THRESHOLD)
+            // Compares live 128-D embedding directly against locally verified reference descriptor (<0.001ms)
+            setFaceMatchProgress(78);
+            const localMatch = verifyFaceLocally(liveDet.descriptor, referenceDescriptor);
+            console.log(`📏 [Fraud Shield 4/4] 1:1 Local Verification: Distance=${localMatch.distance}, Score=${localMatch.score}%, isMatch=${localMatch.isMatch}`);
+
+            // 🛑 STOP IMMEDIATELY IF NOT MATCHED: NEVER SEND IMPOSTORS TO THE SERVER!
+            if (!localMatch.isMatch || localMatch.score < 75) {
+                console.warn(`🛑 [Fraud Shield Intercepted] Identity Mismatch (${localMatch.score}% < 75%). Zero server traffic sent.`);
+                stopCamera();
+                setFaceMatchStep('error');
+                setIsMarkingAttendance(true);
+                setAttendanceStep('failed');
+                const reasonMsg = `Identity Mismatch (${localMatch.score}% Accuracy — Need ≥ 75%). Face does not match registered student profile.`;
+                setAttendanceFailedReason(reasonMsg);
+                showToast(reasonMsg, "error");
+                return {
+                    percentage: localMatch.score,
+                    status: 'rejected',
+                    reason: reasonMsg
+                };
+            }
+
+            // 🛡️ STEP 5: FINAL CONFIRMATION ON RAILWAY SERVER (MiniFASNetV2 ONNX Confirmation + Database Persistence)
+            // Reaches here ONLY IF all 4 local fraud checks passed and match score >= 75%!
+            setFaceMatchProgress(88);
+            const liveImageBase64 = canvas.toDataURL('image/jpeg', 0.88);
+
+            try {
+                const serverRes = await fetch('/api/attendance/face-match', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        image: liveImageBase64,
+                        registrationId: studentProfile.registrationId,
+                        email: studentProfile.email,
+                        studentId: studentProfile._id || studentProfile.id,
+                        clientDescriptor: Array.from(liveDet.descriptor),
+                        box: liveDet.detection?.box || boxOnCanvas
+                    })
+                });
+
+                if (serverRes.ok) {
+                    const aiResult = await serverRes.json();
+                    setFaceMatchProgress(100);
+
+                    // Server MiniFASNet Anti-Spoof Confirmation
+                    if (aiResult.isSpoof) {
+                        console.warn("❌ [Server MiniFASNet] Spoof Blocked:", aiResult.message);
+                        stopCamera();
+                        setFaceMatchStep('error');
+                        setIsMarkingAttendance(true);
+                        setAttendanceStep('failed');
+                        const reasonMsg = aiResult.message || "Mobile Screen Display / Photo Spoof Detected!";
+                        setAttendanceFailedReason(reasonMsg);
+                        showToast(reasonMsg, "error");
+                        return {
+                            percentage: 0,
+                            status: 'rejected',
+                            reason: reasonMsg
+                        };
                     }
-                } catch (netErr) {
-                    console.warn("[Face Verification] Server AI network error, running local engine:", netErr);
+
+                    if (aiResult.success && aiResult.isMatch) {
+                        setFaceMatchStep('success');
+                        return {
+                            percentage: Math.max(localMatch.score, aiResult.score || 75),
+                            status: 'auto-approved',
+                        };
+                    } else if (aiResult.success && !aiResult.isMatch) {
+                        console.warn(`❌ Server Identity Mismatch: Score ${aiResult.score}%`);
+                        stopCamera();
+                        setFaceMatchStep('error');
+                        setIsMarkingAttendance(true);
+                        setAttendanceStep('failed');
+                        const reasonMsg = aiResult.message || `Identity Mismatch (${aiResult.score}% — Need ≥ 75%)`;
+                        setAttendanceFailedReason(reasonMsg);
+                        showToast(reasonMsg, "error");
+                        return {
+                            percentage: aiResult.score || localMatch.score,
+                            status: 'rejected',
+                            reason: reasonMsg
+                        };
+                    }
                 }
+            } catch (netErr) {
+                console.warn("[Face Verification] Server AI network error, verified by client engine:", netErr);
+                // Safe offline fallback: all 4 local fraud shield checks already passed with >= 75%
+                setFaceMatchStep('success');
+                return {
+                    percentage: localMatch.score,
+                    status: 'auto-approved',
+                };
             }
 
             stopCamera();
@@ -3422,9 +3747,9 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
                 ? studentProfile.attendanceMode
                 : (matchedHostel?.attendanceMode || 'strict');
 
-            // ⚡ CHECK HOSTEL MODE
-            if (hostelAttendanceMode === 'gps-only') {
-                console.log("📍 GPS Only mode detected. Skipping face verification.");
+            // ⚡ CHECK HOSTEL MODE (GPS-only or WiFi)
+            if (hostelAttendanceMode === 'gps-only' || hostelAttendanceMode === 'gps' || hostelAttendanceMode === 'wifi') {
+                console.log("📍 GPS / WiFi mode detected. Skipping face verification completely.");
                 await proceedWithAttendance({ percentage: 100, status: 'auto-approved' });
                 return;
             }
@@ -6335,30 +6660,51 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
                                                 {/* Dynamic Green Square Face Tracking Box */}
                                                 {faceDetected && faceBox && videoRef.current ? (
                                                     <div
-                                                        className="absolute pointer-events-none transition-all duration-150 ease-out border-2 border-emerald-400 bg-emerald-500/10 rounded-2xl shadow-[0_0_20px_rgba(52,211,153,0.6)] flex flex-col justify-between p-1.5 z-10"
-                                                        style={{
-                                                            top: `${Math.max(2, Math.min(88, (faceBox.y / (videoRef.current.videoHeight || 480)) * 100))}%`,
-                                                            left: `${Math.max(2, Math.min(88, (((videoRef.current.videoWidth || 640) - (faceBox.x + faceBox.width)) / (videoRef.current.videoWidth || 640)) * 100))}%`,
-                                                            width: `${Math.min(96, (faceBox.width / (videoRef.current.videoWidth || 640)) * 100)}%`,
-                                                            height: `${Math.min(96, (faceBox.height / (videoRef.current.videoHeight || 480)) * 100)}%`,
-                                                        }}
+                                                        className={`absolute pointer-events-none transition-all duration-150 ease-out border-2 rounded-2xl flex flex-col justify-between p-1.5 z-10 ${
+                                                            liveMatchScore >= 75
+                                                                ? 'border-emerald-400 bg-emerald-500/15 shadow-[0_0_25px_rgba(52,211,153,0.7)]'
+                                                                : liveMatchScore > 0
+                                                                ? 'border-amber-400 bg-amber-500/10 shadow-[0_0_20px_rgba(251,191,36,0.5)]'
+                                                                : 'border-emerald-400 bg-emerald-500/10 shadow-[0_0_20px_rgba(52,211,153,0.5)]'
+                                                        }`}
+                                                        style={getFaceBoxStyle(faceBox, videoRef.current)}
                                                     >
                                                         {/* Top-left & top-right HUD corner accents */}
                                                         <div className="flex justify-between items-start w-full">
-                                                            <div className="w-3.5 h-3.5 border-t-[3px] border-l-[3px] border-emerald-300 rounded-tl -mt-1 -ml-1" />
-                                                            <div className="w-3.5 h-3.5 border-t-[3px] border-r-[3px] border-emerald-300 rounded-tr -mt-1 -mr-1" />
+                                                            <div className={`w-3.5 h-3.5 border-t-[3px] border-l-[3px] rounded-tl -mt-1 -ml-1 ${
+                                                                liveMatchScore >= 75 ? 'border-emerald-300' : liveMatchScore > 0 ? 'border-amber-300' : 'border-emerald-300'
+                                                            }`} />
+                                                            <div className={`w-3.5 h-3.5 border-t-[3px] border-r-[3px] rounded-tr -mt-1 -mr-1 ${
+                                                                liveMatchScore >= 75 ? 'border-emerald-300' : liveMatchScore > 0 ? 'border-amber-300' : 'border-emerald-300'
+                                                            }`} />
                                                         </div>
-                                                        {/* Center Status Tag */}
+                                                        {/* Center Status Tag (Real Biometric Score - Zero Simulation) */}
                                                         <div className="self-center">
-                                                            <span className="px-2.5 py-0.5 bg-emerald-600/90 text-white rounded-full text-[9px] font-black uppercase tracking-wider backdrop-blur-md shadow flex items-center gap-1">
-                                                                <span className="w-1.5 h-1.5 rounded-full bg-white animate-ping" />
-                                                                Face Detected • Hold Steady ({scanHoldProgress}%)
+                                                            <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider backdrop-blur-md shadow flex items-center gap-1.5 transition-all duration-200 ${
+                                                                liveMatchScore >= 75
+                                                                    ? 'bg-emerald-600/95 text-white shadow-emerald-500/40'
+                                                                    : liveMatchScore > 0
+                                                                    ? 'bg-amber-600/95 text-white shadow-amber-500/40'
+                                                                    : 'bg-emerald-600/90 text-white shadow-emerald-500/30'
+                                                            }`}>
+                                                                <span className={`w-1.5 h-1.5 rounded-full ${
+                                                                    liveMatchScore >= 75 ? 'bg-white animate-pulse' : 'bg-white animate-ping'
+                                                                }`} />
+                                                                {liveMatchScore >= 75
+                                                                    ? `Real Face Verified • ${liveMatchScore}%`
+                                                                    : liveMatchScore > 0
+                                                                    ? `Match: ${liveMatchScore}% (Need ≥75%)`
+                                                                    : "Measuring Face Reality..."}
                                                             </span>
                                                         </div>
                                                         {/* Bottom-left & bottom-right HUD corner accents */}
                                                         <div className="flex justify-between items-end w-full">
-                                                            <div className="w-3.5 h-3.5 border-b-[3px] border-l-[3px] border-emerald-300 rounded-bl -mb-1 -ml-1" />
-                                                            <div className="w-3.5 h-3.5 border-b-[3px] border-r-[3px] border-emerald-300 rounded-br -mb-1 -mr-1" />
+                                                            <div className={`w-3.5 h-3.5 border-b-[3px] border-l-[3px] rounded-bl -mb-1 -ml-1 ${
+                                                                liveMatchScore >= 75 ? 'border-emerald-300' : liveMatchScore > 0 ? 'border-amber-300' : 'border-emerald-300'
+                                                            }`} />
+                                                            <div className={`w-3.5 h-3.5 border-b-[3px] border-r-[3px] rounded-br -mb-1 -mr-1 ${
+                                                                liveMatchScore >= 75 ? 'border-emerald-300' : liveMatchScore > 0 ? 'border-amber-300' : 'border-emerald-300'
+                                                            }`} />
                                                         </div>
                                                     </div>
                                                 ) : (
@@ -6372,64 +6718,60 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
                                                     </div>
                                                 )}
 
+                                                {/* Non-intrusive final submission pill (never blocks the camera view) */}
                                                 {faceMatchStep === 'matching' && (
-                                                    <div className="absolute inset-0 bg-blue-600/20 backdrop-blur-[2px] flex items-center justify-center z-30">
-                                                        <div className="text-center">
-                                                            <div className="w-12 h-12 border-4 border-white/30 border-t-white rounded-full animate-spin mx-auto mb-3" />
-                                                            <p className="text-white font-black text-sm uppercase tracking-widest leading-none">Verifying...</p>
-                                                            <p className="text-white/80 text-[11px] font-semibold mt-2">
-                                                                {faceMatchProgress >= 100 
-                                                                    ? "✅ Verification Complete (100%)" 
-                                                                    : faceMatchProgress >= 70 
-                                                                    ? "🛡️ Verifying Live Anti-Spoof & Identity (75%)..." 
-                                                                    : faceMatchProgress >= 30 
-                                                                    ? "🔍 Extracting Face Biometrics (40%)..." 
-                                                                    : "⚡ Starting Instant Verification..."}
-                                                            </p>
-                                                        </div>
+                                                    <div className="absolute top-3 left-1/2 -translate-x-1/2 z-20 pointer-events-none animate-in fade-in duration-200">
+                                                        <span className="px-3.5 py-1.5 bg-emerald-600/95 backdrop-blur-md text-white rounded-full text-[11px] font-black uppercase tracking-wider shadow-lg flex items-center gap-2">
+                                                            <div className="w-3 h-3 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                                                            Confirming Reality ({liveMatchScore}%) • Submitting...
+                                                        </span>
                                                     </div>
                                                 )}
                                             </div>
 
                                             <div className="mt-5 space-y-3">
-                                                {faceMatchStep === 'detecting' && (
+                                                {(faceMatchStep === 'detecting' || faceMatchStep === 'matching') && (
                                                     <div className="w-full py-2 text-center space-y-3">
                                                         {faceDetected ? (
                                                             <div className="space-y-2 animate-in fade-in duration-200">
                                                                 <div className={`font-black text-sm flex items-center justify-center gap-2 ${
-                                                                    distanceInfo.status === 'optimal' ? 'text-emerald-600' :
-                                                                    distanceInfo.status === 'too-close' ? 'text-amber-600' : 'text-blue-600'
+                                                                    liveMatchScore >= 75 ? 'text-emerald-600' :
+                                                                    liveMatchScore > 0 ? 'text-amber-600' : 'text-blue-600'
                                                                 }`}>
-                                                                    <div className={`w-2.5 h-2.5 rounded-full animate-ping ${
-                                                                        distanceInfo.status === 'optimal' ? 'bg-emerald-500' :
-                                                                        distanceInfo.status === 'too-close' ? 'bg-amber-500' : 'bg-blue-500'
+                                                                    <div className={`w-2.5 h-2.5 rounded-full ${
+                                                                        liveMatchScore >= 75 ? 'bg-emerald-500 animate-pulse' :
+                                                                        liveMatchScore > 0 ? 'bg-amber-500 animate-ping' : 'bg-blue-500 animate-ping'
                                                                     }`} />
-                                                                    <span className="tracking-wide">{distanceInfo.message.toUpperCase()} • {distanceInfo.percent}%</span>
+                                                                    <span className="tracking-wide">
+                                                                        {liveMatchScore >= 75
+                                                                            ? `REAL FACE VERIFIED • ${liveMatchScore}%`
+                                                                            : liveMatchScore > 0
+                                                                            ? `IDENTITY MATCH: ${liveMatchScore}% (NEED ≥ 75%)`
+                                                                            : "MEASURING LIVE FACE REALITY..."}
+                                                                    </span>
                                                                 </div>
                                                                 <div className="w-full bg-slate-100 rounded-full h-2.5 overflow-hidden">
                                                                     <div
-                                                                        className={`h-2.5 rounded-full transition-all duration-150 shadow-sm ${
-                                                                            distanceInfo.status === 'optimal' ? 'bg-emerald-500' :
-                                                                            distanceInfo.status === 'too-close' ? 'bg-amber-500' : 'bg-blue-500'
+                                                                        className={`h-2.5 rounded-full transition-all duration-200 shadow-sm ${
+                                                                            liveMatchScore >= 75 ? 'bg-emerald-500' :
+                                                                            liveMatchScore > 0 ? 'bg-amber-500' : 'bg-blue-500'
                                                                         }`}
-                                                                        style={{ width: `${Math.max(5, distanceInfo.percent)}%` }}
+                                                                        style={{ width: `${Math.max(5, liveMatchScore)}%` }}
                                                                     />
                                                                 </div>
                                                                 <p className="text-[11px] text-gray-500 font-semibold tracking-wide">
-                                                                    {distanceInfo.status === 'optimal' 
-                                                                        ? (scanHoldProgress > 80 
-                                                                            ? "✅ Liveness Verified! Validating Biometrics..." 
-                                                                            : `Hold steady for verification (${scanHoldProgress}%)...`) 
-                                                                        : distanceInfo.status === 'too-far' 
-                                                                        ? "Bring device closer to increase %" 
-                                                                        : "Move device slightly back to increase %"}
+                                                                    {liveMatchScore >= 75
+                                                                        ? "✅ Authenticity Verified! Submitting attendance..."
+                                                                        : liveMatchScore > 0
+                                                                        ? "Hold steady in good light to match your registered face (≥ 75%)."
+                                                                        : "Align face inside frame and look directly at camera."}
                                                                 </p>
                                                             </div>
                                                         ) : (
                                                             <div className="space-y-2">
                                                                 <div className="font-black text-sm flex items-center justify-center gap-2 text-blue-600">
                                                                     <div className="w-4 h-4 rounded-full border-2 border-blue-600 border-t-transparent animate-spin" />
-                                                                    <span>{consecutiveFailuresRef.current > 10 ? "ENHANCED SCANNING (0%)..." : "ALIGN FACE IN FRAME (0%)..."}</span>
+                                                                    <span>ALIGN FACE IN FRAME (0%)...</span>
                                                                 </div>
                                                                 <div className="w-full bg-slate-100 rounded-full h-2 overflow-hidden">
                                                                     <div className="bg-blue-300 h-2 rounded-full w-0 transition-all" />

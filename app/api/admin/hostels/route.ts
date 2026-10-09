@@ -98,6 +98,30 @@ export async function POST(request: NextRequest) {
             });
         }
 
+        // ⚡ Keep settings.hostelLocations in sync with hostel attendanceMode
+        if (attendanceMode && formattedName) {
+            try {
+                const settings = await db.settings.get();
+                if (settings?.hostelLocations && Array.isArray(settings.hostelLocations)) {
+                    let changed = false;
+                    const updatedLocations = settings.hostelLocations.map((loc: any) => {
+                        const locName = (loc.name || '').toLowerCase().trim();
+                        const hName = formattedName.toLowerCase().trim();
+                        if (locName === hName || locName.includes(hName) || hName.includes(locName)) {
+                            changed = true;
+                            return { ...loc, attendanceMode };
+                        }
+                        return loc;
+                    });
+                    if (changed) {
+                        await db.settings.update({ hostelLocations: updatedLocations });
+                    }
+                }
+            } catch (syncErr) {
+                console.warn("Could not sync attendanceMode to hostelLocations:", syncErr);
+            }
+        }
+
         return NextResponse.json({ success: true, hostel });
     } catch (error: any) {
         console.error("Error saving hostel:", error);

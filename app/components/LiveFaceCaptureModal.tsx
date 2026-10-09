@@ -3,6 +3,7 @@
 import React, { useState, useEffect, useRef, useCallback } from "react";
 import * as faceMatching from "@/lib/faceMatching";
 import { showToast } from "@/lib/toast";
+import { saveBiometricDescriptor } from "@/lib/biometricVault";
 
 interface LiveFaceCaptureModalProps {
     isOpen: boolean;
@@ -308,7 +309,7 @@ export default function LiveFaceCaptureModal({
                 return;
             }
 
-            const descriptorArray = Array.from(descriptor.descriptor);
+            const descriptorArray: number[] = Array.from(descriptor.descriptor as Float32Array | number[]);
 
             // 4. Save to server
             setIsSaving(true);
@@ -327,6 +328,18 @@ export default function LiveFaceCaptureModal({
 
             if (!saveRes.ok || !data.success) {
                 throw new Error(data.error || "Failed to save photo to server");
+            }
+
+            // 🔒 Synchronize with local device Biometric Vault
+            const savedStudent = data.student || {};
+            const regId = savedStudent.registrationId || studentId;
+            if (regId) {
+                saveBiometricDescriptor({
+                    registrationId: regId,
+                    studentId: savedStudent._id || studentId,
+                    email: savedStudent.email || "",
+                    descriptor: descriptorArray
+                }).catch(console.warn);
             }
 
             showToast("🎉 Face verification successful! Profile updated.", "success");

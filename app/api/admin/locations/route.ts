@@ -15,10 +15,30 @@ export async function GET(request: NextRequest) {
 
         const locations = settings?.hostelLocations || [];
 
+        // ⚡ LIVE SYNC: Merge attendanceMode from hostels table into each location
+        let liveHostels: any[] = [];
+        try {
+            liveHostels = await db.hostels.getAll();
+        } catch (hErr) {
+            console.warn("Could not fetch hostels in locations API:", hErr);
+        }
+
+        const enrichedLocations = locations.map((loc: any) => {
+            const locName = (loc.name || '').toLowerCase().trim();
+            const matchedHostel = liveHostels.find((h: any) => {
+                const hName = (h.name || '').toLowerCase().trim();
+                return hName === locName || locName.includes(hName) || hName.includes(locName);
+            });
+            return {
+                ...loc,
+                attendanceMode: matchedHostel?.attendanceMode || loc.attendanceMode || 'strict'
+            };
+        });
+
         return NextResponse.json({
             success: true,
-            locations,
-            count: locations.length
+            locations: enrichedLocations,
+            count: enrichedLocations.length
         });
     } catch (error: any) {
         console.error("Error fetching locations:", error);

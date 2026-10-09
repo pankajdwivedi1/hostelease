@@ -9,6 +9,7 @@ import { supabase } from "@/lib/supabase";
 import { useRef } from "react";
 import * as faceMatching from "@/lib/faceMatching";
 import { formatDateDDMMYYYY } from "@/lib/dateFormat";
+import { saveBiometricDescriptor } from "@/lib/biometricVault";
 
 // Global flag to track if warmup is done so we don't do it twice
 let globalIsAIWarmedUp = false;
@@ -721,6 +722,14 @@ export default function OnboardingPage() {
       setIsSuccess(true);
       if (data.student) {
         localStorage.setItem("cachedStudentData", JSON.stringify(data.student));
+        if (data.student.registrationId && faceDescriptor) {
+          saveBiometricDescriptor({
+            registrationId: data.student.registrationId,
+            studentId: data.student._id || data.student.id,
+            email: data.student.email,
+            descriptor: faceDescriptor
+          }).catch(console.warn);
+        }
       }
       setTimeout(() => {
         localStorage.setItem("userType", "student");

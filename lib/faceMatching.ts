@@ -149,12 +149,12 @@ export function calculateScore(distance: number): number {
     let score;
     if (distance <= 0.35) {
         score = 100 - (distance * 28.57); // 0.0 -> 100%, 0.35 -> 90%
-    } else if (distance <= 0.45) {
-        score = 90 - ((distance - 0.35) * 150); // 0.35 -> 90%, 0.45 -> 75%
-    } else if (distance <= 0.55) {
-        score = 75 - ((distance - 0.45) * 250); // 0.45 -> 75%, 0.55 -> 50%
+    } else if (distance <= 0.48) {
+        score = 90 - ((distance - 0.35) * 115.38); // 0.35 -> 90%, 0.48 -> 75%
+    } else if (distance <= 0.58) {
+        score = 75 - ((distance - 0.48) * 250); // 0.48 -> 75%, 0.58 -> 50%
     } else {
-        score = Math.max(0, 50 - ((distance - 0.55) * 200)); // 0.55+ drops quickly to 0%
+        score = Math.max(0, 50 - ((distance - 0.58) * 200)); // 0.58+ drops quickly to 0%
     }
 
     const matchPercentage = Math.round(Math.max(0, Math.min(100, score)));
@@ -523,6 +523,7 @@ export function assessFacialLandmarkSharpness(
 ): {
     isBlurry: boolean;
     isFoggy: boolean;
+    isSideFace?: boolean;
     isPhotoOfPhoto: boolean;
     sharpnessScore: number;
     fogScore: number;
