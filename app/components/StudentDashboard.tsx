@@ -1644,6 +1644,7 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
     };
 
     const [hostelLocations, setHostelLocations] = useState<any[]>([]);
+    const [serverHostelConfigs, setServerHostelConfigs] = useState<any[]>([]);
     const [isLocationsLoading, setIsLocationsLoading] = useState(false);
 
     const fetchHostelLocations = async () => {
@@ -1663,7 +1664,10 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
             let serverHostels: any[] = [];
             if (hostelsRes.status === 'fulfilled' && hostelsRes.value.ok) {
                 const hData = await hostelsRes.value.json();
-                if (hData.hostels) serverHostels = hData.hostels;
+                if (hData.hostels) {
+                    serverHostels = hData.hostels;
+                    setServerHostelConfigs(serverHostels);
+                }
             }
 
             // Merge live attendanceMode from server hostels into each location
@@ -1675,7 +1679,7 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
                 });
                 return {
                     ...loc,
-                    attendanceMode: loc.attendanceMode || matched?.attendanceMode || 'strict'
+                    attendanceMode: matched?.attendanceMode || loc.attendanceMode || 'strict'
                 };
             });
 
@@ -3734,18 +3738,28 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
                 console.log('📱 Auto-generated device ID:', deviceId);
             }
 
-            // ⚡ RESOLVE ATTENDANCE MODE (Hostel config or Student Override)
+            // ⚡ RESOLVE ATTENDANCE MODE (2-Tier Hierarchy)
             const studentHostel = (studentProfile.hostelName || '').toLowerCase().trim();
             const matchedHostel = hostelLocations.find((loc: any) => {
                 if (!loc || !loc.name) return false;
                 const locName = loc.name.toLowerCase().trim();
                 return locName === studentHostel || studentHostel.includes(locName) || locName.includes(studentHostel);
             });
+            const matchedServerHostel = serverHostelConfigs.find((h: any) => {
+                if (!h || !h.name) return false;
+                const hName = (h.name || '').toLowerCase().trim();
+                return hName === studentHostel || studentHostel.includes(hName) || hName.includes(studentHostel);
+            });
 
-            // Priority: Student specific override -> Hostel setting -> Default ('strict' / camera)
+            // Tier 1: Live hostel attendance mode policy (CAM, GPS, BIO)
+            const liveHostelMode = matchedServerHostel?.attendanceMode || matchedHostel?.attendanceMode || 'strict';
+
+            // Tier 2: Individual student exception (e.g. broken camera override)
+            // If student profile has 'default' (or empty) -> follows Tier 1 Hostel Mode.
+            // If student profile was manually set to 'gps-only', 'strict', or 'biometric' -> uses that exception!
             const hostelAttendanceMode = (studentProfile.attendanceMode && studentProfile.attendanceMode !== 'default')
                 ? studentProfile.attendanceMode
-                : (matchedHostel?.attendanceMode || 'strict');
+                : liveHostelMode;
 
             // ⚡ CHECK HOSTEL MODE (GPS-only or WiFi)
             if (hostelAttendanceMode === 'gps-only' || hostelAttendanceMode === 'gps' || hostelAttendanceMode === 'wifi') {
