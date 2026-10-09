@@ -43,3 +43,65 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ error: error.message }, { status: 500 });
     }
 }
+
+export async function GET(request: NextRequest) {
+    try {
+        const { searchParams } = new URL(request.url);
+        const firebaseUID = searchParams.get("firebaseUID");
+        const email = searchParams.get("email");
+        const registrationId = searchParams.get("registrationId");
+        const studentId = searchParams.get("studentId");
+
+        if (!firebaseUID && !email && !registrationId && !studentId) {
+            return NextResponse.json(
+                { error: "At least one identifier (firebaseUID, email, registrationId, studentId) is required." },
+                { status: 400 }
+            );
+        }
+
+        let student: any = null;
+
+        if (firebaseUID || email) {
+            student = await (db.students as any).findOneFast({
+                firebaseUID: firebaseUID || undefined,
+                email: email || undefined
+            });
+        }
+
+        if (!student && registrationId) {
+            const list = await db.students.list({ registrationId });
+            student = list && list.length > 0 ? list[0] : null;
+        }
+
+        if (!student && studentId) {
+            student = await db.students.findById(studentId);
+        }
+
+        if (!student) {
+            return NextResponse.json({ error: "Student not found" }, { status: 404 });
+        }
+
+        const descriptor = student.faceDescriptor || student.face_descriptor;
+        if (!descriptor || !Array.isArray(descriptor) || descriptor.length < 68) {
+            return NextResponse.json({
+                success: false,
+                message: "No registered face descriptor found for this student.",
+                hasDescriptor: false
+            }, { status: 200 });
+        }
+
+        return NextResponse.json({
+            success: true,
+            hasDescriptor: true,
+            faceDescriptor: Array.from(descriptor),
+            registrationId: student.registrationId || "",
+            studentId: student._id || student.id || "",
+            email: student.email || "",
+            name: student.name || ""
+        }, { status: 200 });
+    } catch (error: any) {
+        console.error("Error fetching face descriptor:", error);
+        return NextResponse.json({ error: error.message }, { status: 500 });
+    }
+}
+

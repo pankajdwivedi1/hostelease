@@ -199,23 +199,17 @@ export function estimateFaceDistance(
     let alignmentQualityPercent = 0;
     let guidanceMessage = "";
 
-    if (faceRatio < 0.28) {
+    if (faceRatio < 0.16) {
         distanceStatus = 'too-far';
-        // Percentage scales 10% to 59% as you move closer towards optimal
-        alignmentQualityPercent = Math.max(10, Math.min(59, Math.round((faceRatio / 0.28) * 59)));
+        alignmentQualityPercent = Math.max(10, Math.min(59, Math.round((faceRatio / 0.16) * 59)));
         guidanceMessage = `Move closer (~${estimatedDistanceCm} cm)`;
-    } else if (faceRatio > 0.72) {
+    } else if (faceRatio > 0.85) {
         distanceStatus = 'too-close';
-        // Percentage drops as you get excessively close
-        alignmentQualityPercent = Math.max(20, Math.min(65, Math.round((1 - (faceRatio - 0.72) / 0.28) * 65)));
+        alignmentQualityPercent = Math.max(20, Math.min(65, Math.round((1 - (faceRatio - 0.85) / 0.15) * 65)));
         guidanceMessage = `Move phone back (~${estimatedDistanceCm} cm)`;
     } else {
         distanceStatus = 'optimal';
-        // Optimal range (0.30 - 0.68) -> Quality scales from 75% to 100%
-        const optimalCenter = 0.48;
-        const devFromOptimal = Math.abs(faceRatio - optimalCenter) / 0.22;
-        alignmentQualityPercent = Math.round(100 - (devFromOptimal * 25)); // 75% to 100%
-        alignmentQualityPercent = Math.max(75, Math.min(100, alignmentQualityPercent));
+        alignmentQualityPercent = 100;
         guidanceMessage = `Optimal distance (~${estimatedDistanceCm} cm)`;
     }
 
@@ -247,7 +241,7 @@ export function detectMobileScreenDisplay(
         const offCanvas = document.createElement('canvas');
         offCanvas.width = width;
         offCanvas.height = height;
-        const ctx = offCanvas.getContext('2d');
+        const ctx = offCanvas.getContext('2d', { willReadFrequently: true });
         if (!ctx) return { isSpoof: false };
 
         ctx.drawImage(inputElement, 0, 0, width, height);
@@ -905,10 +899,9 @@ export async function detectFace(
         // Helper to execute detection pass with landmarks and optional descriptor extraction
         const runDetectorPass = async (detectorOptions: any): Promise<any[]> => {
             try {
-                let task = fa.detectAllFaces(imageElement, detectorOptions)
-                    .withFaceLandmarks(useTinyLandmarks);
+                let task = fa.detectAllFaces(imageElement, detectorOptions);
                 if (withDescriptor) {
-                    task = task.withFaceDescriptors();
+                    task = task.withFaceLandmarks(useTinyLandmarks).withFaceDescriptors();
                 }
                 const result = await task;
                 return Array.isArray(result) ? result : (result ? [result] : []);
@@ -944,41 +937,47 @@ export async function detectFace(
         if (!detections || detections.length === 0) return null;
 
         const mainFace = detections[0];
+        // Normalize detection object: when withDescriptor is false, mainFace is a FaceDetection with .box; when true, mainFace.detection is the FaceDetection
+        const normalizedDetection = mainFace?.detection || mainFace;
 
         const validFaces = detections.filter((d: any) => {
-            const box = d?.detection?.box;
-            const score = d?.detection?.score !== undefined ? d.detection.score : 1;
+            const det = d?.detection || d;
+            const box = det?.box || d?.box;
+            const score = det?.score !== undefined ? det.score : (d?.score !== undefined ? d.score : 1);
             return box && box.width >= 16 && box.height >= 16 && score >= 0.15;
         });
 
-        // Multi-Face Guard: Run raw bounding-box detection to catch partial/side heads or background photobombers
-        let rawBoxes: any[] = [];
-        try {
-            if (fa.nets.tinyFaceDetector?.isLoaded) {
-                rawBoxes = await fa.detectAllFaces(imageElement, new fa.TinyFaceDetectorOptions({
-                    inputSize: 320,
-                    scoreThreshold: 0.12
-                }));
+        // Multi-Face Guard: Run raw bounding-box detection ONLY when verifying descriptors (not on fast 10fps tracking)
+        let totalFaceCount = validFaces.length;
+        if (withDescriptor) {
+            let rawBoxes: any[] = [];
+            try {
+                if (fa.nets.tinyFaceDetector?.isLoaded) {
+                    rawBoxes = await fa.detectAllFaces(imageElement, new fa.TinyFaceDetectorOptions({
+                        inputSize: 320,
+                        scoreThreshold: 0.12
+                    }));
+                }
+                if ((!rawBoxes || rawBoxes.length === 0) && fa.nets.ssdMobilenetv1?.isLoaded) {
+                    rawBoxes = await fa.detectAllFaces(imageElement, new fa.SsdMobilenetv1Options({ minConfidence: 0.20 }));
+                }
+            } catch (e) {
+                console.warn('Multi-face box detector pass exception:', e);
             }
-            if ((!rawBoxes || rawBoxes.length === 0) && fa.nets.ssdMobilenetv1?.isLoaded) {
-                rawBoxes = await fa.detectAllFaces(imageElement, new fa.SsdMobilenetv1Options({ minConfidence: 0.20 }));
-            }
-        } catch (e) {
-            console.warn('Multi-face box detector pass exception:', e);
+
+            const validRawBoxes = (rawBoxes || []).filter((b: any) => {
+                const box = b?.box || b?._box;
+                const score = b?.score !== undefined ? b.score : 1;
+                return box && box.width >= 16 && box.height >= 16 && score >= 0.12;
+            });
+
+            totalFaceCount = Math.max(validFaces.length, validRawBoxes.length);
         }
-
-        const validRawBoxes = (rawBoxes || []).filter((b: any) => {
-            const box = b?.box || b?._box;
-            const score = b?.score !== undefined ? b.score : 1;
-            return box && box.width >= 16 && box.height >= 16 && score >= 0.12;
-        });
-
-        const totalFaceCount = Math.max(validFaces.length, validRawBoxes.length);
 
         return {
             descriptor: withDescriptor ? (mainFace.descriptor || null) : null,
-            detection: mainFace.detection,
-            landmarks: mainFace.landmarks,
+            detection: normalizedDetection,
+            landmarks: mainFace.landmarks || null,
             accurate: accurate,
             multipleFacesDetected: totalFaceCount > 1,
             faceCount: totalFaceCount
