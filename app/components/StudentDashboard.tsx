@@ -939,21 +939,23 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
 
         syncBiometricVault();
 
-        // 3. SILENT BACKGROUND MODEL PRE-WARM: Load face models in idle time so camera verification is 0ms cold start
-        let prewarmTimer: any = null;
-        if (typeof window !== 'undefined') {
-            prewarmTimer = setTimeout(() => {
-                faceMatching.loadFaceApiModels(false).then(() => {
-                    console.log("⚡ [Pre-warm] Biometric face models pre-warmed in memory");
-                }).catch(() => {});
-            }, 1200);
-        }
-
         return () => {
             isMounted = false;
-            if (prewarmTimer) clearTimeout(prewarmTimer);
         };
     }, [studentProfile?.email, studentProfile?.registrationId, studentProfile?.firebaseUID, studentProfile?.faceDescriptor]);
+
+    // ⚡ PERMANENT BIOMETRIC PRE-WARM: Keeps all face models permanently hot in browser memory from the moment dashboard mounts
+    useEffect(() => {
+        if (typeof window === 'undefined') return;
+        console.log("⚡ [Biometrics Pre-warm] Warming all AI models in memory immediately...");
+        faceMatching.loadFaceApiModels(true).then((ready) => {
+            if (ready) {
+                console.log("✅ [Biometrics Pre-warm] All face AI models active in RAM & GPU ready for instant attendance!");
+            }
+        }).catch((err) => {
+            console.warn("⚠️ [Biometrics Pre-warm] Background note:", err);
+        });
+    }, []);
 
     // Helper function to calculate accurately centered face box coordinates inside aspect-square object-cover scale-x-[-1]
     const getFaceBoxStyle = (box: { x: number, y: number, width: number, height: number } | null, video: HTMLVideoElement | null) => {
@@ -3684,6 +3686,9 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
     const handleMarkAttendance = async (retryAttempt = 0) => {
         if (!studentProfile) return;
 
+        // ⚡ EAGER PRE-WARM: Guarantee models are hot in memory while location/time checks run
+        faceMatching.loadFaceApiModels(true).catch(() => {});
+
         // Clear previous error
         setAttendanceError(null);
         setAttendanceStep('idle');
@@ -4193,6 +4198,8 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
                                         </div>
                                     ) : (
                                         <button
+                                            onMouseEnter={() => faceMatching.loadFaceApiModels(true).catch(() => {})}
+                                            onTouchStart={() => faceMatching.loadFaceApiModels(true).catch(() => {})}
                                             onClick={() => handleMarkAttendance(0)}
                                             disabled={isAttendanceMarked}
                                             className={`p-1.5 rounded-lg transition-colors ${

@@ -54,7 +54,7 @@ export async function loadFaceApiModels(accurate: boolean = false): Promise<bool
 
     // 1. Fast path: return immediately if already loaded in memory
     if (accurate && proModelsLoaded) return true;
-    if (!accurate && liteModelsLoaded) return true;
+    if (!accurate && (liteModelsLoaded || proModelsLoaded)) return true;
 
     const MODEL_PATH = '/models';
 
@@ -65,30 +65,33 @@ export async function loadFaceApiModels(accurate: boolean = false): Promise<bool
                 const fa = await getFaceApi();
                 if (!fa) return false;
 
-                if (!fa.nets.tinyFaceDetector.isLoaded) {
-                    await fa.nets.tinyFaceDetector.loadFromUri(MODEL_PATH);
-                    await new Promise(r => setTimeout(r, 10));
+                // Load all required models in parallel for maximum speed
+                const loads: Promise<any>[] = [];
+                if (!fa.nets.tinyFaceDetector.isLoaded) loads.push(fa.nets.tinyFaceDetector.loadFromUri(MODEL_PATH));
+                if (!fa.nets.faceLandmark68TinyNet.isLoaded) loads.push(fa.nets.faceLandmark68TinyNet.loadFromUri(MODEL_PATH));
+                if (!fa.nets.faceRecognitionNet.isLoaded) loads.push(fa.nets.faceRecognitionNet.loadFromUri(MODEL_PATH));
+                if (!fa.nets.ssdMobilenetv1.isLoaded) loads.push(fa.nets.ssdMobilenetv1.loadFromUri(MODEL_PATH));
+                if (!fa.nets.faceLandmark68Net.isLoaded) loads.push(fa.nets.faceLandmark68Net.loadFromUri(MODEL_PATH));
+
+                if (loads.length > 0) {
+                    await Promise.all(loads);
                 }
-                if (!fa.nets.faceLandmark68TinyNet.isLoaded) {
-                    await fa.nets.faceLandmark68TinyNet.loadFromUri(MODEL_PATH);
-                    await new Promise(r => setTimeout(r, 10));
-                }
-                if (!fa.nets.faceRecognitionNet.isLoaded) {
-                    await fa.nets.faceRecognitionNet.loadFromUri(MODEL_PATH);
-                    await new Promise(r => setTimeout(r, 10));
-                }
-                if (!fa.nets.ssdMobilenetv1.isLoaded) {
-                    await fa.nets.ssdMobilenetv1.loadFromUri(MODEL_PATH);
-                    await new Promise(r => setTimeout(r, 10));
-                }
-                if (!fa.nets.faceLandmark68Net.isLoaded) {
-                    await fa.nets.faceLandmark68Net.loadFromUri(MODEL_PATH);
-                    await new Promise(r => setTimeout(r, 10));
-                }
+
+                // ⚡ Pre-compile WebGL / GPU shaders with a dummy offscreen inference
+                // This eliminates the 3-5 second shader compile freeze when webcam opens
+                try {
+                    const warmupCanvas = document.createElement('canvas');
+                    warmupCanvas.width = 64;
+                    warmupCanvas.height = 64;
+                    await fa.detectAllFaces(warmupCanvas, new fa.TinyFaceDetectorOptions({ inputSize: 128, scoreThreshold: 0.5 }));
+                    if (fa.nets.ssdMobilenetv1?.isLoaded) {
+                        await fa.detectAllFaces(warmupCanvas, new fa.SsdMobilenetv1Options({ minConfidence: 0.5 }));
+                    }
+                } catch (_) {}
 
                 liteModelsLoaded = true;
                 proModelsLoaded = true;
-                console.log('✅ [Face-API] PRO models ready');
+                console.log('✅ [Face-API] All models loaded and GPU WebGL shaders pre-warmed in memory');
                 return true;
             } catch (err) {
                 console.error('❌ [Face-API] Pro model load failed:', err);
@@ -105,21 +108,24 @@ export async function loadFaceApiModels(accurate: boolean = false): Promise<bool
                 const fa = await getFaceApi();
                 if (!fa) return false;
 
-                if (!fa.nets.tinyFaceDetector.isLoaded) {
-                    await fa.nets.tinyFaceDetector.loadFromUri(MODEL_PATH);
-                    await new Promise(r => setTimeout(r, 10));
-                }
-                if (!fa.nets.faceLandmark68TinyNet.isLoaded) {
-                    await fa.nets.faceLandmark68TinyNet.loadFromUri(MODEL_PATH);
-                    await new Promise(r => setTimeout(r, 10));
-                }
-                if (!fa.nets.faceRecognitionNet.isLoaded) {
-                    await fa.nets.faceRecognitionNet.loadFromUri(MODEL_PATH);
-                    await new Promise(r => setTimeout(r, 10));
+                const loads: Promise<any>[] = [];
+                if (!fa.nets.tinyFaceDetector.isLoaded) loads.push(fa.nets.tinyFaceDetector.loadFromUri(MODEL_PATH));
+                if (!fa.nets.faceLandmark68TinyNet.isLoaded) loads.push(fa.nets.faceLandmark68TinyNet.loadFromUri(MODEL_PATH));
+                if (!fa.nets.faceRecognitionNet.isLoaded) loads.push(fa.nets.faceRecognitionNet.loadFromUri(MODEL_PATH));
+
+                if (loads.length > 0) {
+                    await Promise.all(loads);
                 }
 
+                try {
+                    const warmupCanvas = document.createElement('canvas');
+                    warmupCanvas.width = 64;
+                    warmupCanvas.height = 64;
+                    await fa.detectAllFaces(warmupCanvas, new fa.TinyFaceDetectorOptions({ inputSize: 128, scoreThreshold: 0.5 }));
+                } catch (_) {}
+
                 liteModelsLoaded = true;
-                console.log('✅ [Face-API] LITE models ready');
+                console.log('✅ [Face-API] LITE models ready and pre-warmed in memory');
                 return true;
             } catch (err) {
                 console.error('❌ [Face-API] Lite model load failed:', err);
