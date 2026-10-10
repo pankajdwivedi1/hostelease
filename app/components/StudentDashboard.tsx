@@ -987,13 +987,20 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
         if (cameraActive && (faceMatchStep === 'detecting' || faceMatchStep === 'matching') && videoRef.current) {
             console.log("🚀 Starting continuous real-time face detection & biometric loop...");
 
+            // ⚡ DEVICE-ADAPTIVE TIMING: 300ms on mobile devices for smooth 30-60 FPS video & zero thermal lag; 100ms on desktop PC
+            const isMobileDevice = typeof window !== 'undefined' && (
+                /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) ||
+                (window.innerWidth <= 768)
+            );
+            const loopIntervalMs = isMobileDevice ? 300 : 100;
+
             const runDetection = async () => {
                 if (!active || !videoRef.current || isProcessingRef.current) return;
 
                 try {
                     const video = videoRef.current;
                     if (video.readyState < 2 || video.videoWidth === 0) {
-                        if (active) detectionIntervalRef.current = setTimeout(runDetection, 60) as any;
+                        if (active) detectionIntervalRef.current = setTimeout(runDetection, isMobileDevice ? 100 : 60) as any;
                         return;
                     }
 
@@ -1231,7 +1238,7 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
                 }
 
                 if (active) {
-                    detectionIntervalRef.current = setTimeout(runDetection, 100) as any;
+                    detectionIntervalRef.current = setTimeout(runDetection, loopIntervalMs) as any;
                 }
             };
 
