@@ -294,7 +294,12 @@ export async function POST(request: NextRequest) {
                     action: "manual_out",
                     studentName: student.name,
                     hostelName: student.hostelName,
-                    roomNumber: student.roomNumber
+                    roomNumber: student.roomNumber,
+                    registrationId: student.registrationId || (student as any).erpId || "",
+                    phoneNumber: student.phoneNumber || "",
+                    profilePicture: student.profilePicture || student.photo || "",
+                    year: student.year,
+                    semester: student.semester
                 });
 
                 await writeAdminAuditLog({
@@ -389,7 +394,12 @@ export async function POST(request: NextRequest) {
                     action: "manual_in",
                     studentName: student.name,
                     hostelName: student.hostelName,
-                    roomNumber: student.roomNumber
+                    roomNumber: student.roomNumber,
+                    registrationId: student.registrationId || (student as any).erpId || "",
+                    phoneNumber: student.phoneNumber || "",
+                    profilePicture: student.profilePicture || student.photo || "",
+                    year: student.year,
+                    semester: student.semester
                 });
 
                 await writeAdminAuditLog({

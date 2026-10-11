@@ -199,6 +199,27 @@ export async function POST(request: NextRequest) {
       }
     }
 
+    // 🛡️ BANK-GRADE ANTI-SPOOF GATEKEEPER: Run in-process MiniFASNetV2 ONNX neural check on registration photo
+    if (profilePicture && typeof profilePicture === "string" && (profilePicture.startsWith("data:image/") || profilePicture.startsWith("data:"))) {
+      try {
+        const { verifyFaceAndLivenessServer } = await import("@/lib/serverAntiSpoof");
+        const livenessCheck = await verifyFaceAndLivenessServer({
+          liveImage: profilePicture,
+          clientDescriptor: Array.isArray(faceDescriptor) ? faceDescriptor : undefined
+        });
+
+        if (livenessCheck.isSpoof) {
+          console.warn(`🛑 [Student Registration Blocked] Presentation attack rejected for ${name || email || phoneNumber}: ${livenessCheck.reason}`);
+          return NextResponse.json(
+            { error: `Registration Rejected: ${livenessCheck.reason}. You must capture a real physical face in person.` },
+            { status: 422 }
+          );
+        }
+      } catch (spoofErr: any) {
+        console.warn("⚠️ [Student Registration] Anti-spoof server check warning:", spoofErr.message);
+      }
+    }
+
     // ✅ Save profile picture directly to Cloudflare R2 CDN ($0 Railway egress)
     let finalProfilePicture = profilePicture;
     if (profilePicture && (profilePicture.startsWith("data:image/") || profilePicture.startsWith("data:"))) {

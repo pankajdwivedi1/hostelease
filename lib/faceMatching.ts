@@ -102,6 +102,7 @@ export async function loadFaceApiModels(accurate: boolean = false): Promise<bool
         })();
         return loadingPromisePro;
     } else {
+        if (loadingPromisePro) return loadingPromisePro;
         if (loadingPromiseLite) return loadingPromiseLite;
         loadingPromiseLite = (async () => {
             try {
@@ -112,6 +113,7 @@ export async function loadFaceApiModels(accurate: boolean = false): Promise<bool
                 if (!fa.nets.tinyFaceDetector.isLoaded) loads.push(fa.nets.tinyFaceDetector.loadFromUri(MODEL_PATH));
                 if (!fa.nets.faceLandmark68TinyNet.isLoaded) loads.push(fa.nets.faceLandmark68TinyNet.loadFromUri(MODEL_PATH));
                 if (!fa.nets.faceRecognitionNet.isLoaded) loads.push(fa.nets.faceRecognitionNet.loadFromUri(MODEL_PATH));
+                if (!fa.nets.ssdMobilenetv1.isLoaded) loads.push(fa.nets.ssdMobilenetv1.loadFromUri(MODEL_PATH));
 
                 if (loads.length > 0) {
                     await Promise.all(loads);
@@ -122,10 +124,13 @@ export async function loadFaceApiModels(accurate: boolean = false): Promise<bool
                     warmupCanvas.width = 64;
                     warmupCanvas.height = 64;
                     await fa.detectAllFaces(warmupCanvas, new fa.TinyFaceDetectorOptions({ inputSize: 128, scoreThreshold: 0.5 }));
+                    if (fa.nets.ssdMobilenetv1?.isLoaded) {
+                        await fa.detectAllFaces(warmupCanvas, new fa.SsdMobilenetv1Options({ minConfidence: 0.5 }));
+                    }
                 } catch (_) {}
 
                 liteModelsLoaded = true;
-                console.log('✅ [Face-API] LITE models ready and pre-warmed in memory');
+                console.log('✅ [Face-API] LITE & SSD models ready and pre-warmed in memory');
                 return true;
             } catch (err) {
                 console.error('❌ [Face-API] Lite model load failed:', err);
@@ -252,7 +257,6 @@ export function detectMobileScreenDisplay(
 
         ctx.drawImage(inputElement, 0, 0, width, height);
 
-        // 🛡️ FACE CROP TEXTURE, SPECULAR GLARE & DIGITAL DISPLAY MOIRÉ ANALYSIS
         const bx = Math.max(0, Math.floor(box.x));
         const by = Math.max(0, Math.floor(box.y));
         const bw = Math.min(width - bx, Math.floor(box.width));
@@ -260,79 +264,44 @@ export function detectMobileScreenDisplay(
 
         if (bw < 30 || bh < 30) return { isSpoof: false };
 
-        const imgData = ctx.getImageData(bx, by, bw, bh);
-        const data = imgData.data;
-        const totalPixels = bw * bh;
-
-        let saturatedPixelCount = 0;
-        let highFreqGridDiffs = 0;
-
-        for (let i = 0; i < data.length; i += 4) {
-            const r = data[i];
-            const g = data[i + 1];
-            const b = data[i + 2];
-
-            // Only count pure blown-out glass reflection
-            if (r >= 248 && g >= 248 && b >= 248) {
-                saturatedPixelCount++;
-            }
-
-            const brightness = 0.299 * r + 0.587 * g + 0.114 * b;
-
-            if (i > 4 && i % (bw * 4) !== 0) {
-                const prevR = data[i - 4];
-                const prevG = data[i - 3];
-                const prevB = data[i - 2];
-                const prevBrightness = 0.299 * prevR + 0.587 * prevG + 0.114 * prevB;
-                const diff = Math.abs(brightness - prevBrightness);
-                if (diff > 25) {
-                    highFreqGridDiffs++;
-                }
-            }
-        }
-
-        const glareRatio = saturatedPixelCount / totalPixels;
-        const moireRatio = highFreqGridDiffs / totalPixels;
-
-        // Calibrated threshold: Real skin highlights under ceiling bulbs occupy 0.5-2%. Flat glass screen glare occupies > 4.5%.
-        if (glareRatio > 0.045) {
-            return { isSpoof: true, reason: "Mobile Device Screen Glare Detected. Please present your real physical face." };
-        }
-
-        // Calibrated threshold: Natural facial skin stays below 10%. Digital LCD/OLED raster grid patterns exceed 12%.
-        if (moireRatio > 0.12) {
-            return { isSpoof: true, reason: "Digital Display / Screen Grid Pattern Detected. Please present your real physical face." };
-        }
-
         // 🛡️ MOBILE PHONE BEZEL / CASING DETECTION:
-        // Analyzes the margin surrounding the face to detect dark phone borders/hand enclosing the screen
-        const marginX = Math.floor(bw * 0.22);
-        const marginY = Math.floor(bh * 0.22);
+        // Analyzes margins surrounding the face (left, right, top - excluding bottom/clothes) to detect enclosing device frame
+        const marginX = Math.floor(bw * 0.28);
+        const marginY = Math.floor(bh * 0.28);
         const outerX = Math.max(0, bx - marginX);
         const outerY = Math.max(0, by - marginY);
         const outerW = Math.min(width - outerX, bw + marginX * 2);
-        const outerH = Math.min(height - outerY, bh + marginY * 2);
+        const outerH = Math.min(height - outerY, bh + marginY); // do not extend into bottom clothes
 
-        if (outerW > bw + 10 && outerH > bh + 10) {
+        if (outerW > bw + 10 && outerH > bh + 5) {
             const outerData = ctx.getImageData(outerX, outerY, outerW, outerH).data;
-            let darkBorderPixels = 0;
-            let totalBorderPixels = 0;
+            let darkLeft = 0, totalLeft = 0;
+            let darkRight = 0, totalRight = 0;
+            let darkTop = 0, totalTop = 0;
 
             for (let y = 0; y < outerH; y++) {
                 for (let x = 0; x < outerW; x++) {
-                    const isBorderRegion = (x < marginX || x >= outerW - marginX || y < marginY || y >= outerH - marginY);
-                    if (isBorderRegion) {
-                        const idx = (y * outerW + x) * 4;
-                        const br = 0.299 * outerData[idx] + 0.587 * outerData[idx + 1] + 0.114 * outerData[idx + 2];
-                        if (br < 40) darkBorderPixels++;
-                        totalBorderPixels++;
+                    const idx = (y * outerW + x) * 4;
+                    const br = 0.299 * outerData[idx] + 0.587 * outerData[idx + 1] + 0.114 * outerData[idx + 2];
+                    if (x < marginX) {
+                        if (br < 40) darkLeft++;
+                        totalLeft++;
+                    } else if (x >= outerW - marginX) {
+                        if (br < 40) darkRight++;
+                        totalRight++;
+                    } else if (y < marginY) {
+                        if (br < 40) darkTop++;
+                        totalTop++;
                     }
                 }
             }
 
-            const borderDarkRatio = totalBorderPixels > 0 ? darkBorderPixels / totalBorderPixels : 0;
-            // Phone casing/bezels are dark (> 48% dark border pixels around an illuminated face)
-            if (borderDarkRatio > 0.48) {
+            const leftRatio = totalLeft > 0 ? darkLeft / totalLeft : 0;
+            const rightRatio = totalRight > 0 ? darkRight / totalRight : 0;
+            const topRatio = totalTop > 0 ? darkTop / totalTop : 0;
+
+            // Only flag as phone casing if an enclosing frame exists on top AND left AND right (> 65% on all 3 sides)
+            if (leftRatio > 0.65 && rightRatio > 0.65 && topRatio > 0.65) {
                 return { isSpoof: true, reason: "Mobile Phone Border / Case Detected! Please present your real physical face directly." };
             }
         }
@@ -924,20 +893,20 @@ export async function detectFace(
         if (!useSSD && fa.nets.tinyFaceDetector?.isLoaded) {
             detections = await runDetectorPass(new fa.TinyFaceDetectorOptions({
                 inputSize: 320,
-                scoreThreshold: 0.15
+                scoreThreshold: 0.12
             }));
         }
 
-        // Tier 2: SSD-MobileNet (When accurate mode requested or as fallback)
+        // Tier 2: SSD-MobileNet (When accurate mode requested or as fallback for tricky lighting)
         if ((!detections || detections.length === 0) && fa.nets.ssdMobilenetv1?.isLoaded) {
-            detections = await runDetectorPass(new fa.SsdMobilenetv1Options({ minConfidence: 0.25 }));
+            detections = await runDetectorPass(new fa.SsdMobilenetv1Options({ minConfidence: 0.20 }));
         }
 
         // Tier 3: Sensitive multi-scale fallback for challenging lighting or smaller face crops
         if (!detections || detections.length === 0) {
             detections = await runDetectorPass(new fa.TinyFaceDetectorOptions({
                 inputSize: 416,
-                scoreThreshold: 0.10
+                scoreThreshold: 0.08
             }));
         }
 

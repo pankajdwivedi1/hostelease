@@ -179,6 +179,27 @@ export async function PATCH(
       }
     }
 
+    // 🛡️ ANTI-SPOOF GATEKEEPER: Run in-process MiniFASNetV2 ONNX neural check on updated photo
+    if (body.profilePicture && (body.profilePicture.startsWith("data:image/") || body.profilePicture.startsWith("data:"))) {
+      try {
+        const { verifyFaceAndLivenessServer } = await import("@/lib/serverAntiSpoof");
+        const livenessCheck = await verifyFaceAndLivenessServer({
+          liveImage: body.profilePicture,
+          clientDescriptor: Array.isArray(body.faceDescriptor) ? body.faceDescriptor : undefined
+        });
+
+        if (livenessCheck.isSpoof) {
+          console.warn(`🛑 [Student Update Blocked] Presentation attack rejected for student ${studentId}: ${livenessCheck.reason}`);
+          return NextResponse.json(
+            { error: `Photo Update Rejected: ${livenessCheck.reason}. You must capture a real physical face in person.` },
+            { status: 422 }
+          );
+        }
+      } catch (spoofErr: any) {
+        console.warn("⚠️ [Student Update] Anti-spoof server check warning:", spoofErr.message);
+      }
+    }
+
     // ✅ Save updated profile picture directly to Cloudflare R2 CDN ($0 Railway egress)
     if (body.profilePicture && (body.profilePicture.startsWith("data:image/") || body.profilePicture.startsWith("data:"))) {
       try {

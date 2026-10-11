@@ -765,9 +765,6 @@ export default function OnboardingPage() {
 
       setIsCameraStarting(true);
 
-      // Yield to let React render the "Starting AI Camera..." spinner
-      await new Promise(resolve => setTimeout(resolve, 100));
-
       // 1. Get camera permission and stream with adaptive hardware fallback
       let stream: MediaStream | null = null;
       try {
@@ -784,10 +781,16 @@ export default function OnboardingPage() {
       // 2. Open camera UI instantly
       setIsCameraOpen(true);
       setIsCameraStarting(false);
+      setIsFaceInFrame(true);
       
-      // 3. Attach stream to the newly rendered video tag
-      setTimeout(() => {
+      // 3. Attach stream to the newly rendered video tag immediately
+      requestAnimationFrame(() => {
         if (videoRef.current) {
+          videoRef.current.srcObject = stream;
+        }
+      });
+      setTimeout(() => {
+        if (videoRef.current && !videoRef.current.srcObject) {
           videoRef.current.srcObject = stream;
         }
       }, 50);
@@ -873,158 +876,185 @@ export default function OnboardingPage() {
     return () => clearInterval(interval);
   }, [isCameraOpen]);
 
-  const captureImage = async () => {
-    if (videoRef.current && canvasRef.current) {
-      const video = videoRef.current;
-      const canvas = canvasRef.current;
-
-      canvas.width = video.videoWidth;
-      canvas.height = video.videoHeight;
-
-      const context = canvas.getContext("2d");
-      if (context) {
-        context.drawImage(video, 0, 0, canvas.width, canvas.height);
-
-        // 1. INSTANT FEEDBACK: Generate high-quality dataUrl and close camera immediately
-        let dataUrl = canvas.toDataURL("image/jpeg", 0.90);
-
-        setCapturedImage(dataUrl);
-        setFaceError(null);
-        stopCamera();
-
-        // 2. BACKGROUND THINKING: Process descriptor without blocking the UI
-        // We pass the static dataUrl string to avoid mobile Safari/Chrome resetting the DOM canvas
-        processFaceInBackground(dataUrl);
+  const validateAndProcessBiometricPhoto = async (
+    canvasOrImg: HTMLCanvasElement | HTMLImageElement
+  ): Promise<{ valid: boolean; descriptor?: number[]; error?: string; score?: number; dataUrl?: string }> => {
+    try {
+      // 🛡️ 1. Photo Quality & Re-Capture Check
+      const quality = faceMatching.assessPhotoQuality(canvasOrImg);
+      if (quality.isPhotoOfPhoto) {
+        return {
+          valid: false,
+          error: quality.reason || "Device bezel / Screen photo detected. Please take a direct live photo.",
+          score: quality.sharpnessScore
+        };
       }
+
+      // 🛡️ 2. Load SSD Models and Run Detection
+      await loadAIModels();
+      const res = await faceMatching.detectFace(canvasOrImg, true, true);
+      if (!res || !res.descriptor) {
+        if (quality.isBlurry) {
+          return {
+            valid: false,
+            error: quality.reason || `Photo too blurry (Sharpness: ${quality.sharpnessScore}%). Please ensure steady lighting and focus.`,
+            score: quality.sharpnessScore
+          };
+        }
+        return { valid: false, error: "No face detected in photo! Please ensure face is centered and clear." };
+      }
+      if (res.multipleFacesDetected) {
+        return { valid: false, error: "Multiple faces detected! Please ensure ONLY the student is in frame." };
+      }
+
+      // 🛡️ 3. Strict Facial Landmark Sharpness & Lens Fog / Smudge Gatekeeper
+      const featureQuality = faceMatching.assessFacialLandmarkSharpness(canvasOrImg, res.landmarks, res.detection?.box);
+      if (featureQuality.isSideFace) {
+        return {
+          valid: false,
+          error: featureQuality.reason || "Side face / turned head detected. Please face the camera directly so both sides of your face are fully visible.",
+          score: featureQuality.sharpnessScore
+        };
+      }
+      if (featureQuality.isFoggy) {
+        return {
+          valid: false,
+          error: featureQuality.reason || "Camera lens appears smudged or foggy. Please wipe camera lens with a clean cloth.",
+          score: featureQuality.sharpnessScore
+        };
+      }
+      if (featureQuality.isBlurry) {
+        return {
+          valid: false,
+          error: featureQuality.reason || `Photo is too blurry (Sharpness: ${featureQuality.sharpnessScore}%). Eyebrows, eyelids, and lips must be sharp.`,
+          score: featureQuality.sharpnessScore
+        };
+      }
+
+      if (res.detection?.box) {
+        const spoof = faceMatching.detectMobileScreenDisplay(canvasOrImg, res.detection.box);
+        if (spoof.isSpoof) {
+          return { valid: false, error: spoof.reason || "Digital display / screen spoof detected! Please take a real live photo." };
+        }
+      }
+      if (!res.descriptor || res.descriptor.length !== 128) {
+        return { valid: false, error: "Failed to extract complete 128-D face vector." };
+      }
+
+      // 🛡️ 4. Generate normalized 640px dataUrl from canvasOrImg
+      let targetCanvas: HTMLCanvasElement;
+      if (canvasOrImg instanceof HTMLCanvasElement) {
+        targetCanvas = canvasOrImg;
+      } else {
+        targetCanvas = document.createElement("canvas");
+        const maxDim = 640;
+        let nw = (canvasOrImg as HTMLImageElement).naturalWidth || 640;
+        let nh = (canvasOrImg as HTMLImageElement).naturalHeight || 480;
+        if (nw > maxDim || nh > maxDim) {
+          if (nw > nh) {
+            nh = Math.round((nh / nw) * maxDim);
+            nw = maxDim;
+          } else {
+            nw = Math.round((nw / nh) * maxDim);
+            nh = maxDim;
+          }
+        }
+        targetCanvas.width = nw;
+        targetCanvas.height = nh;
+        const ctx = targetCanvas.getContext("2d");
+        ctx?.drawImage(canvasOrImg, 0, 0, nw, nh);
+      }
+      const dataUrl = targetCanvas.toDataURL("image/jpeg", 0.90);
+
+      // 🛡️ 5. BANK-GRADE LIVE SERVER NEURAL ANTI-SPOOFING (MiniFASNetV2 ONNX Runtime)
+      try {
+        if (dataUrl && dataUrl.startsWith("data:image/")) {
+          const liveRes = await fetch("/api/biometrics/verify-live", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              image: dataUrl,
+              box: res.detection?.box ? {
+                x: res.detection.box.x,
+                y: res.detection.box.y,
+                width: res.detection.box.width,
+                height: res.detection.box.height,
+                canvasWidth: targetCanvas.width,
+                canvasHeight: targetCanvas.height
+              } : undefined,
+              descriptor: Array.from(res.descriptor)
+            })
+          });
+
+          if (liveRes.ok) {
+            const liveData = await liveRes.json();
+            if (liveData.isSpoof) {
+              return {
+                valid: false,
+                error: liveData.message || liveData.reason || "Fraud Prevented: Mobile Phone Screen or Photo Spoof Detected! Real physical face required."
+              };
+            }
+          }
+        }
+      } catch (liveErr) {
+        console.warn("⚠️ Live server anti-spoof check warning:", liveErr);
+      }
+
+      return {
+        valid: true,
+        descriptor: Array.from(res.descriptor),
+        score: quality.sharpnessScore,
+        dataUrl
+      };
+    } catch (err: any) {
+      console.error("Biometric photo verification failed:", err);
+      return { valid: false, error: "Photo processing failed: " + (err.message || err) };
     }
   };
 
-  const processFaceInBackground = async (dataUrl: string) => {
-    try {
-      setIsFaceProcessing(true);
-      setFaceDescriptor(null); // Clear previous
-
-      // 1. Yield to let React render the "Scanning..." state
-      await new Promise(resolve => setTimeout(resolve, 100));
-
-      // 2. Load the static image into memory to bypass DOM canvas lifecycle limitations on mobile
-      const img = await faceMatching.loadImage(dataUrl);
-
-      // 3. Downscale the image while preserving aspect ratio (optimal 640px for neural net & portrait selfies)
+  const captureImage = async () => {
+    if (videoRef.current) {
+      const video = videoRef.current;
+      if (video.readyState < 2 || !video.videoWidth) {
+        await new Promise(resolve => setTimeout(resolve, 80));
+      }
       const maxDim = 640;
-      let aiWidth = img.width;
-      let aiHeight = img.height;
-      if (aiWidth > maxDim || aiHeight > maxDim) {
-        if (aiWidth > aiHeight) {
-          aiHeight = Math.round((aiHeight / aiWidth) * maxDim);
-          aiWidth = maxDim;
+      let targetW = video.videoWidth || 640;
+      let targetH = video.videoHeight || 480;
+      if (targetW > maxDim || targetH > maxDim) {
+        if (targetW > targetH) {
+          targetH = Math.round((targetH / targetW) * maxDim);
+          targetW = maxDim;
         } else {
-          aiWidth = Math.round((aiWidth / aiHeight) * maxDim);
-          aiHeight = maxDim;
+          targetW = Math.round((targetW / targetH) * maxDim);
+          targetH = maxDim;
         }
       }
 
-      const aiCanvas = document.createElement("canvas");
-      aiCanvas.width = aiWidth;
-      aiCanvas.height = aiHeight;
-      const ctx = aiCanvas.getContext("2d");
+      const canvas = document.createElement("canvas");
+      canvas.width = targetW;
+      canvas.height = targetH;
+      const ctx = canvas.getContext("2d");
       if (ctx) {
-        ctx.drawImage(img, 0, 0, aiWidth, aiHeight);
-      } else {
-        throw new Error("Could not downscale photo for verification");
-      }
+        ctx.drawImage(video, 0, 0, targetW, targetH);
+        setIsFaceProcessing(true);
+        setFaceError(null);
 
-      // Ensure models are loaded
-      await loadAIModels();
-      await new Promise(resolve => setTimeout(resolve, 100)); // Yield to event loop
+        const res = await validateAndProcessBiometricPhoto(canvas);
+        setIsFaceProcessing(false);
 
-      // 🛡️ 1. REAL-TIME PHOTO QUALITY & RE-CAPTURE GATEKEEPER
-      const quality = faceMatching.assessPhotoQuality(aiCanvas);
-      if (quality.isPhotoOfPhoto) {
-        setFaceError(quality.reason || "Photo of a screen / re-capture detected. Please capture a real live selfie.");
-        setCapturedImage(null);
-        return;
-      }
-
-      // 🛡️ 2. Run multi-tier face descriptor generation
-      let descriptor = await faceMatching.detectFace(aiCanvas, true, true);
-      if (!descriptor || !descriptor.descriptor) {
-        descriptor = await faceMatching.detectFace(img, true, true);
-      }
-      await new Promise(resolve => setTimeout(resolve, 100)); // Yield to event loop
-
-      if (!descriptor || !descriptor.descriptor) {
-        if (quality.isBlurry) {
-          setFaceError(quality.reason || `Photo too blurry (Sharpness: ${quality.sharpnessScore}%). Please hold steady in good lighting.`);
-        } else {
-          setFaceError("No face detected! Please capture again with good lighting.");
-        }
-        setCapturedImage(null); // Force retake
-        return;
-      }
-
-      if (descriptor.multipleFacesDetected) {
-        setFaceError("Multiple faces detected! Please ensure ONLY YOU are in the frame.");
-        setCapturedImage(null); // Force retake
-        return;
-      }
-
-      // 🛡️ 3. STRICT FACIAL LANDMARK SHARPNESS & LENS FOG / SMUDGE GATEKEEPER
-      const featureQuality = faceMatching.assessFacialLandmarkSharpness(
-        aiCanvas,
-        descriptor.landmarks,
-        descriptor.detection?.box
-      );
-
-      if (featureQuality.isPhotoOfPhoto) {
-        setFaceError(featureQuality.reason || "Photo of a screen or reprint detected. Please capture a real live selfie.");
-        setCapturedImage(null);
-        return;
-      }
-
-      if (featureQuality.isSideFace) {
-        setFaceError(featureQuality.reason || "Side face / turned head detected. Please look straight at the camera so both sides of your face are fully visible.");
-        setCapturedImage(null);
-        return;
-      }
-
-      if (featureQuality.isFoggy) {
-        setFaceError(featureQuality.reason || "Camera lens appears smudged or foggy. Please wipe your camera lens with a clean cloth.");
-        setCapturedImage(null);
-        return;
-      }
-
-      if (featureQuality.isBlurry) {
-        setFaceError(featureQuality.reason || `Photo is too blurry (Sharpness: ${featureQuality.sharpnessScore}%). Eyebrows, eyelids, and lips must be sharp.`);
-        setCapturedImage(null);
-        return;
-      }
-
-      // 🛡️ 4. ANTI-SPOOF CHECK: Reject mobile screens and printed photos
-      if (descriptor.detection?.box) {
-        const spoofCheck = faceMatching.detectMobileScreenDisplay(aiCanvas, descriptor.detection.box);
-        if (spoofCheck.isSpoof) {
-          setFaceError(spoofCheck.reason || "Mobile Screen / Photo Spoof Detected! Please capture a real live selfie.");
-          setCapturedImage(null);
+        if (!res.valid) {
+          setFaceError(res.error || "Biometric validation failed. Please try again.");
           return;
         }
-      }
 
-      if (!descriptor.descriptor || descriptor.descriptor.length !== 128) {
-        setFaceError("Failed to extract full 128-D biometric face vector. Please retake photo.");
-        setCapturedImage(null);
-        return;
+        const dataUrl = res.dataUrl || canvas.toDataURL("image/jpeg", 0.90);
+        setCapturedImage(dataUrl);
+        setFaceDescriptor(res.descriptor as any);
+        handleChange("profilePicture", dataUrl);
+        stopCamera();
+        setFaceError(null);
       }
-
-      setFaceDescriptor(descriptor.descriptor);
-      setFaceError(null);
-      console.log("✅ Background Face Scan Complete: 128-D Biometric Vector Extracted");
-    } catch (err) {
-      console.error("Error generating face descriptor:", err);
-      setFaceError("Face processing failed. Try again with better lighting.");
-      setCapturedImage(null);
-    } finally {
-      setIsFaceProcessing(false);
     }
   };
 
@@ -1394,45 +1424,26 @@ export default function OnboardingPage() {
                   {field.type === "image" ? (
                     <div className="space-y-2">
                       {!isCameraOpen && !capturedImage && (
-                        <button
-                          type="button"
-                          onClick={startCamera}
-                          disabled={isProfileLocked || isCameraStarting}
-                          className="w-full py-4 rounded-xl border-2 border-dashed border-gray-200 text-gray-400 hover:border-blue-500 hover:text-blue-500 transition-all flex items-center justify-center gap-2 disabled:opacity-50"
-                        >
-                          {isCameraStarting ? (
-                            <>
-                              <div className="w-5 h-5 border-2 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
-                              <span className="font-bold">Opening Camera...</span>
-                            </>
-                          ) : (
-                            <>
-                              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" />
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 13a3 3 0 11-6 0 3 3 0 016 0z" />
-                              </svg>
-                              Capture Profile Photo
-                            </>
-                          )}
-                        </button>
+                        <div className="flex items-center justify-center w-full">
+                          <button
+                            type="button"
+                            onClick={startCamera}
+                            disabled={isProfileLocked || isCameraStarting}
+                            className="px-6 py-2.5 bg-purple-50 text-purple-600 hover:bg-purple-100 text-[10px] font-black uppercase tracking-wider rounded-xl transition-all flex items-center gap-1.5 border border-purple-200 shadow-sm disabled:opacity-50 active:scale-95"
+                          >
+                            📷 Open Camera
+                          </button>
+                        </div>
                       )}
 
                       {isCameraOpen && (
                         <div className="relative w-full max-w-sm mx-auto aspect-[4/5] rounded-[32px] overflow-hidden shadow-2xl bg-black border border-gray-200">
                           {/* Live Status HUD */}
                           <div className="absolute top-4 left-0 right-0 flex flex-col items-center gap-2 z-20">
-                            <div className={`px-4 py-1.5 rounded-full text-[10px] md:text-xs font-black uppercase tracking-widest flex items-center gap-2 shadow-2xl transition-all border-2 ${isFaceInFrame ? 'bg-green-500 border-green-400 text-white' : 'bg-red-600 border-red-400 text-white animate-pulse'}`}>
+                            <div className={`px-4 py-1.5 rounded-full text-[10px] md:text-xs font-black uppercase tracking-widest flex items-center gap-2 shadow-2xl transition-all border-2 ${isFaceInFrame ? 'bg-green-500 border-green-400 text-white' : 'bg-blue-600 border-blue-400 text-white'}`}>
                               <span className={`w-2 h-2 rounded-full ${isFaceInFrame ? 'bg-white' : 'bg-white/80 animate-ping'}`}></span>
-                              {isFaceInFrame ? 'Face Detected' : 'Action Required'}
+                              {isFaceInFrame ? 'Face In Frame ✓' : 'Live Camera Ready'}
                             </div>
-                            
-                            {!isFaceInFrame && (
-                              <div className="bg-black/70 backdrop-blur-md text-white px-3 py-1.5 md:px-6 md:py-3 rounded-xl md:rounded-2xl text-center shadow-xl border border-white/20 mt-1 md:mt-2 mx-4 animate-bounce">
-                                <p className="text-[10px] md:text-base font-black uppercase tracking-wide text-blue-400">
-                                  Position Face in Frame 👤
-                                </p>
-                              </div>
-                            )}
                           </div>
 
                           <video
@@ -1446,46 +1457,55 @@ export default function OnboardingPage() {
                             className="absolute inset-0 w-full h-full object-cover pointer-events-none z-[15]" 
                           />
 
+                          {isFaceProcessing && (
+                            <div className="absolute inset-0 flex flex-col items-center justify-center bg-black/60 backdrop-blur-sm z-30">
+                              <div className="w-8 h-8 border-3 border-white border-t-transparent rounded-full animate-spin mb-2"></div>
+                              <span className="text-[10px] text-white font-black uppercase tracking-widest">Scanning Biometrics...</span>
+                            </div>
+                          )}
+
                           {/* Full Screen Controls */}
                           <div className="absolute bottom-6 left-0 right-0 flex flex-row items-center justify-center gap-3 z-20 px-4">
                             <button
                               type="button"
                               onClick={stopCamera}
-                              className="px-6 py-3 rounded-2xl bg-white/10 backdrop-blur-md text-white border border-white/20 text-[10px] font-black uppercase tracking-widest shadow-2xl transition-all hover:bg-white/20 active:scale-95"
+                              disabled={isFaceProcessing}
+                              className="px-6 py-3 rounded-2xl bg-white/10 backdrop-blur-md text-white border border-white/20 text-[10px] font-black uppercase tracking-widest shadow-2xl transition-all hover:bg-white/20 active:scale-95 disabled:opacity-50"
                             >
                               Cancel
                             </button>
                             <button
                               type="button"
                               onClick={captureImage}
-                              disabled={!isFaceInFrame}
-                              className={`px-8 py-3 rounded-2xl text-[10px] font-black uppercase tracking-widest shadow-2xl transition-all ${isFaceInFrame ? 'bg-white text-blue-600 shadow-white/30 hover:scale-105 active:scale-95' : 'bg-gray-800 text-gray-500 opacity-80 cursor-not-allowed'}`}
+                              disabled={isFaceProcessing}
+                              className="px-8 py-3 rounded-2xl text-[10px] font-black uppercase tracking-widest shadow-2xl transition-all bg-white text-blue-600 shadow-white/30 hover:scale-105 active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed"
                             >
-                              Capture
+                              📸 Capture
                             </button>
                           </div>
                         </div>
                       )}
 
                       {capturedImage && (
-                        <div className="relative w-32 h-40 mx-auto rounded-2xl overflow-hidden border-4 border-white shadow-xl">
-                          <img
-                            src={capturedImage}
-                            alt="Captured profile"
-                            className={`w-full h-full object-cover ${isFaceProcessing ? 'opacity-50 grayscale' : ''}`}
-                          />
-                          {isFaceProcessing && (
-                            <div className="absolute inset-0 flex flex-col items-center justify-center bg-black/20">
-                              <div className="w-6 h-6 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
-                              <span className="text-[8px] text-white font-bold mt-2 uppercase tracking-tight">Scanning...</span>
-                            </div>
-                          )}
+                        <div className="flex flex-col items-center gap-2.5 my-2">
+                          <div className="relative w-28 h-28 rounded-2xl overflow-hidden border-2 border-blue-500 shadow-md">
+                            <img
+                              src={capturedImage}
+                              alt="Captured profile"
+                              className={`w-full h-full object-cover ${isFaceProcessing ? 'opacity-50 grayscale' : ''}`}
+                            />
+                            {isFaceProcessing && (
+                              <div className="absolute inset-0 flex flex-col items-center justify-center bg-black/40">
+                                <div className="w-6 h-6 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                                <span className="text-[8px] text-white font-bold mt-1 uppercase tracking-tight">Verifying...</span>
+                              </div>
+                            )}
+                          </div>
                           {!isFaceProcessing && faceDescriptor && (
-                            <div className="absolute top-2 left-2 bg-green-500 rounded-full p-1 shadow-lg border border-white">
-                              <svg className="w-3 h-3 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={4} d="M5 13l4 4L19 7" />
-                              </svg>
-                            </div>
+                            <span className="text-[9px] font-black text-green-700 bg-green-50 border border-green-200 px-2.5 py-0.5 rounded-full uppercase tracking-wider flex items-center gap-1 shadow-sm">
+                              <span className="w-1.5 h-1.5 rounded-full bg-green-500"></span>
+                              ✓ 128-D Vector Active
+                            </span>
                           )}
                           <button
                             type="button"
@@ -1494,27 +1514,19 @@ export default function OnboardingPage() {
                               setCapturedImage(null);
                               setFaceDescriptor(null);
                               setFaceError(null);
-                              startCamera();
+                              handleChange("profilePicture", "");
                             }}
-                            className="absolute bottom-2 right-2 p-2 bg-black/50 rounded-full text-white hover:bg-black/70 transition-colors disabled:opacity-0"
+                            className="px-3 py-1 bg-red-50 text-red-600 hover:bg-red-100 text-[10px] font-black uppercase tracking-wider rounded-lg transition-all border border-red-100 disabled:opacity-50"
                           >
-                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-                            </svg>
+                            Remove Photo
                           </button>
                         </div>
                       )}
-                      {!isFaceProcessing && faceDescriptor && (
-                        <p className="text-center text-[9px] text-green-600 font-black uppercase mt-2 tracking-widest flex items-center justify-center gap-1">
-                          <span className="w-1 h-1 bg-green-600 rounded-full"></span>
-                          Image Successfully captured
-                          <span className="w-1 h-1 bg-green-600 rounded-full"></span>
-                        </p>
-                      )}
+
                       {faceError && (
-                        <div className="p-3 bg-red-50 border border-red-200 rounded-xl text-center mt-2">
+                        <div className="p-3 bg-red-50 border border-red-200 rounded-xl text-center mt-2 max-w-md mx-auto">
                           <p className="text-[11px] text-red-600 font-bold uppercase">⚠️ {faceError}</p>
-                          <p className="text-[9px] text-red-500 font-medium mt-0.5">Please tap retake and capture a clear selfie in good lighting.</p>
+                          <p className="text-[9px] text-red-500 font-medium mt-0.5">Please ensure good lighting, look straight at the camera, and try again.</p>
                         </div>
                       )}
                       <canvas ref={canvasRef} className="hidden" />

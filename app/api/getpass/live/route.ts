@@ -64,7 +64,8 @@ export async function GET(request: NextRequest) {
                 db.gatePasses.list(returnsFilters, {
                     limit: 5,
                     sortField: source === 'SUPABASE' ? 'check_in_time' : 'checkInTime',
-                    sortOrder: 'desc'
+                    sortOrder: 'desc',
+                    populate: true
                 }),
                 db.gatePasses.list(filters, { limit: 1000 }),
                 db.students.count(countFilters)

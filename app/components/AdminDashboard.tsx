@@ -4073,6 +4073,37 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
         return { valid: false, error: "Failed to extract complete 128-D face vector." };
       }
 
+      // 🛡️ BANK-GRADE LIVE SERVER NEURAL ANTI-SPOOFING (MiniFASNetV2 ONNX Runtime)
+      try {
+        const dataUrl = (canvasOrImg as HTMLCanvasElement).toDataURL 
+          ? (canvasOrImg as HTMLCanvasElement).toDataURL("image/jpeg", 0.90)
+          : (canvasOrImg as HTMLImageElement).src;
+
+        if (dataUrl && dataUrl.startsWith("data:image/")) {
+          const liveRes = await fetch("/api/biometrics/verify-live", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              image: dataUrl,
+              box: res.detection?.box,
+              descriptor: Array.from(res.descriptor)
+            })
+          });
+
+          if (liveRes.ok) {
+            const liveData = await liveRes.json();
+            if (liveData.isSpoof) {
+              return {
+                valid: false,
+                error: liveData.message || liveData.reason || "Fraud Prevented: Mobile Phone Screen or Photo Spoof Detected! Real physical face required."
+              };
+            }
+          }
+        }
+      } catch (liveErr) {
+        console.warn("⚠️ [Admin/Warden Photo] Live server anti-spoof check warning:", liveErr);
+      }
+
       return {
         valid: true,
         descriptor: Array.from(res.descriptor),

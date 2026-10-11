@@ -20,6 +20,9 @@ export interface GateStatusEvent {
     roomNumber?: string;
     registrationId?: string;
     phoneNumber?: string;
+    profilePicture?: string;
+    year?: string | null;
+    semester?: string | null;
     timestamp: number;
 }
 

@@ -198,6 +198,46 @@ function RectangleTimer({ timeLeft, maxTime = 10 }: { timeLeft: number; maxTime?
     );
 }
 
+// ===================== Student Avatar with Blue Frame =====================
+function StudentGateAvatar({
+    record,
+    onClick,
+    fallbackGradient = "from-[#ff6b6b] to-[#ee5253]"
+}: {
+    record: any;
+    onClick: () => void;
+    fallbackGradient?: string;
+}) {
+    const [imgFailed, setImgFailed] = useState(false);
+    const photoUrl = !imgFailed
+        ? (record.profilePicture || record.photo || record.student?.profilePicture || record.student?.photo || null)
+        : null;
+    const initial = (record.studentName?.trim()?.charAt(0) || "?").toUpperCase();
+
+    return (
+        <div
+            onClick={onClick}
+            className="w-6 h-6 sm:w-[26px] sm:h-[26px] rounded-md border border-blue-500 bg-[#161b2e] flex items-center justify-center text-white cursor-pointer shadow-sm hover:scale-105 transition-transform shrink-0 overflow-hidden relative group"
+            title={`View profile for ${record.studentName || "Student"}`}
+        >
+            {photoUrl ? (
+                <img
+                    src={photoUrl}
+                    alt={record.studentName || "Student"}
+                    className="w-full h-full object-cover rounded-[inherit]"
+                    loading="lazy"
+                    decoding="async"
+                    onError={() => setImgFailed(true)}
+                />
+            ) : (
+                <div className={`w-full h-full bg-gradient-to-br ${fallbackGradient} flex items-center justify-center font-black text-[9px] text-white`}>
+                    {initial}
+                </div>
+            )}
+        </div>
+    );
+}
+
 // ===================== Types =====================
 interface OutingRecord {
     _id: string;
@@ -207,6 +247,11 @@ interface OutingRecord {
     hostelName: string;
     roomNumber: string;
     registrationId?: string;
+    profilePicture?: string;
+    photo?: string;
+    year?: string;
+    semester?: string;
+    student?: any;
     checkOutTime: string;
     checkOutISTTime: string;
     checkOutISTDate: string;
@@ -582,6 +627,10 @@ export default function GatepassView({ onClose }: { onClose?: () => void }) {
                                 hostelName: data.hostelName,
                                 roomNumber: data.roomNumber,
                                 registrationId: data.registrationId || "",
+                                profilePicture: data.profilePicture || "",
+                                photo: data.profilePicture || "",
+                                year: data.year || "",
+                                semester: data.semester || "",
                                 status: isCheckOut ? "out" : "in",
                                 type: data.outingType || "outing",
                                 phoneNumber: data.phoneNumber || "",
@@ -997,6 +1046,49 @@ export default function GatepassView({ onClose }: { onClose?: () => void }) {
         return n;
     };
 
+    const formatStudentSubtitle = (record: any) => {
+        if (!record) return "";
+        let year = (record.year || record.student?.year || record.student?.dynamicFields?.year || "").toString().trim().toUpperCase();
+        let sem = (record.semester || record.student?.semester || record.student?.dynamicFields?.semester || "").toString().trim().toUpperCase();
+
+        // Normalize Year (e.g., "1" -> "1ST YEAR", "4TH" -> "4TH YEAR")
+        if (year && !year.includes("YEAR")) {
+            if (year === "1" || year === "1ST") year = "1ST YEAR";
+            else if (year === "2" || year === "2ND") year = "2ND YEAR";
+            else if (year === "3" || year === "3RD") year = "3RD YEAR";
+            else if (year === "4" || year === "4TH") year = "4TH YEAR";
+            else year = `${year} YEAR`;
+        }
+
+        // Normalize Semester (e.g., "7" -> "7TH SEM", "1ST" -> "1ST SEM")
+        if (sem && !sem.includes("SEM")) {
+            if (sem === "1" || sem === "1ST") sem = "1ST SEM";
+            else if (sem === "2" || sem === "2ND") sem = "2ND SEM";
+            else if (sem === "3" || sem === "3RD") sem = "3RD SEM";
+            else if (sem === "4" || sem === "4TH") sem = "4TH SEM";
+            else if (sem === "5" || sem === "5TH") sem = "5TH SEM";
+            else if (sem === "6" || sem === "6TH") sem = "6TH SEM";
+            else if (sem === "7" || sem === "7TH") sem = "7TH SEM";
+            else if (sem === "8" || sem === "8TH") sem = "8TH SEM";
+            else sem = `${sem} SEM`;
+        }
+
+        const academicParts = [year, sem].filter(Boolean);
+        const academicText = academicParts.join(" • ");
+
+        const rawHostel = record.hostelName || record.student?.hostelName || "";
+        const hostel = formatHostelDisplay(rawHostel) || "";
+        const rawRoom = record.roomNumber || record.student?.roomNumber || "";
+        const room = rawRoom ? rawRoom.toString().trim() : "";
+        const hostelParts = [hostel, room].filter(Boolean);
+        const hostelText = hostelParts.join(" • ");
+
+        if (academicText && hostelText) {
+            return `${academicText}---${hostelText}`;
+        }
+        return academicText || hostelText || "";
+    };
+
     return (
         <div className="flex flex-col md:flex-row w-screen min-h-screen md:h-screen bg-[#0a0a1a] font-sans text-white overflow-x-hidden overflow-y-auto scrollbar-thin scrollbar-thumb-blue-500/20 scrollbar-track-transparent">
             {/* =================== LEFT PANEL: QR CODE =================== */}
@@ -1372,12 +1464,11 @@ export default function GatepassView({ onClose }: { onClose?: () => void }) {
                                         return (
                                             <div key={record._id || (record as any).id || `out-${record.studentId || index}`} className="flex justify-between items-center py-2 px-2.5 sm:px-3 bg-[#161b2e] rounded-xl border border-[#ff6b6b15] transition-all hover:border-[#ff6b6b30] group w-full">
                                                 <div className="flex items-center gap-2.5 min-w-0 flex-1">
-                                                    <div
+                                                    <StudentGateAvatar
+                                                        record={record}
                                                         onClick={() => handleStudentClick(targetId, record)}
-                                                        className="w-7 h-7 rounded-lg bg-gradient-to-br from-[#ff6b6b] to-[#ee5253] flex items-center justify-center font-black text-[10px] text-white cursor-pointer shadow-[0_4px_12px_rgba(238,82,83,0.3)] transition-transform hover:scale-105 shrink-0"
-                                                    >
-                                                        {record.studentName?.charAt(0)?.toUpperCase() || "?"}
-                                                    </div>
+                                                        fallbackGradient="from-[#ff6b6b] to-[#ee5253]"
+                                                    />
                                                     <div className="min-w-0 flex-1">
                                                         <div className="flex items-center gap-1.5 min-w-0">
                                                             <h4
@@ -1416,8 +1507,11 @@ export default function GatepassView({ onClose }: { onClose?: () => void }) {
                                                                 );
                                                             })()}
                                                         </div>
-                                                        <p className="text-[9px] text-[rgba(255,255,255,0.3)] tracking-tight uppercase m-0 mt-0.5 font-bold truncate">
-                                                            {formatHostelDisplay(record.hostelName)} • {record.roomNumber}
+                                                        <p 
+                                                            className="text-[8px] text-slate-100 font-bold tracking-tight uppercase m-0 mt-0.5 truncate"
+                                                            title={formatStudentSubtitle(record)}
+                                                        >
+                                                            {formatStudentSubtitle(record)}
                                                         </p>
                                                     </div>
                                                 </div>
@@ -1458,12 +1552,11 @@ export default function GatepassView({ onClose }: { onClose?: () => void }) {
                                         return (
                                             <div key={record._id || (record as any).id || `recent-${record.studentId || index}`} className="flex justify-between items-center py-2 px-2.5 sm:px-3 bg-[#161b2e] rounded-xl border border-[#00ff8815] transition-all hover:border-[#00ff8830] group w-full">
                                                 <div className="flex items-center gap-2.5 min-w-0 flex-1">
-                                                    <div
+                                                    <StudentGateAvatar
+                                                        record={record}
                                                         onClick={() => handleStudentClick(targetId, record)}
-                                                        className="w-7 h-7 rounded-lg bg-gradient-to-br from-[#00ff88] to-[#00cc6a] flex items-center justify-center font-black text-[10px] text-white cursor-pointer shadow-[0_4px_12px_rgba(0,255,136,0.3)] transition-transform hover:scale-105 shrink-0"
-                                                    >
-                                                        {record.studentName?.charAt(0)?.toUpperCase() || "?"}
-                                                    </div>
+                                                        fallbackGradient="from-[#00ff88] to-[#00cc6a]"
+                                                    />
                                                     <div className="min-w-0 flex-1">
                                                         <h4
                                                             onClick={() => handleStudentClick(targetId, record)}
@@ -1471,8 +1564,11 @@ export default function GatepassView({ onClose }: { onClose?: () => void }) {
                                                         >
                                                             {record.studentName}
                                                         </h4>
-                                                        <p className="text-[9px] text-[rgba(255,255,255,0.3)] tracking-tight uppercase m-0 mt-0.5 font-bold truncate">
-                                                            {formatHostelDisplay(record.hostelName)} • {record.roomNumber}
+                                                        <p 
+                                                            className="text-[8px] text-slate-100 font-bold tracking-tight uppercase m-0 mt-0.5 truncate"
+                                                            title={formatStudentSubtitle(record)}
+                                                        >
+                                                            {formatStudentSubtitle(record)}
                                                         </p>
                                                     </div>
                                                 </div>

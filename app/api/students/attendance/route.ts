@@ -53,7 +53,10 @@ export async function POST(request: NextRequest) {
             verificationMethod,
             faceMatchPercentage,
             faceMatchStatus,
-            flaggedPhotoUrl
+            flaggedPhotoUrl,
+            image,
+            clientDescriptor,
+            box
         } = body;
 
         console.log('📥 Attendance Request Received:', {
@@ -204,6 +207,53 @@ export async function POST(request: NextRequest) {
                     { status: 400 }
                 );
             }
+        }
+
+        // ⚡ SINGLE ATOMIC CALL: IN-PROCESS BIOMETRIC & ANTI-SPOOF VERIFICATION (MiniFASNetV2 ONNX Runtime)
+        let finalFaceMatchPercentage = typeof faceMatchPercentage === 'number' ? faceMatchPercentage : 0;
+        let finalFaceMatchStatus = faceMatchStatus || 'auto-approved';
+
+        if (image) {
+            const storedDescriptor = student.faceDescriptor || student.face_descriptor;
+            if (!storedDescriptor || !Array.isArray(storedDescriptor) || storedDescriptor.length === 0) {
+                return NextResponse.json({
+                    error: `Student face descriptor not registered for ${student.name || student.registrationId}. Please update your photo in profile first.`
+                }, { status: 400 });
+            }
+
+            const { verifyFaceAndLivenessServer } = await import("@/lib/serverAntiSpoof");
+            const verification = await verifyFaceAndLivenessServer({
+                liveImage: image,
+                referenceDescriptor: storedDescriptor,
+                clientDescriptor,
+                box
+            });
+
+            // 🛑 1. PRESENTATION ATTACK DETECTED (Screen, Photo-of-Photo, Glass Glare, Replay)
+            if (verification.isSpoof) {
+                console.warn(`🛑 [Attendance Blocked] Spoof attack rejected for ${student.registrationId || student.email || student.name}: ${verification.reason}`);
+                return NextResponse.json({
+                    error: verification.reason || "Mobile Screen Display / Photo Spoof Detected! Please present your real face.",
+                    isSpoof: true,
+                    score: 0,
+                    livenessScore: verification.livenessScore
+                }, { status: 422 });
+            }
+
+            // 🛑 2. IDENTITY MISMATCH (< 75%)
+            if (!verification.isMatch) {
+                console.warn(`⚠️ [Attendance Blocked] Identity mismatch for ${student.registrationId || student.email || student.name} (Score: ${verification.matchScore}%)`);
+                return NextResponse.json({
+                    error: `Identity Mismatch (${verification.matchScore}% Match — Need ≥ 75%). Please ensure your face is well lit and looking straight.`,
+                    isMatch: false,
+                    score: verification.matchScore,
+                    distance: verification.distance
+                }, { status: 422 });
+            }
+
+            finalFaceMatchPercentage = Math.max(finalFaceMatchPercentage, verification.matchScore);
+            finalFaceMatchStatus = 'auto-approved';
+            console.log(`✅ [Attendance Atomic Bio-Verified] ${student.registrationId || student.name} (Score: ${finalFaceMatchPercentage}%, Liveness: ${verification.livenessScore}%)`);
         }
 
         // 3. Verify Location and Time (Optimized with short-term cache)
@@ -486,10 +536,10 @@ export async function POST(request: NextRequest) {
             verificationMethod: verifiedBy || 'gps',
             verifiedBy: verifiedBy || 'gps',
             isWifiVerified: verifiedBy === 'wifi' || verifiedBy === 'ip',
-            faceMatchPercentage,
-            faceMatchStatus,
+            faceMatchPercentage: finalFaceMatchPercentage,
+            faceMatchStatus: finalFaceMatchStatus,
             flaggedPhotoUrl,
-            needsReview: faceMatchStatus === 'flagged',
+            needsReview: finalFaceMatchStatus === 'flagged',
             isTest: false,
             timestamp: nowIST // Ensure timestamp is passed
         };

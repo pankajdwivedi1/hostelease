@@ -1004,9 +1004,12 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
                         return;
                     }
 
-                    // 1. FAST LIGHTWEIGHT FACE DETECTION ON NATIVE VIDEO (<15ms)
+                    // 1. FAST LIGHTWEIGHT FACE DETECTION ON NATIVE VIDEO WITH SSD FALLBACK
                     // Updates face bounding box every frame for smooth tracking
-                    const fastRes = await faceMatching.detectFace(video, false, false);
+                    let fastRes = await faceMatching.detectFace(video, false, false);
+                    if (!fastRes || !fastRes.detection) {
+                        fastRes = await faceMatching.detectFace(video, true, false);
+                    }
 
                     if (fastRes && fastRes.detection) {
                         setFaceDetected(true);
@@ -1089,7 +1092,10 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
                                     }
 
                                     // 🛡️ [FRAUD SHIELD 3/4] Live 128D Face Descriptor Extraction (SSD-MobileNet V1 @ 640px)
-                                    const liveDet = await faceMatching.detectFace(canvas, true, true);
+                                    let liveDet = await faceMatching.detectFace(canvas, true, true);
+                                    if (!liveDet || !liveDet.descriptor || liveDet.descriptor.length < 68) {
+                                        liveDet = await faceMatching.detectFace(canvas, false, true);
+                                    }
                                     if (!liveDet || !liveDet.descriptor || liveDet.descriptor.length < 68) {
                                         return;
                                     }
@@ -1104,8 +1110,12 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
                                     // 🛡️ [FRAUD SHIELD 4/4] 1:1 Biometric Comparison (<0.001ms)
                                     let refDesc = referenceDescriptorRef.current;
                                     if (!refDesc || refDesc.length < 68) {
-                                        if (Array.isArray(studentProfile?.faceDescriptor) && studentProfile.faceDescriptor.length >= 68) {
-                                            refDesc = studentProfile.faceDescriptor;
+                                        let rawDesc = studentProfile?.faceDescriptor;
+                                        if (typeof rawDesc === 'string') {
+                                            try { rawDesc = JSON.parse(rawDesc); } catch (e) {}
+                                        }
+                                        if (Array.isArray(rawDesc) && rawDesc.length >= 68) {
+                                            refDesc = rawDesc;
                                             referenceDescriptorRef.current = refDesc;
                                         } else {
                                             const regId = studentProfile?.registrationId || studentProfile?._id || '';
@@ -1130,76 +1140,25 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
                                         matchStreakRef.current++;
                                         mismatchStreakRef.current = 0;
 
-                                        // Require 2 consecutive clean frames >= 75% for rock-solid stability (~1.0 - 1.8s)
-                                        if (matchStreakRef.current >= 2 && !isProcessingRef.current) {
+                                        // ⚡ INSTANT 1-FRAME LOCK: Immediate lock on first clean match (Zero lag, <0.3s)
+                                        if (matchStreakRef.current >= 1 && !isProcessingRef.current) {
                                             active = false;
                                             isProcessingRef.current = true;
                                             setFaceMatchStep('matching');
-                                            setFaceMatchProgress(88);
+                                            setFaceMatchProgress(95);
 
-                                            // 🛡️ CONFIRM WITH RAILWAY SERVER ONNX MINIFASNET & SAVE ATTENDANCE
+                                            // 🛡️ 1 SINGLE ATOMIC CALL: Stop camera and send face snapshot directly to attendance endpoint
                                             const liveImageBase64 = canvas.toDataURL('image/jpeg', 0.88);
-                                            try {
-                                                const serverRes = await fetch('/api/attendance/face-match', {
-                                                    method: 'POST',
-                                                    headers: { 'Content-Type': 'application/json' },
-                                                    body: JSON.stringify({
-                                                        image: liveImageBase64,
-                                                        registrationId: studentProfile?.registrationId || '',
-                                                        email: studentProfile?.email || '',
-                                                        studentId: studentProfile?._id || studentProfile?.id || '',
-                                                        clientDescriptor: Array.from(liveDet.descriptor),
-                                                        box: liveDet.detection?.box || boxOnCanvas
-                                                    })
-                                                });
+                                            stopCamera();
 
-                                                if (serverRes.ok) {
-                                                    const aiResult = await serverRes.json();
-                                                    if (aiResult.isSpoof) {
-                                                        stopCamera();
-                                                        setFaceMatchStep('error');
-                                                        setIsMarkingAttendance(true);
-                                                        setAttendanceStep('failed');
-                                                        const reason = aiResult.message || "Mobile Screen / Photo Spoof Detected!";
-                                                        setAttendanceFailedReason(reason);
-                                                        showToast(reason, "error");
-                                                        return;
-                                                    }
-
-                                                    if (aiResult.success && aiResult.isMatch) {
-                                                        setFaceMatchStep('success');
-                                                        setTimeout(() => {
-                                                            stopCamera();
-                                                            proceedWithAttendance({
-                                                                percentage: Math.max(localMatch.score, aiResult.score || 75),
-                                                                status: 'auto-approved'
-                                                            });
-                                                        }, 300);
-                                                        return;
-                                                    } else if (aiResult.success && !aiResult.isMatch) {
-                                                        stopCamera();
-                                                        setFaceMatchStep('error');
-                                                        setIsMarkingAttendance(true);
-                                                        setAttendanceStep('failed');
-                                                        const reason = aiResult.message || `Identity Mismatch (${aiResult.score || localMatch.score}% — Need ≥ 75%)`;
-                                                        setAttendanceFailedReason(reason);
-                                                        showToast(reason, "error");
-                                                        return;
-                                                    }
-                                                }
-                                            } catch (netErr) {
-                                                console.warn("Server AI network error, verified by client engine:", netErr);
-                                                // Safe offline fallback: all 4 local fraud shield checks already passed with >= 75%
-                                                setFaceMatchStep('success');
-                                                setTimeout(() => {
-                                                    stopCamera();
-                                                    proceedWithAttendance({
-                                                        percentage: localMatch.score,
-                                                        status: 'auto-approved'
-                                                    });
-                                                }, 300);
-                                                return;
-                                            }
+                                            proceedWithAttendance({
+                                                percentage: localMatch.score,
+                                                status: 'auto-approved',
+                                                image: liveImageBase64,
+                                                clientDescriptor: Array.from(liveDet.descriptor),
+                                                box: liveDet.detection?.box || boxOnCanvas
+                                            });
+                                            return;
                                         }
                                     } else {
                                         // Score < 75%
@@ -3299,8 +3258,12 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
 
             // ⚡ PRE-LOAD BIOMETRIC REFERENCE DESCRIPTOR: Instant 0ms memory access
             if (!referenceDescriptorRef.current || referenceDescriptorRef.current.length < 68) {
-                if (Array.isArray(studentProfile?.faceDescriptor) && studentProfile.faceDescriptor.length >= 68) {
-                    referenceDescriptorRef.current = studentProfile.faceDescriptor;
+                let ref = studentProfile?.faceDescriptor;
+                if (typeof ref === 'string') {
+                    try { ref = JSON.parse(ref); } catch (e) {}
+                }
+                if (Array.isArray(ref) && ref.length >= 68) {
+                    referenceDescriptorRef.current = ref;
                 } else {
                     const regId = studentProfile?.registrationId || studentProfile?._id || '';
                     if (regId) {
@@ -3322,20 +3285,26 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
 
             setCameraActive(true);
 
-            // ⚡ IMMEDIATE: Start camera stream
-            const streamPromise = navigator.mediaDevices.getUserMedia({
-                video: {
-                    facingMode: 'user',
-                    aspectRatio: { ideal: 1 },
-                    width: { ideal: 640 }
-                }
-            });
+            // ⚡ IMMEDIATE: Start camera stream with adaptive resolution fallback
+            let stream: MediaStream | null = null;
+            try {
+                stream = await navigator.mediaDevices.getUserMedia({
+                    video: {
+                        facingMode: 'user',
+                        width: { ideal: 1280 },
+                        height: { ideal: 720 }
+                    }
+                });
+            } catch (e) {
+                stream = await navigator.mediaDevices.getUserMedia({
+                    video: { facingMode: 'user' }
+                });
+            }
 
             // ⚡ FAST FEED: Show video as soon as the browser allows & start detection loop instantly
-            const stream = await streamPromise;
-            if (videoRef.current) {
+            if (videoRef.current && stream) {
                 videoRef.current.srcObject = stream;
-                videoRef.current.play();
+                videoRef.current.play().catch(() => {});
             }
 
             // ⚡ INSTANT: Start detection loop immediately without blocking
@@ -3349,8 +3318,8 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
                 blinkCount: 0,
             });
 
-            // Ensure SSD models are loaded (they should already be from dashboard load, this is a safety net)
-            faceMatching.loadFaceApiModels(true).catch(() => {});
+            // Ensure SSD models are loaded in memory
+            await faceMatching.loadFaceApiModels(true);
         } catch (err) {
             console.error("Camera error:", err);
             alert("Could not access camera. Please ensure permissions are granted.");
@@ -3605,80 +3574,17 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
             }
 
             // 🛡️ STEP 5: FINAL CONFIRMATION ON RAILWAY SERVER (MiniFASNetV2 ONNX Confirmation + Database Persistence)
-            // Reaches here ONLY IF all 4 local fraud checks passed and match score >= 75%!
-            setFaceMatchProgress(88);
-            const liveImageBase64 = canvas.toDataURL('image/jpeg', 0.88);
-
-            try {
-                const serverRes = await fetch('/api/attendance/face-match', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        image: liveImageBase64,
-                        registrationId: studentProfile.registrationId,
-                        email: studentProfile.email,
-                        studentId: studentProfile._id || studentProfile.id,
-                        clientDescriptor: Array.from(liveDet.descriptor),
-                        box: liveDet.detection?.box || boxOnCanvas
-                    })
-                });
-
-                if (serverRes.ok) {
-                    const aiResult = await serverRes.json();
-                    setFaceMatchProgress(100);
-
-                    // Server MiniFASNet Anti-Spoof Confirmation
-                    if (aiResult.isSpoof) {
-                        console.warn("❌ [Server MiniFASNet] Spoof Blocked:", aiResult.message);
-                        stopCamera();
-                        setFaceMatchStep('error');
-                        setIsMarkingAttendance(true);
-                        setAttendanceStep('failed');
-                        const reasonMsg = aiResult.message || "Mobile Screen Display / Photo Spoof Detected!";
-                        setAttendanceFailedReason(reasonMsg);
-                        showToast(reasonMsg, "error");
-                        return {
-                            percentage: 0,
-                            status: 'rejected',
-                            reason: reasonMsg
-                        };
-                    }
-
-                    if (aiResult.success && aiResult.isMatch) {
-                        setFaceMatchStep('success');
-                        return {
-                            percentage: Math.max(localMatch.score, aiResult.score || 75),
-                            status: 'auto-approved',
-                        };
-                    } else if (aiResult.success && !aiResult.isMatch) {
-                        console.warn(`❌ Server Identity Mismatch: Score ${aiResult.score}%`);
-                        stopCamera();
-                        setFaceMatchStep('error');
-                        setIsMarkingAttendance(true);
-                        setAttendanceStep('failed');
-                        const reasonMsg = aiResult.message || `Identity Mismatch (${aiResult.score}% — Need ≥ 75%)`;
-                        setAttendanceFailedReason(reasonMsg);
-                        showToast(reasonMsg, "error");
-                        return {
-                            percentage: aiResult.score || localMatch.score,
-                            status: 'rejected',
-                            reason: reasonMsg
-                        };
-                    }
-                }
-            } catch (netErr) {
-                console.warn("[Face Verification] Server AI network error, verified by client engine:", netErr);
-                // Safe offline fallback: all 4 local fraud shield checks already passed with >= 75%
-                setFaceMatchStep('success');
-                return {
-                    percentage: localMatch.score,
-                    status: 'auto-approved',
-                };
-            }
-
+            // 🛡️ STEP 5: PREPARE PAYLOAD FOR ATOMIC ATTENDANCE CALL
+            // All 4 local fraud checks passed and match score >= 75%!
+            setFaceMatchProgress(100);
             stopCamera();
-            setFaceMatchStep('error');
-            return null;
+            return {
+                percentage: localMatch.score,
+                status: 'auto-approved',
+                image: liveImageBase64,
+                clientDescriptor: Array.from(liveDet.descriptor),
+                box: liveDet.detection?.box || boxOnCanvas
+            };
         } catch (error: any) {
             console.error("Biometric Error:", error);
             stopCamera();
@@ -3817,43 +3723,14 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
             const deviceId = getStoredDeviceId();
             if (!studentProfile) return;
 
-            // ⚡ INSTANT LOCATION RESOLUTION:
-            // Location Lock was ALREADY verified on the dashboard prior to opening face attendance!
-            // Uses cached verified campus coordinates directly (Zero GPS satellite delay: 0ms instead of 5s).
-            let latitude = verifiedCoordsRef.current?.lat || 0;
-            let longitude = verifiedCoordsRef.current?.lng || 0;
-            let accuracy = verifiedCoordsRef.current?.accuracy || 10;
+            // ⚡ INSTANT LOCATION RESOLUTION (Zero GPS Satellite Delay - 0ms):
+            // Location Lock or Campus WiFi was ALREADY verified on the dashboard prior to opening face attendance!
+            // Directly use verified campus coordinates without re-querying GPS satellites.
+            const latitude = verifiedCoordsRef.current?.lat || 0;
+            const longitude = verifiedCoordsRef.current?.lng || 0;
+            const accuracy = verifiedCoordsRef.current?.accuracy || 10;
 
-            // ⚡ FAST LOCATION FALLBACK: Only queried if student never verified via Location Lock
-            const getLocationFast = (): Promise<GeolocationPosition> => {
-                return new Promise((resolve, reject) => {
-                    navigator.geolocation.getCurrentPosition(
-                        (pos) => resolve(pos),
-                        (err) => {
-                            navigator.geolocation.getCurrentPosition(
-                                (pos) => resolve(pos),
-                                (err2) => reject(err2),
-                                { enableHighAccuracy: false, timeout: 5000, maximumAge: 30000 }
-                            );
-                        },
-                        { enableHighAccuracy: true, timeout: 3000, maximumAge: 30000 }
-                    );
-                });
-            };
-
-            if (!verifiedCoordsRef.current && !isOnCampusWifi) {
-                setAttendanceStep('gps');
-                try {
-                    const position = await getLocationFast();
-                    latitude = position.coords.latitude;
-                    longitude = position.coords.longitude;
-                    accuracy = position.coords.accuracy;
-                } catch (e) {
-                    console.warn("GPS fallback note, proceeding with verified status");
-                }
-            }
-
-            // Step: Saving to Database
+            // Step: Saving to Database (Instant 0ms persistence)
             setAttendanceStep('saving');
 
                 const response = await fetch("/api/students/attendance", {
@@ -3874,15 +3751,19 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
                         verifiedBy: isOnCampusWifi === true ? "wifi" : "gps",
                         isWifiVerified: isOnCampusWifi === true,
                         isLocationVerified: true,
-                        // Face matching results (0% Storage - only numbers stored)
-                        faceMatchPercentage: faceResult.percentage,
-                        faceMatchStatus: faceResult.status
+                        // ⚡ 1 Single Atomic Biometric Verification & Persistence
+                        faceMatchPercentage: faceResult?.percentage || 100,
+                        faceMatchStatus: faceResult?.status || 'auto-approved',
+                        image: faceResult?.image,
+                        clientDescriptor: faceResult?.clientDescriptor,
+                        box: faceResult?.box
                     }),
                 });
 
                 const data = await response.json();
 
-                if (response.ok) {
+                if (response.ok && data.success) {
+                    setFaceMatchStep('success');
                     setAttendanceStep('done');
                     setIsAttendanceMarked(true);
 
@@ -3907,16 +3788,22 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
                         showToast(data.message || "Attendance marked successfully!", "success");
                     }, 800);
                 } else {
-                    setAttendanceStep('error');
-                    showToast(data.error || "Failed to mark attendance.", "error");
-                    setIsMarkingAttendance(false);
+                    setFaceMatchStep('error');
+                    setIsMarkingAttendance(true);
+                    setAttendanceStep('failed');
+                    const reason = data.error || data.message || "Failed to mark attendance.";
+                    setAttendanceFailedReason(reason);
+                    showToast(reason, "error");
                 }
 
-        } catch (error) {
+        } catch (error: any) {
             console.error("Location/Attendance Error:", error);
-            setAttendanceStep('error');
-            showToast("Failed to record attendance. Please try again.", "error");
-            setIsMarkingAttendance(false);
+            setFaceMatchStep('error');
+            setIsMarkingAttendance(true);
+            setAttendanceStep('failed');
+            const reason = error?.message || "Failed to record attendance. Please try again.";
+            setAttendanceFailedReason(reason);
+            showToast(reason, "error");
         }
     };
 

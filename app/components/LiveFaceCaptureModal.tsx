@@ -293,7 +293,7 @@ export default function LiveFaceCaptureModal({
                 return;
             }
 
-            // 🛡️ 4. Anti-Spoof Screen Verification
+            // 🛡️ 4. Anti-Spoof Screen Verification (Client Heuristics)
             if (descriptor.detection?.box) {
                 const spoofCheck = faceMatching.detectMobileScreenDisplay(aiCanvas, descriptor.detection.box);
                 if (spoofCheck.isSpoof) {
@@ -307,6 +307,30 @@ export default function LiveFaceCaptureModal({
                 setFaceError("Failed to extract full 128-D biometric vector. Please retake photo.");
                 setIsProcessing(false);
                 return;
+            }
+
+            // 🛡️ 5. BANK-GRADE LIVE SERVER NEURAL ANTI-SPOOFING (MiniFASNetV2 ONNX Runtime)
+            try {
+                const liveRes = await fetch("/api/biometrics/verify-live", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({
+                        image: dataUrl,
+                        box: descriptor.detection?.box,
+                        descriptor: Array.from(descriptor.descriptor)
+                    })
+                });
+
+                if (liveRes.ok) {
+                    const liveData = await liveRes.json();
+                    if (liveData.isSpoof) {
+                        setFaceError(liveData.message || liveData.reason || "Fraud Prevented: Mobile Phone Screen or Photo Spoof Detected! Please present your real physical face directly.");
+                        setIsProcessing(false);
+                        return;
+                    }
+                }
+            } catch (liveErr) {
+                console.warn("⚠️ Live server liveness check warning:", liveErr);
             }
 
             const descriptorArray: number[] = Array.from(descriptor.descriptor as Float32Array | number[]);

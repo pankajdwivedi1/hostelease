@@ -153,13 +153,24 @@ export async function verifyFaceAndLivenessServer(
     let bh = 0;
 
     // 2. Resolve Face Coordinates:
-    // If client provided a valid tracked bounding box from phone camera, use it directly (0ms)
+    // If client provided a valid tracked bounding box from camera, use it directly with auto-scaling
     let validBox = false;
     if (clientBox && typeof clientBox.x === 'number' && typeof clientBox.width === 'number') {
-        bx = Math.max(0, Math.floor(clientBox.x));
-        by = Math.max(0, Math.floor(clientBox.y));
-        bw = Math.min(img.width - bx, Math.floor(clientBox.width));
-        bh = Math.min(img.height - by, Math.floor(clientBox.height));
+        const rawBx = clientBox.x;
+        const rawBy = clientBox.y;
+        const rawBw = clientBox.width;
+        const rawBh = clientBox.height;
+
+        // Auto-scale if client detection was performed on a normalized canvas (e.g. 640px)
+        const refW = clientBox.canvasWidth || clientBox._canvasWidth || (img.width > 700 && rawBx + rawBw <= 650 ? 640 : img.width);
+        const refH = clientBox.canvasHeight || clientBox._canvasHeight || (img.height > 700 && rawBy + rawBh <= 650 ? Math.round(640 * (img.height / img.width)) : img.height);
+        const scaleX = img.width / refW;
+        const scaleY = img.height / refH;
+
+        bx = Math.max(0, Math.floor(rawBx * scaleX));
+        by = Math.max(0, Math.floor(rawBy * scaleY));
+        bw = Math.min(img.width - bx, Math.floor(rawBw * scaleX));
+        bh = Math.min(img.height - by, Math.floor(rawBh * scaleY));
         if (bw >= 30 && bh >= 30 && bx + bw <= img.width && by + bh <= img.height) {
             validBox = true;
         }
@@ -208,30 +219,45 @@ export async function verifyFaceAndLivenessServer(
     const glareRatio = totalFacePixels > 0 ? saturatedPixelCount / totalFacePixels : 0;
     const moireRatio = totalFacePixels > 0 ? highFreqGridDiffs / totalFacePixels : 0;
 
-    // CHECK B: Device Casing / Screen Border Analysis
+    // CHECK B: Device Casing / Screen Border Analysis (Top, Left, Right - excluding bottom clothes)
     let borderDarkRatio = 0;
-    if (clientBox) {
-        const marginX = Math.floor(bw * 0.40);
-        const marginY = Math.floor(bh * 0.40);
-        const outerX = Math.max(0, bx - marginX);
-        const outerY = Math.max(0, by - marginY);
-        const outerW = Math.min(img.width - outerX, bw + 2 * marginX);
-        const outerH = Math.min(img.height - outerY, bh + 2 * marginY);
+    const marginX = Math.floor(bw * 0.28);
+    const marginY = Math.floor(bh * 0.28);
+    const outerX = Math.max(0, bx - marginX);
+    const outerY = Math.max(0, by - marginY);
+    const outerW = Math.min(img.width - outerX, bw + marginX * 2);
+    const outerH = Math.min(img.height - outerY, bh + marginY); // do not extend into bottom clothes
+
+    if (outerW > bw + 10 && outerH > bh + 5) {
         const outerData = ctx.getImageData(outerX, outerY, outerW, outerH).data;
-        let darkBorderPixels = 0;
-        let totalBorderPixels = 0;
+        let darkLeft = 0, totalLeft = 0;
+        let darkRight = 0, totalRight = 0;
+        let darkTop = 0, totalTop = 0;
+
         for (let y = 0; y < outerH; y++) {
             for (let x = 0; x < outerW; x++) {
-                const isBorderRegion = (x < marginX || x >= outerW - marginX || y < marginY || y >= outerH - marginY);
-                if (isBorderRegion) {
-                    const idx = (y * outerW + x) * 4;
-                    const br = 0.299 * outerData[idx] + 0.587 * outerData[idx + 1] + 0.114 * outerData[idx + 2];
-                    if (br < 40) darkBorderPixels++;
-                    totalBorderPixels++;
+                const idx = (y * outerW + x) * 4;
+                const br = 0.299 * outerData[idx] + 0.587 * outerData[idx + 1] + 0.114 * outerData[idx + 2];
+                if (x < marginX) {
+                    if (br < 40) darkLeft++;
+                    totalLeft++;
+                } else if (x >= outerW - marginX) {
+                    if (br < 40) darkRight++;
+                    totalRight++;
+                } else if (y < marginY) {
+                    if (br < 40) darkTop++;
+                    totalTop++;
                 }
             }
         }
-        borderDarkRatio = totalBorderPixels > 0 ? darkBorderPixels / totalBorderPixels : 0;
+
+        const leftRatio = totalLeft > 0 ? darkLeft / totalLeft : 0;
+        const rightRatio = totalRight > 0 ? darkRight / totalRight : 0;
+        const topRatio = totalTop > 0 ? darkTop / totalTop : 0;
+
+        if (leftRatio > 0.65 && rightRatio > 0.65 && topRatio > 0.65) {
+            borderDarkRatio = 0.70;
+        }
     }
 
     // CHECK C: MiniFASNetV2 Neural Anti-Spoofing (Scale 2.7 Context Crop)
@@ -289,8 +315,9 @@ export async function verifyFaceAndLivenessServer(
 
             livenessProb = realProb;
 
-            // Calibrated thresholds for MiniFASNetV2
-            if (realProb < 0.65 || replayProb > 0.40 || printProb > 0.45) {
+            // Calibrated thresholds for MiniFASNetV2:
+            // Replay or Print is flagged when synthetic probability dominates over live skin
+            if (realProb < 0.45 || (replayProb > 0.48 && replayProb > realProb) || (printProb > 0.48 && printProb > realProb)) {
                 isNeuralSpoof = true;
                 if (replayProb >= printProb) {
                     neuralReason = "Digital Mobile Screen / Video Replay Detected";
@@ -303,19 +330,13 @@ export async function verifyFaceAndLivenessServer(
         }
     }
 
-    // 4. Combined Anti-Spoof Decision
+    // 4. Combined Anti-Spoof Decision (Deep-Learning Neural PAD + Physical Device Frame)
     let isSpoof = false;
     let spoofReason = "";
 
-    if (glareRatio > 0.045) {
-        isSpoof = true;
-        spoofReason = "Mobile Device Screen Glare / Reflection Detected. Please present your real physical face.";
-    } else if (borderDarkRatio > 0.50) {
+    if (borderDarkRatio > 0.65) {
         isSpoof = true;
         spoofReason = "Mobile Phone Border / Device Casing Detected. Please present your real face directly.";
-    } else if (moireRatio > 0.14) {
-        isSpoof = true;
-        spoofReason = "Digital Screen Pixel Grid Pattern Detected. Please present your real physical face.";
     } else if (isNeuralSpoof) {
         isSpoof = true;
         spoofReason = `${neuralReason}. Please present your real physical face in person.`;
