@@ -162,8 +162,8 @@ export async function verifyFaceAndLivenessServer(
         const rawBh = clientBox.height;
 
         // Auto-scale if client detection was performed on a normalized canvas (e.g. 640px)
-        const refW = clientBox.canvasWidth || clientBox._canvasWidth || (img.width > 700 && rawBx + rawBw <= 650 ? 640 : img.width);
-        const refH = clientBox.canvasHeight || clientBox._canvasHeight || (img.height > 700 && rawBy + rawBh <= 650 ? Math.round(640 * (img.height / img.width)) : img.height);
+        const refW = (clientBox as any).canvasWidth || (clientBox as any)._canvasWidth || (img.width > 700 && rawBx + rawBw <= 650 ? 640 : img.width);
+        const refH = (clientBox as any).canvasHeight || (clientBox as any)._canvasHeight || (img.height > 700 && rawBy + rawBh <= 650 ? Math.round(640 * (img.height / img.width)) : img.height);
         const scaleX = img.width / refW;
         const scaleY = img.height / refH;
 

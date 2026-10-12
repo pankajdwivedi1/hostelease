@@ -109,11 +109,11 @@ export async function loadFaceApiModels(accurate: boolean = false): Promise<bool
                 const fa = await getFaceApi();
                 if (!fa) return false;
 
+                // Load only lightweight mobile-optimized models (TinyFace + TinyLandmarks + 128D FaceRecognitionNet)
                 const loads: Promise<any>[] = [];
                 if (!fa.nets.tinyFaceDetector.isLoaded) loads.push(fa.nets.tinyFaceDetector.loadFromUri(MODEL_PATH));
                 if (!fa.nets.faceLandmark68TinyNet.isLoaded) loads.push(fa.nets.faceLandmark68TinyNet.loadFromUri(MODEL_PATH));
                 if (!fa.nets.faceRecognitionNet.isLoaded) loads.push(fa.nets.faceRecognitionNet.loadFromUri(MODEL_PATH));
-                if (!fa.nets.ssdMobilenetv1.isLoaded) loads.push(fa.nets.ssdMobilenetv1.loadFromUri(MODEL_PATH));
 
                 if (loads.length > 0) {
                     await Promise.all(loads);
@@ -124,13 +124,10 @@ export async function loadFaceApiModels(accurate: boolean = false): Promise<bool
                     warmupCanvas.width = 64;
                     warmupCanvas.height = 64;
                     await fa.detectAllFaces(warmupCanvas, new fa.TinyFaceDetectorOptions({ inputSize: 128, scoreThreshold: 0.5 }));
-                    if (fa.nets.ssdMobilenetv1?.isLoaded) {
-                        await fa.detectAllFaces(warmupCanvas, new fa.SsdMobilenetv1Options({ minConfidence: 0.5 }));
-                    }
                 } catch (_) {}
 
                 liteModelsLoaded = true;
-                console.log('✅ [Face-API] LITE & SSD models ready and pre-warmed in memory');
+                console.log('✅ [Face-API] LITE Mobile models ready and pre-warmed in memory');
                 return true;
             } catch (err) {
                 console.error('❌ [Face-API] Lite model load failed:', err);
@@ -850,8 +847,8 @@ export async function detectFace(
         const fa = await getFaceApi();
         if (!fa) return null;
 
-        // Ensure models are loaded
-        const modelsToLoad = accurate || withDescriptor;
+        // Ensure models are loaded (accurate=true loads full desktop SSD, accurate=false loads lightweight mobile)
+        const modelsToLoad = accurate;
         const ready = await loadFaceApiModels(modelsToLoad);
         if (!ready) return null;
 
@@ -923,9 +920,9 @@ export async function detectFace(
             return box && box.width >= 16 && box.height >= 16 && score >= 0.15;
         });
 
-        // Multi-Face Guard: Run raw bounding-box detection ONLY when verifying descriptors (not on fast 10fps tracking)
+        // Multi-Face Guard: Run raw bounding-box detection ONLY when verifying descriptors on desktop Pro mode
         let totalFaceCount = validFaces.length;
-        if (withDescriptor) {
+        if (withDescriptor && accurate) {
             let rawBoxes: any[] = [];
             try {
                 if (fa.nets.tinyFaceDetector?.isLoaded) {

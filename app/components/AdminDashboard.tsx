@@ -9358,25 +9358,26 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                       {/* ⚠️ CURFEW ANOMALY DETECTED PANEL */}
                       {anomalyAlerts.length > 0 && (() => {
                         return (
-                          <div className="bg-gradient-to-r from-red-50 to-orange-50 border-2 border-red-100 rounded-2xl md:rounded-3xl p-3 md:p-6 space-y-3 md:space-y-4 shadow-sm animate-in slide-in-from-top duration-300">
-                            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 md:gap-3">
-                              <div className="flex items-center gap-2.5 md:gap-3">
-                                <div className="w-8 h-8 md:w-10 md:h-10 rounded-xl md:rounded-2xl bg-red-500 text-white flex items-center justify-center shrink-0 shadow-lg shadow-red-200">
-                                  <svg className="w-4 h-4 md:w-5 md:h-5 animate-pulse" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" /></svg>
+                          <div className="bg-gradient-to-r from-red-50 to-orange-50 border-2 border-red-100 rounded-2xl md:rounded-3xl p-3 md:p-6 space-y-2 md:space-y-4 shadow-sm animate-in slide-in-from-top duration-300">
+                            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 md:gap-3">
+                              <div className="flex items-center gap-2 md:gap-3">
+                                <div className="w-7 h-7 md:w-10 md:h-10 rounded-lg md:rounded-2xl bg-red-500 text-white flex items-center justify-center shrink-0 shadow-md md:shadow-lg shadow-red-200">
+                                  <svg className="w-3.5 h-3.5 md:w-5 md:h-5 animate-pulse" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" /></svg>
                                 </div>
                                 <div>
-                                  <h3 className="text-xs md:text-sm font-black text-red-950 uppercase tracking-wider">
+                                  <h3 className="text-[10px] md:text-sm font-black text-red-950 uppercase tracking-wider leading-tight">
                                     ⚠️ Attendance Anomalies Detected
                                   </h3>
-                                  <p className="text-[9px] md:text-[11px] text-red-700 font-medium">
+                                  <p className="text-[8px] md:text-[11px] text-red-700 font-medium leading-tight mt-0.5">
                                     {anomalyAlerts.length} student{anomalyAlerts.length > 1 ? 's' : ''} have been absent for 3+ consecutive days.
                                   </p>
                                 </div>
                               </div>
+                              {/* Desktop Alert Parents Button */}
                               <button
                                 onClick={handleNotifyAnomalies}
                                 disabled={isNotifyingAnomalies}
-                                className="w-full sm:w-auto px-4 md:px-5 py-2 md:py-2.5 rounded-xl bg-red-600 hover:bg-red-700 text-white font-black text-[10px] md:text-xs uppercase tracking-widest active:scale-95 transition-all shadow-md md:shadow-lg shadow-red-500/25 flex items-center justify-center gap-1.5 disabled:opacity-50"
+                                className="hidden sm:flex px-4 md:px-5 py-2 md:py-2.5 rounded-xl bg-red-600 hover:bg-red-700 text-white font-black text-[10px] md:text-xs uppercase tracking-widest active:scale-95 transition-all shadow-md md:shadow-lg shadow-red-500/25 items-center justify-center gap-1.5 disabled:opacity-50"
                               >
                                 {isNotifyingAnomalies ? (
                                   <>
@@ -9391,11 +9392,37 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                               </button>
                             </div>
 
-                            {/* Collapsible Details list */}
+                            {/* Collapsible Details list with Mobile Alert Parents on right */}
                             <details className="group border-t border-red-200/50 pt-2 md:pt-3">
-                              <summary className="text-[9px] md:text-[10px] font-black text-red-600 uppercase tracking-widest cursor-pointer select-none flex items-center gap-1 hover:text-red-800 transition-colors">
-                                <span className="transition-transform group-open:rotate-90 inline-block font-bold">▶</span>
-                                View Affected Students ({anomalyAlerts.length})
+                              <summary className="list-none flex items-center justify-between gap-2 cursor-pointer select-none [&::-webkit-details-marker]:hidden">
+                                <span className="text-[8.5px] md:text-[10px] font-black text-red-600 uppercase tracking-widest flex items-center gap-1 hover:text-red-800 transition-colors">
+                                  <span className="transition-transform group-open:rotate-90 inline-block font-bold">▶</span>
+                                  View Affected Students ({anomalyAlerts.length})
+                                </span>
+                                {/* Mobile Alert Parents Button (on the right of View Affected Students) */}
+                                <div className="sm:hidden" onClick={(e) => e.stopPropagation()}>
+                                  <button
+                                    type="button"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      handleNotifyAnomalies();
+                                    }}
+                                    disabled={isNotifyingAnomalies}
+                                    className="px-2.5 py-1 rounded-lg bg-red-600 hover:bg-red-700 text-white font-black text-[8px] uppercase tracking-wider active:scale-95 transition-all shadow-sm shadow-red-500/25 flex items-center justify-center gap-1 disabled:opacity-50 whitespace-nowrap"
+                                  >
+                                    {isNotifyingAnomalies ? (
+                                      <>
+                                        <div className="w-2.5 h-2.5 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                                        <span>Notifying...</span>
+                                      </>
+                                    ) : (
+                                      <>
+                                        <span className="text-[9px]">📢</span>
+                                        <span>Alert Parents</span>
+                                      </>
+                                    )}
+                                  </button>
+                                </div>
                               </summary>
                               <div className="mt-3 overflow-hidden rounded-2xl border border-red-150 bg-white/70 backdrop-blur divide-y divide-red-50 max-h-60 overflow-y-auto">
                                 {anomalyAlerts.map((student: any) => (
@@ -9640,20 +9667,34 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                                             <span className="text-[8px] font-bold uppercase truncate text-gray-400">
                                               {(() => { const student = students.find(s => s.id === (typeof log.studentId === 'string' ? log.studentId : (log.studentId?._id || log.studentId?.id))); const erp = student?.erpInformation || student?.erpId || (typeof log.studentId === 'object' ? (log.studentId?.erpInformation || log.studentId?.erpId) : null) || log.erpId || log.erpInformation; return erp ? `${erp} • ` : ''; })()}{log.hostelName || log.studentId?.hostelName || "N/A"} - {log.roomNumber || log.studentId?.roomNumber || "N/A"}
                                             </span>
-                                            {((typeof log.faceMatchPercentage === 'number' && log.faceMatchPercentage !== null) || log.markedBy || log.deviceId) && (
-                                              <span
+                                            <div className="flex items-center gap-1.5 mt-0.5">
+                                              {((typeof log.faceMatchPercentage === 'number' && log.faceMatchPercentage !== null) || log.markedBy || log.deviceId) ? (
+                                                <span
+                                                  onClick={(e) => {
+                                                    e.stopPropagation();
+                                                    if (log.faceMatchStatus === 'flagged') setReviewingLog(log);
+                                                  }}
+                                                  className={`text-[8px] font-bold uppercase truncate rounded-sm w-fit ${log.faceMatchStatus === 'flagged' ? 'bg-red-50 text-red-600 animate-pulse cursor-pointer px-1' :
+                                                    log.faceMatchStatus === 'manual-override' ? 'bg-amber-50 text-amber-600 px-1' : 'text-blue-500'
+                                                    }`}
+                                                >
+                                                  {typeof log.faceMatchPercentage === 'number' && log.faceMatchPercentage !== null ? `${log.faceMatchPercentage}% Match ${log.faceMatchStatus === 'flagged' ? '🚩' : ''}` : ''}
+                                                  {log.markedBy ? `${(typeof log.faceMatchPercentage === 'number' && log.faceMatchPercentage !== null) ? ' • ' : ''}Marked by ${log.markedBy}` : (typeof log.faceMatchPercentage !== 'number' || log.faceMatchPercentage === null) && (log.deviceId === 'marked-by-dean' || (log.deviceId === 'admin-override' && !isWarden)) ? `Marked by DEAN` : (typeof log.faceMatchPercentage !== 'number' || log.faceMatchPercentage === null) && (log.deviceId === 'marked-by-warden' || (log.deviceId === 'admin-override' && isWarden)) ? `Marked by WARDEN` : ''}
+                                                </span>
+                                              ) : null}
+                                              <button
                                                 onClick={(e) => {
                                                   e.stopPropagation();
-                                                  if (log.faceMatchStatus === 'flagged') setReviewingLog(log);
+                                                  handleUnmarkAttendance(log._id, typeof log.studentId === 'string' ? log.studentId : (log.studentId?._id || log.student_id || ""));
                                                 }}
-                                                className={`text-[8px] font-bold uppercase truncate rounded-sm mt-0.5 w-fit ${log.faceMatchStatus === 'flagged' ? 'bg-red-50 text-red-600 animate-pulse cursor-pointer px-1' :
-                                                  log.faceMatchStatus === 'manual-override' ? 'bg-amber-50 text-amber-600 px-1' : 'text-blue-500'
-                                                  }`}
+                                                className="w-4 h-4 flex items-center justify-center bg-red-50 text-red-500 rounded-full hover:bg-red-100 active:bg-red-200 transition-colors flex-shrink-0"
+                                                title="Unmark / Mark Absent"
                                               >
-                                                {typeof log.faceMatchPercentage === 'number' && log.faceMatchPercentage !== null ? `${log.faceMatchPercentage}% Match ${log.faceMatchStatus === 'flagged' ? '🚩' : ''}` : ''}
-                                                {log.markedBy ? `${(typeof log.faceMatchPercentage === 'number' && log.faceMatchPercentage !== null) ? ' • ' : ''}Marked by ${log.markedBy}` : (typeof log.faceMatchPercentage !== 'number' || log.faceMatchPercentage === null) && (log.deviceId === 'marked-by-dean' || (log.deviceId === 'admin-override' && !isWarden)) ? `Marked by DEAN` : (typeof log.faceMatchPercentage !== 'number' || log.faceMatchPercentage === null) && (log.deviceId === 'marked-by-warden' || (log.deviceId === 'admin-override' && isWarden)) ? `Marked by WARDEN` : ''}
-                                              </span>
-                                            )}
+                                                <svg className="w-2.5 h-2.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M6 18L18 6M6 6l12 12" />
+                                                </svg>
+                                              </button>
+                                            </div>
                                           </div>
                                         </div>
                                       </td>
@@ -9812,18 +9853,21 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
 
                       {/* Absentee List */}
                       <div ref={absenteesRef} className="bg-red-50/30 rounded-xl border border-red-100 p-4">
-                        <h3 className="text-sm font-bold text-red-900 mb-3 flex items-center justify-between gap-2">
-                          <span className="flex items-center gap-2">
-                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" /></svg>
-                            {selectedDate === new Date(new Date().getTime() + (5.5 * 60 * 60 * 1000)).toISOString().split('T')[0] ? "Today's" : selectedDate} Absentee List ({displayedAbsentees.length} students)
+                        <h3 className="text-xs md:text-sm font-bold text-red-900 mb-3 flex items-center justify-between gap-1.5 md:gap-2">
+                          <span className="flex items-center gap-1.5 md:gap-2 min-w-0">
+                            <svg className="w-3.5 h-3.5 md:w-4 md:h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" /></svg>
+                            <span className="truncate">
+                              <span className="hidden md:inline">{selectedDate === new Date(new Date().getTime() + (5.5 * 60 * 60 * 1000)).toISOString().split('T')[0] ? "Today's " : `${selectedDate} `}</span>
+                              Absentee List ({displayedAbsentees.length}<span className="hidden md:inline"> students</span>)
+                            </span>
                           </span>
                           {displayedAbsentees.length > 0 && (
                             <button
                               onClick={handleNotifyAbsentees}
                               disabled={isNotifyingAbsentees}
-                              className="px-2.5 py-1 bg-red-600 hover:bg-red-700 disabled:opacity-50 text-white text-[9px] font-black uppercase tracking-wider rounded-lg transition-all flex items-center gap-1.5 shadow-sm active:scale-95"
+                              className="px-2 py-0.5 md:px-2.5 md:py-1 bg-red-600 hover:bg-red-700 disabled:opacity-50 text-white text-[8px] md:text-[9px] font-black uppercase tracking-wider rounded-md md:rounded-lg transition-all flex items-center gap-1 md:gap-1.5 shadow-sm active:scale-95 flex-shrink-0 whitespace-nowrap"
                             >
-                              <span>🔔</span>
+                              <span className="text-[9px] md:text-xs">🔔</span>
                               {isNotifyingAbsentees ? "Notifying..." : "Notify Parents"}
                             </button>
                           )}
@@ -9889,21 +9933,21 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                   ) : (
                     /* Student History View */
                     <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4">
-                      <div className="bg-white p-5 rounded-2xl border border-gray-200 shadow-sm">
-                        <div className="grid grid-cols-1 md:grid-cols-12 gap-4 items-end">
+                      <div className="bg-white p-3 md:p-5 rounded-2xl border border-gray-200 shadow-sm">
+                        <div className="grid grid-cols-3 md:grid-cols-12 gap-2 md:gap-4 items-end">
                           {/* Student Search */}
-                          <div className="md:col-span-5 relative z-20">
-                            <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1.5 px-1">Search Student</label>
+                          <div className="col-span-1 md:col-span-5 relative z-20">
+                            <label className="block text-[8px] md:text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1 md:mb-1.5 px-0.5 md:px-1 truncate">Search Student</label>
                             <div className="relative">
                               <input
                                 type="text"
-                                placeholder="Search anything... (name, phone, parent, district, room, etc.)"
+                                placeholder="Search..."
                                 value={attendanceHistorySearchQuery}
                                 onChange={(e) => {
                                   setAttendanceHistorySearchQuery(e.target.value);
                                   if (e.target.value === "") setAttendanceHistoryStudentId("");
                                 }}
-                                className="w-full h-11 px-4 rounded-xl border border-gray-200 focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 font-bold text-sm"
+                                className="w-full h-9 md:h-11 px-2.5 md:px-4 rounded-xl border border-gray-200 focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 font-bold text-[11px] md:text-sm placeholder:truncate"
                               />
                               {attendanceHistoryStudentId && (
                                 <button
@@ -9912,15 +9956,15 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                                     setAttendanceHistorySearchQuery("");
                                     setAttendanceHistoryLogs([]);
                                   }}
-                                  className="absolute right-3 top-1/2 -translate-y-1/2 p-1 bg-gray-100 rounded-full text-gray-500 hover:bg-red-50 hover:text-red-500"
+                                  className="absolute right-2 md:right-3 top-1/2 -translate-y-1/2 p-0.5 md:p-1 bg-gray-100 rounded-full text-gray-500 hover:bg-red-50 hover:text-red-500"
                                 >
-                                  <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
+                                  <svg className="w-2.5 h-2.5 md:w-3 md:h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
                                 </button>
                               )}
                             </div>
 
                             {attendanceHistorySearchQuery && !attendanceHistoryStudentId && (
-                              <div className="absolute top-full left-0 w-full mt-2 bg-white border border-gray-100 shadow-xl rounded-xl max-h-60 overflow-y-auto z-50">
+                              <div className="absolute top-full left-0 w-64 md:w-full mt-2 bg-white border border-gray-100 shadow-xl rounded-xl max-h-60 overflow-y-auto z-50">
                                 {students
                                   .filter(s => s.name.toLowerCase().includes(attendanceHistorySearchQuery.toLowerCase()))
                                   .slice(0, 10)
@@ -9948,36 +9992,36 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                           </div>
 
                           {/* Date Range */}
-                          <div className="md:col-span-3">
-                            <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1.5 px-1">From Date</label>
+                          <div className="col-span-1 md:col-span-3">
+                            <label className="block text-[8px] md:text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1 md:mb-1.5 px-0.5 md:px-1 truncate">From Date</label>
                             <input
                               type="date"
                               value={attendanceHistoryStartDate}
                               onChange={e => setAttendanceHistoryStartDate(e.target.value)}
-                              className="w-full h-11 px-3 rounded-xl border border-gray-200 font-bold text-xs focus:border-blue-500 outline-none"
+                              className="w-full h-9 md:h-11 px-1.5 md:px-3 rounded-xl border border-gray-200 font-bold text-[10px] md:text-xs focus:border-blue-500 outline-none"
                             />
                           </div>
-                          <div className="md:col-span-3">
-                            <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1.5 px-1">To Date</label>
+                          <div className="col-span-1 md:col-span-3">
+                            <label className="block text-[8px] md:text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1 md:mb-1.5 px-0.5 md:px-1 truncate">To Date</label>
                             <input
                               type="date"
                               value={attendanceHistoryEndDate}
                               onChange={e => setAttendanceHistoryEndDate(e.target.value)}
-                              className="w-full h-11 px-3 rounded-xl border border-gray-200 font-bold text-xs focus:border-blue-500 outline-none"
+                              className="w-full h-9 md:h-11 px-1.5 md:px-3 rounded-xl border border-gray-200 font-bold text-[10px] md:text-xs focus:border-blue-500 outline-none"
                             />
                           </div>
 
                           {/* Search Button */}
-                          <div className="md:col-span-1">
+                          <div className="col-span-3 md:col-span-1">
                             <button
                               onClick={fetchStudentHistory}
                               disabled={!attendanceHistoryStudentId || attendanceHistoryLoading}
-                              className="w-full h-11 bg-blue-600 text-white rounded-xl shadow-lg shadow-blue-200 hover:bg-blue-700 transition-all flex items-center justify-center disabled:opacity-50 disabled:shadow-none"
+                              className="w-full h-9 md:h-11 bg-blue-600 text-white rounded-xl shadow-md md:shadow-lg shadow-blue-200 hover:bg-blue-700 transition-all flex items-center justify-center disabled:opacity-50 disabled:shadow-none"
                             >
                               {attendanceHistoryLoading ? (
                                 <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
                               ) : (
-                                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" /></svg>
+                                <svg className="w-4 h-4 md:w-5 md:h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" /></svg>
                               )}
                             </button>
                           </div>
