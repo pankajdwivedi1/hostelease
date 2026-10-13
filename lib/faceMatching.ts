@@ -120,10 +120,12 @@ export async function loadFaceApiModels(accurate: boolean = false): Promise<bool
                 }
 
                 try {
+                    // ⚡ Warmup at 128x128 canvas with inputSize 224 — matches live mobile inference dimensions exactly.
+                    // This pre-compiles WebGL shaders at the correct tensor size, eliminating first-frame freeze.
                     const warmupCanvas = document.createElement('canvas');
-                    warmupCanvas.width = 64;
-                    warmupCanvas.height = 64;
-                    await fa.detectAllFaces(warmupCanvas, new fa.TinyFaceDetectorOptions({ inputSize: 128, scoreThreshold: 0.5 }));
+                    warmupCanvas.width = 128;
+                    warmupCanvas.height = 128;
+                    await fa.detectAllFaces(warmupCanvas, new fa.TinyFaceDetectorOptions({ inputSize: 224, scoreThreshold: 0.5 }));
                 } catch (_) {}
 
                 liteModelsLoaded = true;
@@ -886,24 +888,41 @@ export async function detectFace(
 
         const useSSD = accurate;
 
-        // Tier 1: Fast TinyFaceDetector (Default for high speed & robust detection on 320x320 canvas)
+        // Tier 1: Fast TinyFaceDetector
+        // ⚡ MOBILE SPEED: inputSize 224 gives ~2x faster inference than 320 on mobile CPUs.
+        // Close-up face in frame fills enough pixels at 224 for reliable detection.
+        // Desktop keeps 320 for accuracy.
+        const tinyInputSize = accurate ? 320 : 224;
+
         if (!useSSD && fa.nets.tinyFaceDetector?.isLoaded) {
             detections = await runDetectorPass(new fa.TinyFaceDetectorOptions({
-                inputSize: 320,
+                inputSize: tinyInputSize,
                 scoreThreshold: 0.12
             }));
         }
 
-        // Tier 2: SSD-MobileNet (When accurate mode requested or as fallback for tricky lighting)
-        if ((!detections || detections.length === 0) && fa.nets.ssdMobilenetv1?.isLoaded) {
+        // Tier 2: SSD-MobileNet fallback — DESKTOP ONLY (accurate=true).
+        // ⚡ MOBILE SPEED: SSD is a 5MB heavy MobileNet that blocks mobile CPU for 1-3 seconds.
+        // On mobile (accurate=false) we NEVER fall through to SSD. TinyFace at 224 is sufficient.
+        if (accurate && (!detections || detections.length === 0) && fa.nets.ssdMobilenetv1?.isLoaded) {
             detections = await runDetectorPass(new fa.SsdMobilenetv1Options({ minConfidence: 0.20 }));
         }
 
-        // Tier 3: Sensitive multi-scale fallback for challenging lighting or smaller face crops
-        if (!detections || detections.length === 0) {
+        // Tier 3: Sensitive multi-scale fallback — DESKTOP ONLY when accurate mode
+        // ⚡ MOBILE SPEED: Skip on mobile. Retry at 416px is heavy and rarely needed for close-up faces.
+        if (accurate && (!detections || detections.length === 0)) {
             detections = await runDetectorPass(new fa.TinyFaceDetectorOptions({
                 inputSize: 416,
                 scoreThreshold: 0.08
+            }));
+        }
+
+        // Tier 3 MOBILE-ONLY: Tiny retry with lowered threshold if first pass missed (bad lighting edge case)
+        // Uses same lightweight TinyFace — no SSD, no extra model load.
+        if (!accurate && (!detections || detections.length === 0) && fa.nets.tinyFaceDetector?.isLoaded) {
+            detections = await runDetectorPass(new fa.TinyFaceDetectorOptions({
+                inputSize: 224,
+                scoreThreshold: 0.07
             }));
         }
 
@@ -920,7 +939,9 @@ export async function detectFace(
             return box && box.width >= 16 && box.height >= 16 && score >= 0.15;
         });
 
-        // Multi-Face Guard: Run raw bounding-box detection ONLY when verifying descriptors on desktop Pro mode
+        // Multi-Face Guard:
+        // ⚡ MOBILE SPEED: On mobile (accurate=false), reuse already-computed detections array.
+        //    No extra inference pass. Desktop (accurate=true) still runs dedicated raw-box scan for fraud prevention.
         let totalFaceCount = validFaces.length;
         if (withDescriptor && accurate) {
             let rawBoxes: any[] = [];

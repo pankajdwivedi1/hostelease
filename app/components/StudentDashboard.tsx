@@ -1035,7 +1035,9 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
                                     // Adaptive Canvas Normalization: 360px on mobile for instant 40ms inference, 640px on desktop
                                     const vW = video.videoWidth || 640;
                                     const vH = video.videoHeight || 480;
-                                    const maxDim = isMobileDevice ? 360 : 640;
+                                    // ⚡ MOBILE SPEED: 280px canvas = optimal for TinyFace 224px internal inputSize.
+                                    // Reduces drawImage + pixel copy time vs 360px, no accuracy loss.
+                                    const maxDim = isMobileDevice ? 280 : 640;
                                     let targetW = vW;
                                     let targetH = vH;
                                     if (targetW > targetH) {

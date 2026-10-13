@@ -1629,8 +1629,23 @@ function LoginForm() {
                   title="Download Android APK"
                   aria-label="Download Android App"
                 >
-                  <svg className="w-5 h-5 text-emerald-600 group-hover:scale-110 transition-transform" viewBox="0 0 24 24" fill="currentColor">
-                    <path d="M17.523 15.3414c-.5511 0-.9993-.4486-.9993-.9997s.4482-.9993.9993-.9993c.551 0 .9993.4482.9993.9993.0001.5511-.4483.9997-.9993.9997m-11.046 0c-.5511 0-.9993-.4486-.9993-.9997s.4482-.9993.9993-.9993c.5511 0 .9993.4482.9993.9993 0 .5511-.4482.9997-.9993.9997m11.4045-6.02l1.9973-3.4592a.416.416 0 00-.1521-.5676.416.416 0 00-.5676.1521l-2.0223 3.503C15.5902 8.4065 13.8533 8.0818 12 8.0818c-1.8535 0-3.5905.3247-5.1372.868L4.8405 5.4468a.416.416 0 00-.5676-.1521.416.416 0 00-.1521.5676l1.9973 3.4592C2.6889 11.1867.3432 14.6589 0 18.761h24c-.3432-4.1021-2.6889-7.5743-6.1185-9.4396"/>
+                  <svg className="w-5 h-5 text-[#78C257] group-hover:scale-110 transition-transform" viewBox="0 0 24 24" fill="currentColor">
+                    {/* Antennae */}
+                    <line x1="8.6" y1="4.2" x2="7.1" y2="1.8" stroke="currentColor" strokeWidth="0.85" strokeLinecap="round" />
+                    <line x1="15.4" y1="4.2" x2="16.9" y2="1.8" stroke="currentColor" strokeWidth="0.85" strokeLinecap="round" />
+                    {/* Head */}
+                    <path d="M6.5 8.3 A5.5 5.5 0 0 1 17.5 8.3 Z" />
+                    {/* Eyes */}
+                    <circle cx="9.3" cy="5.7" r="0.65" fill="#FFFFFF" />
+                    <circle cx="14.7" cy="5.7" r="0.65" fill="#FFFFFF" />
+                    {/* Torso */}
+                    <path d="M6.5 8.9 H17.5 V15.2 A1.6 1.6 0 0 1 15.9 16.8 H8.1 A1.6 1.6 0 0 1 6.5 15.2 Z" />
+                    {/* Arms */}
+                    <rect x="3.5" y="8.7" width="2.3" height="7.8" rx="1.15" />
+                    <rect x="18.2" y="8.7" width="2.3" height="7.8" rx="1.15" />
+                    {/* Legs */}
+                    <rect x="8.5" y="15.2" width="2.3" height="4.8" rx="1.15" />
+                    <rect x="13.2" y="15.2" width="2.3" height="4.8" rx="1.15" />
                   </svg>
                 </a>
 
