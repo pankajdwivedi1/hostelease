@@ -565,29 +565,6 @@ export default function StudentScannerPage() {
             </div>
 
 
-            {/* ⚠️ PWA Install Warning — shown when opened in browser tab instead of installed app */}
-            {!isPWA && (
-                <div style={{
-                    margin: "12px 16px 0",
-                    padding: "12px 16px",
-                    borderRadius: "12px",
-                    background: "rgba(255, 165, 0, 0.12)",
-                    border: "1px solid rgba(255, 165, 0, 0.4)",
-                    display: "flex",
-                    alignItems: "flex-start",
-                    gap: "10px",
-                }}>
-                    <span style={{ fontSize: "20px", flexShrink: 0 }}>📲</span>
-                    <div>
-                        <p style={{ margin: 0, fontSize: "13px", fontWeight: "700", color: "#ffaa00" }}>
-                            Install the app for secure attendance
-                        </p>
-                        <p style={{ margin: "4px 0 0", fontSize: "12px", color: "rgba(255,255,255,0.55)", lineHeight: "1.4" }}>
-                            You're using the browser. Tap <strong style={{ color: "#ffaa00" }}>Share → Add to Home Screen</strong> to install the app. Your device binding will be more secure and won't be affected by clearing browser data.
-                        </p>
-                    </div>
-                </div>
-            )}
 
             {/* Scanner Area */}
             {!scanResult ? (

@@ -1487,18 +1487,35 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
     const latestPermission = useMemo(() => {
         if (!permissions || permissions.length === 0) return null;
         const now = Date.now();
-        // 1. First priority: Any non-cancelled pending or active/allowed permission whose return date has not passed yet
+        // 1. First priority: Any non-cancelled pending or active/allowed permission within 5 days of completion
         const activePerm = [...permissions].find(p => {
             if (p.status === 'cancelled') return false;
             const toTime = new Date(p.toDateTime || p.fromDateTime || 0).getTime();
             const isPending = p.status === 'pending' || p.wardenStatus === 'pending' || p.deanStatus === 'pending';
-            const isOngoingOrUpcoming = (p.status === 'allowed' || p.status === 'approved' || p.status === 'accepted') && toTime >= now;
-            return isPending || isOngoingOrUpcoming;
+            const isApproved = p.status === 'allowed' || p.status === 'approved' || p.status === 'accepted' || p.deanStatus === 'allowed';
+            if (isApproved) {
+                // Ongoing or upcoming is always active
+                if (toTime >= now) return true;
+                // Once completed, visible for up to 5 days on dashboard
+                const daysSinceReturn = (now - toTime) / (1000 * 60 * 60 * 24);
+                return daysSinceReturn <= 5;
+            }
+            return isPending;
         });
         if (activePerm) return activePerm;
 
-        // 2. Otherwise, check if there's any non-cancelled latest permission
-        const validPerms = [...permissions].filter(p => p.status !== 'cancelled');
+        // 2. Otherwise, check if there's any approved latest permission within 5 days of return
+        const validPerms = [...permissions].filter(p => {
+            if (p.status === 'cancelled') return false;
+            const isApproved = p.status === 'allowed' || p.status === 'approved' || p.deanStatus === 'allowed';
+            if (isApproved) {
+                const toTime = new Date(p.toDateTime || p.fromDateTime || 0).getTime();
+                if (toTime >= now) return true;
+                const daysSinceReturn = (now - toTime) / (1000 * 60 * 60 * 24);
+                return daysSinceReturn <= 5;
+            }
+            return false;
+        });
         if (validPerms.length === 0) return null;
 
         return validPerms.sort((a, b) =>
@@ -1510,11 +1527,23 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
         if (!permissions || permissions.length === 0) return false;
         const now = Date.now();
         return permissions.some(p => {
-            if (p.status === 'cancelled' || p.status === 'rejected' || p.wardenStatus === 'rejected' || p.deanStatus === 'rejected') {
+            if (
+                p.status === 'cancelled' ||
+                p.status === 'rejected' ||
+                p.status === 'expired' ||
+                p.wardenStatus === 'rejected' ||
+                p.wardenStatus === 'expired' ||
+                p.deanStatus === 'rejected' ||
+                p.deanStatus === 'expired'
+            ) {
+                return false;
+            }
+            const toTime = new Date(p.toDateTime || p.fromDateTime || 0).getTime();
+            // If leave end date has passed without approval, it has expired and does not block new requests
+            if (toTime > 0 && toTime < now) {
                 return false;
             }
             const isPending = p.status === 'pending' || p.wardenStatus === 'pending' || p.deanStatus === 'pending';
-            const toTime = new Date(p.toDateTime || p.fromDateTime || 0).getTime();
             const isOngoingOrUpcoming = (p.status === 'allowed' || p.status === 'approved' || p.status === 'accepted') && toTime >= now;
             return isPending || isOngoingOrUpcoming;
         });
@@ -1713,19 +1742,13 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
         }
     };
 
-    const performBiometricCheck = async (): Promise<boolean> => {
-        try {
-            if (typeof window !== 'undefined' && window.PublicKeyCredential) {
-                const available = await PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable();
-                if (available) {
-                    return true;
-                }
-            }
-            return true;
-        } catch (err) {
-            console.warn("Biometric check fallback:", err);
-            return true;
+    const bufferToBase64 = (buffer: ArrayBuffer): string => {
+        const bytes = new Uint8Array(buffer);
+        let binary = '';
+        for (let i = 0; i < bytes.byteLength; i++) {
+            binary += String.fromCharCode(bytes[i]);
         }
+        return window.btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
     };
 
     const handleRegisterDevice = async () => {
@@ -1734,17 +1757,178 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
         try {
             setIsRegisteringDevice(true);
 
-            // ⚡ TRANSITION: Use secure biometrics instead of generic Device ID
-            const biometricSuccess = await performBiometricCheck();
+            // 1. Check if browser supports WebAuthn platform biometrics
+            const isSecure = typeof window !== 'undefined' ? window.isSecureContext : false;
+            const currentDeviceId = await getInstallationId();
+            const targetId = studentProfile._id || studentProfile.id;
 
-            if (biometricSuccess) {
-                setShowDeviceRegistration(false);
+            // ⚡ WebAuthn Security Standard: Mobile operating systems (iOS/Android) strictly require HTTPS for Face ID/Fingerprint
+            if (!isSecure && window.location.hostname !== 'localhost') {
+                const res = await fetch(`/api/students/${targetId}${getTenantParam(true)}`, {
+                    method: "PATCH",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ deviceId: currentDeviceId }),
+                });
+
+                if (res.ok) {
+                    const data = await res.json();
+                    if (data.success && data.student) {
+                        setStudentProfile(data.student);
+                    }
+                    storeDeviceId(currentDeviceId);
+                    setShowDeviceRegistration(false);
+                    showToast("Phone Face ID / Fingerprint requires HTTPS. Device linked securely with Device ID on local WiFi!", "info");
+                } else {
+                    showToast("Failed to link device.", "error");
+                }
+                return;
+            }
+
+            const hasWebAuthn = typeof window !== 'undefined' && !!window.PublicKeyCredential;
+            let isPlatformAvailable = false;
+            if (hasWebAuthn) {
+                try {
+                    isPlatformAvailable = await PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable();
+                } catch {
+                    isPlatformAvailable = false;
+                }
+            }
+
+            // If device doesn't support hardware biometrics (e.g. desktop without Windows Hello / Touch ID)
+            if (!hasWebAuthn || !isPlatformAvailable) {
+                const res = await fetch(`/api/students/${targetId}${getTenantParam(true)}`, {
+                    method: "PATCH",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ deviceId: currentDeviceId }),
+                });
+
+                if (res.ok) {
+                    const data = await res.json();
+                    if (data.success && data.student) {
+                        setStudentProfile(data.student);
+                    }
+                    storeDeviceId(currentDeviceId);
+                    setShowDeviceRegistration(false);
+                    showToast("Hardware biometric sensor not detected on this device. Linked securely via Device ID!", "info");
+                } else {
+                    showToast("Failed to link device.", "error");
+                }
+                return;
+            }
+
+            // 2. Perform WebAuthn Registration for Face ID / Fingerprint
+            const challenge = new Uint8Array(32);
+            window.crypto.getRandomValues(challenge);
+
+            const studentIdStr = studentProfile.registrationId || studentProfile._id || studentProfile.id || "student";
+            const userId = new TextEncoder().encode(studentIdStr);
+
+            const hostname = typeof window !== 'undefined' ? window.location.hostname : "";
+            const isIp = /^(\d{1,3}\.){3}\d{1,3}$/.test(hostname);
+            const rpConfig: any = {
+                name: "HOSTELEAZE",
+            };
+            if (hostname && !isIp && hostname !== "localhost") {
+                rpConfig.id = hostname;
+            }
+
+            const credential = await navigator.credentials.create({
+                publicKey: {
+                    challenge,
+                    rp: rpConfig,
+                    user: {
+                        id: userId,
+                        name: studentProfile.email || `${studentIdStr}@hosteleaze.app`,
+                        displayName: studentProfile.name || "Student",
+                    },
+                    pubKeyCredParams: [
+                        { alg: -7, type: "public-key" },  // ES256 (standard on iOS / Android)
+                        { alg: -257, type: "public-key" }, // RS256 (standard on Windows Hello)
+                    ],
+                    authenticatorSelection: {
+                        authenticatorAttachment: "platform",
+                        userVerification: "required",
+                        residentKey: "preferred",
+                    },
+                    timeout: 60000,
+                    attestation: "none",
+                },
+            }) as PublicKeyCredential | null;
+
+            if (!credential) {
+                showToast("Biometric registration was cancelled.", "info");
+                return;
+            }
+
+            const credentialID = credential.id || bufferToBase64(credential.rawId);
+            const rawIdBase64 = bufferToBase64(credential.rawId);
+            const attestationResponse = credential.response as AuthenticatorAttestationResponse;
+            const clientDataJSON = attestationResponse?.clientDataJSON 
+                ? bufferToBase64(attestationResponse.clientDataJSON) 
+                : "";
+
+            const newCredentialEntry = {
+                credentialID,
+                publicKey: rawIdBase64,
+                clientData: clientDataJSON,
+                registeredAt: new Date().toISOString(),
+                device: typeof navigator !== 'undefined' ? navigator.userAgent : "Device",
+            };
+
+            const existingCredentials = Array.isArray(studentProfile.webAuthnCredentials)
+                ? [...studentProfile.webAuthnCredentials]
+                : [];
+
+            const existingIdx = existingCredentials.findIndex((c: any) => c.credentialID === credentialID);
+            if (existingIdx >= 0) {
+                existingCredentials[existingIdx] = newCredentialEntry;
             } else {
-                alert("Registration cancelled or failed. Please try again to secure your account.");
+                existingCredentials.push(newCredentialEntry);
+            }
+
+            // 3. Save to Railway PostgreSQL
+            const saveRes = await fetch(`/api/students/${targetId}${getTenantParam(true)}`, {
+                method: "PATCH",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    webAuthnCredentials: existingCredentials,
+                    deviceId: currentDeviceId,
+                }),
+            });
+
+            if (saveRes.ok) {
+                const data = await saveRes.json();
+                if (data.success && data.student) {
+                    setStudentProfile(data.student);
+                } else {
+                    setStudentProfile((prev: any) => prev ? ({
+                        ...prev,
+                        webAuthnCredentials: existingCredentials,
+                        deviceId: currentDeviceId,
+                    }) : prev);
+                }
+                storeDeviceId(currentDeviceId);
+                setShowDeviceRegistration(false);
+                showToast("🔒 Face ID / Fingerprint successfully linked!", "success");
+            } else {
+                const errData = await saveRes.json().catch(() => ({}));
+                showToast(errData.error || "Failed to save biometric credentials to server.", "error");
             }
         } catch (error: any) {
-            console.error("Error registering device:", error);
-            alert(error.message || "Failed to register device. Please try again.");
+            if (error?.name === "NotAllowedError") {
+                if (typeof window !== 'undefined' && !window.isSecureContext && window.location.hostname !== 'localhost') {
+                    showToast("Face ID / Fingerprint requires HTTPS. Blocked by phone browser over plain HTTP WiFi.", "warning");
+                } else {
+                    showToast("Biometric verification cancelled or timed out.", "info");
+                }
+            } else if (error?.name === "SecurityError") {
+                showToast("Security error: Face ID / WebAuthn requires HTTPS or a valid domain.", "warning");
+            } else if (error?.name === "InvalidStateError") {
+                showToast("This biometric key is already linked to this device.", "info");
+            } else {
+                console.error("Error registering biometric device:", error);
+                showToast(error.message || "Failed to link Face ID / Fingerprint. Please try again.", "error");
+            }
         } finally {
             setIsRegisteringDevice(false);
         }
@@ -2635,29 +2819,29 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
         }
     };
 
-    const [isCancellingLeave, setIsCancellingLeave] = useState(false);
+    const [isRemovingLeave, setIsRemovingLeave] = useState(false);
+    const isCancellingLeave = isRemovingLeave;
 
-    const handleCancelLeave = async (permissionId: string) => {
+    const handleRemoveLeave = async (permissionId: string) => {
         if (!permissionId) return;
-        const confirmed = await showConfirm("Are you sure you want to cancel this leave application?\n\nThis will revoke your active leave pass and unlock new requests.");
+        const confirmed = await showConfirm("Are you sure you want to remove this leave request?\n\nThis will permanently delete your unapproved leave application from all dashboards so you can apply again.");
         if (!confirmed) return;
 
-        setIsCancellingLeave(true);
+        setIsRemovingLeave(true);
         try {
             const res = await fetch(`/api/permissions${getTenantParam()}`, {
-                method: 'PATCH',
+                method: 'DELETE',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
-                    permissionId,
-                    status: 'cancelled',
-                    cancellationReason: 'Cancelled by student before leaving campus'
+                    permissionIds: [permissionId],
+                    isStudent: true
                 })
             });
             const data = await res.json();
             if (data.success) {
-                showToast("Leave request cancelled successfully.", "success");
+                showToast("Leave request removed successfully.", "success");
                 setPermissions(prev => {
-                    const updated = prev.map(p => (p._id === permissionId || p.id === permissionId) ? { ...p, status: 'cancelled' } : p);
+                    const updated = prev.filter(p => p._id !== permissionId && p.id !== permissionId);
                     try {
                         localStorage.setItem("cachedStudentPermissions", JSON.stringify(updated));
                     } catch (e) {}
@@ -2665,15 +2849,16 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
                 });
                 if (fetchStudentHistoryData) fetchStudentHistoryData();
             } else {
-                showToast(data.error || "Failed to cancel leave request.", "error");
+                showToast(data.error || "Failed to remove leave request.", "error");
             }
         } catch (e: any) {
-            console.error("Error cancelling leave:", e);
-            showToast("Error cancelling leave request.", "error");
+            console.error("Error removing leave:", e);
+            showToast("Error removing leave request.", "error");
         } finally {
-            setIsCancellingLeave(false);
+            setIsRemovingLeave(false);
         }
     };
+    const handleCancelLeave = handleRemoveLeave;
 
     const [studentEditLeaveModalData, setStudentEditLeaveModalData] = useState<{
         permissionId: string;
@@ -4542,12 +4727,20 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
                                     if (latestPermission.status === 'cancelled') return null;
 
                                     const toTime = new Date(latestPermission.toDateTime || latestPermission.fromDateTime || 0).getTime();
-                                    const isPending = latestPermission.status === 'pending' || latestPermission.wardenStatus === 'pending' || latestPermission.deanStatus === 'pending';
-                                    const isOngoingOrUpcoming = toTime >= Date.now();
+                                    const isApproved = latestPermission.status === 'allowed' || latestPermission.status === 'approved' || latestPermission.deanStatus === 'allowed' || latestPermission.deanStatus === 'approved';
+                                    const isRejected = latestPermission.status === 'rejected' || latestPermission.wardenStatus === 'rejected' || latestPermission.deanStatus === 'rejected';
+                                    const isCancelled = latestPermission.status === 'cancelled';
+                                    const isLeaveExpired = latestPermission.status === 'expired' || (!isApproved && !isCancelled && !isRejected && toTime > 0 && toTime < Date.now());
+                                    const isPending = !isApproved && !isRejected && !isCancelled && !isLeaveExpired && (latestPermission.status === 'pending' || latestPermission.wardenStatus === 'pending' || latestPermission.deanStatus === 'pending');
+                                    const isOngoingOrUpcoming = isApproved && toTime >= Date.now();
 
-                                    // ⚡ User Requirement: Always visible while pending or ongoing/upcoming until the leave completed date/time.
-                                    // Once completed (past return date) or rejected, it stays visible for up to 24 hours after completion.
-                                    if (!isPending && !isOngoingOrUpcoming) {
+                                    // ⚡ User Requirement: If approved, appears on active student dashboard only for 5 days.
+                                    // After 5 days, it automatically hides from this card and remains visible inside "Outing & Permission History & Hostel Attendance"
+                                    if (isApproved) {
+                                        const completedTime = toTime > 0 ? toTime : new Date(latestPermission.updatedAt || latestPermission.createdAt || Date.now()).getTime();
+                                        const daysPassed = (Date.now() - completedTime) / (1000 * 60 * 60 * 24);
+                                        if (daysPassed > 5) return null;
+                                    } else if (!isPending) {
                                         const completedTime = toTime > 0 ? toTime : new Date(latestPermission.updatedAt || latestPermission.createdAt || Date.now()).getTime();
                                         const hoursPassed = (Date.now() - completedTime) / (1000 * 60 * 60);
                                         if (hoursPassed > 24) return null;
@@ -4558,43 +4751,37 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
                                             <div className="flex items-center justify-between mb-2 border-b border-gray-100 pb-1.5 gap-2">
                                                 <h3 className="text-[9px] sm:text-[9.5px] font-bold text-gray-400 uppercase tracking-wider">Active Request Status</h3>
                                                 <div className="flex items-center gap-1.5 shrink-0">
-                                                    {/* ✏️ Option B: Edit Leave Button (Visible before approval, restricted after) */}
-                                                    {!isParentView && studentProfile?.studentStatus !== 'out' && latestPermission.status !== 'cancelled' && latestPermission.status !== 'rejected' && (
+                                                    {/* ✏️ Option B: Edit Leave Button (Visible strictly before approval & before expiry) */}
+                                                    {!isParentView && studentProfile?.studentStatus !== 'out' && !isCancelled && !isRejected && !isLeaveExpired && !isApproved && (
                                                         <button
                                                             type="button"
-                                                            onClick={() => {
-                                                                const isApproved = latestPermission.status === 'allowed' || latestPermission.status === 'approved' || latestPermission.wardenStatus === 'allowed' || latestPermission.deanStatus === 'allowed';
-                                                                if (isApproved) {
-                                                                    showToast("Unable to edit: Leave has already been approved. Please contact your warden to extend dates.", "error");
-                                                                    return;
-                                                                }
-                                                                openStudentEditLeaveModal(latestPermission);
-                                                            }}
+                                                            onClick={() => openStudentEditLeaveModal(latestPermission)}
                                                             className="px-2 py-0.5 rounded-md text-[9px] sm:text-[9.5px] font-bold bg-blue-50 text-blue-700 border border-blue-200 hover:bg-blue-100 hover:border-blue-300 transition-all flex items-center gap-1 cursor-pointer"
                                                             title="Edit Leave Details (Before Approval)"
                                                         >
                                                             <span className="text-[10px]">✏️</span> Edit Leave
                                                         </button>
                                                     )}
-                                                    {/* ↩️ Option A: Cancel Leave Button (Visible when student is in campus and request is pending or allowed) */}
-                                                    {!isParentView && studentProfile?.studentStatus !== 'out' && (latestPermission.status === 'pending' || latestPermission.status === 'allowed' || latestPermission.status === 'approved' || latestPermission.status === 'accepted') && (
+                                                    {/* 🗑️ Option A: Remove Leave Button (Visible strictly before approval & before expiry when student is in campus) */}
+                                                    {!isParentView && studentProfile?.studentStatus !== 'out' && !isLeaveExpired && !isApproved && isPending && (
                                                         <button
                                                             type="button"
-                                                            disabled={isCancellingLeave}
-                                                            onClick={() => handleCancelLeave(latestPermission._id || latestPermission.id || "")}
+                                                            disabled={isRemovingLeave}
+                                                            onClick={() => handleRemoveLeave(latestPermission._id || latestPermission.id || "")}
                                                             className="px-2 py-0.5 rounded-md text-[9px] sm:text-[9.5px] font-bold bg-rose-50 text-rose-700 border border-rose-200 hover:bg-rose-100 hover:border-rose-300 transition-all flex items-center gap-1 cursor-pointer disabled:opacity-50"
-                                                            title="Cancel / Revoke this leave request"
+                                                            title="Remove this unapproved leave request permanently"
                                                         >
-                                                            <span className="text-[10px]">↩️</span> {isCancellingLeave ? 'Cancelling...' : 'Cancel Leave'}
+                                                            <span className="text-[10px]">🗑️</span> {isRemovingLeave ? 'Removing...' : 'Remove Leave'}
                                                         </button>
                                                     )}
                                                     <div className={`px-2 py-0.5 rounded-md text-[9px] sm:text-[9.5px] font-black uppercase tracking-wider ${
-                                                        latestPermission.status === 'allowed' ? 'bg-green-100 text-green-700 border border-green-200' :
-                                                        latestPermission.status === 'rejected' ? 'bg-red-100 text-red-700 border border-red-200' :
-                                                        latestPermission.status === 'cancelled' ? 'bg-slate-100 text-slate-600 border border-slate-200' :
+                                                        isApproved ? 'bg-green-100 text-green-700 border border-green-200' :
+                                                        isRejected ? 'bg-red-100 text-red-700 border border-red-200' :
+                                                        isCancelled ? 'bg-slate-100 text-slate-600 border border-slate-200' :
+                                                        isLeaveExpired ? 'bg-rose-50 text-rose-700 border border-rose-200' :
                                                         'bg-yellow-100 text-yellow-800 border border-yellow-200'
                                                     }`}>
-                                                        {latestPermission.status === 'cancelled' ? 'Cancelled' : latestPermission.status}
+                                                        {isApproved ? 'Approved' : isRejected ? 'Rejected' : isCancelled ? 'Cancelled' : isLeaveExpired ? 'Expired' : 'Pending'}
                                                     </div>
                                                 </div>
                                             </div>
@@ -4602,22 +4789,22 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
                                                 {/* Left Side: Student Info & Approvals */}
                                                 <div className="w-full md:w-auto shrink-0 flex flex-row md:flex-col items-stretch md:items-start justify-between md:justify-start gap-2">
                                                     <div className="flex flex-col justify-between gap-1.5 bg-gray-50/80 p-2 md:p-2.5 rounded-lg border border-gray-100 flex-1 md:flex-initial md:w-fit shrink-0">
-                                                        <div className="flex items-center gap-1.5 md:gap-2">
-                                                            <div className="w-4 h-4 md:w-5 md:h-5 rounded-md bg-orange-100 text-orange-600 flex items-center justify-center shrink-0">
+                                                        <div className="flex items-start md:items-center gap-1.5 md:gap-2">
+                                                            <div className="w-4 h-4 md:w-5 md:h-5 rounded-md bg-orange-100 text-orange-600 flex items-center justify-center shrink-0 mt-0.5 md:mt-0">
                                                                 <svg className="w-3 h-3 md:w-3.5 md:h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" /></svg>
                                                             </div>
-                                                            <div className="min-w-0 flex items-baseline gap-1 text-[8.5px] sm:text-[9.5px] md:text-[11px] leading-tight">
-                                                                <span className="font-bold text-gray-500 tracking-tight whitespace-nowrap">Campus Out:</span>
-                                                                <span className="font-extrabold text-gray-900 whitespace-nowrap">{formatPermDate(latestPermission, true)}</span>
+                                                            <div className="min-w-0 flex flex-col md:flex-row md:items-baseline md:gap-1 text-[8.5px] sm:text-[9.5px] md:text-[11px] leading-tight">
+                                                                <span className="font-bold text-gray-500 tracking-tight whitespace-nowrap">Campus Out Time:</span>
+                                                                <span className="font-extrabold text-gray-900 whitespace-nowrap mt-0.5 md:mt-0">{formatPermDate(latestPermission, true)}</span>
                                                             </div>
                                                         </div>
-                                                        <div className="flex items-center gap-1.5 md:gap-2">
-                                                            <div className="w-4 h-4 md:w-5 md:h-5 rounded-md bg-green-100 text-green-600 flex items-center justify-center shrink-0">
+                                                        <div className="flex items-start md:items-center gap-1.5 md:gap-2">
+                                                            <div className="w-4 h-4 md:w-5 md:h-5 rounded-md bg-green-100 text-green-600 flex items-center justify-center shrink-0 mt-0.5 md:mt-0">
                                                                 <svg className="w-3 h-3 md:w-3.5 md:h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" /></svg>
                                                             </div>
-                                                            <div className="min-w-0 flex items-baseline gap-1 text-[8.5px] sm:text-[9.5px] md:text-[11px] leading-tight">
-                                                                <span className="font-bold text-gray-500 tracking-tight whitespace-nowrap">Campus In:</span>
-                                                                <span className="font-extrabold text-gray-900 whitespace-nowrap">{formatPermDate(latestPermission, false)}</span>
+                                                            <div className="min-w-0 flex flex-col md:flex-row md:items-baseline md:gap-1 text-[8.5px] sm:text-[9.5px] md:text-[11px] leading-tight">
+                                                                <span className="font-bold text-gray-500 tracking-tight whitespace-nowrap">Campus In Time:</span>
+                                                                <span className="font-extrabold text-gray-900 whitespace-nowrap mt-0.5 md:mt-0">{formatPermDate(latestPermission, false)}</span>
                                                             </div>
                                                         </div>
                                                         {(() => {
@@ -5666,7 +5853,10 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
                                                                             studentPermissionsList.map((permission, idx) => {
                                                                                 const isAllowed = permission.status === "allowed" || permission.status === "accepted" || permission.status === "approved" || permission.deanStatus === "allowed" || permission.deanStatus === "approved";
                                                                                 const isRejected = permission.status === "rejected" || permission.deanStatus === "rejected" || permission.wardenStatus === "rejected";
-                                                                                const isPending = !isAllowed && !isRejected;
+                                                                                const isCancelled = permission.status === "cancelled";
+                                                                                const isPermExpired = permission.toDateTime ? (new Date(permission.toDateTime).getTime() < Date.now()) : false;
+                                                                                const isExpired = permission.status === "expired" || (!isAllowed && !isCancelled && !isRejected && isPermExpired);
+                                                                                const isPending = !isAllowed && !isRejected && !isCancelled && !isExpired;
 
                                                                                 const fromFormatted = permission.fromDateTime
                                                                                     ? formatDateTimeDDMMYYYY(permission.fromDateTime)
@@ -5729,6 +5919,14 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
                                                                                                 ) : isRejected ? (
                                                                                                     <div className="px-2 py-0.5 rounded-md text-[9px] font-black bg-red-100 text-red-700 border border-red-200">
                                                                                                         Rejected
+                                                                                                    </div>
+                                                                                                ) : isCancelled ? (
+                                                                                                    <div className="px-2 py-0.5 rounded-md text-[9px] font-black bg-slate-100 text-slate-600 border border-slate-300">
+                                                                                                        Cancelled
+                                                                                                    </div>
+                                                                                                ) : isExpired ? (
+                                                                                                    <div className="px-2 py-0.5 rounded-md text-[9px] font-black bg-rose-50 text-rose-700 border border-rose-200">
+                                                                                                        Expired
                                                                                                     </div>
                                                                                                 ) : (
                                                                                                     <div className="px-2 py-0.5 rounded-md text-[9px] font-black bg-yellow-100 text-yellow-800 border border-yellow-200">
@@ -5832,7 +6030,10 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
                                                                                 const isCurrentlyOut = item.status === 'out';
                                                                                 const isAllowed = item.status === 'allowed' || item.status === 'approved' || item.deanStatus === 'allowed' || item.deanStatus === 'approved';
                                                                                 const isRejected = item.status === 'rejected' || item.deanStatus === 'rejected' || item.wardenStatus === 'rejected';
-                                                                                const isPending = !isAllowed && !isRejected;
+                                                                                const isCancelled = item.status === 'cancelled';
+                                                                                const isLeaveExpired = item.toDateTime ? (new Date(item.toDateTime).getTime() < Date.now()) : false;
+                                                                                const isExpired = item.status === 'expired' || (!isAllowed && !isCancelled && !isRejected && isLeaveExpired);
+                                                                                const isPending = !isAllowed && !isRejected && !isCancelled && !isExpired;
 
                                                                                 const fromRawDate = item.checkOutTime || item.fromDateTime || item.createdAt;
                                                                                 const toRawDate = item.checkInTime || item.toDateTime;
@@ -5910,6 +6111,14 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
                                                                                                 ) : isRejected ? (
                                                                                                     <div className="px-2 py-0.5 rounded-md text-[9px] font-black bg-red-100 text-red-700 border border-red-200">
                                                                                                         Rejected
+                                                                                                    </div>
+                                                                                                ) : isCancelled ? (
+                                                                                                    <div className="px-2 py-0.5 rounded-md text-[9px] font-black bg-slate-100 text-slate-600 border border-slate-300">
+                                                                                                        Cancelled
+                                                                                                    </div>
+                                                                                                ) : isExpired ? (
+                                                                                                    <div className="px-2 py-0.5 rounded-md text-[9px] font-black bg-rose-50 text-rose-700 border border-rose-200">
+                                                                                                        Expired
                                                                                                     </div>
                                                                                                 ) : isPending ? (
                                                                                                     <div className="px-2 py-0.5 rounded-md text-[9px] font-black bg-yellow-100 text-yellow-800 border border-yellow-200">

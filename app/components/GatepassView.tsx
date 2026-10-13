@@ -1094,15 +1094,15 @@ export default function GatepassView({ onClose }: { onClose?: () => void }) {
             {/* =================== LEFT PANEL: QR CODE =================== */}
             <div className="w-full md:w-[42%] flex flex-col items-center justify-center gap-6 p-6 md:p-6 bg-gradient-to-b from-[#0a0a1a] via-[#0d1420] to-[#0a0a1a] border-b md:border-b-0 md:border-r border-[#00ff881a] relative shrink-0 transition-all duration-300 overflow-hidden">
 
-                {/* ── TOP ROW: Logo left + Instructions right ── */}
+                {/* ── TOP ROW: Logo left + Instructions / Mobile Gate info right ── */}
                 <div className="flex items-start justify-between w-full mb-2">
                     {/* Logo block */}
                     <div className="flex flex-col">
-                        <div className="flex items-center gap-3">
+                        <div className="flex items-center gap-2.5 sm:gap-3">
                             {onClose && (
                                 <button
                                     onClick={onClose}
-                                    className="md:hidden p-1.5 bg-blue-500/10 border border-blue-500/30 rounded-lg text-blue-400 active:scale-90 transition-all"
+                                    className="md:hidden p-1.5 bg-blue-500/10 border border-blue-500/30 rounded-lg text-blue-400 active:scale-90 transition-all shrink-0"
                                     title="Back to Dashboard"
                                 >
                                     <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -1110,11 +1110,12 @@ export default function GatepassView({ onClose }: { onClose?: () => void }) {
                                     </svg>
                                 </button>
                             )}
-                            <h1 className="text-2xl md:text-3xl font-extrabold bg-gradient-to-br from-[#00ff88] to-[#00cc6a] bg-clip-text text-transparent tracking-widest m-0 leading-tight">
+                            <h1 className="text-xl sm:text-2xl md:text-3xl font-extrabold bg-gradient-to-br from-[#00ff88] to-[#00cc6a] bg-clip-text text-transparent tracking-wider sm:tracking-widest m-0 leading-tight">
                                 GATEPASS
                             </h1>
                         </div>
-                        <div className="flex flex-wrap items-center gap-2 mt-1">
+                        {/* Desktop: under GATEPASS */}
+                        <div className="hidden sm:flex flex-wrap items-center gap-2 mt-1">
                             <span className="inline-block px-2 py-0.5 bg-[rgba(0,255,136,0.1)] border border-[rgba(0,255,136,0.3)] rounded-full text-[10px] md:text-xs text-[#00ff88] font-bold">
                                 📍 {gateName}
                             </span>
@@ -1122,6 +1123,16 @@ export default function GatepassView({ onClose }: { onClose?: () => void }) {
                                 Campus Outing System
                             </p>
                         </div>
+                    </div>
+
+                    {/* Mobile: Gate tag in top right corner, Campus Outing System just below */}
+                    <div className="flex flex-col items-end sm:hidden shrink-0 pt-0.5">
+                        <span className="inline-block px-2 py-0.5 bg-[rgba(0,255,136,0.1)] border border-[rgba(0,255,136,0.3)] rounded-full text-[10px] text-[#00ff88] font-bold whitespace-nowrap">
+                            📍 {gateName}
+                        </span>
+                        <p className="text-[9px] text-[rgba(255,255,255,0.45)] tracking-wider uppercase m-0 mt-1 leading-none text-right whitespace-nowrap">
+                            Campus Outing System
+                        </p>
                     </div>
 
                     {/* Instructions bar */}

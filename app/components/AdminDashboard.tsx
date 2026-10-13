@@ -7581,11 +7581,23 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
         : (p.student || (p as any).students || (students.find(s => (s.id || (s as any)._id) === p.studentId)) || null);
       if (!student) return false;
 
+      const isCancelled = p.status === 'cancelled' || p.wardenStatus === 'cancelled' || p.deanStatus === 'cancelled';
+      const isApproved = p.status === 'allowed' || p.status === 'approved' || p.deanStatus === 'allowed' || p.deanStatus === 'approved';
+      const isRejected = p.status === 'rejected' || p.wardenStatus === 'rejected' || p.deanStatus === 'rejected';
+      const isExpired = p.status === 'expired' || p.wardenStatus === 'expired' || p.deanStatus === 'expired' || (!isApproved && !isRejected && !isCancelled && p.toDateTime ? Date.now() > new Date(p.toDateTime).getTime() : false);
+
       let matchesStatus = false;
       if (filter === "hidden") {
         matchesStatus = Boolean(p.isHidden);
       } else if (filter === "all") {
-        matchesStatus = !p.isHidden;
+        // 🚫 Hide cancelled and expired leaves from the main UI
+        matchesStatus = !p.isHidden && !isCancelled && !isExpired;
+      } else if (filter === "pending") {
+        matchesStatus = !isCancelled && !isExpired && !isApproved && !isRejected && !p.isHidden;
+      } else if (filter === "allowed") {
+        matchesStatus = isApproved && !p.isHidden;
+      } else if (filter === "rejected") {
+        matchesStatus = isRejected && !p.isHidden;
       } else {
         matchesStatus = p.status === filter && !p.isHidden;
       }
@@ -8881,9 +8893,12 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                         const initials = getInitials(student.name);
                         const profilePic = student.profilePicture && student.profilePicture.trim() !== "" && student.profilePicture !== "undefined";
 
-                        const isLeaveExpired = permission.toDateTime 
-                          ? Date.now() > new Date(permission.toDateTime).getTime() 
-                          : false;
+                        const isCancelled = permission.status === 'cancelled' || permission.wardenStatus === 'cancelled' || permission.deanStatus === 'cancelled';
+                        const isApproved = permission.status === 'allowed' || permission.status === 'approved' || permission.deanStatus === 'allowed' || permission.deanStatus === 'approved';
+                        const isRejected = permission.status === 'rejected' || permission.wardenStatus === 'rejected' || permission.deanStatus === 'rejected';
+                        const isLeaveExpired = (permission.status === 'expired' || permission.wardenStatus === 'expired' || permission.deanStatus === 'expired') || (
+                          !isApproved && !isRejected && !isCancelled && permission.toDateTime ? Date.now() > new Date(permission.toDateTime).getTime() : false
+                        );
 
                         return (
                           <div key={permission._id} className="rounded-lg border border-solid border-[#9CA3AF] bg-filler p-2 md:p-3">
@@ -8969,13 +8984,15 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                                                 <span className="font-extrabold text-blue-700">{durationStr}</span>
                                               </span>
                                             )}
-                                            <button
-                                              onClick={() => openEditLeaveModal(permission)}
-                                              className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-blue-50 text-blue-700 border border-blue-200 hover:bg-blue-100 transition-colors text-[8.5px] md:text-[10px] font-bold shadow-2xs w-fit cursor-pointer leading-tight whitespace-nowrap shrink-0"
-                                              title="Edit Leave Dates / Extend Return Date"
-                                            >
-                                              <span>✏️</span> Edit Leave
-                                            </button>
+                                            {!isCancelled && !isLeaveExpired && !isApproved && (
+                                              <button
+                                                onClick={() => openEditLeaveModal(permission)}
+                                                className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-blue-50 text-blue-700 border border-blue-200 hover:bg-blue-100 transition-colors text-[8.5px] md:text-[10px] font-bold shadow-2xs w-fit cursor-pointer leading-tight whitespace-nowrap shrink-0"
+                                                title="Edit Leave Dates / Extend Return Date"
+                                              >
+                                                <span>✏️</span> Edit Leave
+                                              </button>
+                                            )}
                                           </div>
                                         </div>
                                       );
@@ -9038,7 +9055,15 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                                           Warden
                                         </span>
                                         <div className="flex-1 flex items-center justify-center text-center px-0.5 min-w-0">
-                                          {permission.wardenStatus === "rejected" ? (
+                                          {isCancelled ? (
+                                            <span className="inline-flex items-center justify-center text-[6px] sm:text-[7px] md:text-[8px] font-bold text-slate-600 bg-slate-100 px-1 py-0.5 rounded uppercase tracking-wider border border-slate-200 text-center whitespace-nowrap">
+                                              Cancelled
+                                            </span>
+                                          ) : isLeaveExpired ? (
+                                            <span className="inline-flex items-center justify-center text-[6px] sm:text-[7px] md:text-[8px] font-bold text-rose-600 bg-rose-50 px-1 py-0.5 rounded uppercase tracking-wider border border-rose-200 text-center whitespace-nowrap">
+                                              Expired
+                                            </span>
+                                          ) : permission.wardenStatus === "rejected" ? (
                                             <span className="inline-flex items-center justify-center text-[6px] sm:text-[7px] md:text-[8px] font-bold text-red-600 bg-red-50 px-1 py-0.5 rounded uppercase tracking-wider border border-red-100 text-center whitespace-nowrap">
                                               Rejected
                                             </span>
@@ -9055,21 +9080,23 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                                         <div className="shrink-0 flex items-center gap-1 sm:gap-1.5 md:gap-2.5">
                                           <button
                                             onClick={() => {
+                                              if (isCancelled) return showToast("Cannot modify: Leave has been cancelled by the student.", "error");
                                               if (isLeaveExpired) return showToast("Cannot modify: Leave end date has already passed.", "error");
                                               if (userType === "warden" || userType === "admin" || userType === "superadmin") handleStatusChange(permission._id, "allowed", "warden");
                                             }}
-                                            disabled={(userType !== "warden" && userType !== "admin" && userType !== "superadmin") || isLeaveExpired}
-                                            className={`w-3.5 h-3.5 sm:w-4 sm:h-4 md:w-7 md:h-7 rounded-md border flex items-center justify-center transition-all bg-white shadow-2xs ${(permission.wardenStatus === "allowed" || (permission.status === "allowed" && permission.wardenStatus !== "rejected")) ? "border-green-300 !bg-green-50 text-green-600 shadow-sm" : "border-gray-200 text-gray-400 hover:border-green-300 hover:bg-green-50/50"} ${(userType !== "warden" && userType !== "admin" && userType !== "superadmin") || isLeaveExpired ? "cursor-not-allowed" : "cursor-pointer"}`}
+                                            disabled={(userType !== "warden" && userType !== "admin" && userType !== "superadmin") || isLeaveExpired || isCancelled}
+                                            className={`w-3.5 h-3.5 sm:w-4 sm:h-4 md:w-7 md:h-7 rounded-md border flex items-center justify-center transition-all bg-white shadow-2xs ${(permission.wardenStatus === "allowed" || (permission.status === "allowed" && permission.wardenStatus !== "rejected")) ? "border-green-300 !bg-green-50 text-green-600 shadow-sm" : "border-gray-200 text-gray-400 hover:border-green-300 hover:bg-green-50/50"} ${(userType !== "warden" && userType !== "admin" && userType !== "superadmin") || isLeaveExpired || isCancelled ? "cursor-not-allowed opacity-50" : "cursor-pointer"}`}
                                           >
                                             <svg className="w-2 h-2 sm:w-2.5 sm:h-2.5 md:w-4 md:h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" /></svg>
                                           </button>
                                           <button
                                             onClick={() => {
+                                              if (isCancelled) return showToast("Cannot modify: Leave has been cancelled by the student.", "error");
                                               if (isLeaveExpired) return showToast("Cannot modify: Leave end date has already passed.", "error");
                                               if (userType === "warden" || userType === "admin" || userType === "superadmin") handleStatusChange(permission._id, "rejected", "warden");
                                             }}
-                                            disabled={(userType !== "warden" && userType !== "admin" && userType !== "superadmin") || isLeaveExpired}
-                                            className={`w-3.5 h-3.5 sm:w-4 sm:h-4 md:w-7 md:h-7 rounded-md border flex items-center justify-center transition-all bg-white shadow-2xs ${permission.wardenStatus === "rejected" ? "border-red-500 !bg-red-50 text-red-600 shadow-sm" : "border-gray-200 text-gray-400 hover:border-red-300 hover:bg-red-50/50"} ${(userType !== "warden" && userType !== "admin" && userType !== "superadmin") || isLeaveExpired ? "cursor-not-allowed" : "cursor-pointer"}`}
+                                            disabled={(userType !== "warden" && userType !== "admin" && userType !== "superadmin") || isLeaveExpired || isCancelled}
+                                            className={`w-3.5 h-3.5 sm:w-4 sm:h-4 md:w-7 md:h-7 rounded-md border flex items-center justify-center transition-all bg-white shadow-2xs ${permission.wardenStatus === "rejected" ? "border-red-500 !bg-red-50 text-red-600 shadow-sm" : "border-gray-200 text-gray-400 hover:border-red-300 hover:bg-red-50/50"} ${(userType !== "warden" && userType !== "admin" && userType !== "superadmin") || isLeaveExpired || isCancelled ? "cursor-not-allowed opacity-50" : "cursor-pointer"}`}
                                           >
                                             <svg className="w-2 h-2 sm:w-2.5 sm:h-2.5 md:w-4 md:h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M6 18L18 6M6 6l12 12" /></svg>
                                           </button>
@@ -9082,7 +9109,15 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                                           Dean
                                         </span>
                                         <div className="flex-1 flex items-center justify-center text-center px-0.5 min-w-0">
-                                          {permission.deanStatus === "rejected" ? (
+                                          {isCancelled ? (
+                                            <span className="inline-flex items-center justify-center text-[6px] sm:text-[7px] md:text-[8px] font-bold text-slate-600 bg-slate-100 px-1 py-0.5 rounded uppercase tracking-wider border border-slate-200 text-center whitespace-nowrap">
+                                              Cancelled
+                                            </span>
+                                          ) : isLeaveExpired ? (
+                                            <span className="inline-flex items-center justify-center text-[6px] sm:text-[7px] md:text-[8px] font-bold text-rose-600 bg-rose-50 px-1 py-0.5 rounded uppercase tracking-wider border border-rose-200 text-center whitespace-nowrap">
+                                              Expired
+                                            </span>
+                                          ) : permission.deanStatus === "rejected" ? (
                                             <span className="inline-flex items-center justify-center text-[6px] sm:text-[7px] md:text-[8px] font-bold text-red-600 bg-red-50 px-1 py-0.5 rounded uppercase tracking-wider border border-red-100 text-center whitespace-nowrap">
                                               Rejected
                                             </span>
@@ -9099,21 +9134,23 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                                         <div className="shrink-0 flex items-center gap-1 sm:gap-1.5 md:gap-2.5">
                                           <button
                                             onClick={() => {
+                                              if (isCancelled) return showToast("Cannot modify: Leave has been cancelled by the student.", "error");
                                               if (isLeaveExpired) return showToast("Cannot modify: Leave end date has already passed.", "error");
                                               if (userType === "admin" || userType === "superadmin") handleStatusChange(permission._id, "allowed", "dean");
                                             }}
-                                            disabled={userType !== "admin" && userType !== "superadmin"}
-                                            className={`w-3.5 h-3.5 sm:w-4 sm:h-4 md:w-7 md:h-7 rounded-md border flex items-center justify-center transition-all bg-white shadow-2xs ${permission.deanStatus === "allowed" ? "border-green-600 !bg-green-500 text-white shadow-md scale-105" : "border-gray-200 text-gray-400 hover:border-green-300 hover:bg-green-50/50"} ${((userType !== "admin" && userType !== "superadmin") || isLeaveExpired) ? "cursor-not-allowed" : "cursor-pointer"}`}
+                                            disabled={(userType !== "admin" && userType !== "superadmin") || isLeaveExpired || isCancelled}
+                                            className={`w-3.5 h-3.5 sm:w-4 sm:h-4 md:w-7 md:h-7 rounded-md border flex items-center justify-center transition-all bg-white shadow-2xs ${permission.deanStatus === "allowed" ? "border-green-600 !bg-green-500 text-white shadow-md scale-105" : "border-gray-200 text-gray-400 hover:border-green-300 hover:bg-green-50/50"} ${((userType !== "admin" && userType !== "superadmin") || isLeaveExpired || isCancelled) ? "cursor-not-allowed opacity-50" : "cursor-pointer"}`}
                                           >
                                             <svg className="w-2 h-2 sm:w-2.5 sm:h-2.5 md:w-4 md:h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" /></svg>
                                           </button>
                                           <button
                                             onClick={() => {
+                                              if (isCancelled) return showToast("Cannot modify: Leave has been cancelled by the student.", "error");
                                               if (isLeaveExpired) return showToast("Cannot modify: Leave end date has already passed.", "error");
                                               if (userType === "admin" || userType === "superadmin") handleStatusChange(permission._id, "rejected", "dean");
                                             }}
-                                            disabled={userType !== "admin" && userType !== "superadmin"}
-                                            className={`w-3.5 h-3.5 sm:w-4 sm:h-4 md:w-7 md:h-7 rounded-md border flex items-center justify-center transition-all bg-white shadow-2xs ${permission.deanStatus === "rejected" ? "border-red-500 !bg-red-50 text-red-600 shadow-sm" : "border-gray-200 text-gray-400 hover:border-red-300 hover:bg-red-50/50"} ${((userType !== "admin" && userType !== "superadmin") || isLeaveExpired) ? "cursor-not-allowed" : "cursor-pointer"}`}
+                                            disabled={(userType !== "admin" && userType !== "superadmin") || isLeaveExpired || isCancelled}
+                                            className={`w-3.5 h-3.5 sm:w-4 sm:h-4 md:w-7 md:h-7 rounded-md border flex items-center justify-center transition-all bg-white shadow-2xs ${permission.deanStatus === "rejected" ? "border-red-500 !bg-red-50 text-red-600 shadow-sm" : "border-gray-200 text-gray-400 hover:border-red-300 hover:bg-red-50/50"} ${((userType !== "admin" && userType !== "superadmin") || isLeaveExpired || isCancelled) ? "cursor-not-allowed opacity-50" : "cursor-pointer"}`}
                                           >
                                             <svg className="w-2 h-2 sm:w-2.5 sm:h-2.5 md:w-4 md:h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M6 18L18 6M6 6l12 12" /></svg>
                                           </button>
@@ -13575,7 +13612,10 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                           studentPermissionsList.map((permission, idx) => {
                             const isAllowed = permission.status === "allowed" || permission.status === "accepted" || permission.status === "approved" || permission.deanStatus === "allowed" || permission.deanStatus === "approved";
                             const isRejected = permission.status === "rejected" || permission.deanStatus === "rejected" || permission.wardenStatus === "rejected";
-                            const isPending = !isAllowed && !isRejected;
+                            const isCancelled = permission.status === "cancelled";
+                            const isPermExpired = permission.toDateTime ? (new Date(permission.toDateTime).getTime() < Date.now()) : false;
+                            const isExpired = permission.status === "expired" || (!isAllowed && !isCancelled && !isRejected && isPermExpired);
+                            const isPending = !isAllowed && !isRejected && !isCancelled && !isExpired;
 
                             const fromFormatted = permission.fromDateTime
                               ? formatDateTimeDDMMYYYY(permission.fromDateTime)
@@ -13662,6 +13702,14 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                                       <div className="px-2 py-0.5 rounded-md text-[9px] font-black bg-red-100 text-red-700 border border-red-200">
                                         Rejected
                                       </div>
+                                    ) : isCancelled ? (
+                                      <div className="px-2 py-0.5 rounded-md text-[9px] font-black bg-slate-100 text-slate-600 border border-slate-300">
+                                        Cancelled
+                                      </div>
+                                    ) : isExpired ? (
+                                      <div className="px-2 py-0.5 rounded-md text-[9px] font-black bg-rose-50 text-rose-700 border border-rose-200">
+                                        Expired
+                                      </div>
                                     ) : (
                                       <div className="px-2 py-0.5 rounded-md text-[9px] font-black bg-yellow-100 text-yellow-800 border border-yellow-200">
                                         Pending
@@ -13742,7 +13790,10 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                             const isCurrentlyOut = item.status === 'out';
                             const isAllowed = item.status === 'allowed' || item.status === 'approved' || item.deanStatus === 'allowed' || item.deanStatus === 'approved';
                             const isRejected = item.status === 'rejected' || item.deanStatus === 'rejected' || item.wardenStatus === 'rejected';
-                            const isPending = !isAllowed && !isRejected;
+                            const isCancelled = item.status === 'cancelled';
+                            const isLeaveExpired = item.toDateTime ? (new Date(item.toDateTime).getTime() < Date.now()) : false;
+                            const isExpired = item.status === 'expired' || (!isAllowed && !isCancelled && !isRejected && isLeaveExpired);
+                            const isPending = !isAllowed && !isRejected && !isCancelled && !isExpired;
 
                             // Robust Date Resolution
                             const fromRawDate = item.checkOutTime || item.fromDateTime || item.createdAt;
@@ -13822,6 +13873,14 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                                     ) : isRejected ? (
                                       <div className="px-2 py-0.5 rounded-md text-[9px] font-black bg-red-100 text-red-700 border border-red-200">
                                         Rejected
+                                      </div>
+                                    ) : isCancelled ? (
+                                      <div className="px-2 py-0.5 rounded-md text-[9px] font-black bg-slate-100 text-slate-600 border border-slate-300">
+                                        Cancelled
+                                      </div>
+                                    ) : isExpired ? (
+                                      <div className="px-2 py-0.5 rounded-md text-[9px] font-black bg-rose-50 text-rose-700 border border-rose-200">
+                                        Expired
                                       </div>
                                     ) : isPending ? (
                                       <div className="px-2 py-0.5 rounded-md text-[9px] font-black bg-yellow-100 text-yellow-800 border border-yellow-200">

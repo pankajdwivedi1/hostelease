@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/dbAdapter";
+import { prisma } from "@/lib/prisma";
 import { triggerLeaveVoiceCall } from "@/lib/msg91";
 import { assertTenantActive } from "@/lib/tenant";
 import { parseAsIST } from "@/lib/dateFormat";
@@ -59,17 +60,26 @@ export async function POST(request: NextRequest) {
     const reqTo = toDate.getTime();
 
     const conflictingPermission = (existingPermissions || []).find((p: any) => {
-      // Ignore cancelled or rejected permissions
+      // Ignore cancelled, rejected, or expired permissions
       if (
         p.status === "cancelled" ||
         p.status === "rejected" ||
+        p.status === "expired" ||
         p.wardenStatus === "rejected" ||
-        p.deanStatus === "rejected"
+        p.wardenStatus === "expired" ||
+        p.deanStatus === "rejected" ||
+        p.deanStatus === "expired"
       ) {
         return false;
       }
 
-      // Existing Pending Request (awaiting authority decisions)
+      const existTo = new Date(p.toDateTime).getTime();
+      // If end date has already passed without approval, it has expired and does not conflict
+      if (existTo > 0 && existTo < now) {
+        return false;
+      }
+
+      // Existing Pending Request (awaiting authority decisions for active/future dates)
       const isPending =
         p.status === "pending" ||
         p.wardenStatus === "pending" ||
@@ -80,7 +90,6 @@ export async function POST(request: NextRequest) {
       const isApproved = p.status === "allowed" || p.status === "approved";
       if (isApproved) {
         const existFrom = new Date(p.fromDateTime).getTime();
-        const existTo = new Date(p.toDateTime).getTime();
         const isUpcomingOrOngoing = existTo >= now;
         const isDateOverlap = reqFrom <= existTo && reqTo >= existFrom;
         return isUpcomingOrOngoing || isDateOverlap;
@@ -224,6 +233,23 @@ export async function GET(request: NextRequest) {
       options.limit = parseInt(limitParam, 10);
     }
 
+    // 🧹 Auto-delete cancelled or expired permissions older than 10 days from their last date
+    const tenDaysAgo = new Date(Date.now() - 10 * 24 * 60 * 60 * 1000);
+    prisma.permission.deleteMany({
+      where: {
+        toDateTime: { lte: tenDaysAgo },
+        OR: [
+          { status: { in: ['cancelled', 'expired'] } },
+          { wardenStatus: { in: ['cancelled', 'expired'] } },
+          { deanStatus: { in: ['cancelled', 'expired'] } },
+          {
+            status: 'pending',
+            deanStatus: { notIn: ['allowed', 'approved'] }
+          }
+        ]
+      }
+    }).catch((err) => console.error("Auto-delete 10-day old leaves failed:", err));
+
     const { records: permissions, total } = await db.permissions.list(filters, options);
 
     // Filter out artificial "Manual Management Override" records so only real student applications appear
@@ -238,11 +264,38 @@ export async function GET(request: NextRequest) {
       } else if ((p.deanStatus === 'rejected' || p.wardenStatus === 'rejected') && p.status === 'pending') {
         p.status = 'rejected';
         db.permissions.update(p._id || p.id, { status: 'rejected' }).catch(() => {});
+      } else if (p.status === 'cancelled' && (p.wardenStatus !== 'cancelled' || p.deanStatus !== 'cancelled')) {
+        p.wardenStatus = 'cancelled';
+        p.deanStatus = 'cancelled';
+        db.permissions.update(p._id || p.id, { wardenStatus: 'cancelled', deanStatus: 'cancelled' }).catch(() => {});
       }
 
-      // If user is specifically querying for "pending", exclude any where dean already approved or rejected
+      // Auto-expire unapproved leaves whose end date has passed
+      const isApproved = p.status === 'allowed' || p.status === 'approved' || p.deanStatus === 'allowed' || p.deanStatus === 'approved';
+      const isRejected = p.status === 'rejected' || p.deanStatus === 'rejected' || p.wardenStatus === 'rejected';
+      const isCancelled = p.status === 'cancelled' || p.wardenStatus === 'cancelled' || p.deanStatus === 'cancelled';
+      const toTime = p.toDateTime ? new Date(p.toDateTime).getTime() : 0;
+      if (!isApproved && !isRejected && !isCancelled && p.status !== 'expired' && toTime > 0 && toTime < Date.now()) {
+        p.status = 'expired';
+        p.wardenStatus = 'expired';
+        p.deanStatus = 'expired';
+        db.permissions.update(p._id || p.id, {
+          status: 'expired',
+          wardenStatus: 'expired',
+          deanStatus: 'expired'
+        }).catch(() => {});
+      }
+
+      // If user is specifically querying for "pending", exclude any where dean already approved, rejected, cancelled, or expired
       if (status === 'pending') {
-        if (p.deanStatus === 'allowed' || p.deanStatus === 'rejected' || p.wardenStatus === 'rejected' || p.status !== 'pending') {
+        if (p.deanStatus === 'allowed' || p.deanStatus === 'rejected' || p.wardenStatus === 'rejected' || p.status !== 'pending' || isCancelled || p.status === 'expired' || (toTime > 0 && toTime < Date.now())) {
+          return false;
+        }
+      }
+
+      // 🚫 Hide cancelled and expired leaves from the Admin main permissions list
+      if (!studentId && (status === 'all' || !status || status === 'pending')) {
+        if (isCancelled || p.status === 'expired' || (!isApproved && !isRejected && toTime > 0 && toTime < Date.now())) {
           return false;
         }
       }
@@ -320,6 +373,17 @@ export async function PATCH(request: NextRequest) {
         );
       }
 
+      const isExpired = currentPermission.toDateTime && new Date(currentPermission.toDateTime).getTime() < Date.now();
+      if (isStudent && (currentPermission.status === "expired" || isExpired)) {
+        return NextResponse.json(
+          {
+            error:
+              "Unable to edit: This leave application has already expired.",
+          },
+          { status: 400 }
+        );
+      }
+
       if (fromDateTime) update.fromDateTime = parseAsIST(fromDateTime) || new Date(fromDateTime);
       if (toDateTime) update.toDateTime = parseAsIST(toDateTime) || new Date(toDateTime);
       if (reason) update.reason = reason;
@@ -360,6 +424,8 @@ export async function PATCH(request: NextRequest) {
 
     if (status === "cancelled") {
       update.status = "cancelled";
+      update.wardenStatus = "cancelled";
+      update.deanStatus = "cancelled";
       update.cancellationReason = body.cancellationReason || "Cancelled by student before leaving campus";
     } else if (currentPermission.status !== "completed") {
       if (finalDeanStatus === "allowed" || status === "allowed") {
@@ -436,6 +502,22 @@ export async function DELETE(request: NextRequest) {
 
     if (!permissionIds || permissionIds.length === 0) {
       return NextResponse.json({ error: "No permission IDs provided" }, { status: 400 });
+    }
+
+    // 🔒 Security Guard: Prevent students from deleting approved leaves
+    if (body.isStudent) {
+      for (const pid of permissionIds) {
+        const perm = await db.permissions.getById(pid);
+        if (perm) {
+          const isApproved = perm.status === 'allowed' || perm.status === 'approved' || perm.deanStatus === 'allowed' || perm.deanStatus === 'approved';
+          if (isApproved) {
+            return NextResponse.json(
+              { error: "Cannot remove: This leave has already been approved by authorities and cannot be deleted or modified." },
+              { status: 400 }
+            );
+          }
+        }
+      }
     }
 
     await db.permissions.deleteByIds(permissionIds);

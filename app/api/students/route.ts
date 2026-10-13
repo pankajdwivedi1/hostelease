@@ -387,6 +387,8 @@ export async function PUT(request: NextRequest) {
     if (body.category !== undefined) updateFields.category = body.category;
     if (body.dob !== undefined) updateFields.dob = body.dob;
     if (body.floorNumber !== undefined) updateFields.floorNumber = body.floorNumber;
+    if (body.deviceId !== undefined) updateFields.deviceId = body.deviceId;
+    if (body.webAuthnCredentials !== undefined) updateFields.webAuthnCredentials = body.webAuthnCredentials;
 
     const student = await db.students.update(targetId, { $set: updateFields });
     return NextResponse.json({ success: true, student }, { status: 200 });
