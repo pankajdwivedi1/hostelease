@@ -1596,6 +1596,10 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
   const [studentHomeLeaves, setStudentHomeLeaves] = useState<any[]>([]);
   const [studentGatePasses, setStudentGatePasses] = useState<any[]>([]);
   const [isLoadingStudentHistory, setIsLoadingStudentHistory] = useState<boolean>(false);
+  const [gatePassCalendarMonth, setGatePassCalendarMonth] = useState<Date>(new Date());
+  const [selectedGatePassDate, setSelectedGatePassDate] = useState<string>("");
+  const [gatePassViewMode, setGatePassViewMode] = useState<"calendar" | "list">("calendar");
+  const [showMonthOutings, setShowMonthOutings] = useState<boolean>(false);
 
   // ⚡ Preload Map Chunk & Tile CDN Connections in Background for Instant Opening
   useEffect(() => {
@@ -1913,6 +1917,35 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
       setStudentPermissionsList(sortedPermsList);
       setStudentHomeLeaves(uniqueHomeLeaves);
       setStudentGatePasses(uniqueGatePasses);
+
+      // ⚡ Auto-initialize Calendar to Latest Outing Date & Month
+      if (uniqueGatePasses.length > 0) {
+        const latestPass: any = uniqueGatePasses[0];
+        const rawDate = latestPass.checkOutTime || latestPass.fromDateTime || latestPass.createdAt;
+        const d = parseFlexibleDate(rawDate);
+        let latestDateKey = "";
+        if (latestPass.checkOutIstDate && typeof latestPass.checkOutIstDate === "string") {
+          const match = latestPass.checkOutIstDate.trim().match(/^(\d{1,2})[-/](\d{1,2})[-/](\d{4})$/);
+          if (match) {
+            latestDateKey = `${match[1].padStart(2, '0')}-${match[2].padStart(2, '0')}-${match[3]}`;
+          }
+        }
+        if (!latestDateKey && d && !isNaN(d.getTime())) {
+          latestDateKey = formatToDDMMYYYY(d, false);
+        }
+        if (latestDateKey) {
+          setSelectedGatePassDate(latestDateKey);
+          const parts = latestDateKey.split("-");
+          if (parts.length === 3) {
+            setGatePassCalendarMonth(new Date(parseInt(parts[2], 10), parseInt(parts[1], 10) - 1, 1));
+          }
+        } else if (d && !isNaN(d.getTime())) {
+          setGatePassCalendarMonth(new Date(d.getFullYear(), d.getMonth(), 1));
+        }
+      } else {
+        setSelectedGatePassDate("");
+        setGatePassCalendarMonth(new Date());
+      }
     } catch (err) {
       console.error("Error loading student profile history:", err);
     } finally {
@@ -1928,6 +1961,10 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
       setStudentHomeLeaves([]);
       setStudentGatePasses([]);
       setStudentHistoryTab("permissions");
+      setSelectedGatePassDate("");
+      setGatePassCalendarMonth(new Date());
+      setGatePassViewMode("calendar");
+      setShowMonthOutings(false);
     }
   }, [selectedStudent?.id, (selectedStudent as any)?._id, selectedStudent?.email, fetchStudentProfileHistory]);
   
@@ -14114,125 +14151,458 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                       </div>
                     )}
 
-                    {/* TAB 2: GATE-PASS HISTORY */}
-                    {studentHistoryTab === "gate_pass" && (
-                      <div className="space-y-3">
-                        {studentGatePasses.length === 0 ? (
+                    {/* TAB 3: GATE-PASS HISTORY WITH MONTH CALENDAR VIEW */}
+                    {studentHistoryTab === "gate_pass" && (() => {
+                      // Helper to extract DD-MM-YYYY date key from any gate pass
+                      const normalizePassDateKey = (pass: any): string => {
+                        if (pass.checkOutIstDate && typeof pass.checkOutIstDate === 'string') {
+                          const trimmed = pass.checkOutIstDate.trim();
+                          const match = trimmed.match(/^(\d{1,2})[-/](\d{1,2})[-/](\d{4})$/);
+                          if (match) {
+                            return `${match[1].padStart(2, '0')}-${match[2].padStart(2, '0')}-${match[3]}`;
+                          }
+                        }
+                        const rawDate = pass.checkOutTime || pass.fromDateTime || pass.createdAt;
+                        if (rawDate) {
+                          const d = parseFlexibleDate(rawDate);
+                          if (d && !isNaN(d.getTime())) {
+                            return formatToDDMMYYYY(d, false);
+                          }
+                        }
+                        return "";
+                      };
+
+                      // 1. Map of Outings by "DD-MM-YYYY"
+                      const outingsByDateMap = new Map<string, any[]>();
+                      studentGatePasses.forEach((pass: any) => {
+                        const key = normalizePassDateKey(pass);
+                        if (key) {
+                          if (!outingsByDateMap.has(key)) outingsByDateMap.set(key, []);
+                          outingsByDateMap.get(key)!.push(pass);
+                        }
+                      });
+
+                      // 2. Identify Latest Outing Date
+                      const latestPassDateKey = studentGatePasses.length > 0 ? normalizePassDateKey(studentGatePasses[0]) : "";
+                      const activeSelectedDate = selectedGatePassDate || latestPassDateKey;
+
+                      // 3. Calendar Month Grid Calculation
+                      const calYear = gatePassCalendarMonth.getFullYear();
+                      const calMonth = gatePassCalendarMonth.getMonth(); // 0 to 11
+                      const daysInCalMonth = new Date(calYear, calMonth + 1, 0).getDate();
+                      const firstDayWeekday = new Date(calYear, calMonth, 1).getDay(); // 0 = Sun
+                      const daysInPrevCalMonth = new Date(calYear, calMonth, 0).getDate();
+
+                      const prevMonthDays: number[] = [];
+                      for (let i = firstDayWeekday - 1; i >= 0; i--) {
+                        prevMonthDays.push(daysInPrevCalMonth - i);
+                      }
+
+                      let calMonthOutingsCount = 0;
+                      const currentMonthDays: { day: number; dateKey: string; count: number; hasOutings: boolean }[] = [];
+                      for (let d = 1; d <= daysInCalMonth; d++) {
+                        const dKey = `${String(d).padStart(2, '0')}-${String(calMonth + 1).padStart(2, '0')}-${calYear}`;
+                        const count = (outingsByDateMap.get(dKey) || []).length;
+                        if (count > 0) calMonthOutingsCount += count;
+                        currentMonthDays.push({
+                          day: d,
+                          dateKey: dKey,
+                          count,
+                          hasOutings: count > 0,
+                        });
+                      }
+
+                      const totalSlots = prevMonthDays.length + currentMonthDays.length;
+                      const trailingSlots = (7 - (totalSlots % 7)) % 7;
+                      const nextMonthDays: number[] = [];
+                      for (let d = 1; d <= trailingSlots; d++) {
+                        nextMonthDays.push(d);
+                      }
+
+                      const calMonthTitle = gatePassCalendarMonth.toLocaleDateString("en-US", { month: "long", year: "numeric" });
+                      const todayIST = formatDateDDMMYYYY(new Date());
+
+                      // 4. Quick Jump Handler
+                      const handleJumpToLatest = () => {
+                        if (latestPassDateKey) {
+                          setSelectedGatePassDate(latestPassDateKey);
+                          setShowMonthOutings(false);
+                          const parts = latestPassDateKey.split("-");
+                          if (parts.length === 3) {
+                            setGatePassCalendarMonth(new Date(parseInt(parts[2], 10), parseInt(parts[1], 10) - 1, 1));
+                          }
+                        }
+                      };
+
+                      // 5. Filter Passes for View
+                      let displayPasses: any[] = [];
+                      if (gatePassViewMode === "list") {
+                        displayPasses = studentGatePasses;
+                      } else if (showMonthOutings) {
+                        displayPasses = studentGatePasses.filter((p: any) => {
+                          const k = normalizePassDateKey(p);
+                          if (!k) return false;
+                          const parts = k.split("-");
+                          return parseInt(parts[1], 10) === calMonth + 1 && parseInt(parts[2], 10) === calYear;
+                        });
+                      } else {
+                        displayPasses = activeSelectedDate ? (outingsByDateMap.get(activeSelectedDate) || []) : [];
+                      }
+
+                      // 6. Card Item Renderer
+                      const renderPassCard = (pass: any, idx: number) => {
+                        const isCurrentlyOut = pass.status === 'out';
+                        
+                        // Robust Date & Time Formatting with Multi-Layer Fallback
+                        const rawOutDate = pass.checkOutTime || pass.fromDateTime || pass.createdAt;
+                        const rawInDate = pass.checkInTime || pass.toDateTime;
+
+                        const formattedDate = pass.checkOutIstDate || (rawOutDate ? formatDateDDMMYYYY(rawOutDate) : "N/A");
+                        const formattedOutTime = pass.checkOutIstTime || (rawOutDate ? new Date(rawOutDate).toLocaleTimeString("en-IN", { timeZone: "Asia/Kolkata", hour: "2-digit", minute: "2-digit", hour12: true }) : "N/A");
+                        const formattedInTime = isCurrentlyOut ? "Not Returned" : (pass.checkInIstTime || (rawInDate ? new Date(rawInDate).toLocaleTimeString("en-IN", { timeZone: "Asia/Kolkata", hour: "2-digit", minute: "2-digit", hour12: true }) : "Approved (Used)"));
+
+                        // Calculate Duration (Formatted as "28 mins", "3h 22m")
+                        let durationDisplay = "—";
+                        if (pass.durationMinutes && pass.durationMinutes > 0) {
+                          const hrs = Math.floor(pass.durationMinutes / 60);
+                          const mins = pass.durationMinutes % 60;
+                          durationDisplay = hrs > 0 ? `${hrs}h ${mins > 0 ? `${mins}m` : ''}` : `${mins} mins`;
+                        } else if (rawOutDate) {
+                          const outMs = new Date(rawOutDate).getTime();
+                          const inMs = rawInDate ? new Date(rawInDate).getTime() : (isCurrentlyOut ? Date.now() : 0);
+                          if (inMs > outMs) {
+                            const totalMins = Math.floor((inMs - outMs) / (1000 * 60));
+                            const hrs = Math.floor(totalMins / 60);
+                            const mins = totalMins % 60;
+                            durationDisplay = hrs > 0 ? `${hrs}h ${mins > 0 ? `${mins}m` : ''}` : `${totalMins} mins`;
+                          }
+                        }
+                        if (isCurrentlyOut && durationDisplay === "—") {
+                          durationDisplay = "Active Now";
+                        }
+
+                        return (
+                          <div
+                            key={pass.id || idx}
+                            className={`rounded-xl p-3 sm:p-3.5 border transition-all shadow-2xs ${
+                              isCurrentlyOut
+                                ? 'bg-rose-50/50 border-rose-200/90 shadow-rose-100/50'
+                                : 'bg-white border-slate-200/80 hover:border-slate-300'
+                            }`}
+                          >
+                            {/* Header: Gate Name, Date Badge & Status */}
+                            <div className="flex flex-wrap items-center justify-between gap-1.5 mb-2">
+                              <div className="flex items-center flex-wrap gap-1.5">
+                                <span className={`text-[9px] font-bold tracking-wider px-2 py-0.5 rounded-md border ${
+                                  isCurrentlyOut ? 'bg-rose-100/80 text-rose-800 border-rose-200' : 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                                }`}>
+                                  🚪 {pass.gateName ? pass.gateName.replace(/_/g, ' ').replace(/\b\w/g, (c: string) => c.toUpperCase()) : 'Main Gate'}
+                                </span>
+                                {/* Prominent Date Display */}
+                                <span className="text-[10px] font-bold text-slate-700 bg-slate-100 px-2 py-0.5 rounded-md border border-slate-200 flex items-center gap-1">
+                                  📅 {formattedDate}
+                                </span>
+                              </div>
+
+                              {/* Status Badge */}
+                              <div className="flex items-center gap-1.5 shrink-0">
+                                {isCurrentlyOut ? (
+                                  <div className="px-2 py-0.5 rounded-md text-[9px] font-black bg-rose-100 text-rose-700 border border-rose-200 flex items-center gap-1 animate-pulse">
+                                    <span className="w-1.5 h-1.5 rounded-full bg-rose-600"></span>
+                                    Currently Out
+                                  </div>
+                                ) : (
+                                  <div className="px-2 py-0.5 rounded-md text-[9px] font-black bg-emerald-100 text-emerald-800 border border-emerald-200">
+                                    ✓ Returned (In)
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+
+                            {/* 3-Column Time & Duration Grid: CHECK OUT | CHECK IN | DURATION */}
+                            <div className="grid grid-cols-3 gap-1.5 sm:gap-2 bg-slate-50/80 p-2 sm:p-2.5 rounded-lg border border-slate-100 text-[11px] mb-2">
+                              <div>
+                                <p className="text-[9px] font-bold text-slate-400">Check Out</p>
+                                <p className="font-extrabold text-slate-800 mt-0.5 text-xs sm:text-[13px] leading-tight">
+                                  {formattedOutTime}
+                                </p>
+                                <p className="text-[9px] text-slate-400 font-medium">
+                                  {formattedDate}
+                                </p>
+                              </div>
+
+                              <div>
+                                <p className="text-[9px] font-bold text-slate-400">Check In</p>
+                                <p className={`font-extrabold mt-0.5 text-xs sm:text-[13px] leading-tight ${isCurrentlyOut ? 'text-rose-600 italic font-bold' : 'text-slate-800'}`}>
+                                  {formattedInTime}
+                                </p>
+                                <p className="text-[9px] text-slate-400 font-medium">
+                                  {isCurrentlyOut ? "Pending Return" : formattedDate}
+                                </p>
+                              </div>
+
+                              <div>
+                                <p className="text-[9px] font-bold text-slate-400">Duration</p>
+                                <p className="font-black text-indigo-700 bg-indigo-50/80 px-1.5 py-0.5 rounded border border-indigo-100 inline-block mt-0.5 text-[10px] sm:text-xs">
+                                  ⏱️ {durationDisplay}
+                                </p>
+                              </div>
+                            </div>
+
+                            {/* Purpose / Reason */}
+                            <p className="text-[11px] text-slate-600 font-medium">
+                              <span className="font-bold text-slate-800">Purpose: </span>{pass.reason || "Campus Outing"}
+                            </p>
+                          </div>
+                        );
+                      };
+
+                      if (studentGatePasses.length === 0) {
+                        return (
                           <div className="p-6 text-center bg-slate-50/70 border border-dashed border-slate-200 rounded-2xl">
                             <span className="text-2xl block mb-1.5">🎫</span>
                             <p className="text-xs font-bold text-slate-700">No Gate-Pass history found</p>
                             <p className="text-[11px] text-slate-400 mt-0.5">This student has not recorded any campus outings or gate passes yet.</p>
                           </div>
-                        ) : (
-                          studentGatePasses.map((pass, idx) => {
-                            const isCurrentlyOut = pass.status === 'out';
-                            
-                            // Robust Date & Time Formatting with Multi-Layer Fallback
-                            const rawOutDate = pass.checkOutTime || pass.fromDateTime || pass.createdAt;
-                            const rawInDate = pass.checkInTime || pass.toDateTime;
+                        );
+                      }
 
-                            const formattedDate = pass.checkOutIstDate || (rawOutDate ? formatDateDDMMYYYY(rawOutDate) : "N/A");
-                            const formattedOutTime = pass.checkOutIstTime || (rawOutDate ? new Date(rawOutDate).toLocaleTimeString("en-IN", { timeZone: "Asia/Kolkata", hour: "2-digit", minute: "2-digit", hour12: true }) : "N/A");
-                            const formattedInTime = isCurrentlyOut ? "Not Returned" : (pass.checkInIstTime || (rawInDate ? new Date(rawInDate).toLocaleTimeString("en-IN", { timeZone: "Asia/Kolkata", hour: "2-digit", minute: "2-digit", hour12: true }) : "Completed"));
-
-                            // Calculate Duration (Formatted as "28 mins", "3h 22m")
-                            let durationDisplay = "—";
-                            if (pass.durationMinutes && pass.durationMinutes > 0) {
-                              const hrs = Math.floor(pass.durationMinutes / 60);
-                              const mins = pass.durationMinutes % 60;
-                              durationDisplay = hrs > 0 ? `${hrs}h ${mins > 0 ? `${mins}m` : ''}` : `${mins} mins`;
-                            } else if (rawOutDate) {
-                              const outMs = new Date(rawOutDate).getTime();
-                              const inMs = rawInDate ? new Date(rawInDate).getTime() : (isCurrentlyOut ? Date.now() : 0);
-                              if (inMs > outMs) {
-                                const totalMins = Math.floor((inMs - outMs) / (1000 * 60));
-                                const hrs = Math.floor(totalMins / 60);
-                                const mins = totalMins % 60;
-                                durationDisplay = hrs > 0 ? `${hrs}h ${mins > 0 ? `${mins}m` : ''}` : `${totalMins} mins`;
-                              }
-                            }
-                            if (isCurrentlyOut && durationDisplay === "—") {
-                              durationDisplay = "Active Now";
-                            }
-
-                            return (
-                              <div
-                                key={pass.id || idx}
-                                className={`rounded-xl p-3 sm:p-3.5 border transition-all shadow-2xs ${
-                                  isCurrentlyOut
-                                    ? 'bg-rose-50/50 border-rose-200/90 shadow-rose-100/50'
-                                    : 'bg-white border-slate-200/80 hover:border-slate-300'
+                      return (
+                        <div className="space-y-3">
+                          {/* View Toggle Bar (Month Calendar vs List All) */}
+                          <div className="flex items-center justify-between pb-1 border-b border-slate-100">
+                            <div className="inline-flex items-center bg-slate-100 p-0.5 rounded-lg border border-slate-200">
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setGatePassViewMode("calendar");
+                                  setShowMonthOutings(false);
+                                }}
+                                className={`px-2.5 py-1 rounded-md text-[10.5px] font-black transition-all flex items-center gap-1.5 cursor-pointer ${
+                                  gatePassViewMode === "calendar"
+                                    ? "bg-white text-indigo-700 shadow-2xs border border-indigo-100"
+                                    : "text-slate-500 hover:text-slate-800"
                                 }`}
                               >
-                                {/* Header: Gate Name, Date Badge & Status */}
-                                <div className="flex flex-wrap items-center justify-between gap-1.5 mb-2">
-                                  <div className="flex items-center flex-wrap gap-1.5">
-                                    <span className={`text-[9px] font-bold tracking-wider px-2 py-0.5 rounded-md border ${
-                                      isCurrentlyOut ? 'bg-rose-100/80 text-rose-800 border-rose-200' : 'bg-emerald-50 text-emerald-700 border-emerald-200'
-                                    }`}>
-                                      🚪 {pass.gateName ? pass.gateName.replace(/_/g, ' ').replace(/\b\w/g, (c: string) => c.toUpperCase()) : 'Main Gate'}
+                                <span>📅</span>
+                                <span>Month Calendar</span>
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => setGatePassViewMode("list")}
+                                className={`px-2.5 py-1 rounded-md text-[10.5px] font-black transition-all flex items-center gap-1.5 cursor-pointer ${
+                                  gatePassViewMode === "list"
+                                    ? "bg-white text-indigo-700 shadow-2xs border border-indigo-100"
+                                    : "text-slate-500 hover:text-slate-800"
+                                }`}
+                              >
+                                <span>📋</span>
+                                <span>All Passes ({studentGatePasses.length})</span>
+                              </button>
+                            </div>
+
+                            {latestPassDateKey && gatePassViewMode === "calendar" && (
+                              <button
+                                type="button"
+                                onClick={handleJumpToLatest}
+                                className="text-[10px] font-bold text-amber-900 bg-amber-50 hover:bg-amber-100 border border-amber-200 px-2 py-1 rounded-md transition-all cursor-pointer flex items-center gap-1"
+                                title="Jump to Latest Outing Date"
+                              >
+                                <span>⚡ Latest:</span>
+                                <span className="font-extrabold">{latestPassDateKey}</span>
+                              </button>
+                            )}
+                          </div>
+
+                          {/* 1. MONTH CALENDAR VIEW (Marked by Red Pen in User Request) */}
+                          {gatePassViewMode === "calendar" && (
+                            <>
+                              <div className="bg-gradient-to-b from-slate-50/90 to-white border border-slate-200/90 rounded-2xl p-3 sm:p-3.5 shadow-2xs">
+                                {/* Month Navigation & Outings Summary */}
+                                <div className="flex items-center justify-between gap-2 mb-2.5">
+                                  <div className="flex items-center gap-1">
+                                    <button
+                                      type="button"
+                                      onClick={() => setGatePassCalendarMonth(prev => new Date(prev.getFullYear(), prev.getMonth() - 1, 1))}
+                                      className="w-7 h-7 flex items-center justify-center rounded-lg bg-white border border-slate-200 text-slate-700 hover:bg-slate-100 font-bold transition-all cursor-pointer shadow-2xs"
+                                      title="Previous Month"
+                                    >
+                                      ◀
+                                    </button>
+                                    <span className="text-xs sm:text-sm font-black text-slate-800 px-2 min-w-[130px] text-center select-none">
+                                      {calMonthTitle}
                                     </span>
-                                    {/* Prominent Date Display */}
-                                    <span className="text-[10px] font-bold text-slate-700 bg-slate-100 px-2 py-0.5 rounded-md border border-slate-200 flex items-center gap-1">
-                                      📅 {formattedDate}
+                                    <button
+                                      type="button"
+                                      onClick={() => setGatePassCalendarMonth(prev => new Date(prev.getFullYear(), prev.getMonth() + 1, 1))}
+                                      className="w-7 h-7 flex items-center justify-center rounded-lg bg-white border border-slate-200 text-slate-700 hover:bg-slate-100 font-bold transition-all cursor-pointer shadow-2xs"
+                                      title="Next Month"
+                                    >
+                                      ▶
+                                    </button>
+                                  </div>
+
+                                  {/* Month Outings Count Badge */}
+                                  <div className="flex items-center gap-1.5">
+                                    <span className="text-[10px] sm:text-[11px] font-black px-2.5 py-0.5 rounded-full bg-amber-100 text-amber-900 border border-amber-300 flex items-center gap-1.5 shadow-2xs">
+                                      <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse"></span>
+                                      {calMonthOutingsCount} {calMonthOutingsCount === 1 ? 'outing' : 'outings'} in month
+                                    </span>
+                                  </div>
+                                </div>
+
+                                {/* Weekday Row (Sun to Sat) */}
+                                <div className="grid grid-cols-7 gap-1 sm:gap-1.5 text-center text-[10px] font-black text-slate-400 mb-1">
+                                  {["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].map(day => (
+                                    <div key={day} className="py-0.5 tracking-wider uppercase">{day}</div>
+                                  ))}
+                                </div>
+
+                                {/* Month Days Grid: Yellow Highlighted Days for Outings */}
+                                <div className="grid grid-cols-7 gap-1 sm:gap-1.5">
+                                  {prevMonthDays.map(d => (
+                                    <div key={`prev-${d}`} className="h-9 sm:h-10 rounded-lg flex items-center justify-center text-xs text-slate-300/80 font-medium select-none">
+                                      {d}
+                                    </div>
+                                  ))}
+                                  {currentMonthDays.map(({ day, dateKey, count, hasOutings }) => {
+                                    const isSelected = activeSelectedDate === dateKey && !showMonthOutings;
+                                    const isToday = todayIST === dateKey;
+
+                                    return (
+                                      <button
+                                        key={dateKey}
+                                        type="button"
+                                        onClick={() => {
+                                          setSelectedGatePassDate(dateKey);
+                                          setShowMonthOutings(false);
+                                        }}
+                                        className={`relative h-9 sm:h-10 rounded-lg flex flex-col items-center justify-center transition-all cursor-pointer select-none text-xs ${
+                                          isSelected
+                                            ? hasOutings
+                                              ? "bg-amber-400 text-amber-950 font-black ring-2 ring-indigo-600 ring-offset-1 shadow-md scale-[1.05]"
+                                              : "bg-indigo-600 text-white font-black ring-2 ring-indigo-400 ring-offset-1 shadow-md scale-[1.05]"
+                                            : hasOutings
+                                            ? "bg-amber-100 hover:bg-amber-200 text-amber-950 font-bold border border-amber-300 shadow-2xs"
+                                            : "bg-slate-50/70 text-slate-600 hover:bg-slate-100 hover:text-slate-900 border border-transparent"
+                                        }`}
+                                        title={hasOutings ? `${count} outing${count > 1 ? 's' : ''} on ${dateKey}` : `No outings on ${dateKey}`}
+                                      >
+                                        <span className="leading-none text-[11px] sm:text-xs">{day}</span>
+                                        {hasOutings && (
+                                          <span className="flex items-center gap-0.5 mt-0.5">
+                                            <span className={`w-1.5 h-1.5 rounded-full ${isSelected ? "bg-amber-950" : "bg-amber-600"}`}></span>
+                                            {count > 1 && (
+                                              <span className={`text-[8.5px] font-black leading-none ${isSelected ? "text-amber-950" : "text-amber-800"}`}>
+                                                {count}
+                                              </span>
+                                            )}
+                                          </span>
+                                        )}
+                                        {isToday && !hasOutings && (
+                                          <span className="absolute bottom-1 w-1 h-1 rounded-full bg-indigo-500"></span>
+                                        )}
+                                      </button>
+                                    );
+                                  })}
+                                  {nextMonthDays.map(d => (
+                                    <div key={`next-${d}`} className="h-9 sm:h-10 rounded-lg flex items-center justify-center text-xs text-slate-300/80 font-medium select-none">
+                                      {d}
+                                    </div>
+                                  ))}
+                                </div>
+
+                                {/* Calendar Legend & Footer */}
+                                <div className="flex items-center justify-between pt-2.5 mt-2.5 border-t border-slate-200/70 text-[10px] text-slate-500 font-medium flex-wrap gap-2">
+                                  <div className="flex items-center gap-3">
+                                    <span className="flex items-center gap-1.5">
+                                      <span className="w-3 h-3 rounded bg-amber-200 border border-amber-300"></span>
+                                      <span className="font-bold text-slate-700">Outing History (Yellow)</span>
+                                    </span>
+                                    <span className="flex items-center gap-1.5">
+                                      <span className="w-3 h-3 rounded bg-amber-400 ring-2 ring-indigo-600"></span>
+                                      <span className="font-bold text-slate-700">Selected Date</span>
+                                    </span>
+                                  </div>
+                                  <span className="text-[9.5px] text-slate-400">
+                                    Click any date above to view details below
+                                  </span>
+                                </div>
+                              </div>
+
+                              {/* 2. OUTING CARDS BELOW CALENDAR (Marked by Blue Pen in User Request) */}
+                              <div className="space-y-2.5 pt-1">
+                                <div className="flex items-center justify-between px-0.5 flex-wrap gap-1.5">
+                                  <div className="flex items-center gap-2">
+                                    <span className="text-xs font-black text-slate-800 flex items-center gap-1.5">
+                                      <span>📍 Outing Details for</span>
+                                      <span className="px-2 py-0.5 rounded-md bg-amber-100 text-amber-950 border border-amber-300 font-extrabold">
+                                        📅 {showMonthOutings ? `${calMonthTitle} (All Month)` : (activeSelectedDate || "Selected Date")}
+                                      </span>
+                                    </span>
+                                    <span className="text-[11px] font-bold text-slate-500">
+                                      ({displayPasses.length} {displayPasses.length === 1 ? 'pass' : 'passes'})
                                     </span>
                                   </div>
 
-                                  {/* Status Badge - Matching rounded-md corner style */}
-                                  <div className="flex items-center gap-1.5 shrink-0">
-                                    {isCurrentlyOut ? (
-                                      <div className="px-2 py-0.5 rounded-md text-[9px] font-black bg-rose-100 text-rose-700 border border-rose-200 flex items-center gap-1 animate-pulse">
-                                        <span className="w-1.5 h-1.5 rounded-full bg-rose-600"></span>
-                                        Currently Out
-                                      </div>
-                                    ) : (
-                                      <div className="px-2 py-0.5 rounded-md text-[9px] font-black bg-emerald-100 text-emerald-800 border border-emerald-200">
-                                        ✓ Returned (In)
-                                      </div>
+                                  {calMonthOutingsCount > 0 && (
+                                    <button
+                                      type="button"
+                                      onClick={() => setShowMonthOutings(prev => !prev)}
+                                      className="text-[10.5px] font-bold text-indigo-600 hover:text-indigo-800 hover:underline cursor-pointer flex items-center gap-1"
+                                    >
+                                      {showMonthOutings ? "← Show Only Selected Date" : `View all ${calMonthOutingsCount} passes in ${calMonthTitle} →`}
+                                    </button>
+                                  )}
+                                </div>
+
+                                {displayPasses.length === 0 ? (
+                                  <div className="p-6 text-center bg-slate-50/70 border border-dashed border-slate-200 rounded-2xl">
+                                    <span className="text-2xl block mb-1.5">📅</span>
+                                    <p className="text-xs font-bold text-slate-700">
+                                      No outings recorded on {activeSelectedDate || "this date"}
+                                    </p>
+                                    <p className="text-[11px] text-slate-400 mt-0.5">
+                                      Click any yellow highlighted date on the calendar above to view outing movement.
+                                    </p>
+                                    {latestPassDateKey && latestPassDateKey !== activeSelectedDate && (
+                                      <button
+                                        type="button"
+                                        onClick={handleJumpToLatest}
+                                        className="mt-3 px-3.5 py-1.5 bg-amber-400 hover:bg-amber-500 text-amber-950 font-black rounded-lg text-xs transition-all cursor-pointer inline-flex items-center gap-1.5 shadow-xs"
+                                      >
+                                        <span>⚡ Jump to Latest Outing ({latestPassDateKey})</span>
+                                      </button>
                                     )}
                                   </div>
-                                </div>
-
-                                {/* 3-Column Time & Duration Grid: CHECK OUT | CHECK IN | DURATION */}
-                                <div className="grid grid-cols-3 gap-1.5 sm:gap-2 bg-slate-50/80 p-2 sm:p-2.5 rounded-lg border border-slate-100 text-[11px] mb-2">
-                                  <div>
-                                    <p className="text-[9px] font-bold text-slate-400">Check Out</p>
-                                    <p className="font-extrabold text-slate-800 mt-0.5 text-xs sm:text-[13px] leading-tight">
-                                      {formattedOutTime}
-                                    </p>
-                                    <p className="text-[9px] text-slate-400 font-medium">
-                                      {formattedDate}
-                                    </p>
-                                  </div>
-
-                                  <div>
-                                    <p className="text-[9px] font-bold text-slate-400">Check In</p>
-                                    <p className={`font-extrabold mt-0.5 text-xs sm:text-[13px] leading-tight ${isCurrentlyOut ? 'text-rose-600 italic font-bold' : 'text-slate-800'}`}>
-                                      {formattedInTime}
-                                    </p>
-                                    <p className="text-[9px] text-slate-400 font-medium">
-                                      {isCurrentlyOut ? "Pending Return" : formattedDate}
-                                    </p>
-                                  </div>
-
-                                  <div>
-                                    <p className="text-[9px] font-bold text-slate-400">Duration</p>
-                                    <p className="font-black text-indigo-700 bg-indigo-50/80 px-1.5 py-0.5 rounded border border-indigo-100 inline-block mt-0.5 text-[10px] sm:text-xs">
-                                      ⏱️ {durationDisplay}
-                                    </p>
-                                  </div>
-                                </div>
-
-                                {/* Purpose / Reason */}
-                                <p className="text-[11px] text-slate-600 font-medium">
-                                  <span className="font-bold text-slate-800">Purpose: </span>{pass.reason || "Campus Outing"}
-                                </p>
+                                ) : (
+                                  displayPasses.map((pass: any, idx: number) => renderPassCard(pass, idx))
+                                )}
                               </div>
-                            );
-                          })
-                        )}
-                      </div>
-                    )}
+                            </>
+                          )}
+
+                          {/* 3. LIST ALL VIEW (Full Chronological List of All Passes) */}
+                          {gatePassViewMode === "list" && (
+                            <div className="space-y-3">
+                              <div className="flex items-center justify-between px-1">
+                                <p className="text-xs font-bold text-slate-600">
+                                  Showing all {studentGatePasses.length} gate passes recorded for this student.
+                                </p>
+                                <button
+                                  type="button"
+                                  onClick={() => setGatePassViewMode("calendar")}
+                                  className="text-xs font-bold text-indigo-600 hover:text-indigo-800 hover:underline cursor-pointer"
+                                >
+                                  ← Switch back to Month Calendar
+                                </button>
+                              </div>
+                              {studentGatePasses.map((pass: any, idx: number) => renderPassCard(pass, idx))}
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })()}
                   </>
                 )}
               </div>
