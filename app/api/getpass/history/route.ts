@@ -32,18 +32,20 @@ export async function GET(request: NextRequest) {
 
         const filters: any = {};
 
-        if (studentId || firebaseUID) {
+        if (studentId || registrationId || erpId || firebaseUID) {
             const student = await db.students.findOne({
                 ...(studentId ? { _id: studentId } : {}),
+                ...(registrationId ? { registrationId } : {}),
+                ...(erpId ? { erpInformation: erpId } : {}),
                 ...(firebaseUID ? { firebaseUID } : {})
             }, { minimal: true });
 
             if (student) {
                 filters.studentId = (student._id || student.id || studentId)?.toString();
-                if (student.firebaseUID) filters.firebaseUID = student.firebaseUID;
+                filters.registrationId = student.registrationId || registrationId;
             } else {
                 if (studentId) filters.studentId = studentId;
-                if (firebaseUID) filters.firebaseUID = firebaseUID;
+                if (registrationId) filters.registrationId = registrationId;
             }
         }
 

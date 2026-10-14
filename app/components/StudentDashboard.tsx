@@ -396,8 +396,8 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
     const fetchStudentHistoryData = useCallback(async () => {
         if (!studentProfile) return;
         const studentId = studentProfile._id || (studentProfile as any).id;
-        const firebaseUID = studentProfile.firebaseUID || (studentProfile as any).firebaseUid;
         const regId = studentProfile.registrationId;
+        const studentEmail = studentProfile.email;
 
         // Only display skeleton loader if no records are in memory yet
         setStudentPermissionsList(prev => {
@@ -413,16 +413,16 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
         try {
             const gpQuery = new URLSearchParams();
             if (studentId) gpQuery.set("studentId", String(studentId));
-            if (firebaseUID) gpQuery.set("firebaseUID", firebaseUID);
             if (regId) gpQuery.set("registrationId", regId);
-            gpQuery.set("limit", "200");
+            if (studentEmail) gpQuery.set("email", studentEmail);
+            gpQuery.set("limit", "500");
             gpQuery.set("populate", "true");
 
             const permQuery = new URLSearchParams();
             if (studentId) permQuery.set("studentId", String(studentId));
-            if (firebaseUID) permQuery.set("firebaseUID", firebaseUID);
             if (regId) permQuery.set("registrationId", regId);
-            permQuery.set("limit", "200");
+            if (studentEmail) permQuery.set("email", studentEmail);
+            permQuery.set("limit", "500");
 
             const [gpRes, permRes] = await Promise.allSettled([
                 fetch(`/api/getpass/history?${gpQuery.toString()}${getTenantParam(false)}`).then(r => (r.ok ? r.json() : null)),
@@ -471,76 +471,151 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
             });
             setStudentPermissionsList(sortedPermsList);
 
-            // 2. HOME-LEAVE RECORDS (Tab 2)
-            const homeLeavePerms = sortedPermsList.filter((p: any) => {
+            // 2. HOME-LEAVE RECORDS (Tab 2) - 1-to-1 Mapping between Permissions and Gate Movements
+            const leavePerms = sortedPermsList.filter((p: any) => {
                 const rType = String(p.requestType || '').toLowerCase();
-                return rType === 'leave' || rType === 'home-leave' || rType === 'home' || rType === 'home_leave';
-            }).map((p: any) => ({
-                source: 'permission' as const,
-                id: p.id || p._id,
-                fromDateTime: p.fromDateTime,
-                toDateTime: p.toDateTime,
-                reason: p.reason || 'Home Leave',
-                status: p.status,
-                wardenStatus: p.wardenStatus,
-                deanStatus: p.deanStatus,
-                parentStatus: p.parentStatus,
-                parentConsentUrl: p.parentConsentUrl || p.consentVideoUrl || p.videoUrl || p.parentVideoUrl,
-                createdAt: p.createdAt,
-                type: 'leave',
-                requestType: p.requestType || 'leave'
-            }));
+                return rType === 'leave' || rType === 'home-leave' || rType === 'home' || rType === 'home_leave' || rType === 'hleave';
+            });
 
-            const homeLeavePasses = gpRecords.filter((gp: any) => {
+            const leavePasses = gpRecords.filter((gp: any) => {
                 const pType = String(gp.type || '').toLowerCase();
                 return pType === 'leave' || pType === 'home-leave' || pType === 'home' || pType === 'hleave' || pType === 'home_leave';
-            }).map((gp: any) => ({
-                source: 'gate_pass' as const,
-                id: gp.id || gp._id,
-                fromDateTime: gp.checkOutTime || gp.createdAt,
-                toDateTime: gp.checkInTime || gp.expectedReturnDate,
-                checkOutIstDate: gp.checkOutIstDate,
-                checkOutIstTime: gp.checkOutIstTime,
-                checkInIstDate: gp.checkInIstDate,
-                checkInIstTime: gp.checkInIstTime,
-                checkOutTime: gp.checkOutTime,
-                checkInTime: gp.checkInTime,
-                reason: gp.reason || 'Home Leave Movement',
-                destination: gp.destination,
-                status: gp.status,
-                gateName: gp.gateName || 'Main Gate',
-                durationMinutes: gp.durationMinutes,
-                parentConsentUrl: gp.parentConsentUrl,
-                createdAt: gp.createdAt,
-                type: 'leave'
-            }));
+            });
 
-            const combinedHomeLeaves = [...homeLeavePerms, ...homeLeavePasses].sort((a, b) => {
+            const matchedGpIdSet = new Set<string>();
+            const combinedHomeLeaves: any[] = [];
+
+            // Pass 1: Match each official permission with its corresponding gate pass (via permissionId or time alignment)
+            leavePerms.forEach((p: any) => {
+                const pIdStr = String(p.id || p._id);
+                const matchingGp = leavePasses.find((gp: any) => {
+                    const gpId = String(gp.id || gp._id);
+                    if (matchedGpIdSet.has(gpId)) return false;
+                    const gpPermId = gp.permissionId || gp.permission_id;
+                    if (gpPermId && (String(gpPermId) === pIdStr)) return true;
+                    return false;
+                }) || leavePasses.find((gp: any) => {
+                    const gpId = String(gp.id || gp._id);
+                    if (matchedGpIdSet.has(gpId)) return false;
+                    const gpPermId = gp.permissionId || gp.permission_id;
+                    if (gpPermId) return false;
+                    const pStart = new Date(p.fromDateTime).getTime();
+                    const gpOut = new Date(gp.checkOutTime || gp.createdAt).getTime();
+                    if (pStart > 0 && gpOut > 0) {
+                        return Math.abs(gpOut - pStart) <= 24 * 60 * 60 * 1000;
+                    }
+                    return false;
+                });
+
+                if (matchingGp) {
+                    matchedGpIdSet.add(String(matchingGp.id || matchingGp._id));
+                    combinedHomeLeaves.push({
+                        source: 'merged' as const,
+                        id: pIdStr,
+                        permissionId: pIdStr,
+                        gatePassId: matchingGp.id || matchingGp._id,
+                        fromDateTime: matchingGp.checkOutTime || p.fromDateTime,
+                        toDateTime: matchingGp.checkInTime || p.toDateTime,
+                        approvedFromDateTime: p.fromDateTime,
+                        approvedToDateTime: p.toDateTime,
+                        checkOutIstDate: matchingGp.checkOutIstDate,
+                        checkOutIstTime: matchingGp.checkOutIstTime,
+                        checkInIstDate: matchingGp.checkInIstDate,
+                        checkInIstTime: matchingGp.checkInIstTime,
+                        checkOutTime: matchingGp.checkOutTime,
+                        checkInTime: matchingGp.checkInTime,
+                        reason: p.reason || matchingGp.reason || 'Home Leave',
+                        destination: matchingGp.destination || p.destination,
+                        status: matchingGp.status === 'out' ? 'out' : (matchingGp.checkInTime ? 'completed' : (p.status || 'approved')),
+                        wardenStatus: p.wardenStatus,
+                        deanStatus: p.deanStatus,
+                        parentStatus: p.parentStatus,
+                        parentConsentUrl: p.parentConsentUrl || p.consentVideoUrl || p.videoUrl || p.parentVideoUrl || matchingGp.parentConsentUrl,
+                        gateName: matchingGp.gateName || 'Main Gate',
+                        durationMinutes: matchingGp.durationMinutes,
+                        hasGateMovement: true,
+                        createdAt: p.createdAt || matchingGp.createdAt,
+                        type: 'leave',
+                        requestType: p.requestType || 'leave',
+                        rawPermission: p,
+                        rawGatePass: matchingGp
+                    });
+                } else {
+                    combinedHomeLeaves.push({
+                        source: 'permission' as const,
+                        id: pIdStr,
+                        permissionId: pIdStr,
+                        gatePassId: null,
+                        fromDateTime: p.fromDateTime,
+                        toDateTime: p.toDateTime,
+                        approvedFromDateTime: p.fromDateTime,
+                        approvedToDateTime: p.toDateTime,
+                        checkOutIstDate: null,
+                        checkOutIstTime: null,
+                        checkInIstDate: null,
+                        checkInIstTime: null,
+                        checkOutTime: null,
+                        checkInTime: null,
+                        reason: p.reason || 'Home Leave',
+                        destination: p.destination,
+                        status: p.status,
+                        wardenStatus: p.wardenStatus,
+                        deanStatus: p.deanStatus,
+                        parentStatus: p.parentStatus,
+                        parentConsentUrl: p.parentConsentUrl || p.consentVideoUrl || p.videoUrl || p.parentVideoUrl,
+                        gateName: 'Not Checked Out Yet',
+                        durationMinutes: null,
+                        hasGateMovement: false,
+                        createdAt: p.createdAt,
+                        type: 'leave',
+                        requestType: p.requestType || 'leave',
+                        rawPermission: p
+                    });
+                }
+            });
+
+            // Pass 2: Any gate passes with type 'leave' that had no matching permission
+            leavePasses.forEach((gp: any) => {
+                const gpId = String(gp.id || gp._id);
+                if (!matchedGpIdSet.has(gpId)) {
+                    combinedHomeLeaves.push({
+                        source: 'gate_pass' as const,
+                        id: gpId,
+                        permissionId: gp.permissionId || gp.permission_id || null,
+                        gatePassId: gpId,
+                        fromDateTime: gp.checkOutTime || gp.createdAt,
+                        toDateTime: gp.checkInTime || gp.expectedReturnDate,
+                        checkOutIstDate: gp.checkOutIstDate,
+                        checkOutIstTime: gp.checkOutIstTime,
+                        checkInIstDate: gp.checkInIstDate,
+                        checkInIstTime: gp.checkInIstTime,
+                        checkOutTime: gp.checkOutTime,
+                        checkInTime: gp.checkInTime,
+                        reason: gp.reason || 'Home Leave Movement',
+                        destination: gp.destination,
+                        status: gp.status,
+                        wardenStatus: null,
+                        deanStatus: null,
+                        parentStatus: null,
+                        parentConsentUrl: gp.parentConsentUrl,
+                        gateName: gp.gateName || 'Main Gate',
+                        durationMinutes: gp.durationMinutes,
+                        hasGateMovement: true,
+                        createdAt: gp.createdAt,
+                        type: 'leave',
+                        rawGatePass: gp
+                    });
+                }
+            });
+
+            combinedHomeLeaves.sort((a, b) => {
                 const dateA = new Date(a.fromDateTime || a.createdAt || 0).getTime();
                 const dateB = new Date(b.fromDateTime || b.createdAt || 0).getTime();
                 return dateB - dateA;
             });
             setStudentHomeLeaves(combinedHomeLeaves);
 
-            // 3. GATE-PASS RECORDS (Tab 3)
-            const outingPerms = sortedPermsList.filter((p: any) => {
-                const rType = String(p.requestType || '').toLowerCase();
-                return rType === 'outing' || rType === 'gatepass' || rType === 'gate-pass';
-            }).map((p: any) => ({
-                source: 'permission' as const,
-                id: p.id || p._id,
-                fromDateTime: p.fromDateTime,
-                toDateTime: p.toDateTime,
-                reason: p.reason || 'Day Outing Permission',
-                status: p.status,
-                wardenStatus: p.wardenStatus,
-                deanStatus: p.deanStatus,
-                parentConsentUrl: p.parentConsentUrl || p.consentVideoUrl || p.videoUrl || p.parentVideoUrl,
-                createdAt: p.createdAt,
-                type: 'outing',
-                requestType: p.requestType || 'outing'
-            }));
-
+            // 3. GATE-PASS RECORDS (Tab 3) - All Campus Outings & Gate Movements
             const outingPasses = gpRecords.filter((gp: any) => {
                 const pType = String(gp.type || '').toLowerCase();
                 return !(pType === 'leave' || pType === 'home-leave' || pType === 'home' || pType === 'hleave' || pType === 'home_leave');
@@ -562,7 +637,30 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
                 durationMinutes: gp.durationMinutes,
                 qrTokenUsedOut: gp.qrTokenUsedOut,
                 createdAt: gp.createdAt,
-                type: 'outing'
+                type: 'outing',
+                rawGatePass: gp
+            }));
+
+            const outingPerms = sortedPermsList.filter((p: any) => {
+                const rType = String(p.requestType || '').toLowerCase();
+                return rType === 'outing' || rType === 'gatepass' || rType === 'gate-pass';
+            }).filter((p: any) => {
+                const pIdStr = String(p.id || p._id);
+                return !outingPasses.some((gp: any) => String(gp.permissionId || gp.permission_id) === pIdStr);
+            }).map((p: any) => ({
+                source: 'permission' as const,
+                id: p.id || p._id,
+                fromDateTime: p.fromDateTime,
+                toDateTime: p.toDateTime,
+                reason: p.reason || 'Day Outing Permission',
+                status: p.status,
+                wardenStatus: p.wardenStatus,
+                deanStatus: p.deanStatus,
+                parentConsentUrl: p.parentConsentUrl || p.consentVideoUrl || p.videoUrl || p.parentVideoUrl,
+                createdAt: p.createdAt,
+                type: 'outing',
+                requestType: p.requestType || 'outing',
+                rawPermission: p
             }));
 
             const combinedGatePasses = [...outingPasses, ...outingPerms].sort((a: any, b: any) => {
@@ -576,7 +674,7 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
         } finally {
             setIsLoadingStudentHistory(false);
         }
-    }, [studentProfile?._id, (studentProfile as any)?.id, studentProfile?.firebaseUID, studentProfile?.registrationId, permissions]);
+    }, [studentProfile?._id, (studentProfile as any)?.id, studentProfile?.registrationId, studentProfile?.email, permissions]);
 
     // Outing Calendar Helpers and Fetch Logic
     const monthNames = [
@@ -586,10 +684,11 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
 
     const fetchGatePassHistory = async (isFullHistory = false) => {
         const studentId = studentProfile?._id || (studentProfile as any)?.id;
-        const firebaseUID = studentProfile?.firebaseUID || (studentProfile as any)?.firebaseUid;
-        if (!studentId && !firebaseUID) return;
+        const regId = studentProfile?.registrationId;
+        const studentEmail = studentProfile?.email;
+        if (!studentId && !regId) return;
 
-        const cacheKey = `cached_gatepasses_${studentId || firebaseUID}`;
+        const cacheKey = `cached_gatepasses_${studentId || regId}`;
 
         // ⚡ INSTANT 0ms LOAD FROM LOCAL CACHE
         try {
@@ -610,7 +709,8 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
             const limit = 1000;
             const queryParams = new URLSearchParams();
             if (studentId) queryParams.set("studentId", String(studentId));
-            if (firebaseUID) queryParams.set("firebaseUID", String(firebaseUID));
+            if (regId) queryParams.set("registrationId", regId);
+            if (studentEmail) queryParams.set("email", studentEmail);
             queryParams.set("limit", String(limit));
             queryParams.set("populate", "false");
 
@@ -634,11 +734,11 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
     };
 
     useEffect(() => {
-        if (studentProfile?._id || (studentProfile as any)?.id || studentProfile?.firebaseUID) {
+        if (studentProfile?._id || (studentProfile as any)?.id || studentProfile?.registrationId) {
             fetchGatePassHistory(Boolean(showPermissionsHistory));
             fetchStudentHistoryData();
         }
-    }, [showPermissionsHistory, studentProfile?._id, (studentProfile as any)?.id, studentProfile?.firebaseUID, fetchStudentHistoryData]);
+    }, [showPermissionsHistory, studentProfile?._id, (studentProfile as any)?.id, studentProfile?.registrationId, fetchStudentHistoryData]);
 
     const parseGatePassTime = (timeVal: any, dateVal?: any): Date | null => {
         if (!timeVal && !dateVal) return null;

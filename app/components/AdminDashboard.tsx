@@ -1633,21 +1633,21 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
     setIsLoadingStudentHistory(true);
     try {
       const studentId = student.id || (student as any)._id;
-      const firebaseUID = student.firebaseUID;
       const regId = student.registrationId;
+      const studentEmail = student.email;
 
       const gpQuery = new URLSearchParams();
       if (studentId) gpQuery.set("studentId", String(studentId));
-      if (firebaseUID) gpQuery.set("firebaseUID", firebaseUID);
       if (regId) gpQuery.set("registrationId", regId);
-      gpQuery.set("limit", "200");
+      if (studentEmail) gpQuery.set("email", studentEmail);
+      gpQuery.set("limit", "500");
       gpQuery.set("populate", "true");
 
       const permQuery = new URLSearchParams();
       if (studentId) permQuery.set("studentId", String(studentId));
-      if (firebaseUID) permQuery.set("firebaseUID", firebaseUID);
       if (regId) permQuery.set("registrationId", regId);
-      permQuery.set("limit", "200");
+      if (studentEmail) permQuery.set("email", studentEmail);
+      permQuery.set("limit", "500");
 
       const [gpRes, permRes] = await Promise.allSettled([
         fetch(`/api/getpass/history?${gpQuery.toString()}`).then(r => (r.ok ? r.json() : null)),
@@ -1667,10 +1667,10 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
         const pSid = typeof p.studentId === 'object' ? (p.studentId?._id || p.studentId?.id) : p.studentId;
         const sId = student.id || (student as any)._id;
         if (pSid && sId && pSid.toString() === sId.toString()) return true;
-        if (p.firebaseUID && student.firebaseUID && p.firebaseUID === student.firebaseUID) return true;
-        if (p.studentId?.firebaseUID && student.firebaseUID && p.studentId.firebaseUID === student.firebaseUID) return true;
         if (p.registrationId && student.registrationId && p.registrationId.toUpperCase() === student.registrationId.toUpperCase()) return true;
         if (p.studentId?.registrationId && student.registrationId && p.studentId.registrationId.toUpperCase() === student.registrationId.toUpperCase()) return true;
+        if (p.email && student.email && p.email.toLowerCase() === student.email.toLowerCase()) return true;
+        if (p.studentId?.email && student.email && p.studentId.email.toLowerCase() === student.email.toLowerCase()) return true;
         if (p.name && student.name && p.name.trim().toLowerCase() === student.name.trim().toLowerCase()) return true;
         if (p.studentId?.name && student.name && p.studentId.name.trim().toLowerCase() === student.name.trim().toLowerCase()) return true;
         return false;
@@ -1709,75 +1709,151 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
         return dateB - dateA;
       });
 
-      // 2. HOME-LEAVE RECORDS (Tab 2)
-      const homeLeavePerms = sortedPermsList.filter((p: any) => {
+      // 2. HOME-LEAVE RECORDS (Tab 2) - 1-to-1 Mapping between Permissions and Gate Movements
+      const leavePerms = sortedPermsList.filter((p: any) => {
         const rType = String(p.requestType || '').toLowerCase();
-        return rType === 'leave' || rType === 'home-leave' || rType === 'home' || rType === 'home_leave';
-      }).map((p: any) => ({
-        source: 'permission' as const,
-        id: p.id || p._id,
-        fromDateTime: p.fromDateTime,
-        toDateTime: p.toDateTime,
-        reason: p.reason || 'Home Leave',
-        status: p.status,
-        wardenStatus: p.wardenStatus,
-        deanStatus: p.deanStatus,
-        parentStatus: p.parentStatus,
-        parentConsentUrl: p.parentConsentUrl || p.consentVideoUrl || p.videoUrl || p.parentVideoUrl,
-        createdAt: p.createdAt,
-        type: 'leave',
-        requestType: p.requestType || 'leave'
-      }));
+        return rType === 'leave' || rType === 'home-leave' || rType === 'home' || rType === 'home_leave' || rType === 'hleave';
+      });
 
-      const homeLeavePasses = gpRecords.filter((gp: any) => {
+      const leavePasses = gpRecords.filter((gp: any) => {
         const pType = String(gp.type || '').toLowerCase();
         return pType === 'leave' || pType === 'home-leave' || pType === 'home' || pType === 'hleave' || pType === 'home_leave';
-      }).map((gp: any) => ({
-        source: 'gate_pass' as const,
-        id: gp.id || gp._id,
-        fromDateTime: gp.checkOutTime || gp.createdAt,
-        toDateTime: gp.checkInTime || gp.expectedReturnDate,
-        checkOutIstDate: gp.checkOutIstDate,
-        checkOutIstTime: gp.checkOutIstTime,
-        checkInIstDate: gp.checkInIstDate,
-        checkInIstTime: gp.checkInIstTime,
-        checkOutTime: gp.checkOutTime,
-        checkInTime: gp.checkInTime,
-        reason: gp.reason || 'Home Leave Movement',
-        destination: gp.destination,
-        status: gp.status,
-        gateName: gp.gateName || 'Main Gate',
-        durationMinutes: gp.durationMinutes,
-        parentConsentUrl: gp.parentConsentUrl,
-        createdAt: gp.createdAt,
-        type: 'leave'
-      }));
+      });
 
-      const combinedHomeLeaves = [...homeLeavePerms, ...homeLeavePasses].sort((a, b) => {
+      const matchedGpIdSet = new Set<string>();
+      const combinedHomeLeaves: any[] = [];
+
+      // Pass 1: Match each official permission with its corresponding gate pass (via permissionId or time alignment)
+      leavePerms.forEach((p: any) => {
+        const pIdStr = String(p.id || p._id);
+        const matchingGp = leavePasses.find((gp: any) => {
+          const gpId = String(gp.id || gp._id);
+          if (matchedGpIdSet.has(gpId)) return false;
+          const gpPermId = gp.permissionId || gp.permission_id;
+          if (gpPermId && (String(gpPermId) === pIdStr)) return true;
+          return false;
+        }) || leavePasses.find((gp: any) => {
+          const gpId = String(gp.id || gp._id);
+          if (matchedGpIdSet.has(gpId)) return false;
+          const gpPermId = gp.permissionId || gp.permission_id;
+          if (gpPermId) return false;
+          const pStart = new Date(p.fromDateTime).getTime();
+          const gpOut = new Date(gp.checkOutTime || gp.createdAt).getTime();
+          if (pStart > 0 && gpOut > 0) {
+            return Math.abs(gpOut - pStart) <= 24 * 60 * 60 * 1000;
+          }
+          return false;
+        });
+
+        if (matchingGp) {
+          matchedGpIdSet.add(String(matchingGp.id || matchingGp._id));
+          combinedHomeLeaves.push({
+            source: 'merged' as const,
+            id: pIdStr,
+            permissionId: pIdStr,
+            gatePassId: matchingGp.id || matchingGp._id,
+            fromDateTime: matchingGp.checkOutTime || p.fromDateTime,
+            toDateTime: matchingGp.checkInTime || p.toDateTime,
+            approvedFromDateTime: p.fromDateTime,
+            approvedToDateTime: p.toDateTime,
+            checkOutIstDate: matchingGp.checkOutIstDate,
+            checkOutIstTime: matchingGp.checkOutIstTime,
+            checkInIstDate: matchingGp.checkInIstDate,
+            checkInIstTime: matchingGp.checkInIstTime,
+            checkOutTime: matchingGp.checkOutTime,
+            checkInTime: matchingGp.checkInTime,
+            reason: p.reason || matchingGp.reason || 'Home Leave',
+            destination: matchingGp.destination || p.destination,
+            status: matchingGp.status === 'out' ? 'out' : (matchingGp.checkInTime ? 'completed' : (p.status || 'approved')),
+            wardenStatus: p.wardenStatus,
+            deanStatus: p.deanStatus,
+            parentStatus: p.parentStatus,
+            parentConsentUrl: p.parentConsentUrl || p.consentVideoUrl || p.videoUrl || p.parentVideoUrl || matchingGp.parentConsentUrl,
+            gateName: matchingGp.gateName || 'Main Gate',
+            durationMinutes: matchingGp.durationMinutes,
+            hasGateMovement: true,
+            createdAt: p.createdAt || matchingGp.createdAt,
+            type: 'leave',
+            requestType: p.requestType || 'leave',
+            rawPermission: p,
+            rawGatePass: matchingGp
+          });
+        } else {
+          // Unmatched official permission (e.g. approved leave awaiting gate checkout)
+          combinedHomeLeaves.push({
+            source: 'permission' as const,
+            id: pIdStr,
+            permissionId: pIdStr,
+            gatePassId: null,
+            fromDateTime: p.fromDateTime,
+            toDateTime: p.toDateTime,
+            approvedFromDateTime: p.fromDateTime,
+            approvedToDateTime: p.toDateTime,
+            checkOutIstDate: null,
+            checkOutIstTime: null,
+            checkInIstDate: null,
+            checkInIstTime: null,
+            checkOutTime: null,
+            checkInTime: null,
+            reason: p.reason || 'Home Leave',
+            destination: p.destination,
+            status: p.status,
+            wardenStatus: p.wardenStatus,
+            deanStatus: p.deanStatus,
+            parentStatus: p.parentStatus,
+            parentConsentUrl: p.parentConsentUrl || p.consentVideoUrl || p.videoUrl || p.parentVideoUrl,
+            gateName: 'Not Checked Out Yet',
+            durationMinutes: null,
+            hasGateMovement: false,
+            createdAt: p.createdAt,
+            type: 'leave',
+            requestType: p.requestType || 'leave',
+            rawPermission: p
+          });
+        }
+      });
+
+      // Pass 2: Any gate passes with type 'leave' that had no matching permission
+      leavePasses.forEach((gp: any) => {
+        const gpId = String(gp.id || gp._id);
+        if (!matchedGpIdSet.has(gpId)) {
+          combinedHomeLeaves.push({
+            source: 'gate_pass' as const,
+            id: gpId,
+            permissionId: gp.permissionId || gp.permission_id || null,
+            gatePassId: gpId,
+            fromDateTime: gp.checkOutTime || gp.createdAt,
+            toDateTime: gp.checkInTime || gp.expectedReturnDate,
+            checkOutIstDate: gp.checkOutIstDate,
+            checkOutIstTime: gp.checkOutIstTime,
+            checkInIstDate: gp.checkInIstDate,
+            checkInIstTime: gp.checkInIstTime,
+            checkOutTime: gp.checkOutTime,
+            checkInTime: gp.checkInTime,
+            reason: gp.reason || 'Home Leave Movement',
+            destination: gp.destination,
+            status: gp.status,
+            wardenStatus: null,
+            deanStatus: null,
+            parentStatus: null,
+            parentConsentUrl: gp.parentConsentUrl,
+            gateName: gp.gateName || 'Main Gate',
+            durationMinutes: gp.durationMinutes,
+            hasGateMovement: true,
+            createdAt: gp.createdAt,
+            type: 'leave',
+            rawGatePass: gp
+          });
+        }
+      });
+
+      combinedHomeLeaves.sort((a, b) => {
         const dateA = new Date(a.fromDateTime || a.createdAt || 0).getTime();
         const dateB = new Date(b.fromDateTime || b.createdAt || 0).getTime();
         return dateB - dateA;
       });
 
-      // 3. GATE-PASS RECORDS (Tab 3)
-      const outingPerms = sortedPermsList.filter((p: any) => {
-        const rType = String(p.requestType || '').toLowerCase();
-        return rType === 'outing' || rType === 'gatepass' || rType === 'gate-pass';
-      }).map((p: any) => ({
-        source: 'permission' as const,
-        id: p.id || p._id,
-        fromDateTime: p.fromDateTime,
-        toDateTime: p.toDateTime,
-        reason: p.reason || 'Day Outing Permission',
-        status: p.status,
-        wardenStatus: p.wardenStatus,
-        deanStatus: p.deanStatus,
-        parentConsentUrl: p.parentConsentUrl || p.consentVideoUrl || p.videoUrl || p.parentVideoUrl,
-        createdAt: p.createdAt,
-        type: 'outing',
-        requestType: p.requestType || 'outing'
-      }));
-
+      // 3. GATE-PASS RECORDS (Tab 3) - All Campus Outings & Gate Movements
       const outingPasses = gpRecords.filter((gp: any) => {
         const pType = String(gp.type || '').toLowerCase();
         return !(pType === 'leave' || pType === 'home-leave' || pType === 'home' || pType === 'hleave' || pType === 'home_leave');
@@ -1799,7 +1875,30 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
         durationMinutes: gp.durationMinutes,
         qrTokenUsedOut: gp.qrTokenUsedOut,
         createdAt: gp.createdAt,
-        type: 'outing'
+        type: 'outing',
+        rawGatePass: gp
+      }));
+
+      const outingPerms = sortedPermsList.filter((p: any) => {
+        const rType = String(p.requestType || '').toLowerCase();
+        return rType === 'outing' || rType === 'gatepass' || rType === 'gate-pass';
+      }).filter((p: any) => {
+        const pIdStr = String(p.id || p._id);
+        return !outingPasses.some((gp: any) => String(gp.permissionId || gp.permission_id) === pIdStr);
+      }).map((p: any) => ({
+        source: 'permission' as const,
+        id: p.id || p._id,
+        fromDateTime: p.fromDateTime,
+        toDateTime: p.toDateTime,
+        reason: p.reason || 'Day Outing Permission',
+        status: p.status,
+        wardenStatus: p.wardenStatus,
+        deanStatus: p.deanStatus,
+        parentConsentUrl: p.parentConsentUrl || p.consentVideoUrl || p.videoUrl || p.parentVideoUrl,
+        createdAt: p.createdAt,
+        type: 'outing',
+        requestType: p.requestType || 'outing',
+        rawPermission: p
       }));
 
       const combinedGatePasses = [...outingPasses, ...outingPerms].sort((a: any, b: any) => {
@@ -13789,22 +13888,23 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                         ) : (
                           studentHomeLeaves.map((item, idx) => {
                             const isGatePassOuting = item.source === 'gate_pass';
+                            const isMerged = item.source === 'merged' || (item.hasGateMovement && (item.wardenStatus || item.deanStatus));
                             const isCurrentlyOut = item.status === 'out';
                             const isAllowed = item.status === 'allowed' || item.status === 'approved' || item.deanStatus === 'allowed' || item.deanStatus === 'approved';
                             const isRejected = item.status === 'rejected' || item.deanStatus === 'rejected' || item.wardenStatus === 'rejected';
                             const isCancelled = item.status === 'cancelled';
                             const isLeaveExpired = item.toDateTime ? (new Date(item.toDateTime).getTime() < Date.now()) : false;
-                            const isExpired = item.status === 'expired' || (!isAllowed && !isCancelled && !isRejected && isLeaveExpired);
-                            const isPending = !isAllowed && !isRejected && !isCancelled && !isExpired;
+                            const isExpired = item.status === 'expired' || (!isAllowed && !isCancelled && !isRejected && isLeaveExpired && !item.hasGateMovement);
+                            const isPending = !isAllowed && !isRejected && !isCancelled && !isExpired && !item.hasGateMovement;
 
                             // Robust Date Resolution
-                            const fromRawDate = item.checkOutTime || item.fromDateTime || item.createdAt;
-                            const toRawDate = item.checkInTime || item.toDateTime;
+                            const fromRawDate = item.checkOutTime || item.fromDateTime || item.approvedFromDateTime || item.createdAt;
+                            const toRawDate = item.checkInTime || item.toDateTime || item.approvedToDateTime;
                             
                             const formattedOutDate = item.checkOutIstDate || (fromRawDate ? formatDateDDMMYYYY(fromRawDate) : "N/A");
                             const formattedOutTime = item.checkOutIstTime || (fromRawDate ? new Date(fromRawDate).toLocaleTimeString("en-IN", { timeZone: "Asia/Kolkata", hour: "2-digit", minute: "2-digit", hour12: true }) : "");
                             
-                            const formattedInDate = item.checkInIstDate || (toRawDate ? formatDateDDMMYYYY(toRawDate) : (isCurrentlyOut ? "Pending Return" : "Completed"));
+                            const formattedInDate = item.checkInIstDate || (toRawDate ? formatDateDDMMYYYY(toRawDate) : (isCurrentlyOut ? "Pending Return" : (!item.hasGateMovement ? "Scheduled Return" : "Completed")));
                             const formattedInTime = item.checkInIstTime || (toRawDate ? new Date(toRawDate).toLocaleTimeString("en-IN", { timeZone: "Asia/Kolkata", hour: "2-digit", minute: "2-digit", hour12: true }) : "");
 
                             // Calculate Duration in Days/Hours
@@ -13835,7 +13935,7 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                                 <div className="flex flex-wrap items-center justify-between gap-1.5 mb-2">
                                   <div className="flex items-center flex-wrap gap-1.5">
                                     <span className="text-[9px] font-black uppercase tracking-wider px-2 py-0.5 rounded-md bg-blue-50 text-blue-700 border border-blue-200/60">
-                                      {isGatePassOuting ? '🚪 Gate Leave Log' : '📝 Official Leave Pass'}
+                                      {isMerged ? '📝 Official Leave • 🚪 Gate Verified' : isGatePassOuting ? '🚪 Gate Leave Log' : '📝 Official Leave Pass'}
                                     </span>
                                     <span className="text-[10px] font-bold text-slate-700 bg-slate-100 px-2 py-0.5 rounded-md border border-slate-200 flex items-center gap-1">
                                       📅 {formattedOutDate}
@@ -13868,9 +13968,13 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                                         <span className="w-1.5 h-1.5 rounded-full bg-amber-600"></span>
                                         Currently At Home
                                       </div>
-                                    ) : isAllowed ? (
+                                    ) : (isAllowed && item.hasGateMovement) ? (
                                       <div className="px-2 py-0.5 rounded-md text-[9px] font-black bg-green-100 text-green-700 border border-green-200">
-                                        Approved
+                                        Completed
+                                      </div>
+                                    ) : (isAllowed && !item.hasGateMovement) ? (
+                                      <div className="px-2 py-0.5 rounded-md text-[9px] font-black bg-emerald-100 text-emerald-800 border border-emerald-300">
+                                        Approved (Awaiting Gate Exit)
                                       </div>
                                     ) : isRejected ? (
                                       <div className="px-2 py-0.5 rounded-md text-[9px] font-black bg-red-100 text-red-700 border border-red-200">
@@ -13882,7 +13986,7 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                                       </div>
                                     ) : isExpired ? (
                                       <div className="px-2 py-0.5 rounded-md text-[9px] font-black bg-rose-50 text-rose-700 border border-rose-200">
-                                        Expired
+                                        Expired (Not Utilized)
                                       </div>
                                     ) : isPending ? (
                                       <div className="px-2 py-0.5 rounded-md text-[9px] font-black bg-yellow-100 text-yellow-800 border border-yellow-200">
@@ -13899,7 +14003,7 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                                 {/* 3-Column Time & Duration Grid */}
                                 <div className="grid grid-cols-3 gap-1.5 sm:gap-2 bg-slate-50/80 p-2 rounded-lg border border-slate-100 text-[11px] mb-2">
                                   <div>
-                                    <p className="text-[9px] font-bold text-slate-400">Leave From</p>
+                                    <p className="text-[9px] font-bold text-slate-400">{item.hasGateMovement ? "Gate Out" : "Leave From"}</p>
                                     <p className="font-extrabold text-slate-800 mt-0.5 leading-tight">
                                       {formattedOutDate}
                                     </p>
@@ -13911,10 +14015,15 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                                   </div>
 
                                   <div>
-                                    <p className="text-[9px] font-bold text-slate-400">Return (In)</p>
+                                    <p className="text-[9px] font-bold text-slate-400">{item.hasGateMovement ? "Gate In" : "Expected Return"}</p>
                                     <p className={`font-extrabold mt-0.5 leading-tight ${isCurrentlyOut ? 'text-amber-700 italic' : 'text-slate-800'}`}>
                                       {formattedInDate}
                                     </p>
+                                    {formattedInTime && formattedInDate !== "Completed" && (
+                                      <p className="text-[10px] font-semibold text-emerald-700">
+                                        {formattedInTime}
+                                      </p>
+                                    )}
                                   </div>
 
                                   <div>
@@ -13936,8 +14045,8 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                                   )}
                                 </div>
 
-                                {/* Approvals Footer (if official permission) */}
-                                {(item.wardenStatus || item.deanStatus || item.parentStatus || item.parentConsentUrl || (item as any).consentVideoUrl || (item as any).videoUrl || (item as any).parentVideoUrl || true) && (
+                                {/* Approvals Footer (if official permission or gate pass) */}
+                                {(item.wardenStatus || item.deanStatus || item.parentStatus || item.parentConsentUrl || (item as any).consentVideoUrl || (item as any).videoUrl || (item as any).parentVideoUrl || item.gateName || true) && (
                                   <div className="mt-1.5 pt-1.5 border-t border-slate-100 flex flex-wrap items-center gap-1.5 text-[9.5px] sm:text-[10px] text-slate-600 font-bold">
                                     {/* 1. Parent Consent Badge (Before Warden) */}
                                     {(item.parentConsentUrl || (item as any).consentVideoUrl || (item as any).videoUrl || (item as any).parentVideoUrl) ? (
@@ -13984,6 +14093,13 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                                         {(item.deanStatus || 'PENDING').toUpperCase()}
                                       </strong>
                                     </span>
+
+                                    {/* 4. Gate Scanned Badge */}
+                                    {item.hasGateMovement && item.gateName && (
+                                      <span className="px-2 py-0.5 rounded-md bg-indigo-50 border border-indigo-200 text-indigo-700 text-[9.5px] sm:text-[10px] font-bold inline-flex items-center gap-1">
+                                        Gate: <strong className="font-extrabold">{item.gateName}</strong>
+                                      </span>
+                                    )}
                                   </div>
                                 )}
                               </div>

@@ -1989,7 +1989,23 @@ export const db = {
 
             const whereClause: any = {};
             if (tenantId) whereClause.tenantId = tenantId;
-            if (filter.studentId) whereClause.studentId = filter.studentId;
+            const orConditions: any[] = [];
+            if (filter.studentId) {
+                orConditions.push({ studentId: filter.studentId });
+                orConditions.push({ student: { id: filter.studentId } });
+            }
+            if (filter.registrationId) {
+                orConditions.push({ registrationId: { equals: filter.registrationId, mode: 'insensitive' } });
+                orConditions.push({ student: { registrationId: { equals: filter.registrationId, mode: 'insensitive' } } });
+            }
+            if (filter.email) {
+                orConditions.push({ student: { email: { equals: filter.email, mode: 'insensitive' } } });
+            }
+            if (orConditions.length > 0) {
+                whereClause.OR = orConditions;
+            } else if (filter.firebaseUID) {
+                whereClause.firebaseUid = filter.firebaseUID;
+            }
             if (filter.status) whereClause.status = filter.status;
             if (filter.type) {
                 const rawT = String(filter.type).toLowerCase().trim();
@@ -2005,8 +2021,6 @@ export const db = {
                     whereClause.type = { equals: filter.type, mode: 'insensitive' };
                 }
             }
-            if (filter.firebaseUID) whereClause.firebaseUid = filter.firebaseUID;
-            if (filter.registrationId) whereClause.registrationId = filter.registrationId;
             if (filter.hostelName && filter.hostelName !== 'all') {
                 whereClause.hostelName = { equals: filter.hostelName, mode: 'insensitive' };
             }
@@ -2526,30 +2540,50 @@ export const db = {
             } catch (err) {}
 
             const whereClause: any = {};
+            const andConditions: any[] = [];
             if (tenantId) {
-                whereClause.student = { tenantId };
+                andConditions.push({ student: { tenantId } });
             }
 
-            if (filters.studentId) whereClause.studentId = filters.studentId;
-            if (filters.firebaseUID || filters.firebaseUid) {
-                whereClause.student = {
-                    ...(whereClause.student || {}),
-                    firebaseUid: filters.firebaseUID || filters.firebaseUid
-                };
+            const studentOrConditions: any[] = [];
+            if (filters.studentId) {
+                studentOrConditions.push({ studentId: filters.studentId });
+                studentOrConditions.push({ student: { id: filters.studentId } });
             }
             if (filters.registrationId) {
-                whereClause.student = {
-                    ...(whereClause.student || {}),
-                    registrationId: filters.registrationId
-                };
+                studentOrConditions.push({ student: { registrationId: { equals: filters.registrationId, mode: 'insensitive' } } });
+            }
+            if (filters.email) {
+                studentOrConditions.push({ student: { email: { equals: filters.email, mode: 'insensitive' } } });
+            }
+
+            if (studentOrConditions.length > 0) {
+                andConditions.push({ OR: studentOrConditions });
+            } else if (filters.firebaseUID || filters.firebaseUid) {
+                andConditions.push({
+                    student: {
+                        firebaseUid: filters.firebaseUID || filters.firebaseUid
+                    }
+                });
             }
 
             if (filters.status && filters.status !== 'all' && filters.status !== 'hidden') {
                 if (filters.status === 'allowed') {
-                    whereClause.OR = [{ status: 'allowed' }, { deanStatus: 'allowed' }];
+                    andConditions.push({
+                        OR: [
+                            { status: 'allowed' },
+                            { deanStatus: 'allowed' },
+                            { status: 'approved' },
+                            { deanStatus: 'approved' }
+                        ]
+                    });
                 } else {
-                    whereClause.status = filters.status;
+                    andConditions.push({ status: filters.status });
                 }
+            }
+
+            if (andConditions.length > 0) {
+                whereClause.AND = andConditions;
             }
 
             // Exclude artificial manual toggle records

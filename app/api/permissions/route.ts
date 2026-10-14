@@ -199,6 +199,7 @@ export async function GET(request: NextRequest) {
     const studentId = searchParams.get("studentId");
     const firebaseUID = searchParams.get("firebaseUID") || searchParams.get("firebaseUid");
     const registrationId = searchParams.get("registrationId");
+    const email = searchParams.get("email");
     const status = searchParams.get("status");
     const hostelName = searchParams.get("hostelName");
     const authorizedHostelsStr = searchParams.get("authorizedHostels");
@@ -207,11 +208,14 @@ export async function GET(request: NextRequest) {
     if (studentId) {
       filters.studentId = studentId;
     }
-    if (firebaseUID) {
-      filters.firebaseUID = firebaseUID;
-    }
     if (registrationId) {
       filters.registrationId = registrationId;
+    }
+    if (email) {
+      filters.email = email;
+    }
+    if (firebaseUID && !studentId && !registrationId && !email) {
+      filters.firebaseUID = firebaseUID;
     }
     if (status && status !== "all") {
       filters.status = status;
