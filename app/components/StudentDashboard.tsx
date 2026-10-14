@@ -7223,88 +7223,191 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
                                             </button>
                                         </div>
 
-                                        {/* 📱 MOBILE VIEW: Filtered by Selected Category Tab */}
-                                        <div className="grid grid-cols-2 gap-2 sm:hidden text-xs">
-                                            {formBuilderConfig.filter(f => {
-                                                if (!f.visible || f.type === 'image') return false;
-                                                const id = f.id.toLowerCase();
-                                                const lbl = (f.label || '').toLowerCase();
-                                                if (mobileProfileTab === 'academic') {
-                                                    if (lbl.includes('hostel') || id.includes('hostel')) return false;
-                                                    return (lbl.includes('name') && !lbl.includes('father') && !lbl.includes('mother') && !lbl.includes('guardian')) ||
-                                                        (id.includes('name') && !id.includes('father') && !id.includes('mother') && !id.includes('hostel')) ||
-                                                        lbl.includes('erp') || id.includes('erp') ||
-                                                        lbl.includes('college') || id.includes('college') ||
-                                                        lbl.includes('branch') || id.includes('branch') ||
-                                                        lbl.includes('year') || id.includes('year') ||
-                                                        lbl.includes('sem') || id.includes('sem') ||
-                                                        lbl.includes('section') || id.includes('sec');
-                                                } else if (mobileProfileTab === 'family') {
-                                                    return lbl.includes('father') || id.includes('father') ||
-                                                        lbl.includes('mother') || id.includes('mother') ||
-                                                        lbl.includes('guardian') || id.includes('guardian');
-                                                } else {
-                                                    // Personal
-                                                    const isPhone = (lbl.includes('phone') || id.includes('phone')) && !lbl.includes('father') && !lbl.includes('mother') && !lbl.includes('guardian');
-                                                    const isAddress = (lbl.includes('address') || id.includes('address') || lbl.includes('permanent') || id.includes('permanent')) && !lbl.includes('guardian') && !id.includes('guardian');
-                                                    return isPhone || isAddress ||
-                                                        lbl.includes('gender') || id.includes('gender') ||
-                                                        lbl.includes('birth') || lbl.includes('dob') || id.includes('dob') ||
-                                                        lbl.includes('category') || id.includes('category') ||
-                                                        lbl.includes('state') || id.includes('state') ||
-                                                        lbl.includes('hostel') || id.includes('hostel');
+                                        {/* 📱 MOBILE VIEW & DESKTOP VIEW */}
+                                        {(() => {
+                                            const modalDefaultFields = [
+                                                { id: "name", label: "FULL NAME", visible: true, type: "text" },
+                                                { id: "gender", label: "GENDER", visible: true, type: "text" },
+                                                { id: "phoneNumber", label: "PHONE NUMBER", visible: true, type: "tel" },
+                                                { id: "dob", label: "DATE OF BIRTH", visible: true, type: "date" },
+                                                { id: "category", label: "SOCIAL CATEGORY", visible: true, type: "text" },
+                                                { id: "registrationId", label: "ERP ID", visible: true, type: "text" },
+                                                { id: "collegeName", label: "COLLEGE NAME", visible: true, type: "text" },
+                                                { id: "branch", label: "BRANCH", visible: true, type: "text" },
+                                                { id: "year", label: "CURRENT YEAR", visible: true, type: "text" },
+                                                { id: "semester", label: "SEMESTER", visible: true, type: "text" },
+                                                { id: "section", label: "SECTION", visible: true, type: "text" },
+                                                { id: "fatherName", label: "FATHER'S NAME", visible: true, type: "text" },
+                                                { id: "fatherNumber", label: "FATHER'S PHONE NO", visible: true, type: "tel" },
+                                                { id: "motherName", label: "MOTHER'S NAME", visible: true, type: "text" },
+                                                { id: "motherNumber", label: "MOTHER'S PHONE NO", visible: true, type: "tel" },
+                                                { id: "localGuardianAddress", label: "LOCAL GUARDIAN ADDRESS", visible: true, type: "text" },
+                                                { id: "localGuardianPhoneNumber", label: "LOCAL GUARDIAN PHONE", visible: true, type: "tel" },
+                                                { id: "homeState", label: "HOME STATE", visible: true, type: "text" },
+                                                { id: "permanentAddress", label: "PERMANENT ADDRESS", visible: true, type: "text" },
+                                                { id: "hostelName", label: "HOSTEL NAME", visible: true, type: "text" },
+                                                { id: "floorNumber", label: "FLOOR NUMBER", visible: true, type: "text" },
+                                                { id: "roomNumber", label: "ROOM NUMBER", visible: true, type: "text" },
+                                                { id: "joiningDate", label: "HOSTEL JOINING DATE", visible: true, type: "date" }
+                                            ];
+
+                                            const fieldsToRenderModal = (formBuilderConfig && formBuilderConfig.length > 0)
+                                                ? formBuilderConfig.filter(f => f.visible && f.type !== 'image')
+                                                : modalDefaultFields;
+
+                                            const getFieldValueModal = (field: any) => {
+                                                let rawVal: any = "N/A";
+                                                if (studentProfile) {
+                                                    const p = studentProfile as any;
+                                                    if (p[field.id] !== undefined && p[field.id] !== null && p[field.id] !== "") {
+                                                        rawVal = p[field.id];
+                                                    } else if (p.dynamicFields && p.dynamicFields[field.id] !== undefined && p.dynamicFields[field.id] !== null && p.dynamicFields[field.id] !== "") {
+                                                        rawVal = p.dynamicFields[field.id];
+                                                    } else {
+                                                        const lowerId = field.id.toLowerCase();
+                                                        if (lowerId.includes("name") && !lowerId.includes("father") && !lowerId.includes("mother") && !lowerId.includes("college")) {
+                                                            rawVal = p.name || p.fullName || "N/A";
+                                                        } else if (lowerId === "gender") {
+                                                            rawVal = p.gender || "N/A";
+                                                        } else if (lowerId.includes("phone") && !lowerId.includes("father") && !lowerId.includes("mother") && !lowerId.includes("guardian")) {
+                                                            rawVal = p.phoneNumber || p.phone || p.studentPhone || p.mobile || "N/A";
+                                                        } else if (lowerId.includes("dob") || lowerId.includes("birth")) {
+                                                            rawVal = p.dob || p.dateOfBirth || "N/A";
+                                                        } else if (lowerId.includes("category")) {
+                                                            rawVal = p.category || p.socialCategory || "N/A";
+                                                        } else if (lowerId.includes("reg") || lowerId.includes("erp")) {
+                                                            rawVal = p.registrationId || p.erpId || p.erpInformation || "N/A";
+                                                        } else if (lowerId.includes("college")) {
+                                                            rawVal = p.collegeName || "N/A";
+                                                        } else if (lowerId === "branch") {
+                                                            rawVal = p.branch || "N/A";
+                                                        } else if (lowerId.includes("year")) {
+                                                            rawVal = p.year || p.currentYear || "N/A";
+                                                        } else if (lowerId.includes("sem")) {
+                                                            rawVal = p.semester || p.sem || "N/A";
+                                                        } else if (lowerId === "section") {
+                                                            rawVal = p.section || "N/A";
+                                                        } else if (lowerId.includes("fathername") || lowerId.includes("father'sname")) {
+                                                            rawVal = p.fatherName || "N/A";
+                                                        } else if (lowerId.includes("fathernumber") || lowerId.includes("fatherphone") || lowerId.includes("parentphone") || lowerId.includes("father'sphone")) {
+                                                            rawVal = p.fatherNumber || p.parentPhone || p.fatherPhone || p.fatherMobile || "N/A";
+                                                        } else if (lowerId.includes("mothername") || lowerId.includes("mother'sname")) {
+                                                            rawVal = p.motherName || "N/A";
+                                                        } else if (lowerId.includes("mothernumber") || lowerId.includes("motherphone") || lowerId.includes("mother'sphone")) {
+                                                            rawVal = p.motherNumber || p.motherPhone || p.motherMobile || "N/A";
+                                                        } else if (lowerId.includes("localguardianaddress")) {
+                                                            rawVal = p.localGuardianAddress || "N/A";
+                                                        } else if (lowerId.includes("localguardianphone") || lowerId.includes("guardianphone")) {
+                                                            rawVal = p.localGuardianPhoneNumber || p.localGuardianPhone || "N/A";
+                                                        } else if (lowerId.includes("homestate") || lowerId.includes("state")) {
+                                                            rawVal = p.homeState || "N/A";
+                                                        } else if (lowerId.includes("permanentaddress") || lowerId === "address") {
+                                                            rawVal = p.permanentAddress || p.address || "N/A";
+                                                        } else if (lowerId.includes("hostelname")) {
+                                                            rawVal = p.hostelName || "N/A";
+                                                        } else if (lowerId.includes("floor")) {
+                                                            rawVal = p.floorNumber || "N/A";
+                                                        } else if (lowerId.includes("room")) {
+                                                            rawVal = p.roomNumber || "N/A";
+                                                        } else if (lowerId.includes("joining") || lowerId.includes("hosteljoiningdate")) {
+                                                            rawVal = p.joiningDate || "N/A";
+                                                        }
+                                                    }
                                                 }
-                                            }).sort((a, b) => {
-                                                const lblA = (a.label || '').toLowerCase();
-                                                const lblB = (b.label || '').toLowerCase();
-                                                const aIsAddress = lblA.includes('address') || lblA.includes('permanent') || a.id.toLowerCase().includes('address') || a.id.toLowerCase().includes('permanent');
-                                                const bIsAddress = lblB.includes('address') || lblB.includes('permanent') || b.id.toLowerCase().includes('address') || b.id.toLowerCase().includes('permanent');
-                                                if (aIsAddress && !bIsAddress) return 1;
-                                                if (!aIsAddress && bIsAddress) return -1;
-                                                return 0;
-                                            }).map((field) => {
-                                                const value = (studentProfile as any)[field.id] || studentProfile.dynamicFields?.[field.id] || "N/A";
-                                                const displayValue = (field.type === 'date' || field.id === 'joiningDate') ? formatDate(value) : value;
-                                                const isLongField = field.id.toLowerCase().includes('address') || String(displayValue).length > 25;
-                                                const isPhoneModal = (field.type === 'tel' || field.id.toLowerCase().includes('phone') || field.id.toLowerCase().includes('mobile') || (field.id.toLowerCase().includes('number') && (field.id.toLowerCase().includes('father') || field.id.toLowerCase().includes('mother') || field.id.toLowerCase().includes('guardian') || field.id.toLowerCase().includes('parent') || field.id.toLowerCase().includes('contact')))) && !field.id.toLowerCase().includes('room') && !field.id.toLowerCase().includes('floor') && !field.id.toLowerCase().includes('erp') && !field.id.toLowerCase().includes('reg') && value !== "N/A";
-                                                const fieldIconModal = field.id.toLowerCase().includes('floor') ? '🏢 ' : field.id.toLowerCase().includes('hostel') ? '🏬 ' : field.id.toLowerCase().includes('state') ? '🗺️ ' : (field.id.toLowerCase().includes('birth') || field.id.toLowerCase().includes('dob')) ? '🎂 ' : field.id.toLowerCase().includes('category') ? '🏷️ ' : (field.id.toLowerCase().includes('joining') || field.id.toLowerCase().includes('date')) ? '🗓️ ' : field.id.toLowerCase().includes('gender') ? '👤 ' : '';
+                                                const value = (rawVal === undefined || rawVal === null || rawVal === "") ? "N/A" : (typeof rawVal === 'object' ? JSON.stringify(rawVal) : String(rawVal));
+                                                const displayValue = (field.type === 'date' || field.id === 'joiningDate' || field.id === 'dob') ? formatDate(value) : value;
+                                                return { value, displayValue };
+                                            };
 
-                                                return (
-                                                    <div 
-                                                        key={field.id} 
-                                                        className={`flex flex-col bg-slate-50/80 border border-slate-100 p-2 rounded-lg ${isLongField ? 'col-span-2 bg-amber-50/30 border-amber-100' : ''}`}
-                                                    >
-                                                        <p className="text-[9px] font-bold text-slate-400 uppercase tracking-wider mb-0.5">{field.label}</p>
-                                                        {isPhoneModal ? (
-                                                            <a href={`tel:${value}`} className="text-blue-600 font-black break-words text-[11px] leading-relaxed flex items-center gap-1">
-                                                                <span>📞</span> {displayValue}
-                                                            </a>
-                                                        ) : (
-                                                            <p className="text-slate-800 font-extrabold break-words text-[11px] leading-relaxed">{displayValue}</p>
-                                                        )}
+                                            return (
+                                                <>
+                                                    {/* 📱 MOBILE VIEW: Filtered by Selected Category Tab */}
+                                                    <div className="grid grid-cols-2 gap-2 sm:hidden text-xs">
+                                                        {fieldsToRenderModal.filter(f => {
+                                                            const id = f.id.toLowerCase();
+                                                            const lbl = (f.label || '').toLowerCase();
+                                                            if (mobileProfileTab === 'academic') {
+                                                                if (lbl.includes('hostel') || id.includes('hostel')) return false;
+                                                                return (lbl.includes('name') && !lbl.includes('father') && !lbl.includes('mother') && !lbl.includes('guardian')) ||
+                                                                    (id.includes('name') && !id.includes('father') && !id.includes('mother') && !id.includes('hostel')) ||
+                                                                    lbl.includes('erp') || id.includes('erp') || id.includes('reg') ||
+                                                                    lbl.includes('college') || id.includes('college') ||
+                                                                    lbl.includes('branch') || id.includes('branch') ||
+                                                                    lbl.includes('year') || id.includes('year') ||
+                                                                    lbl.includes('sem') || id.includes('sem') ||
+                                                                    lbl.includes('section') || id.includes('sec') ||
+                                                                    (lbl.includes('joining') && !lbl.includes('hostel')) || (id.includes('joining') && !id.includes('hostel'));
+                                                            } else if (mobileProfileTab === 'family') {
+                                                                return lbl.includes('father') || id.includes('father') ||
+                                                                    lbl.includes('mother') || id.includes('mother') ||
+                                                                    lbl.includes('guardian') || id.includes('guardian');
+                                                            } else {
+                                                                // Personal
+                                                                const isPhone = (lbl.includes('phone') || id.includes('phone')) && !lbl.includes('father') && !lbl.includes('mother') && !lbl.includes('guardian');
+                                                                const isAddress = (lbl.includes('address') || id.includes('address') || lbl.includes('permanent') || id.includes('permanent')) && !lbl.includes('guardian') && !id.includes('guardian');
+                                                                return isPhone || isAddress ||
+                                                                    lbl.includes('gender') || id.includes('gender') ||
+                                                                    lbl.includes('birth') || lbl.includes('dob') || id.includes('dob') ||
+                                                                    lbl.includes('category') || id.includes('category') ||
+                                                                    lbl.includes('state') || id.includes('state') ||
+                                                                    lbl.includes('hostel') || id.includes('hostel') ||
+                                                                    lbl.includes('floor') || id.includes('floor') ||
+                                                                    lbl.includes('room') || id.includes('room');
+                                                            }
+                                                        }).sort((a, b) => {
+                                                            const lblA = (a.label || '').toLowerCase();
+                                                            const lblB = (b.label || '').toLowerCase();
+                                                            const aIsAddress = lblA.includes('address') || lblA.includes('permanent') || a.id.toLowerCase().includes('address') || a.id.toLowerCase().includes('permanent');
+                                                            const bIsAddress = lblB.includes('address') || lblB.includes('permanent') || b.id.toLowerCase().includes('address') || b.id.toLowerCase().includes('permanent');
+                                                            if (aIsAddress && !bIsAddress) return 1;
+                                                            if (!aIsAddress && bIsAddress) return -1;
+                                                            return 0;
+                                                        }).map((field) => {
+                                                            const { value, displayValue } = getFieldValueModal(field);
+                                                            const lbl = (field.label || '').toLowerCase();
+                                                            const isLongField = lbl.includes('address') || lbl.includes('permanent') || field.id.toLowerCase().includes('address') || String(displayValue).length > 20;
+                                                            const isPhoneModal = (field.type === 'tel' || field.id.toLowerCase().includes('phone') || field.id.toLowerCase().includes('mobile') || (field.id.toLowerCase().includes('number') && (field.id.toLowerCase().includes('father') || field.id.toLowerCase().includes('mother') || field.id.toLowerCase().includes('guardian') || field.id.toLowerCase().includes('parent') || field.id.toLowerCase().includes('contact')))) && !field.id.toLowerCase().includes('room') && !field.id.toLowerCase().includes('floor') && !field.id.toLowerCase().includes('erp') && !field.id.toLowerCase().includes('reg') && value !== "N/A";
+                                                            const fieldIconModal = field.id.toLowerCase().includes('floor') ? '🏢 ' : field.id.toLowerCase().includes('hostel') ? '🏬 ' : field.id.toLowerCase().includes('state') ? '🗺️ ' : (field.id.toLowerCase().includes('birth') || field.id.toLowerCase().includes('dob')) ? '🎂 ' : field.id.toLowerCase().includes('category') ? '🏷️ ' : (field.id.toLowerCase().includes('joining') || field.id.toLowerCase().includes('date')) ? '🗓️ ' : field.id.toLowerCase().includes('gender') ? '👤 ' : '';
+
+                                                            return (
+                                                                <div 
+                                                                    key={field.id} 
+                                                                    className={`flex flex-col bg-slate-50/80 border border-slate-100 p-2 rounded-lg ${isLongField ? 'col-span-2 bg-amber-50/30 border-amber-100' : ''}`}
+                                                                >
+                                                                    <p className="text-[9px] font-bold text-slate-400 uppercase tracking-wider mb-0.5">{field.label}</p>
+                                                                    {isPhoneModal ? (
+                                                                        <a href={`tel:${value}`} className="text-blue-600 font-black break-words text-[11px] leading-relaxed flex items-center gap-1">
+                                                                            <span>📞</span> {displayValue}
+                                                                        </a>
+                                                                    ) : (
+                                                                        <p className="text-slate-800 font-extrabold break-words text-[11px] leading-relaxed">{fieldIconModal}{field.id === 'roomNumber' && value !== 'N/A' && !String(value).startsWith('#') ? '#' : ''}{displayValue}</p>
+                                                                    )}
+                                                                </div>
+                                                            );
+                                                        })}
                                                     </div>
-                                                );
-                                            })}
-                                        </div>
 
-                                        {/* 💻 DESKTOP/TABLET VIEW: Full 2-Column Grid */}
-                                        <div className="hidden sm:grid grid-cols-2 gap-2.5 text-xs">
-                                            {formBuilderConfig.filter(f => f.visible && f.type !== 'image').map((field) => {
-                                                const value = (studentProfile as any)[field.id] || studentProfile.dynamicFields?.[field.id] || "N/A";
-                                                const displayValue = (field.type === 'date' || field.id === 'joiningDate') ? formatDate(value) : value;
-                                                const isLongField = field.id.toLowerCase().includes('address') || String(displayValue).length > 25;
+                                                    {/* 💻 DESKTOP/TABLET VIEW: Full 2-Column Grid */}
+                                                    <div className="hidden sm:grid grid-cols-2 gap-2.5 text-xs">
+                                                        {fieldsToRenderModal.map((field) => {
+                                                            const { value, displayValue } = getFieldValueModal(field);
+                                                            const lbl = (field.label || '').toLowerCase();
+                                                            const isLongField = lbl.includes('address') || lbl.includes('permanent') || field.id.toLowerCase().includes('address') || String(displayValue).length > 25;
 
-                                                return (
-                                                    <div 
-                                                        key={field.id} 
-                                                        className={`flex flex-col bg-slate-50/80 border border-slate-100 p-2.5 rounded-lg ${isLongField ? 'col-span-2 bg-amber-50/30 border-amber-100' : ''}`}
-                                                    >
-                                                        <p className="text-[9px] font-bold text-slate-400 uppercase tracking-wider mb-0.5">{field.label}</p>
-                                                        <p className="text-slate-800 font-extrabold break-words text-xs leading-relaxed">{displayValue}</p>
+                                                            return (
+                                                                <div 
+                                                                    key={field.id} 
+                                                                    className={`flex flex-col bg-slate-50/80 border border-slate-100 p-2.5 rounded-lg ${isLongField ? 'col-span-2 bg-amber-50/30 border-amber-100' : ''}`}
+                                                                >
+                                                                    <p className="text-[9px] font-bold text-slate-400 uppercase tracking-wider mb-0.5">{field.label}</p>
+                                                                    <p className="text-slate-800 font-extrabold break-words text-xs leading-relaxed">{field.id === 'roomNumber' && value !== 'N/A' && !String(value).startsWith('#') ? '#' : ''}{displayValue}</p>
+                                                                </div>
+                                                            );
+                                                        })}
                                                     </div>
-                                                );
-                                            })}
-                                        </div>
+                                                </>
+                                            );
+                                        })()}
                                     </div>
                                 </div>
                             </div>
