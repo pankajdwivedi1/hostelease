@@ -1751,6 +1751,69 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
         return window.btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
     };
 
+    const base64ToBuffer = (base64: string): ArrayBuffer => {
+        let binary = base64.replace(/-/g, '+').replace(/_/g, '/');
+        while (binary.length % 4) {
+            binary += '=';
+        }
+        const binStr = window.atob(binary);
+        const len = binStr.length;
+        const bytes = new Uint8Array(len);
+        for (let i = 0; i < len; i++) {
+            bytes[i] = binStr.charCodeAt(i);
+        }
+        return bytes.buffer;
+    };
+
+    const performBiometricCheck = async (): Promise<boolean> => {
+        try {
+            if (typeof window === 'undefined' || !window.PublicKeyCredential || !navigator.credentials?.get) {
+                showToast("Biometric verification not supported by this browser.", "warning");
+                return false;
+            }
+
+            const challenge = new Uint8Array(32);
+            window.crypto.getRandomValues(challenge);
+
+            const hostname = typeof window !== 'undefined' ? window.location.hostname : "";
+            const isIp = /^(\d{1,3}\.){3}\d{1,3}$/.test(hostname);
+            const rpId = (hostname && !isIp && hostname !== "localhost") ? hostname : undefined;
+
+            const existingCreds = (studentProfile?.webAuthnCredentials || []).map((c: any) => {
+                try {
+                    return {
+                        id: base64ToBuffer(c.credentialID),
+                        type: 'public-key' as const,
+                        transports: ['internal'] as AuthenticatorTransport[],
+                    };
+                } catch {
+                    return null;
+                }
+            }).filter((c: any): c is { id: ArrayBuffer; type: 'public-key'; transports: AuthenticatorTransport[] } => !!c && c.id.byteLength > 0);
+
+            const getOptions: CredentialRequestOptions = {
+                publicKey: {
+                    challenge,
+                    ...(rpId ? { rpId } : {}),
+                    timeout: 60000,
+                    userVerification: "preferred",
+                    ...(existingCreds.length > 0 ? { allowCredentials: existingCreds } : {}),
+                }
+            };
+
+            const assertion = await navigator.credentials.get(getOptions);
+            return !!assertion;
+        } catch (err: any) {
+            console.error("Biometric verification error:", err);
+            if (err?.name === "NotAllowedError") {
+                showToast("Biometric verification cancelled or timed out.", "warning");
+            } else {
+                showToast("Biometric verification failed: " + (err?.message || "Unknown error"), "error");
+            }
+            return false;
+        }
+    };
+
     const handleRegisterDevice = async () => {
         if (!studentProfile) return;
 
@@ -1784,18 +1847,10 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
                 return;
             }
 
-            const hasWebAuthn = typeof window !== 'undefined' && !!window.PublicKeyCredential;
-            let isPlatformAvailable = false;
-            if (hasWebAuthn) {
-                try {
-                    isPlatformAvailable = await PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable();
-                } catch {
-                    isPlatformAvailable = false;
-                }
-            }
+            const hasWebAuthn = typeof window !== 'undefined' && !!window.PublicKeyCredential && typeof navigator.credentials?.create === 'function';
 
-            // If device doesn't support hardware biometrics (e.g. desktop without Windows Hello / Touch ID)
-            if (!hasWebAuthn || !isPlatformAvailable) {
+            // If browser has no WebAuthn support at all (e.g. older Android WebView / unsupported browser)
+            if (!hasWebAuthn) {
                 const res = await fetch(`/api/students/${targetId}${getTenantParam(true)}`, {
                     method: "PATCH",
                     headers: { "Content-Type": "application/json" },
@@ -1809,14 +1864,16 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
                     }
                     storeDeviceId(currentDeviceId);
                     setShowDeviceRegistration(false);
-                    showToast("Hardware biometric sensor not detected on this device. Linked securely via Device ID!", "info");
+                    showToast("Browser does not support biometric passkeys. Linked securely via Device ID!", "info");
                 } else {
                     showToast("Failed to link device.", "error");
                 }
                 return;
             }
 
-            // 2. Perform WebAuthn Registration for Face ID / Fingerprint
+            // 2. Perform WebAuthn Registration for Face ID / Fingerprint directly
+            // Note: We intentionally avoid blocking on isUserVerifyingPlatformAuthenticatorAvailable()
+            // because on Android (MIUI, ColorOS, etc.) it often reports false until credentials.create() is actually called!
             const challenge = new Uint8Array(32);
             window.crypto.getRandomValues(challenge);
 
@@ -1832,28 +1889,54 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
                 rpConfig.id = hostname;
             }
 
-            const credential = await navigator.credentials.create({
-                publicKey: {
-                    challenge,
-                    rp: rpConfig,
-                    user: {
-                        id: userId,
-                        name: studentProfile.email || `${studentIdStr}@hosteleaze.app`,
-                        displayName: studentProfile.name || "Student",
+            let credential: PublicKeyCredential | null = null;
+            try {
+                credential = await navigator.credentials.create({
+                    publicKey: {
+                        challenge,
+                        rp: rpConfig,
+                        user: {
+                            id: userId,
+                            name: studentProfile.email || `${studentIdStr}@hosteleaze.app`,
+                            displayName: studentProfile.name || "Student",
+                        },
+                        pubKeyCredParams: [
+                            { alg: -7, type: "public-key" },  // ES256 (standard on iOS / Android)
+                            { alg: -257, type: "public-key" }, // RS256 (standard on Windows Hello)
+                        ],
+                        authenticatorSelection: {
+                            authenticatorAttachment: "platform",
+                            userVerification: "preferred", // 'preferred' allows Android to invoke Fingerprint/Face smoothly without throwing
+                            residentKey: "preferred",
+                        },
+                        timeout: 60000,
+                        attestation: "none",
                     },
-                    pubKeyCredParams: [
-                        { alg: -7, type: "public-key" },  // ES256 (standard on iOS / Android)
-                        { alg: -257, type: "public-key" }, // RS256 (standard on Windows Hello)
-                    ],
-                    authenticatorSelection: {
-                        authenticatorAttachment: "platform",
-                        userVerification: "required",
-                        residentKey: "preferred",
-                    },
-                    timeout: 60000,
-                    attestation: "none",
-                },
-            }) as PublicKeyCredential | null;
+                }) as PublicKeyCredential | null;
+            } catch (authErr: any) {
+                // If platform authenticator is genuinely not supported on this device/browser
+                if (authErr?.name === "NotSupportedError" || authErr?.name === "ConstraintError") {
+                    console.warn("Platform biometrics not supported, falling back to Device ID:", authErr);
+                    const res = await fetch(`/api/students/${targetId}${getTenantParam(true)}`, {
+                        method: "PATCH",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({ deviceId: currentDeviceId }),
+                    });
+                    if (res.ok) {
+                        const data = await res.json();
+                        if (data.success && data.student) {
+                            setStudentProfile(data.student);
+                        }
+                        storeDeviceId(currentDeviceId);
+                        setShowDeviceRegistration(false);
+                        showToast("Biometric sensor not supported on this browser. Linked securely via Device ID!", "info");
+                    } else {
+                        showToast("Failed to link device.", "error");
+                    }
+                    return;
+                }
+                throw authErr;
+            }
 
             if (!credential) {
                 showToast("Biometric registration was cancelled.", "info");
