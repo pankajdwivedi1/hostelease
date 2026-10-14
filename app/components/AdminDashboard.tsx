@@ -13893,7 +13893,8 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                             const isAllowed = item.status === 'allowed' || item.status === 'approved' || item.deanStatus === 'allowed' || item.deanStatus === 'approved';
                             const isRejected = item.status === 'rejected' || item.deanStatus === 'rejected' || item.wardenStatus === 'rejected';
                             const isCancelled = item.status === 'cancelled';
-                            const isLeaveExpired = item.toDateTime ? (new Date(item.toDateTime).getTime() < Date.now()) : false;
+                            const leaveEndDate = item.toDateTime || item.approvedToDateTime;
+                            const isLeaveExpired = leaveEndDate ? (new Date(leaveEndDate).getTime() < Date.now()) : false;
                             const isExpired = item.status === 'expired' || (!isAllowed && !isCancelled && !isRejected && isLeaveExpired && !item.hasGateMovement);
                             const isPending = !isAllowed && !isRejected && !isCancelled && !isExpired && !item.hasGateMovement;
 
@@ -13970,11 +13971,15 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                                       </div>
                                     ) : (isAllowed && item.hasGateMovement) ? (
                                       <div className="px-2 py-0.5 rounded-md text-[9px] font-black bg-green-100 text-green-700 border border-green-200">
-                                        Completed
+                                        Approved (Used)
                                       </div>
-                                    ) : (isAllowed && !item.hasGateMovement) ? (
+                                    ) : (isAllowed && !item.hasGateMovement && !isLeaveExpired) ? (
                                       <div className="px-2 py-0.5 rounded-md text-[9px] font-black bg-emerald-100 text-emerald-800 border border-emerald-300">
                                         Approved (Awaiting Gate Exit)
+                                      </div>
+                                    ) : (isAllowed && !item.hasGateMovement && isLeaveExpired) ? (
+                                      <div className="px-2 py-0.5 rounded-md text-[9px] font-black bg-slate-100 text-slate-600 border border-slate-300">
+                                        Approved (Unused)
                                       </div>
                                     ) : isRejected ? (
                                       <div className="px-2 py-0.5 rounded-md text-[9px] font-black bg-red-100 text-red-700 border border-red-200">
