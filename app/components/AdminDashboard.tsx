@@ -13969,7 +13969,7 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                                         <span className="w-1.5 h-1.5 rounded-full bg-amber-600"></span>
                                         Currently At Home
                                       </div>
-                                    ) : (isAllowed && item.hasGateMovement) ? (
+                                    ) : (item.hasGateMovement || item.checkInTime || item.status === 'in' || item.status === 'completed') ? (
                                       <div className="px-2 py-0.5 rounded-md text-[9px] font-black bg-green-100 text-green-700 border border-green-200">
                                         Approved (Used)
                                       </div>
@@ -13998,8 +13998,8 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                                         Pending
                                       </div>
                                     ) : (
-                                      <div className="px-2 py-0.5 rounded-md text-[9px] font-black bg-slate-100 text-slate-700 border border-slate-200">
-                                        Completed
+                                      <div className="px-2 py-0.5 rounded-md text-[9px] font-black bg-green-100 text-green-700 border border-green-200">
+                                        Approved (Used)
                                       </div>
                                     )}
                                   </div>
