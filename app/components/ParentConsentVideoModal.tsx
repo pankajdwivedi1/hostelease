@@ -83,8 +83,26 @@ export default function ParentConsentVideoModal({
 
     const handleCanPlay = () => {
       setIsLoading(false);
-      video.muted = isMuted;
+      video.muted = false;
       video.volume = 1;
+
+      // ⚡ Auto-Play instantly like Facebook/TikTok/Instagram videos
+      const playPromise = video.play();
+      if (playPromise !== undefined) {
+        playPromise
+          .then(() => {
+            setIsPlaying(true);
+            setIsMuted(false);
+          })
+          .catch(() => {
+            // If browser autoplay policy requires muted initial playback, smoothly autoplay muted
+            video.muted = true;
+            setIsMuted(true);
+            video.play()
+              .then(() => setIsPlaying(true))
+              .catch(() => {});
+          });
+      }
     };
 
     const handleError = () => {
@@ -128,12 +146,22 @@ export default function ParentConsentVideoModal({
         <div className="py-3 px-3 sm:py-6 sm:px-4 flex justify-center bg-gray-50 dark:bg-gray-900">
           <div className="w-full flex flex-col items-center">
             <div
-              className="relative overflow-hidden rounded-xl bg-black border border-gray-200 dark:border-gray-800 shadow-inner"
+              onClick={() => {
+                if (videoRef.current) {
+                  if (isPlaying) {
+                    videoRef.current.pause();
+                  } else {
+                    videoRef.current.play().catch(() => {});
+                  }
+                }
+              }}
+              className="relative overflow-hidden rounded-xl bg-black border border-gray-200 dark:border-gray-800 shadow-inner cursor-pointer"
               style={frameStyle}
             >
               <video
                 ref={videoRef}
                 src={url}
+                autoPlay
                 playsInline
                 preload="auto"
                 muted={isMuted}

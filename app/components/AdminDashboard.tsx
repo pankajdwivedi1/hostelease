@@ -8933,6 +8933,8 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                                           <img 
                                             src={student.profilePicture} 
                                             alt={student.name} 
+                                            loading="eager"
+                                            decoding="async"
                                             className="w-full h-full rounded-full object-cover" 
                                             onError={(e) => {
                                               e.currentTarget.style.display = 'none';
