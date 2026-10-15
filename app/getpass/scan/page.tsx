@@ -544,6 +544,21 @@ export default function StudentScannerPage() {
     const daysInMonth = new Date(viewYear, viewMonth + 1, 0).getDate();
     const todayStr = formatDateDDMMYYYY(new Date());
 
+    const yearOptions = useMemo(() => {
+        const yearsSet = new Set<number>();
+        const curY = new Date().getFullYear();
+        for (let y = curY - 2; y <= curY + 2; y++) {
+            yearsSet.add(y);
+        }
+        for (const record of outingHistory) {
+            const p = parseFlexibleDate(record.checkOutTime || record.checkOutISTDate);
+            if (p && !isNaN(p.getFullYear())) {
+                yearsSet.add(p.getFullYear());
+            }
+        }
+        return Array.from(yearsSet).sort((a, b) => a - b);
+    }, [outingHistory]);
+
     const padZero = (n: number) => String(n).padStart(2, "0");
     const getFormattedDateStr = (year: number, monthIndex: number, dayNum: number) => {
         return `${padZero(dayNum)}-${padZero(monthIndex + 1)}-${year}`;
@@ -589,7 +604,7 @@ export default function StudentScannerPage() {
                 display: "flex",
                 alignItems: "center",
                 justifyContent: "space-between",
-                padding: "16px 20px",
+                padding: "10px 16px",
                 borderBottom: "1px solid rgba(255, 255, 255, 0.08)",
                 background: "rgba(10, 15, 30, 0.9)",
                 backdropFilter: "blur(12px)",
@@ -795,7 +810,7 @@ export default function StudentScannerPage() {
 
             {/* Outing History */}
             <div style={{
-                padding: "16px 14px 40px",
+                padding: "4px 14px 28px",
                 maxWidth: "540px",
                 width: "100%",
                 margin: "0 auto",
@@ -857,7 +872,7 @@ export default function StudentScannerPage() {
                                 justifyContent: "space-between",
                                 marginBottom: "10px"
                             }}>
-                                <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                                <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
                                     <button
                                         type="button"
                                         onClick={handlePrevMonth}
@@ -880,15 +895,60 @@ export default function StudentScannerPage() {
                                         ‹
                                     </button>
 
-                                    <span style={{
-                                        fontSize: "12.5px",
-                                        fontWeight: "800",
-                                        color: "#ffffff",
-                                        letterSpacing: "0.04em",
-                                        textTransform: "uppercase"
-                                    }}>
-                                        {monthNames[viewMonth]} {viewYear}
-                                    </span>
+                                    {/* Month Picker Dropdown */}
+                                    <select
+                                        value={viewMonth}
+                                        onChange={(e) => {
+                                            const newMonth = parseInt(e.target.value, 10);
+                                            setViewMonthDate(new Date(viewYear, newMonth, 1));
+                                        }}
+                                        style={{
+                                            backgroundColor: "rgba(255, 255, 255, 0.08)",
+                                            color: "#ffffff",
+                                            border: "1px solid rgba(255, 255, 255, 0.2)",
+                                            borderRadius: "8px",
+                                            padding: "3px 6px",
+                                            fontSize: "11px",
+                                            fontWeight: "800",
+                                            cursor: "pointer",
+                                            outline: "none",
+                                            textTransform: "uppercase",
+                                            letterSpacing: "0.03em"
+                                        }}
+                                    >
+                                        {monthNames.map((name, idx) => (
+                                            <option key={name} value={idx} style={{ backgroundColor: "#0f172a", color: "#ffffff" }}>
+                                                {name.toUpperCase()}
+                                            </option>
+                                        ))}
+                                    </select>
+
+                                    {/* Year Picker Dropdown */}
+                                    <select
+                                        value={viewYear}
+                                        onChange={(e) => {
+                                            const newYear = parseInt(e.target.value, 10);
+                                            setViewMonthDate(new Date(newYear, viewMonth, 1));
+                                        }}
+                                        style={{
+                                            backgroundColor: "rgba(255, 255, 255, 0.08)",
+                                            color: "#ffffff",
+                                            border: "1px solid rgba(255, 255, 255, 0.2)",
+                                            borderRadius: "8px",
+                                            padding: "3px 6px",
+                                            fontSize: "11px",
+                                            fontWeight: "800",
+                                            cursor: "pointer",
+                                            outline: "none",
+                                            letterSpacing: "0.03em"
+                                        }}
+                                    >
+                                        {yearOptions.map((y) => (
+                                            <option key={y} value={y} style={{ backgroundColor: "#0f172a", color: "#ffffff" }}>
+                                                {y}
+                                            </option>
+                                        ))}
+                                    </select>
 
                                     <button
                                         type="button"
@@ -1348,7 +1408,7 @@ const styles: { [key: string]: React.CSSProperties } = {
     },
 
     scannerArea: {
-        padding: "20px",
+        padding: "8px 16px 4px",
     },
 
     cameraContainer: {
@@ -1492,53 +1552,53 @@ const styles: { [key: string]: React.CSSProperties } = {
         display: "flex",
         flexDirection: "column" as const,
         alignItems: "center",
-        padding: "40px 20px",
-        gap: "16px",
+        padding: "8px 16px 6px",
+        gap: "8px",
     },
 
     scanIconContainer: {
-        width: "100px",
-        height: "100px",
-        borderRadius: "24px",
+        width: "56px",
+        height: "56px",
+        borderRadius: "16px",
         background: "rgba(0, 255, 136, 0.1)",
-        border: "2px solid rgba(0, 255, 136, 0.2)",
+        border: "1.5px solid rgba(0, 255, 136, 0.25)",
         display: "flex",
         alignItems: "center",
         justifyContent: "center",
-        marginBottom: "8px",
+        marginBottom: "0px",
     },
 
     scanIcon: {
-        fontSize: "48px",
+        fontSize: "26px",
     },
 
     scanTitle: {
-        fontSize: "24px",
-        fontWeight: "700",
+        fontSize: "17px",
+        fontWeight: "800",
         color: "#fff",
         margin: 0,
         textAlign: "center" as const,
     },
 
     scanDescription: {
-        fontSize: "14px",
-        color: "rgba(255,255,255,0.5)",
+        fontSize: "11.5px",
+        color: "rgba(255,255,255,0.6)",
         textAlign: "center" as const,
         margin: 0,
-        maxWidth: "300px",
-        lineHeight: "1.5",
+        maxWidth: "280px",
+        lineHeight: "1.4",
     },
 
     scanButton: {
-        padding: "16px 40px",
-        borderRadius: "16px",
+        padding: "9px 24px",
+        borderRadius: "12px",
         border: "none",
         color: "#fff",
-        fontSize: "18px",
-        fontWeight: "700",
+        fontSize: "13.5px",
+        fontWeight: "800",
         cursor: "pointer",
-        marginTop: "8px",
-        boxShadow: "0 8px 30px rgba(0, 255, 136, 0.3)",
+        marginTop: "2px",
+        boxShadow: "0 4px 16px rgba(0, 255, 136, 0.25)",
         transition: "all 0.2s ease",
     },
 
