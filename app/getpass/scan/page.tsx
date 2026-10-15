@@ -615,15 +615,18 @@ export default function StudentScannerPage() {
                         onClick={() => router.back()}
                         style={{
                             background: "rgba(255, 255, 255, 0.08)",
-                            border: "none",
-                            borderRadius: "10px",
-                            padding: "8px 12px",
+                            border: "1px solid rgba(255, 255, 255, 0.15)",
+                            borderRadius: "6px",
+                            padding: "3px 10px",
                             color: "#fff",
                             cursor: "pointer",
-                            fontSize: "14px",
+                            fontSize: "9.5px",
+                            fontWeight: "800",
+                            letterSpacing: "0.05em",
+                            textTransform: "uppercase",
                             display: "flex",
                             alignItems: "center",
-                            gap: "6px"
+                            gap: "4px"
                         }}
                     >
                         ← Back
@@ -640,14 +643,18 @@ export default function StudentScannerPage() {
 
                 <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
                     <div style={{
-                        padding: "4px 10px",
-                        borderRadius: "20px",
-                        fontSize: "11px",
-                        fontWeight: "700",
+                        padding: "3px 10px",
+                        borderRadius: "6px",
+                        fontSize: "9.5px",
+                        fontWeight: "800",
                         letterSpacing: "0.05em",
+                        textTransform: "uppercase",
                         backgroundColor: currentStatus === "in" ? "rgba(16, 185, 129, 0.15)" : "rgba(245, 158, 11, 0.15)",
                         color: currentStatus === "in" ? "#34d399" : "#fbbf24",
-                        border: `1px solid ${currentStatus === "in" ? "rgba(16, 185, 129, 0.3)" : "rgba(245, 158, 11, 0.3)"}`
+                        border: `1px solid ${currentStatus === "in" ? "rgba(16, 185, 129, 0.3)" : "rgba(245, 158, 11, 0.3)"}`,
+                        display: "flex",
+                        alignItems: "center",
+                        gap: "4px"
                     }}>
                         {currentStatus === "in" ? "🏠 In Campus" : "🚶 Outside"}
                     </div>
@@ -1021,10 +1028,11 @@ export default function StudentScannerPage() {
                             <div style={{
                                 display: "grid",
                                 gridTemplateColumns: "repeat(7, 1fr)",
-                                gap: "3px"
+                                rowGap: "1px",
+                                columnGap: "3px"
                             }}>
                                 {Array.from({ length: startDayOfWeek }).map((_, i) => (
-                                    <div key={`empty-${i}`} style={{ height: "34px" }} />
+                                    <div key={`empty-${i}`} style={{ height: "27px" }} />
                                 ))}
                                 {Array.from({ length: daysInMonth }).map((_, i) => {
                                     const day = i + 1;
@@ -1046,8 +1054,8 @@ export default function StudentScannerPage() {
                                             }}
                                             style={{
                                                 position: "relative",
-                                                height: "34px",
-                                                borderRadius: "9px",
+                                                height: "27px",
+                                                borderRadius: "6px",
                                                 border: isSelected
                                                     ? "2px solid #3b82f6"
                                                     : isToday
@@ -1074,7 +1082,7 @@ export default function StudentScannerPage() {
                                             }}
                                         >
                                             <span style={{
-                                                fontSize: "11.5px",
+                                                fontSize: "11px",
                                                 fontWeight: isSelected || hasOuting || isToday ? "800" : "500",
                                                 lineHeight: "1"
                                             }}>
@@ -1084,16 +1092,16 @@ export default function StudentScannerPage() {
                                             {/* Dot indicator for outing or home leave */}
                                             {hasOuting && (
                                                 <span style={{
-                                                    width: "5px",
-                                                    height: "5px",
+                                                    width: "4px",
+                                                    height: "4px",
                                                     borderRadius: "50%",
                                                     backgroundColor: isSelected
                                                         ? "#fbbf24"
                                                         : hasLeave
                                                         ? "#60a5fa"
                                                         : "#f59e0b",
-                                                    marginTop: "2px",
-                                                    boxShadow: "0 0 4px rgba(245, 158, 11, 0.7)"
+                                                    marginTop: "1px",
+                                                    boxShadow: "0 0 3px rgba(245, 158, 11, 0.7)"
                                                 }} />
                                             )}
                                         </button>
