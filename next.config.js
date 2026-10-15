@@ -81,6 +81,7 @@ const withPWA = require("next-pwa")({
 /** @type {import('next').NextConfig} */
 const nextConfig = {
     compress: true,
+    productionBrowserSourceMaps: false,
     typescript: {
         // !! WARN !!
         // Dangerously allow production builds to successfully complete even if
@@ -166,7 +167,10 @@ const nextConfig = {
             },
         ];
     },
-    webpack: (config, { isServer }) => {
+    webpack: (config, { isServer, dev }) => {
+        if (!dev) {
+            config.devtool = false; // Disable heavy source maps during production build
+        }
         if (!isServer) {
             config.output = {
                 ...config.output,
