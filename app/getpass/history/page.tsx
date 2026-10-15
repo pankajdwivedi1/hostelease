@@ -69,16 +69,21 @@ export default function OutingHistoryPage() {
 
     // Dynamic Columns for Export
     const availableColumnsData = [
-        { id: "name", label: "Student Name", width: 25 },
+        { id: "sno", label: "S.No", width: 8 },
+        { id: "name", label: "Student Name", width: 24 },
         { id: "phone", label: "Mobile", width: 15 },
-        { id: "regId", label: "Reg. ID", width: 18 },
-        { id: "erpId", label: "ERP ID", width: 18 },
-        { id: "hostel", label: "Hostel", width: 25 },
+        { id: "regId", label: "Reg. ID", width: 16 },
+        { id: "erpId", label: "ERP ID", width: 16 },
+        { id: "hostel", label: "Hostel", width: 22 },
         { id: "room", label: "Room", width: 10 },
-        { id: "outTime", label: "Out Time", width: 25 },
-        { id: "inTime", label: "In Time", width: 25 },
+        { id: "outDate", label: "Out Date", width: 14 },
+        { id: "outTime", label: "Out Time", width: 14 },
+        { id: "inDate", label: "In Date", width: 14 },
+        { id: "inTime", label: "In Time", width: 14 },
         { id: "duration", label: "Duration", width: 12 },
+        { id: "type", label: "Pass Type", width: 14 },
         { id: "status", label: "Status", width: 10 },
+        { id: "reason", label: "Reason / Remarks", width: 24 },
         { id: "fatherName", label: "Father Name", width: 20 },
         { id: "fatherNumber", label: "Father Mobile", width: 15 },
         { id: "motherName", label: "Mother Name", width: 20 },
@@ -86,7 +91,7 @@ export default function OutingHistoryPage() {
     ];
 
     const [selectedColumns, setSelectedColumns] = useState<Set<string>>(new Set([
-        "name", "phone", "regId", "erpId", "hostel", "room", "outTime", "inTime", "duration", "status"
+        "sno", "name", "phone", "regId", "erpId", "hostel", "room", "outDate", "outTime", "inDate", "inTime", "duration", "type", "status"
     ]));
 
     const [columnOrder, setColumnOrder] = useState<string[]>(availableColumnsData.map(c => c.id));
@@ -355,6 +360,23 @@ export default function OutingHistoryPage() {
 
             if (data.success && data.records.length > 0) {
                 setExportData(data.records);
+
+                // Auto-detect if export belongs to a single student
+                const isSingle = data.records.length > 0 && data.records.every((r: any) =>
+                    (r.studentName || '').trim().toLowerCase() === (data.records[0].studentName || '').trim().toLowerCase() &&
+                    (r.registrationId || '').trim().toLowerCase() === (data.records[0].registrationId || '').trim().toLowerCase()
+                );
+
+                if (isSingle) {
+                    setSelectedColumns(new Set([
+                        "sno", "outDate", "outTime", "inDate", "inTime", "duration", "type", "status", "reason"
+                    ]));
+                } else {
+                    setSelectedColumns(new Set([
+                        "sno", "name", "phone", "regId", "erpId", "hostel", "room", "outDate", "outTime", "inDate", "inTime", "duration", "type", "status"
+                    ]));
+                }
+
                 setIsExportModalOpen(true);
             } else {
                 alert("No records found to export");
@@ -372,70 +394,190 @@ export default function OutingHistoryPage() {
             const workbook = new ExcelJS.Workbook();
             const worksheet = workbook.addWorksheet("Outing History");
 
-            // Define Columns dynamically based on order and selection
+            const isSingleStudent = exportData.length > 0 && exportData.every((r: any) => 
+                (r.studentName || '').trim().toLowerCase() === (exportData[0].studentName || '').trim().toLowerCase() && 
+                (r.registrationId || '').trim().toLowerCase() === (exportData[0].registrationId || '').trim().toLowerCase()
+            );
+
+            // Active Columns dynamically based on order and selection
             const activeColumnObjects = columnOrder
                 .map(id => availableColumnsData.find(c => c.id === id))
                 .filter(col => col && selectedColumns.has(col.id));
 
+            if (activeColumnObjects.length === 0) {
+                alert("Please select at least one column to export");
+                return;
+            }
+
+            const numCols = activeColumnObjects.length;
+
+            // Define column widths without automatic header (headers are placed on row 5)
             worksheet.columns = activeColumnObjects.map(col => ({
-                header: col!.label,
                 key: col!.id,
-                width: col!.width
+                width: col!.width || 15
             }));
 
-            // Add Data dynamically
-            exportData.forEach((r: any) => {
-                const row: any = {};
-                if (selectedColumns.has("name")) row.name = r.studentName;
-                if (selectedColumns.has("phone")) row.phone = r.phoneNumber || "";
-                if (selectedColumns.has("regId")) row.regId = r.registrationId;
-                if (selectedColumns.has("erpId")) row.erpId = r.erpId || "";
-                if (selectedColumns.has("hostel")) row.hostel = formatHostelDisplay(r.hostelName);
-                if (selectedColumns.has("room")) row.room = r.roomNumber;
-                if (selectedColumns.has("outTime")) row.outTime = `${r.checkOutISTTime} ${formatDateDDMMYYYY(r.checkOutISTDate || r.checkOutTime)}`;
-                if (selectedColumns.has("inTime")) row.inTime = (r.status === 'in' || r.status === 'auto-resolved') ? `${r.checkInISTTime} ${formatDateDDMMYYYY(r.checkInISTDate || r.checkInTime || r.checkOutISTDate)}` : "Still Outside";
-                if (selectedColumns.has("duration")) row.duration = formatDuration(r.durationMinutes);
-                if (selectedColumns.has("status")) row.status = r.status === 'out' ? "OUT" : "IN";
-                if (selectedColumns.has("fatherName")) row.fatherName = r.fatherName || "";
-                if (selectedColumns.has("fatherNumber")) row.fatherNumber = r.fatherNumber || "";
-                if (selectedColumns.has("motherName")) row.motherName = r.motherName || "";
-                if (selectedColumns.has("motherNumber")) row.motherNumber = r.motherNumber || "";
+            // Prepare Period & Date text
+            const periodText = filters.startDate && filters.endDate 
+                ? `${formatDateDDMMYYYY(filters.startDate)} TO ${formatDateDDMMYYYY(filters.endDate)}` 
+                : filters.startDate 
+                    ? `FROM ${formatDateDDMMYYYY(filters.startDate)}` 
+                    : filters.endDate 
+                        ? `UNTIL ${formatDateDDMMYYYY(filters.endDate)}` 
+                        : "ALL TIME";
 
-                worksheet.addRow(row);
-            });
+            const now = new Date();
+            const generatedDateStr = `${formatDateDDMMYYYY(now)} ${formatISTTimeAMPM(undefined, now.toISOString())}`;
+            const firstRec = exportData[0] || {};
 
-            // Styling
-            const headerRow = worksheet.getRow(1);
-            headerRow.eachCell((cell) => {
-                cell.font = { name: 'Cambria', size: 10, bold: true };
+            const thinBorder = {
+                top: { style: 'thin' as const, color: { argb: 'FFCBD5E1' } },
+                left: { style: 'thin' as const, color: { argb: 'FFCBD5E1' } },
+                bottom: { style: 'thin' as const, color: { argb: 'FFCBD5E1' } },
+                right: { style: 'thin' as const, color: { argb: 'FFCBD5E1' } }
+            };
+
+            const headerBorder = {
+                top: { style: 'thin' as const, color: { argb: 'FF0F172A' } },
+                left: { style: 'thin' as const, color: { argb: 'FF0F172A' } },
+                bottom: { style: 'thin' as const, color: { argb: 'FF0F172A' } },
+                right: { style: 'thin' as const, color: { argb: 'FF0F172A' } }
+            };
+
+            // ROW 1: Branded Title Banner
+            const titleText = isSingleStudent 
+                ? "HOSTELEAZE - INDIVIDUAL STUDENT OUTING & MOVEMENT REPORT"
+                : "HOSTELEAZE - STUDENT OUTING & GATEPASS REGISTER";
+
+            worksheet.addRow([]);
+            if (numCols > 1) {
+                worksheet.mergeCells(1, 1, 1, numCols);
+            }
+            const row1 = worksheet.getRow(1);
+            row1.height = 30;
+            for (let c = 1; c <= numCols; c++) {
+                const cell = worksheet.getCell(1, c);
+                cell.font = { name: 'Calibri', size: 12.5, bold: true, color: { argb: 'FFFFFFFF' } };
                 cell.alignment = { vertical: 'middle', horizontal: 'center' };
-                cell.fill = {
-                    type: 'pattern',
-                    pattern: 'solid',
-                    fgColor: { argb: 'FFD3D3D3' } // Light Grey
-                };
-                cell.border = {
-                    top: { style: 'thin' },
-                    left: { style: 'thin' },
-                    bottom: { style: 'thin' },
-                    right: { style: 'thin' }
-                };
+                cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF0F172A' } };
+                cell.border = headerBorder;
+            }
+            worksheet.getCell(1, 1).value = titleText;
+
+            // ROW 2: Scope / Info Row 1
+            const infoText1 = isSingleStudent
+                ? `STUDENT: ${(firstRec.studentName || 'STUDENT').toUpperCase()}   •   REG ID: ${firstRec.registrationId || '---'}   •   ERP ID: ${firstRec.erpId || '---'}   •   HOSTEL: ${formatHostelDisplay(firstRec.hostelName)} (ROOM ${firstRec.roomNumber || '---'})`
+                : `HOSTEL SCOPE: ${filters.hostelName && filters.hostelName !== 'all' ? formatHostelDisplay(filters.hostelName) : 'ALL HOSTELS'}   •   COLLEGE: ${filters.collegeName && filters.collegeName !== 'all' ? filters.collegeName.toUpperCase() : 'ALL COLLEGES'}   •   TYPE: ${filters.type === 'outing' ? 'DAILY PASS' : filters.type === 'leave' ? 'LEAVE LOGS' : 'ALL MOVEMENTS'}`;
+
+            worksheet.addRow([]);
+            if (numCols > 1) {
+                worksheet.mergeCells(2, 1, 2, numCols);
+            }
+            const row2 = worksheet.getRow(2);
+            row2.height = 22;
+            for (let c = 1; c <= numCols; c++) {
+                const cell = worksheet.getCell(2, c);
+                cell.font = { name: 'Calibri', size: 10, bold: true, color: { argb: 'FF0F172A' } };
+                cell.alignment = { vertical: 'middle', horizontal: 'center' };
+                cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF1F5F9' } };
+                cell.border = thinBorder;
+            }
+            worksheet.getCell(2, 1).value = infoText1;
+
+            // ROW 3: Scope / Info Row 2
+            const infoText2 = isSingleStudent
+                ? `MOBILE: ${firstRec.phoneNumber || firstRec.phone || '---'}   •   COLLEGE: ${firstRec.collegeName || 'ALL COLLEGES'}   •   TOTAL OUTINGS: ${exportData.length}   •   PERIOD: ${periodText}   •   GENERATED: ${generatedDateStr}`
+                : `TOTAL RECORDS: ${exportData.length}   •   PERIOD: ${periodText}   •   GENERATED: ${generatedDateStr}   •   SYSTEM: SUPER ADMIN DASHBOARD`;
+
+            worksheet.addRow([]);
+            if (numCols > 1) {
+                worksheet.mergeCells(3, 1, 3, numCols);
+            }
+            const row3 = worksheet.getRow(3);
+            row3.height = 20;
+            for (let c = 1; c <= numCols; c++) {
+                const cell = worksheet.getCell(3, c);
+                cell.font = { name: 'Calibri', size: 9.5, bold: true, color: { argb: 'FF334155' } };
+                cell.alignment = { vertical: 'middle', horizontal: 'center' };
+                cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF1F5F9' } };
+                cell.border = thinBorder;
+            }
+            worksheet.getCell(3, 1).value = infoText2;
+
+            // ROW 4: Spacer row
+            const row4 = worksheet.addRow([]);
+            row4.height = 10;
+
+            // ROW 5: Table Column Headers
+            const headerRow = worksheet.addRow(activeColumnObjects.map(col => col!.label));
+            headerRow.height = 26;
+            headerRow.eachCell((cell) => {
+                cell.font = { name: 'Calibri', size: 10.5, bold: true, color: { argb: 'FFFFFFFF' } };
+                cell.alignment = { vertical: 'middle', horizontal: 'center', wrapText: true };
+                cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF0F172A' } };
+                cell.border = headerBorder;
             });
 
-            worksheet.eachRow((row, rowNumber) => {
-                if (rowNumber > 1) {
-                    row.eachCell((cell) => {
-                        cell.font = { name: 'Cambria', size: 10 };
-                        cell.alignment = { vertical: 'middle', horizontal: 'center' };
-                        cell.border = {
-                            top: { style: 'thin' },
-                            left: { style: 'thin' },
-                            bottom: { style: 'thin' },
-                            right: { style: 'thin' }
-                        };
-                    });
-                }
+            // ROW 6+: Data Rows
+            exportData.forEach((r: any, idx: number) => {
+                const rowValues = activeColumnObjects.map(col => {
+                    switch (col!.id) {
+                        case "sno": return idx + 1;
+                        case "name": return r.studentName || "";
+                        case "phone": return r.phoneNumber || r.phone || "";
+                        case "regId": return r.registrationId || "";
+                        case "erpId": return r.erpId || "";
+                        case "hostel": return formatHostelDisplay(r.hostelName);
+                        case "room": return r.roomNumber || "";
+                        case "outDate": return formatDateDDMMYYYY(r.checkOutISTDate || r.checkOutTime);
+                        case "outTime": return formatISTTimeAMPM(r.checkOutISTTime, r.checkOutTime);
+                        case "inDate": return (r.status === 'in' || r.status === 'auto-resolved') ? formatDateDDMMYYYY(r.checkInISTDate || r.checkInTime) : "---";
+                        case "inTime": return (r.status === 'in' || r.status === 'auto-resolved') ? formatISTTimeAMPM(r.checkInISTTime, r.checkInTime) : "Still Outside";
+                        case "duration": return formatDuration(r.durationMinutes);
+                        case "type": return r.type === 'leave' ? 'LEAVE' : 'GATEPASS';
+                        case "status": return r.status === 'out' ? "OUT" : "IN";
+                        case "reason": return r.reason || r.leaveReason || "---";
+                        case "fatherName": return r.fatherName || "";
+                        case "fatherNumber": return r.fatherNumber || "";
+                        case "motherName": return r.motherName || "";
+                        case "motherNumber": return r.motherNumber || "";
+                        default: return "";
+                    }
+                });
+
+                const dataRow = worksheet.addRow(rowValues);
+                dataRow.height = 20;
+
+                const isEven = idx % 2 === 0;
+                const rowBg = isEven ? 'FFFFFFFF' : 'FFF8FAFC';
+
+                dataRow.eachCell((cell, colNumber) => {
+                    cell.font = { name: 'Calibri', size: 9.5 };
+                    cell.alignment = { vertical: 'middle', horizontal: 'center' };
+                    cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: rowBg } };
+                    cell.border = thinBorder;
+
+                    const colObj = activeColumnObjects[colNumber - 1];
+                    if (colObj?.id === 'status') {
+                        if (cell.value === 'OUT') {
+                            cell.font = { name: 'Calibri', size: 9.5, bold: true, color: { argb: 'FFDC2626' } };
+                        } else {
+                            cell.font = { name: 'Calibri', size: 9.5, bold: true, color: { argb: 'FF16A34A' } };
+                        }
+                    } else if (colObj?.id === 'inTime' && cell.value === 'Still Outside') {
+                        cell.font = { name: 'Calibri', size: 9.5, bold: true, color: { argb: 'FFDC2626' } };
+                    } else if (colObj?.id === 'type') {
+                        cell.font = { name: 'Calibri', size: 9.5, bold: true, color: { argb: cell.value === 'LEAVE' ? 'FF2563EB' : 'FF059669' } };
+                    }
+                });
             });
+
+            // File Name
+            const dateStamp = new Date().toISOString().split('T')[0];
+            const cleanStudentName = (firstRec.studentName || 'Student').replace(/[^a-zA-Z0-9_-]/g, '_');
+            const fileName = isSingleStudent 
+                ? `Outing_Report_${cleanStudentName}_${dateStamp}.xlsx`
+                : `Outing_Register_${dateStamp}.xlsx`;
 
             // Generate Buffer and Download
             const buffer = await workbook.xlsx.writeBuffer();
@@ -443,7 +585,7 @@ export default function OutingHistoryPage() {
             const url = window.URL.createObjectURL(blob);
             const anchor = document.createElement('a');
             anchor.href = url;
-            anchor.download = `Outing_History_${new Date().toISOString().split('T')[0]}.xlsx`;
+            anchor.download = fileName;
             anchor.click();
             window.URL.revokeObjectURL(url);
             setIsExportModalOpen(false);
@@ -1089,7 +1231,21 @@ export default function OutingHistoryPage() {
                             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 sm:gap-4 mb-2.5 sm:mb-5 pr-8 sm:pr-12">
                                 <div>
                                     <h2 className="text-sm sm:text-xl font-black text-white m-0 flex items-center gap-1.5">📥 Export Data Preview</h2>
-                                    <p className="text-[8px] sm:text-[10px] text-white/40 uppercase tracking-widest mt-0.5">Reviewing {exportData.length} records before download</p>
+                                    <div className="flex flex-wrap items-center gap-2 mt-1">
+                                        <p className="text-[8px] sm:text-[10px] text-white/40 uppercase tracking-widest m-0">Reviewing {exportData.length} records</p>
+                                        {exportData.length > 0 && exportData.every((r: any) => 
+                                            (r.studentName || '').trim().toLowerCase() === (exportData[0].studentName || '').trim().toLowerCase() && 
+                                            (r.registrationId || '').trim().toLowerCase() === (exportData[0].registrationId || '').trim().toLowerCase()
+                                        ) ? (
+                                            <span className="text-[9px] bg-blue-500/20 text-blue-400 border border-blue-500/30 px-2 py-0.5 rounded-full font-bold">
+                                                👤 Student Report: {exportData[0].studentName} ({exportData[0].registrationId})
+                                            </span>
+                                        ) : (
+                                            <span className="text-[9px] bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 px-2 py-0.5 rounded-full font-bold">
+                                                👥 Outing Register (All Students)
+                                            </span>
+                                        )}
+                                    </div>
                                 </div>
                                 <div className="flex items-center gap-2 sm:gap-4">
                                     <button
@@ -1115,6 +1271,7 @@ export default function OutingHistoryPage() {
                                 <div className="flex flex-wrap items-center gap-1.5 sm:gap-2 max-h-28 sm:max-h-none overflow-y-auto no-scrollbar">
                                     {columnOrder.map((colId) => {
                                         const col = availableColumnsData.find(c => c.id === colId)!;
+                                        if (!col) return null;
                                         const isSelected = selectedColumns.has(col.id);
                                         return (
                                             <div
@@ -1152,9 +1309,10 @@ export default function OutingHistoryPage() {
                                 <thead className="sticky top-0 bg-[#121421] z-10">
                                     <tr>
                                         {columnOrder.map((colId) => {
-                                            const col = availableColumnsData.find(c => c.id === colId)!;
+                                            const col = availableColumnsData.find(c => c.id === colId);
+                                            if (!col) return null;
                                             return selectedColumns.has(col.id) && (
-                                                <th key={col.id} className="px-3 sm:px-6 py-2.5 sm:py-5 text-[8px] sm:text-[10px] font-black text-white/30 uppercase tracking-[0.2em] border-b border-white/5 bg-[#121421]">{col.label}</th>
+                                                <th key={col.id} className="px-3 sm:px-6 py-2.5 sm:py-5 text-[8px] sm:text-[10px] font-black text-white/30 uppercase tracking-[0.2em] border-b border-white/5 bg-[#121421] text-center">{col.label}</th>
                                             );
                                         })}
                                     </tr>
@@ -1166,38 +1324,45 @@ export default function OutingHistoryPage() {
                                                 if (!selectedColumns.has(colId)) return null;
 
                                                 switch (colId) {
+                                                    case "sno": return <td key="sno" className="px-3 sm:px-6 py-2 sm:py-4 text-[9px] sm:text-xs font-mono font-bold text-white/50 border-b border-white/5 text-center">{i + 1}</td>;
                                                     case "name": return <td key="name" className="px-3 sm:px-6 py-2 sm:py-4 text-[10px] sm:text-xs font-bold text-white border-b border-white/5">{r.studentName}</td>;
                                                     case "phone": return <td key="phone" className="px-3 sm:px-6 py-2 sm:py-4 text-[10px] sm:text-xs font-medium text-blue-400 border-b border-white/5 font-mono">{r.phoneNumber || r.phone || "---"}</td>;
                                                     case "regId": return <td key="regId" className="px-3 sm:px-6 py-2 sm:py-4 text-[8px] sm:text-[10px] font-bold text-white/40 border-b border-white/5 uppercase">{r.registrationId}</td>;
                                                     case "erpId": return <td key="erpId" className="px-3 sm:px-6 py-2 sm:py-4 text-[8px] sm:text-[10px] font-bold text-indigo-400/80 border-b border-white/5 uppercase">{r.erpId || "---"}</td>;
                                                     case "hostel": return <td key="hostel" className="px-3 sm:px-6 py-2 sm:py-4 text-[8px] sm:text-[10px] font-bold text-white/70 border-b border-white/5">{formatHostelDisplay(r.hostelName)}</td>;
-                                                    case "room": return <td key="room" className="px-3 sm:px-6 py-2 sm:py-4 text-[10px] sm:text-xs font-bold text-white/90 border-b border-white/5">{r.roomNumber}</td>;
-                                                    case "outTime": return (
-                                                        <td key="outTime" className="px-3 sm:px-6 py-2 sm:py-4 text-[9px] sm:text-[11px] font-medium text-white/40 border-b border-white/5">
-                                                            <span className="text-white/80">{r.checkOutISTTime}</span> <br /> {formatDateDDMMYYYY(r.checkOutISTDate || r.checkOutTime)}
-                                                        </td>
-                                                    );
+                                                    case "room": return <td key="room" className="px-3 sm:px-6 py-2 sm:py-4 text-[10px] sm:text-xs font-bold text-white/90 border-b border-white/5 text-center">{r.roomNumber}</td>;
+                                                    case "outDate": return <td key="outDate" className="px-3 sm:px-6 py-2 sm:py-4 text-[9px] sm:text-xs font-semibold text-white/90 border-b border-white/5 text-center">{formatDateDDMMYYYY(r.checkOutISTDate || r.checkOutTime)}</td>;
+                                                    case "outTime": return <td key="outTime" className="px-3 sm:px-6 py-2 sm:py-4 text-[9px] sm:text-xs font-mono text-amber-400 border-b border-white/5 text-center">{formatISTTimeAMPM(r.checkOutISTTime, r.checkOutTime)}</td>;
+                                                    case "inDate": return <td key="inDate" className="px-3 sm:px-6 py-2 sm:py-4 text-[9px] sm:text-xs font-semibold text-white/70 border-b border-white/5 text-center">{(r.status === 'in' || r.status === 'auto-resolved') ? formatDateDDMMYYYY(r.checkInISTDate || r.checkInTime) : "---"}</td>;
                                                     case "inTime": return (
-                                                        <td key="inTime" className="px-3 sm:px-6 py-2 sm:py-4 text-[9px] sm:text-[11px] font-medium text-white/40 border-b border-white/5">
-                                                             {r.status === 'in' || r.status === 'auto-resolved' ? (
-                                                                <>
-                                                                    <span className="text-green-400">{r.checkInISTTime}</span> <br /> {formatDateDDMMYYYY(r.checkInISTDate || r.checkInTime || r.checkOutISTDate)}
-                                                                </>
-                                                            ) : "---"}
+                                                        <td key="inTime" className="px-3 sm:px-6 py-2 sm:py-4 text-[9px] sm:text-xs font-mono border-b border-white/5 text-center">
+                                                            {(r.status === 'in' || r.status === 'auto-resolved') ? (
+                                                                <span className="text-green-400">{formatISTTimeAMPM(r.checkInISTTime, r.checkInTime)}</span>
+                                                            ) : (
+                                                                <span className="text-red-400 font-bold">Still Outside</span>
+                                                            )}
                                                         </td>
                                                     );
                                                     case "duration": return (
-                                                        <td key="duration" className="px-3 sm:px-6 py-2 sm:py-4 text-[8px] sm:text-[10px] font-black border-b border-white/5">
+                                                        <td key="duration" className="px-3 sm:px-6 py-2 sm:py-4 text-[8px] sm:text-[10px] font-black border-b border-white/5 text-center">
                                                             <span className={r.status === 'out' ? 'text-red-400' : 'text-blue-400'}>{formatDuration(r.durationMinutes)}</span>
                                                         </td>
                                                     );
+                                                    case "type": return (
+                                                        <td key="type" className="px-3 sm:px-6 py-2 sm:py-4 border-b border-white/5 text-center">
+                                                            <span className={`px-2 py-0.5 rounded text-[7px] sm:text-[8px] font-black uppercase ${r.type === 'leave' ? 'bg-blue-500/20 text-blue-400 border border-blue-500/30' : 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30'}`}>
+                                                                {r.type === 'leave' ? 'LEAVE' : 'GATEPASS'}
+                                                            </span>
+                                                        </td>
+                                                    );
                                                     case "status": return (
-                                                        <td key="status" className="px-3 sm:px-6 py-2 sm:py-4 border-b border-white/5">
+                                                        <td key="status" className="px-3 sm:px-6 py-2 sm:py-4 border-b border-white/5 text-center">
                                                             <span className={`px-1.5 py-0.5 rounded text-[7px] sm:text-[8px] font-black uppercase tracking-tighter ${r.status === 'out' ? 'bg-red-500/10 text-red-500 border border-red-500/20' : 'bg-green-500/10 text-green-500 border border-green-500/20'}`}>
                                                                 {r.status === 'out' ? 'OUT' : 'IN'}
                                                             </span>
                                                         </td>
                                                     );
+                                                    case "reason": return <td key="reason" className="px-3 sm:px-6 py-2 sm:py-4 text-[8px] sm:text-[10px] text-white/60 border-b border-white/5 max-w-[180px] truncate">{r.reason || r.leaveReason || "---"}</td>;
                                                     case "fatherName": return <td key="fatherName" className="px-3 sm:px-6 py-2 sm:py-4 text-[8px] sm:text-[10px] font-bold text-white/60 border-b border-white/5">{r.fatherName || "---"}</td>;
                                                     case "fatherNumber": return <td key="fatherNumber" className="px-3 sm:px-6 py-2 sm:py-4 text-[8px] sm:text-[10px] font-medium text-blue-400/70 border-b border-white/5 font-mono">{r.fatherNumber || "---"}</td>;
                                                     case "motherName": return <td key="motherName" className="px-3 sm:px-6 py-2 sm:py-4 text-[8px] sm:text-[10px] font-bold text-white/60 border-b border-white/5">{r.motherName || "---"}</td>;
