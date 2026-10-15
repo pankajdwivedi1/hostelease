@@ -18,6 +18,12 @@ const getDaysAgoYMD = (daysAgo: number) => {
     return formatYMD(d);
 };
 
+const getMonthStartYMD = () => {
+    const d = new Date();
+    d.setDate(1);
+    return formatYMD(d);
+};
+
 const getInitialDateFilters = () => {
     return {
         startDate: getDaysAgoYMD(7),
@@ -242,9 +248,7 @@ export default function OutingHistoryPage() {
         } else if (preset === '7days') {
             setFilters(prev => ({ ...prev, startDate: getDaysAgoYMD(7), endDate: today }));
         } else if (preset === 'month') {
-            const firstDay = new Date();
-            firstDay.setDate(1);
-            setFilters(prev => ({ ...prev, startDate: formatYMD(firstDay), endDate: today }));
+            setFilters(prev => ({ ...prev, startDate: getMonthStartYMD(), endDate: today }));
         } else if (preset === 'all') {
             setFilters(prev => ({ ...prev, startDate: "", endDate: "" }));
         }
@@ -671,7 +675,7 @@ export default function OutingHistoryPage() {
                                 type="button"
                                 onClick={() => setPresetRange('month')}
                                 className={`px-2.5 py-1 rounded-lg text-[10px] font-bold tracking-wider uppercase transition-all ${
-                                    filters.startDate === formatYMD(new Date(new Date().getFullYear(), new Date().getMonth(), 1)) && filters.endDate === formatYMD(new Date())
+                                    filters.startDate === getMonthStartYMD() && filters.endDate === formatYMD(new Date())
                                         ? 'bg-blue-600 text-white shadow-sm'
                                         : 'bg-white/5 hover:bg-white/10 text-white/60 hover:text-white'
                                 }`}

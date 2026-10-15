@@ -84,6 +84,45 @@ export async function GET(request: NextRequest) {
                     if (filters.registrationId) statsWhere.registrationId = { equals: filters.registrationId, mode: 'insensitive' };
                     if (filters.hostelName && filters.hostelName !== 'all') statsWhere.hostelName = { equals: filters.hostelName, mode: 'insensitive' };
                     if (filters.status && filters.status !== 'all') statsWhere.status = filters.status;
+
+                    // ⚡ SYNC STATS TO DATE RANGE: Ensure Daily Pass and Leave counts match the selected date filters (e.g. Last 7 Days, Today, This Month, All Time)
+                    if (filters.startDate || filters.endDate) {
+                        const dateCondition: any = {};
+                        if (filters.startDate) {
+                            const s = filters.startDate.includes('T') 
+                                ? new Date(filters.startDate) 
+                                : new Date(`${filters.startDate}T00:00:00+05:30`);
+                            if (!isNaN(s.getTime())) dateCondition.gte = s;
+                        }
+                        if (filters.endDate) {
+                            const e = filters.endDate.includes('T') 
+                                ? new Date(filters.endDate) 
+                                : new Date(`${filters.endDate}T23:59:59.999+05:30`);
+                            if (!isNaN(e.getTime())) dateCondition.lte = e;
+                        }
+                        if (dateCondition.gte || dateCondition.lte) {
+                            statsWhere.checkOutTime = dateCondition;
+                        }
+                    }
+
+                    if (filters.collegeName && filters.collegeName !== 'all') {
+                        statsWhere.student = {
+                            ...(statsWhere.student || {}),
+                            collegeName: { equals: filters.collegeName, mode: 'insensitive' }
+                        };
+                    }
+
+                    if (filters.search && filters.search.trim()) {
+                        const term = filters.search.trim();
+                        statsWhere.OR = [
+                            { studentName: { contains: term, mode: 'insensitive' } },
+                            { registrationId: { contains: term, mode: 'insensitive' } },
+                            { student: { erpInformation: { contains: term, mode: 'insensitive' } } },
+                            { student: { phoneNumber: { contains: term, mode: 'insensitive' } } },
+                            { student: { name: { contains: term, mode: 'insensitive' } } }
+                        ];
+                    }
+
                     return await prisma.gatePass.groupBy({
                         by: ['type'],
                         where: statsWhere,
