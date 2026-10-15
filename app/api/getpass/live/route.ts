@@ -159,17 +159,9 @@ export async function GET(request: NextRequest) {
 
         const currentlyOut = Array.from(uniqueOutRecords.values());
         const uniqueStudentsOut = currentlyOut.length;
-        
-        let leaveCount = 0;
-        let gatePassCount = 0;
-        currentlyOut.forEach((p) => {
-            const t = String(p.type || '').toLowerCase().trim();
-            if (t === 'leave' || t === 'home-leave' || t === 'hleave' || t.includes('leave')) {
-                leaveCount++;
-            } else {
-                gatePassCount++;
-            }
-        });
+
+        // Track any passes that should be auto-healed to HOME-LEAVE in the database
+        const passesToAutoSync: { id: string; permId?: string; reason?: string }[] = [];
 
         // Use the deduplicated list for display (no extra healing needed as it's already mapped)
         const currentlyOutWithDuration = currentlyOut.map((record: any) => {
@@ -213,17 +205,58 @@ export async function GET(request: NextRequest) {
                 }
             }
 
+            const effectiveType = isLeave ? "HOME-LEAVE" : (record.type || "GATE-PASS");
+            const effectivePermId = matchedPerm?._id || matchedPerm?.id || record.permissionId || null;
+
+            // Auto-heal DB if student has an approved leave but pass was recorded as regular outing
+            const rawType = String(record.type || '').toLowerCase().trim();
+            if (isLeave && (!rawType.includes('leave') || !record.permissionId)) {
+                const gpId = record._id || record.id;
+                if (gpId) {
+                    passesToAutoSync.push({
+                        id: gpId.toString(),
+                        permId: effectivePermId ? effectivePermId.toString() : undefined,
+                        reason: genuineReason || undefined
+                    });
+                }
+            }
+
             return {
                 ...record,
+                type: effectiveType,
+                permissionId: effectivePermId,
                 expectedReturnDate: expectedReturn,
                 leaveTo: expectedReturn,
                 leaveFrom: leaveFrom,
                 leaveReason: genuineReason,
-                reason: genuineReason,
+                reason: genuineReason || (isLeave ? "Home Leave" : record.reason),
                 isOverdue,
                 currentDurationMinutes: durationMinutes,
                 currentDurationText: durationText,
             };
+        });
+
+        // ⚡ ASYNC AUTO-HEAL: Update the gate pass record in the database so history & subsequent calls retain HOME-LEAVE
+        if (passesToAutoSync.length > 0) {
+            Promise.all(passesToAutoSync.map(item => 
+                db.gatePasses.update(item.id, {
+                    type: "HOME-LEAVE",
+                    ...(item.permId ? { permissionId: item.permId } : {}),
+                    ...(item.reason ? { reason: item.reason } : {})
+                }).catch((e: any) => console.error("Auto-sync gatepass leave type error:", e))
+            )).catch(() => {});
+        }
+
+        // ⚡ RECALCULATE LEAVE & GATEPASS COUNTS ACCURATELY:
+        let leaveCount = 0;
+        let gatePassCount = 0;
+        currentlyOutWithDuration.forEach((p: any) => {
+            const t = String(p.type || '').toLowerCase().trim();
+            if (t.includes('leave') || t === 'hleave') {
+                leaveCount++;
+            } else {
+                gatePassCount++;
+            }
         });
 
         // ⚡ EXCLUDE CURRENTLY OUT STUDENTS FROM RETURNS TODAY:
