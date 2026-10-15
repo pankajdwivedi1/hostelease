@@ -136,16 +136,26 @@ export async function GET(request: NextRequest) {
         const recentActivity = recentActivityRes.records || [];
         const activePermsList = Array.isArray(activePermsRes) ? activePermsRes : (activePermsRes?.records || (activePermsRes as any)?.permissions || []);
 
-        const permsByStudentId = new Map<string, any>();
-        const permsByRegId = new Map<string, any>();
-        activePermsList.forEach((perm: any) => {
-            const pSid = (typeof perm.studentId === 'object' ? (perm.studentId?._id || perm.studentId?.id) : perm.studentId)?.toString();
+        // ⚡ ACTIVE APPROVED LEAVES ONLY:
+        // A permission can only match if:
+        // 1. It is a leave request
+        // 2. Status is NOT completed, expired, rejected, or cancelled
+        // 3. Approved by Dean or Warden
+        const validActiveLeaves = activePermsList.filter((perm: any) => {
             const rType = String(perm.requestType || '').toLowerCase();
             const isLeave = rType.includes('leave') || rType === 'hleave';
-            if (isLeave && perm.status !== 'rejected' && perm.status !== 'cancelled') {
-                if (pSid && !permsByStudentId.has(pSid)) permsByStudentId.set(pSid, perm);
-                if (perm.registrationId && !permsByRegId.has(perm.registrationId)) permsByRegId.set(perm.registrationId, perm);
+            if (!isLeave) return false;
+
+            // Must NOT be completed, expired, rejected, or cancelled
+            if (perm.status === 'completed' || perm.status === 'expired' || perm.status === 'rejected' || perm.status === 'cancelled') {
+                return false;
             }
+
+            // Must be approved by Dean or Warden
+            const isApproved = perm.status === 'allowed' || perm.status === 'approved' || perm.deanStatus === 'allowed' || perm.deanStatus === 'approved';
+            if (!isApproved) return false;
+
+            return true;
         });
         
         // ⚡ DE-DUPLICATION: Use a Map to keep ONLY the most recent record per student
@@ -185,12 +195,30 @@ export async function GET(request: NextRequest) {
             }
 
             const recordSid = (typeof record.studentId === 'object' ? (record.studentId?._id || record.studentId?.id) : record.studentId)?.toString() || record.student?._id || record.student?.id;
-            const matchedPerm = (recordSid ? permsByStudentId.get(recordSid) : null) || (record.registrationId ? permsByRegId.get(record.registrationId) : null);
+            const checkOutMs = !isNaN(outDate.getTime()) ? outDate.getTime() : now.getTime();
+
+            // Match ONLY if student has an active approved leave whose departure window covers this checkout
+            const matchedPerm = validActiveLeaves.find((perm: any) => {
+                const pSid = (typeof perm.studentId === 'object' ? (perm.studentId?._id || perm.studentId?.id) : perm.studentId)?.toString();
+                const idMatches = (pSid && recordSid && pSid === recordSid) || 
+                                  (perm.registrationId && record.registrationId && perm.registrationId.toLowerCase() === record.registrationId.toLowerCase());
+                if (!idMatches) return false;
+
+                const permStart = new Date(perm.fromDateTime).getTime();
+                const permEnd = new Date(perm.toDateTime).getTime();
+                if (isNaN(permStart) || isNaN(permEnd)) return false;
+
+                // Student checkout must be near departure (within 18 hours before fromDateTime) through the end date (plus 24h grace)
+                return (checkOutMs >= (permStart - 18 * 60 * 60 * 1000)) && (checkOutMs <= (permEnd + 24 * 60 * 60 * 1000));
+            });
 
             const expectedReturn = matchedPerm?.toDateTime || record.expectedReturnDate || record.toDateTime || record.student?.dynamicFields?.leaveTo || record.student?.leaveTo || null;
             const leaveFrom = matchedPerm?.fromDateTime || record.fromDateTime || record.leaveFrom || record.student?.dynamicFields?.leaveFrom || null;
             const genuineReason = matchedPerm?.reason || record.reason || record.leaveReason || record.student?.dynamicFields?.leaveReason || null;
-            const isLeave = String(record.type || '').toLowerCase().includes('leave') || String(record.type || '').toLowerCase() === 'hleave' || !!matchedPerm;
+            
+            const rawType = String(record.type || '').toLowerCase().trim();
+            const originallyLeave = rawType.includes('leave') || rawType === 'hleave';
+            const isLeave = originallyLeave || !!matchedPerm;
             
             let isOverdue = false;
             if (isLeave) {
@@ -208,9 +236,8 @@ export async function GET(request: NextRequest) {
             const effectiveType = isLeave ? "HOME-LEAVE" : (record.type || "GATE-PASS");
             const effectivePermId = matchedPerm?._id || matchedPerm?.id || record.permissionId || null;
 
-            // Auto-heal DB if student has an approved leave but pass was recorded as regular outing
-            const rawType = String(record.type || '').toLowerCase().trim();
-            if (isLeave && (!rawType.includes('leave') || !record.permissionId)) {
+            // Auto-heal DB ONLY if student has a genuinely active approved leave covering this date
+            if (matchedPerm && (!rawType.includes('leave') || !record.permissionId)) {
                 const gpId = record._id || record.id;
                 if (gpId) {
                     passesToAutoSync.push({
