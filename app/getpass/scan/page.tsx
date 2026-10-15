@@ -1,12 +1,12 @@
 "use client";
 
-import React, { useState, useEffect, useRef, useCallback } from "react";
+import React, { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import jsQR from "jsqr";
 import { getInstallationId, isPWAInstalled } from "@/lib/installationId";
 import { onAuthStateChanged } from "firebase/auth";
 import { auth } from "@/lib/firebase";
-import { formatDateDDMMYYYY } from "@/lib/dateFormat";
+import { formatDateDDMMYYYY, parseFlexibleDate } from "@/lib/dateFormat";
 
 // ============================================================
 // GATEPASS STUDENT SCANNER — QR Code Scanner for Students
@@ -56,6 +56,12 @@ export default function StudentScannerPage() {
     const [deviceId, setDeviceId] = useState<string>("");
     const [studentName, setStudentName] = useState<string>("");
     const [isPWA, setIsPWA] = useState<boolean>(true); // assume true until checked
+
+    // Calendar & Single Strip History States
+    const [viewMonthDate, setViewMonthDate] = useState<Date>(() => new Date());
+    const [selectedDateStr, setSelectedDateStr] = useState<string>(() => formatDateDDMMYYYY(new Date()));
+    const [selectedPassIndex, setSelectedPassIndex] = useState<number>(0);
+    const hasUserSelectedDateRef = useRef<boolean>(false);
 
     // Zoom state
     const [zoomLevel, setZoomLevel] = useState(1);
@@ -145,16 +151,44 @@ export default function StudentScannerPage() {
         if (!uid) return;
         setLoadingHistory(true);
         try {
-            const res = await fetch(`/api/getpass/history?firebaseUID=${uid}&limit=10&t=${Date.now()}`);
+            const res = await fetch(`/api/getpass/history?firebaseUID=${uid}&limit=100&t=${Date.now()}`);
             const data = await res.json();
             if (data.success) {
-                setOutingHistory(data.records || []);
+                const records: OutingRecord[] = data.records || [];
+                setOutingHistory(records);
+
+                // Auto-select latest record if today has no outings and user hasn't explicitly clicked a date yet
+                if (records.length > 0 && !hasUserSelectedDateRef.current) {
+                    const todayStr = formatDateDDMMYYYY(new Date());
+                    const hasToday = records.some(r => formatDateDDMMYYYY(r.checkOutISTDate || r.checkOutTime) === todayStr);
+                    if (!hasToday) {
+                        const latestDate = formatDateDDMMYYYY(records[0].checkOutISTDate || records[0].checkOutTime);
+                        setSelectedDateStr(latestDate);
+                        const parsed = parseFlexibleDate(records[0].checkOutTime || records[0].checkOutISTDate);
+                        if (parsed) {
+                            setViewMonthDate(new Date(parsed.getFullYear(), parsed.getMonth(), 1));
+                        }
+                    }
+                }
             }
         } catch (err) {
             console.error("Failed to fetch history:", err);
         }
         setLoadingHistory(false);
     };
+
+    // Fast lookup map for records grouped by DD-MM-YYYY
+    const outingsByDate = useMemo(() => {
+        const map = new Map<string, OutingRecord[]>();
+        for (const record of outingHistory) {
+            const key = formatDateDDMMYYYY(record.checkOutISTDate || record.checkOutTime);
+            if (!key) continue;
+            const list = map.get(key) || [];
+            list.push(record);
+            map.set(key, list);
+        }
+        return map;
+    }, [outingHistory]);
 
     // ─── Camera / QR Scanning ────────────────────────────────────────────────
     // Strategy: use a <video> ref-callback.
@@ -307,6 +341,10 @@ export default function StudentScannerPage() {
                     console.error("Failed to update cachedStudentData:", e);
                 }
 
+                setSelectedDateStr(formatDateDDMMYYYY(new Date()));
+                setSelectedPassIndex(0);
+                setViewMonthDate(new Date());
+                hasUserSelectedDateRef.current = true;
                 fetchOutingHistory(firebaseUID);
             } else {
                 setScanResult({
@@ -493,6 +531,43 @@ export default function StudentScannerPage() {
         processingRef.current = false;
         startCamera();
     };
+
+    // Calendar calculation helpers
+    const monthNames = [
+        "January", "February", "March", "April", "May", "June",
+        "July", "August", "September", "October", "November", "December"
+    ];
+
+    const viewYear = viewMonthDate.getFullYear();
+    const viewMonth = viewMonthDate.getMonth();
+    const startDayOfWeek = new Date(viewYear, viewMonth, 1).getDay();
+    const daysInMonth = new Date(viewYear, viewMonth + 1, 0).getDate();
+    const todayStr = formatDateDDMMYYYY(new Date());
+
+    const padZero = (n: number) => String(n).padStart(2, "0");
+    const getFormattedDateStr = (year: number, monthIndex: number, dayNum: number) => {
+        return `${padZero(dayNum)}-${padZero(monthIndex + 1)}-${year}`;
+    };
+
+    const handlePrevMonth = () => {
+        setViewMonthDate(prev => new Date(prev.getFullYear(), prev.getMonth() - 1, 1));
+    };
+
+    const handleNextMonth = () => {
+        setViewMonthDate(prev => new Date(prev.getFullYear(), prev.getMonth() + 1, 1));
+    };
+
+    const handleToday = () => {
+        const now = new Date();
+        setViewMonthDate(new Date(now.getFullYear(), now.getMonth(), 1));
+        setSelectedDateStr(formatDateDDMMYYYY(now));
+        setSelectedPassIndex(0);
+        hasUserSelectedDateRef.current = true;
+    };
+
+    const selectedDayRecords = outingsByDate.get(selectedDateStr) || [];
+    const safePassIndex = Math.min(selectedPassIndex, Math.max(0, selectedDayRecords.length - 1));
+    const activeRecord = selectedDayRecords[safePassIndex];
 
     return (
         <div style={{
@@ -725,142 +800,490 @@ export default function StudentScannerPage() {
                 width: "100%",
                 margin: "0 auto",
             }}>
-                <h3 style={{
-                    fontSize: "11px",
-                    fontWeight: "800",
-                    color: "#9ca3af",
-                    textTransform: "uppercase",
-                    letterSpacing: "0.08em",
-                    marginBottom: "12px",
+                <div style={{
                     display: "flex",
+                    justifyContent: "space-between",
                     alignItems: "center",
-                    gap: "6px"
+                    marginBottom: "12px",
                 }}>
-                    <span>📋</span> Your Outing History
-                </h3>
+                    <h3 style={{
+                        fontSize: "11px",
+                        fontWeight: "800",
+                        color: "#9ca3af",
+                        textTransform: "uppercase",
+                        letterSpacing: "0.08em",
+                        margin: 0,
+                        display: "flex",
+                        alignItems: "center",
+                        gap: "6px"
+                    }}>
+                        <span>📋</span> Your Outing History
+                    </h3>
+
+                    {outingHistory.length > 0 && (
+                        <span style={{
+                            fontSize: "10px",
+                            fontWeight: "700",
+                            color: "#9ca3af",
+                            backgroundColor: "rgba(255, 255, 255, 0.05)",
+                            padding: "2px 8px",
+                            borderRadius: "9999px",
+                            border: "1px solid rgba(255, 255, 255, 0.1)"
+                        }}>
+                            {outingHistory.length} Total Passes
+                        </span>
+                    )}
+                </div>
 
                 {loadingHistory ? (
-                    <div style={{ padding: "20px", textAlign: "center", color: "#6b7280", fontSize: "11px" }}>
+                    <div style={{ padding: "24px", textAlign: "center", color: "#6b7280", fontSize: "11px" }}>
                         Loading Outing History...
                     </div>
-                ) : outingHistory.length > 0 ? (
-                    <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
-                        {outingHistory.map((record) => {
-                            const isLeave = String(record.type || '').toLowerCase().includes('leave') || String(record.type || '').toLowerCase() === 'hleave';
-                            const isOut = record.status === "out";
+                ) : (
+                    <>
+                        {/* CALENDAR COMPONENT (Marked Blue Area) */}
+                        <div style={{
+                            backgroundColor: "#0d1527",
+                            borderRadius: "14px",
+                            border: "1px solid rgba(255, 255, 255, 0.1)",
+                            padding: "12px 14px 10px",
+                            boxShadow: "0 6px 20px rgba(0, 0, 0, 0.35)",
+                            marginBottom: "14px"
+                        }}>
+                            {/* Calendar Header: Month/Year & Navigation */}
+                            <div style={{
+                                display: "flex",
+                                alignItems: "center",
+                                justifyContent: "space-between",
+                                marginBottom: "10px"
+                            }}>
+                                <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                                    <button
+                                        type="button"
+                                        onClick={handlePrevMonth}
+                                        style={{
+                                            width: "28px",
+                                            height: "28px",
+                                            borderRadius: "8px",
+                                            border: "1px solid rgba(255, 255, 255, 0.15)",
+                                            backgroundColor: "rgba(255, 255, 255, 0.06)",
+                                            color: "#e5e7eb",
+                                            fontSize: "14px",
+                                            fontWeight: "bold",
+                                            display: "flex",
+                                            alignItems: "center",
+                                            justifyContent: "center",
+                                            cursor: "pointer"
+                                        }}
+                                        aria-label="Previous Month"
+                                    >
+                                        ‹
+                                    </button>
 
-                            return (
-                                <div
-                                    key={record._id}
+                                    <span style={{
+                                        fontSize: "12.5px",
+                                        fontWeight: "800",
+                                        color: "#ffffff",
+                                        letterSpacing: "0.04em",
+                                        textTransform: "uppercase"
+                                    }}>
+                                        {monthNames[viewMonth]} {viewYear}
+                                    </span>
+
+                                    <button
+                                        type="button"
+                                        onClick={handleNextMonth}
+                                        style={{
+                                            width: "28px",
+                                            height: "28px",
+                                            borderRadius: "8px",
+                                            border: "1px solid rgba(255, 255, 255, 0.15)",
+                                            backgroundColor: "rgba(255, 255, 255, 0.06)",
+                                            color: "#e5e7eb",
+                                            fontSize: "14px",
+                                            fontWeight: "bold",
+                                            display: "flex",
+                                            alignItems: "center",
+                                            justifyContent: "center",
+                                            cursor: "pointer"
+                                        }}
+                                        aria-label="Next Month"
+                                    >
+                                        ›
+                                    </button>
+                                </div>
+
+                                <button
+                                    type="button"
+                                    onClick={handleToday}
                                     style={{
-                                        backgroundColor: "#ffffff",
-                                        borderRadius: "12px",
-                                        border: "1px solid rgba(229, 231, 235, 0.9)",
-                                        padding: "12px 14px",
-                                        boxShadow: "0 2px 8px rgba(0, 0, 0, 0.04)",
-                                        display: "flex",
-                                        flexDirection: "column",
-                                        gap: "8px",
+                                        padding: "3px 10px",
+                                        borderRadius: "6px",
+                                        border: "1px solid rgba(59, 130, 246, 0.5)",
+                                        backgroundColor: "rgba(59, 130, 246, 0.15)",
+                                        color: "#60a5fa",
+                                        fontSize: "9.5px",
+                                        fontWeight: "800",
+                                        letterSpacing: "0.05em",
+                                        textTransform: "uppercase",
+                                        cursor: "pointer"
                                     }}
                                 >
-                                    {/* Top Row: Type Pill + Status Pill */}
-                                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                                        <span style={{
-                                            padding: "2px 7px",
-                                            borderRadius: "9999px",
-                                            fontSize: "8.5px",
-                                            fontWeight: "800",
-                                            textTransform: "uppercase",
-                                            letterSpacing: "0.05em",
-                                            backgroundColor: isLeave ? "#dbeafe" : "#f3e8ff",
-                                            color: isLeave ? "#1d4ed8" : "#7e22ce"
-                                        }}>
-                                            {isLeave ? "🏠 Home Leave" : "🚶 Short Outing"}
-                                        </span>
+                                    Today
+                                </button>
+                            </div>
 
-                                        <span style={{
-                                            padding: "2px 7px",
-                                            borderRadius: "9999px",
-                                            fontSize: "8.5px",
+                            {/* Days of Week Header */}
+                            <div style={{
+                                display: "grid",
+                                gridTemplateColumns: "repeat(7, 1fr)",
+                                gap: "3px",
+                                textAlign: "center",
+                                marginBottom: "6px"
+                            }}>
+                                {["Su", "Mo", "Tu", "We", "Th", "Fr", "Sa"].map((dayName) => (
+                                    <span
+                                        key={dayName}
+                                        style={{
+                                            fontSize: "9.5px",
                                             fontWeight: "800",
+                                            color: "#9ca3af",
                                             textTransform: "uppercase",
-                                            letterSpacing: "0.05em",
-                                            backgroundColor: isOut ? "#ffe4e6" : "#d1fae5",
-                                            color: isOut ? "#be123c" : "#047857",
-                                            border: isOut ? "1px solid #fecdd3" : "1px solid #a7f3d0"
-                                        }}>
-                                            {isOut ? "Still Outside" : "Returned"}
-                                        </span>
-                                    </div>
+                                            letterSpacing: "0.03em"
+                                        }}
+                                    >
+                                        {dayName}
+                                    </span>
+                                ))}
+                            </div>
 
-                                    {/* Middle Rows: Full horizontal row matching Screenshot 2 */}
-                                    <div style={{ display: "flex", flexDirection: "column", gap: "6px", paddingTop: "4px" }}>
-                                        <div style={{ display: "flex", alignItems: "center", fontSize: "11px", fontWeight: "800", color: "#111827" }}>
-                                            <span style={{ width: "85px", textTransform: "uppercase", letterSpacing: "-0.02em", flexShrink: 0 }}>CHECK OUT</span>
-                                            <span style={{ color: "#d1d5db", fontWeight: "normal", padding: "0 8px", flexShrink: 0 }}>|</span>
-                                            <span style={{ textAlign: "center", flex: 1, fontVariantNumeric: "tabular-nums" }}>{record.checkOutISTTime}</span>
-                                            <span style={{ color: "#d1d5db", fontWeight: "normal", padding: "0 8px", flexShrink: 0 }}>|</span>
-                                            <span style={{ textAlign: "right", flex: 1, fontVariantNumeric: "tabular-nums" }}>{formatDateDDMMYYYY(record.checkOutISTDate || record.checkOutTime)}</span>
+                            {/* Days Grid */}
+                            <div style={{
+                                display: "grid",
+                                gridTemplateColumns: "repeat(7, 1fr)",
+                                gap: "3px"
+                            }}>
+                                {Array.from({ length: startDayOfWeek }).map((_, i) => (
+                                    <div key={`empty-${i}`} style={{ height: "34px" }} />
+                                ))}
+                                {Array.from({ length: daysInMonth }).map((_, i) => {
+                                    const day = i + 1;
+                                    const dayStr = getFormattedDateStr(viewYear, viewMonth, day);
+                                    const isSelected = selectedDateStr === dayStr;
+                                    const isToday = todayStr === dayStr;
+                                    const dayRecords = outingsByDate.get(dayStr) || [];
+                                    const hasOuting = dayRecords.length > 0;
+                                    const hasLeave = dayRecords.some(r => String(r.type || '').toLowerCase().includes('leave') || String(r.type || '').toLowerCase() === 'hleave');
+
+                                    return (
+                                        <button
+                                            key={dayStr}
+                                            type="button"
+                                            onClick={() => {
+                                                hasUserSelectedDateRef.current = true;
+                                                setSelectedDateStr(dayStr);
+                                                setSelectedPassIndex(0);
+                                            }}
+                                            style={{
+                                                position: "relative",
+                                                height: "34px",
+                                                borderRadius: "9px",
+                                                border: isSelected
+                                                    ? "2px solid #3b82f6"
+                                                    : isToday
+                                                    ? "1px solid rgba(56, 189, 248, 0.6)"
+                                                    : "1px solid transparent",
+                                                backgroundColor: isSelected
+                                                    ? "#2563eb"
+                                                    : hasOuting
+                                                    ? "rgba(255, 255, 255, 0.08)"
+                                                    : "transparent",
+                                                color: isSelected
+                                                    ? "#ffffff"
+                                                    : hasOuting
+                                                    ? "#ffffff"
+                                                    : "#9ca3af",
+                                                display: "flex",
+                                                flexDirection: "column",
+                                                alignItems: "center",
+                                                justifyContent: "center",
+                                                cursor: "pointer",
+                                                padding: 0,
+                                                transition: "all 0.15s ease",
+                                                boxShadow: isSelected ? "0 2px 8px rgba(37, 99, 235, 0.5)" : "none"
+                                            }}
+                                        >
+                                            <span style={{
+                                                fontSize: "11.5px",
+                                                fontWeight: isSelected || hasOuting || isToday ? "800" : "500",
+                                                lineHeight: "1"
+                                            }}>
+                                                {day}
+                                            </span>
+
+                                            {/* Dot indicator for outing or home leave */}
+                                            {hasOuting && (
+                                                <span style={{
+                                                    width: "5px",
+                                                    height: "5px",
+                                                    borderRadius: "50%",
+                                                    backgroundColor: isSelected
+                                                        ? "#fbbf24"
+                                                        : hasLeave
+                                                        ? "#60a5fa"
+                                                        : "#f59e0b",
+                                                    marginTop: "2px",
+                                                    boxShadow: "0 0 4px rgba(245, 158, 11, 0.7)"
+                                                }} />
+                                            )}
+                                        </button>
+                                    );
+                                })}
+                            </div>
+
+                            {/* Calendar Legend / Footer */}
+                            <div style={{
+                                display: "flex",
+                                alignItems: "center",
+                                justifyContent: "space-between",
+                                marginTop: "8px",
+                                paddingTop: "7px",
+                                borderTop: "1px solid rgba(255, 255, 255, 0.08)",
+                                fontSize: "9px",
+                                fontWeight: "700",
+                                color: "#9ca3af"
+                            }}>
+                                <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+                                    <span style={{ display: "flex", alignItems: "center", gap: "4px" }}>
+                                        <span style={{ width: "5px", height: "5px", borderRadius: "50%", backgroundColor: "#f59e0b", display: "inline-block" }} />
+                                        Outing
+                                    </span>
+                                    <span style={{ display: "flex", alignItems: "center", gap: "4px" }}>
+                                        <span style={{ width: "5px", height: "5px", borderRadius: "50%", backgroundColor: "#60a5fa", display: "inline-block" }} />
+                                        Home Leave
+                                    </span>
+                                </div>
+                                <span style={{ color: "#cbd5e1" }}>
+                                    Selected: {selectedDateStr}
+                                </span>
+                            </div>
+                        </div>
+
+                        {/* SINGLE STRIP ONLY (as circled by black pen) */}
+                        {activeRecord ? (
+                            <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
+                                {selectedDayRecords.length > 1 && (
+                                    <div style={{
+                                        display: "flex",
+                                        justifyContent: "space-between",
+                                        alignItems: "center",
+                                        padding: "0 4px",
+                                        marginBottom: "2px"
+                                    }}>
+                                        <span style={{
+                                            fontSize: "10px",
+                                            fontWeight: "800",
+                                            color: "#9ca3af",
+                                            textTransform: "uppercase",
+                                            letterSpacing: "0.05em"
+                                        }}>
+                                            Pass {safePassIndex + 1} of {selectedDayRecords.length} on {selectedDateStr}
+                                        </span>
+                                        <div style={{ display: "flex", gap: "6px" }}>
+                                            <button
+                                                type="button"
+                                                disabled={safePassIndex === 0}
+                                                onClick={() => setSelectedPassIndex(p => Math.max(0, p - 1))}
+                                                style={{
+                                                    padding: "2px 8px",
+                                                    borderRadius: "4px",
+                                                    border: "1px solid rgba(255, 255, 255, 0.2)",
+                                                    backgroundColor: "rgba(255, 255, 255, 0.1)",
+                                                    color: "#ffffff",
+                                                    fontSize: "10px",
+                                                    fontWeight: "bold",
+                                                    cursor: safePassIndex === 0 ? "not-allowed" : "pointer",
+                                                    opacity: safePassIndex === 0 ? 0.35 : 1
+                                                }}
+                                            >
+                                                ‹ Prev
+                                            </button>
+                                            <button
+                                                type="button"
+                                                disabled={safePassIndex === selectedDayRecords.length - 1}
+                                                onClick={() => setSelectedPassIndex(p => Math.min(selectedDayRecords.length - 1, p + 1))}
+                                                style={{
+                                                    padding: "2px 8px",
+                                                    borderRadius: "4px",
+                                                    border: "1px solid rgba(255, 255, 255, 0.2)",
+                                                    backgroundColor: "rgba(255, 255, 255, 0.1)",
+                                                    color: "#ffffff",
+                                                    fontSize: "10px",
+                                                    fontWeight: "bold",
+                                                    cursor: safePassIndex === selectedDayRecords.length - 1 ? "not-allowed" : "pointer",
+                                                    opacity: safePassIndex === selectedDayRecords.length - 1 ? 0.35 : 1
+                                                }}
+                                            >
+                                                Next ›
+                                            </button>
                                         </div>
+                                    </div>
+                                )}
 
-                                        <div style={{ display: "flex", alignItems: "center", fontSize: "11px", fontWeight: "800", color: "#111827" }}>
-                                            <span style={{ width: "85px", textTransform: "uppercase", letterSpacing: "-0.02em", flexShrink: 0 }}>CHECK IN</span>
-                                            <span style={{ color: "#d1d5db", fontWeight: "normal", padding: "0 8px", flexShrink: 0 }}>|</span>
-                                            {record.status === "in" || record.status === "auto-resolved" ? (
-                                                <>
-                                                    <span style={{ textAlign: "center", flex: 1, fontVariantNumeric: "tabular-nums" }}>{record.checkInISTTime || "---"}</span>
-                                                    <span style={{ color: "#d1d5db", fontWeight: "normal", padding: "0 8px", flexShrink: 0 }}>|</span>
-                                                    <span style={{ textAlign: "right", flex: 1, fontVariantNumeric: "tabular-nums" }}>{formatDateDDMMYYYY(record.checkInISTDate || record.checkInTime || record.checkOutISTDate)}</span>
-                                                </>
-                                            ) : (
-                                                <span style={{ flex: 1, textAlign: "center", color: "#f43f5e", fontWeight: "800", textTransform: "uppercase", letterSpacing: "0.05em", fontSize: "10px" }}>
-                                                    Outside Campus
+                                {(() => {
+                                    const record = activeRecord;
+                                    const isLeave = String(record.type || '').toLowerCase().includes('leave') || String(record.type || '').toLowerCase() === 'hleave';
+                                    const isOut = record.status === "out";
+
+                                    return (
+                                        <div
+                                            key={record._id}
+                                            style={{
+                                                backgroundColor: "#ffffff",
+                                                borderRadius: "12px",
+                                                border: "1px solid rgba(229, 231, 235, 0.9)",
+                                                padding: "12px 14px",
+                                                boxShadow: "0 2px 8px rgba(0, 0, 0, 0.04)",
+                                                display: "flex",
+                                                flexDirection: "column",
+                                                gap: "8px",
+                                            }}
+                                        >
+                                            {/* Top Row: Type Pill + Status Pill */}
+                                            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                                                <span style={{
+                                                    padding: "2px 7px",
+                                                    borderRadius: "9999px",
+                                                    fontSize: "8.5px",
+                                                    fontWeight: "800",
+                                                    textTransform: "uppercase",
+                                                    letterSpacing: "0.05em",
+                                                    backgroundColor: isLeave ? "#dbeafe" : "#f3e8ff",
+                                                    color: isLeave ? "#1d4ed8" : "#7e22ce"
+                                                }}>
+                                                    {isLeave ? "🏠 Home Leave" : "🚶 Short Outing"}
                                                 </span>
+
+                                                <span style={{
+                                                    padding: "2px 7px",
+                                                    borderRadius: "9999px",
+                                                    fontSize: "8.5px",
+                                                    fontWeight: "800",
+                                                    textTransform: "uppercase",
+                                                    letterSpacing: "0.05em",
+                                                    backgroundColor: isOut ? "#ffe4e6" : "#d1fae5",
+                                                    color: isOut ? "#be123c" : "#047857",
+                                                    border: isOut ? "1px solid #fecdd3" : "1px solid #a7f3d0"
+                                                }}>
+                                                    {isOut ? "Still Outside" : "Returned"}
+                                                </span>
+                                            </div>
+
+                                            {/* Middle Rows: Full horizontal row matching Screenshot 2 */}
+                                            <div style={{ display: "flex", flexDirection: "column", gap: "6px", paddingTop: "4px" }}>
+                                                <div style={{ display: "flex", alignItems: "center", fontSize: "11px", fontWeight: "800", color: "#111827" }}>
+                                                    <span style={{ width: "85px", textTransform: "uppercase", letterSpacing: "-0.02em", flexShrink: 0 }}>CHECK OUT</span>
+                                                    <span style={{ color: "#d1d5db", fontWeight: "normal", padding: "0 8px", flexShrink: 0 }}>|</span>
+                                                    <span style={{ textAlign: "center", flex: 1, fontVariantNumeric: "tabular-nums" }}>{record.checkOutISTTime}</span>
+                                                    <span style={{ color: "#d1d5db", fontWeight: "normal", padding: "0 8px", flexShrink: 0 }}>|</span>
+                                                    <span style={{ textAlign: "right", flex: 1, fontVariantNumeric: "tabular-nums" }}>{formatDateDDMMYYYY(record.checkOutISTDate || record.checkOutTime)}</span>
+                                                </div>
+
+                                                <div style={{ display: "flex", alignItems: "center", fontSize: "11px", fontWeight: "800", color: "#111827" }}>
+                                                    <span style={{ width: "85px", textTransform: "uppercase", letterSpacing: "-0.02em", flexShrink: 0 }}>CHECK IN</span>
+                                                    <span style={{ color: "#d1d5db", fontWeight: "normal", padding: "0 8px", flexShrink: 0 }}>|</span>
+                                                    {record.status === "in" || record.status === "auto-resolved" ? (
+                                                        <>
+                                                            <span style={{ textAlign: "center", flex: 1, fontVariantNumeric: "tabular-nums" }}>{record.checkInISTTime || "---"}</span>
+                                                            <span style={{ color: "#d1d5db", fontWeight: "normal", padding: "0 8px", flexShrink: 0 }}>|</span>
+                                                            <span style={{ textAlign: "right", flex: 1, fontVariantNumeric: "tabular-nums" }}>{formatDateDDMMYYYY(record.checkInISTDate || record.checkInTime || record.checkOutISTDate)}</span>
+                                                        </>
+                                                    ) : (
+                                                        <span style={{ flex: 1, textAlign: "center", color: "#f43f5e", fontWeight: "800", textTransform: "uppercase", letterSpacing: "0.05em", fontSize: "10px" }}>
+                                                            Outside Campus
+                                                        </span>
+                                                    )}
+                                                </div>
+                                            </div>
+
+                                            {/* Bottom Row: Centered TOTAL DURATION */}
+                                            {record.durationMinutes !== undefined && record.durationMinutes !== null && (
+                                                <div style={{
+                                                    fontSize: "10.5px",
+                                                    fontWeight: "800",
+                                                    color: "#111827",
+                                                    textTransform: "uppercase",
+                                                    letterSpacing: "0.05em",
+                                                    paddingTop: "6px",
+                                                    borderTop: "1px solid #f3f4f6",
+                                                    textAlign: "center"
+                                                }}>
+                                                    TOTAL DURATION: {(() => {
+                                                        const minutes = record.durationMinutes;
+                                                        if (minutes >= 1440) {
+                                                            const days = Math.floor(minutes / 1440);
+                                                            const hrs = Math.floor((minutes % 1440) / 60);
+                                                            const mins = minutes % 60;
+                                                            return `${days}D ${hrs}H ${mins}M`;
+                                                        }
+                                                        const h = Math.floor(minutes / 60);
+                                                        const mins = minutes % 60;
+                                                        return h > 0 ? `${h}H ${mins}M` : `${mins}M`;
+                                                    })()}
+                                                </div>
                                             )}
                                         </div>
-                                    </div>
-
-                                    {/* Bottom Row: Centered TOTAL DURATION */}
-                                    {record.durationMinutes !== undefined && record.durationMinutes !== null && (
-                                        <div style={{
+                                    );
+                                })()}
+                            </div>
+                        ) : (
+                            <div style={{
+                                padding: "20px 16px",
+                                textAlign: "center",
+                                backgroundColor: "rgba(255, 255, 255, 0.03)",
+                                borderRadius: "12px",
+                                border: "1px dashed rgba(255, 255, 255, 0.15)",
+                                display: "flex",
+                                flexDirection: "column",
+                                alignItems: "center",
+                                gap: "6px"
+                            }}>
+                                <span style={{ fontSize: "20px" }}>📅</span>
+                                <p style={{ margin: 0, fontSize: "11px", color: "rgba(255, 255, 255, 0.5)", fontWeight: "600" }}>
+                                    No outing recorded on {selectedDateStr}
+                                </p>
+                                {outingHistory.length > 0 && (
+                                    <button
+                                        type="button"
+                                        onClick={() => {
+                                            const latest = outingHistory[0];
+                                            const latestDate = formatDateDDMMYYYY(latest.checkOutISTDate || latest.checkOutTime);
+                                            hasUserSelectedDateRef.current = true;
+                                            setSelectedDateStr(latestDate);
+                                            setSelectedPassIndex(0);
+                                            const parsed = parseFlexibleDate(latest.checkOutTime || latest.checkOutISTDate);
+                                            if (parsed) {
+                                                setViewMonthDate(new Date(parsed.getFullYear(), parsed.getMonth(), 1));
+                                            }
+                                        }}
+                                        style={{
+                                            marginTop: "4px",
+                                            padding: "5px 12px",
+                                            borderRadius: "8px",
+                                            backgroundColor: "rgba(59, 130, 246, 0.15)",
+                                            border: "1px solid rgba(59, 130, 246, 0.35)",
+                                            color: "#60a5fa",
                                             fontSize: "10.5px",
-                                            fontWeight: "800",
-                                            color: "#111827",
-                                            textTransform: "uppercase",
-                                            letterSpacing: "0.05em",
-                                            paddingTop: "6px",
-                                            borderTop: "1px solid #f3f4f6",
-                                            textAlign: "center"
-                                        }}>
-                                            TOTAL DURATION: {(() => {
-                                                const minutes = record.durationMinutes;
-                                                if (minutes >= 1440) {
-                                                    const days = Math.floor(minutes / 1440);
-                                                    const hrs = Math.floor((minutes % 1440) / 60);
-                                                    const mins = minutes % 60;
-                                                    return `${days}D ${hrs}H ${mins}M`;
-                                                }
-                                                const h = Math.floor(minutes / 60);
-                                                const mins = minutes % 60;
-                                                return h > 0 ? `${h}H ${mins}M` : `${mins}M`;
-                                            })()}
-                                        </div>
-                                    )}
-                                </div>
-                            );
-                        })}
-                    </div>
-                ) : (
-                    <div style={{
-                        padding: "24px 16px",
-                        textAlign: "center",
-                        backgroundColor: "rgba(255, 255, 255, 0.03)",
-                        borderRadius: "12px",
-                        border: "1px solid rgba(255, 255, 255, 0.08)"
-                    }}>
-                        <span style={{ fontSize: "24px", display: "block", marginBottom: "6px" }}>📭</span>
-                        <p style={{ margin: 0, fontSize: "11px", color: "rgba(255, 255, 255, 0.4)" }}>No outings recorded yet</p>
-                    </div>
+                                            fontWeight: "700",
+                                            cursor: "pointer"
+                                        }}
+                                    >
+                                        Jump to Latest Outing ({formatDateDDMMYYYY(outingHistory[0].checkOutISTDate || outingHistory[0].checkOutTime)})
+                                    </button>
+                                )}
+                            </div>
+                        )}
+                    </>
                 )}
             </div>
 
