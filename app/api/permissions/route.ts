@@ -4,8 +4,11 @@ import { prisma } from "@/lib/prisma";
 import { triggerLeaveVoiceCall } from "@/lib/msg91";
 import { assertTenantActive } from "@/lib/tenant";
 import { parseAsIST } from "@/lib/dateFormat";
+import { jsonWithEtag } from "@/lib/etag";
 
 export const dynamic = "force-dynamic";
+
+let lastPermCleanupTime = 0;
 
 export async function POST(request: NextRequest) {
   try {
@@ -232,46 +235,58 @@ export async function GET(request: NextRequest) {
     }
 
     const limitParam = searchParams.get("limit");
-    const options: any = { populate: true };
+    const light = searchParams.get("light") === "true";
+    const options: any = { populate: studentId ? false : !light };
     if (limitParam) {
       options.limit = parseInt(limitParam, 10);
     }
 
-    // 🧹 Auto-delete cancelled or expired permissions older than 10 days from their last date
-    const tenDaysAgo = new Date(Date.now() - 10 * 24 * 60 * 60 * 1000);
-    prisma.permission.deleteMany({
-      where: {
-        toDateTime: { lte: tenDaysAgo },
-        OR: [
-          { status: { in: ['cancelled', 'expired'] } },
-          { wardenStatus: { in: ['cancelled', 'expired'] } },
-          { deanStatus: { in: ['cancelled', 'expired'] } },
-          {
-            status: 'pending',
-            deanStatus: { notIn: ['allowed', 'approved'] }
-          }
-        ]
-      }
-    }).catch((err) => console.error("Auto-delete 10-day old leaves failed:", err));
+    const nowMs = Date.now();
+    // 🧹 Auto-delete cancelled or expired permissions older than 10 days (throttled to at most once per 6 hours)
+    if (nowMs - lastPermCleanupTime > 6 * 60 * 60 * 1000) {
+      lastPermCleanupTime = nowMs;
+      const tenDaysAgo = new Date(nowMs - 10 * 24 * 60 * 60 * 1000);
+      prisma.permission.deleteMany({
+        where: {
+          toDateTime: { lte: tenDaysAgo },
+          OR: [
+            { status: { in: ['cancelled', 'expired'] } },
+            { wardenStatus: { in: ['cancelled', 'expired'] } },
+            { deanStatus: { in: ['cancelled', 'expired'] } },
+            {
+              status: 'pending',
+              deanStatus: { notIn: ['allowed', 'approved'] }
+            }
+          ]
+        }
+      }).catch((err) => console.error("Auto-delete 10-day old leaves failed:", err));
+    }
 
     const { records: permissions, total } = await db.permissions.list(filters, options);
+
+    const allowSyncIds: string[] = [];
+    const rejectSyncIds: string[] = [];
+    const cancelSyncIds: string[] = [];
+    const expireSyncIds: string[] = [];
 
     // Filter out artificial "Manual Management Override" records so only real student applications appear
     const realPermissions = (permissions || []).filter((p: any) => {
       const reason = String(p.reason || '').trim().toLowerCase();
       if (reason.includes('manual management override')) return false;
 
+      const permId = p._id || p.id;
+
       // Auto-heal out-of-sync records where dean approved or rejected
       if (p.deanStatus === 'allowed' && p.status === 'pending') {
         p.status = 'allowed';
-        db.permissions.update(p._id || p.id, { status: 'allowed' }).catch(() => {});
+        if (permId) allowSyncIds.push(permId);
       } else if ((p.deanStatus === 'rejected' || p.wardenStatus === 'rejected') && p.status === 'pending') {
         p.status = 'rejected';
-        db.permissions.update(p._id || p.id, { status: 'rejected' }).catch(() => {});
+        if (permId) rejectSyncIds.push(permId);
       } else if (p.status === 'cancelled' && (p.wardenStatus !== 'cancelled' || p.deanStatus !== 'cancelled')) {
         p.wardenStatus = 'cancelled';
         p.deanStatus = 'cancelled';
-        db.permissions.update(p._id || p.id, { wardenStatus: 'cancelled', deanStatus: 'cancelled' }).catch(() => {});
+        if (permId) cancelSyncIds.push(permId);
       }
 
       // Auto-expire unapproved leaves whose end date has passed
@@ -279,27 +294,23 @@ export async function GET(request: NextRequest) {
       const isRejected = p.status === 'rejected' || p.deanStatus === 'rejected' || p.wardenStatus === 'rejected';
       const isCancelled = p.status === 'cancelled' || p.wardenStatus === 'cancelled' || p.deanStatus === 'cancelled';
       const toTime = p.toDateTime ? new Date(p.toDateTime).getTime() : 0;
-      if (!isApproved && !isRejected && !isCancelled && p.status !== 'expired' && toTime > 0 && toTime < Date.now()) {
+      if (!isApproved && !isRejected && !isCancelled && p.status !== 'expired' && toTime > 0 && toTime < nowMs) {
         p.status = 'expired';
         p.wardenStatus = 'expired';
         p.deanStatus = 'expired';
-        db.permissions.update(p._id || p.id, {
-          status: 'expired',
-          wardenStatus: 'expired',
-          deanStatus: 'expired'
-        }).catch(() => {});
+        if (permId) expireSyncIds.push(permId);
       }
 
       // If user is specifically querying for "pending", exclude any where dean already approved, rejected, cancelled, or expired
       if (status === 'pending') {
-        if (p.deanStatus === 'allowed' || p.deanStatus === 'rejected' || p.wardenStatus === 'rejected' || p.status !== 'pending' || isCancelled || p.status === 'expired' || (toTime > 0 && toTime < Date.now())) {
+        if (p.deanStatus === 'allowed' || p.deanStatus === 'rejected' || p.wardenStatus === 'rejected' || p.status !== 'pending' || isCancelled || p.status === 'expired' || (toTime > 0 && toTime < nowMs)) {
           return false;
         }
       }
 
       // 🚫 Hide cancelled and expired leaves from the Admin main permissions list
       if (!studentId && (status === 'all' || !status || status === 'pending')) {
-        if (isCancelled || p.status === 'expired' || (!isApproved && !isRejected && toTime > 0 && toTime < Date.now())) {
+        if (isCancelled || p.status === 'expired' || (!isApproved && !isRejected && toTime > 0 && toTime < nowMs)) {
           return false;
         }
       }
@@ -307,12 +318,26 @@ export async function GET(request: NextRequest) {
       return true;
     });
 
-    return NextResponse.json({ 
+    // ⚡ ASYNC BATCH PERSISTENCE: Background update changed records in 1 query each instead of N individual queries
+    if (allowSyncIds.length > 0) {
+      prisma.permission.updateMany({ where: { id: { in: allowSyncIds } }, data: { status: 'allowed' } }).catch(() => {});
+    }
+    if (rejectSyncIds.length > 0) {
+      prisma.permission.updateMany({ where: { id: { in: rejectSyncIds } }, data: { status: 'rejected' } }).catch(() => {});
+    }
+    if (cancelSyncIds.length > 0) {
+      prisma.permission.updateMany({ where: { id: { in: cancelSyncIds } }, data: { wardenStatus: 'cancelled', deanStatus: 'cancelled' } }).catch(() => {});
+    }
+    if (expireSyncIds.length > 0) {
+      prisma.permission.updateMany({ where: { id: { in: expireSyncIds } }, data: { status: 'expired', wardenStatus: 'expired', deanStatus: 'expired' } }).catch(() => {});
+    }
+
+    return jsonWithEtag(request, { 
       permissions: realPermissions, 
       records: realPermissions,
       total: typeof total === 'number' && total > 0 ? total : realPermissions.length, 
       success: true 
-    }, { status: 200 });
+    }, 200);
   } catch (error: any) {
     console.error("Error in GET /api/permissions:", error);
     return NextResponse.json(

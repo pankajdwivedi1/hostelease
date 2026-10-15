@@ -218,6 +218,8 @@ model GatePass {
   @@index([checkOutIstDate])
   @@index([tenantId, checkOutTime])
   @@index([updatedAt])
+  @@index([tenantId, type])
+  @@index([type])
   @@map("gate_passes")
 }
 

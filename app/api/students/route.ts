@@ -661,8 +661,37 @@ export async function GET(request: NextRequest) {
     let syncCount = 0;
 
     try {
-      // 1. Fetch Open Passes (lean, no relation overhead)
-      const gatePassResult = await db.gatePasses.list({ status: "out" }, { limit: 500, populate: false });
+      const studentIds = students.map((s: any) => s._id || s.id).filter(Boolean);
+
+      // ⚡ CONCURRENT EXECUTION: Fetch open passes and active student permissions in parallel
+      const [gatePassResult, permsList] = await Promise.all([
+        db.gatePasses.list({ 
+          status: "out",
+          ...(hostelName && hostelName !== "all" ? { hostelName } : {})
+        }, { limit: 500, populate: false, skipCount: true }),
+        studentIds.length > 0 ? (async () => {
+          try {
+            const { prisma } = await import("@/lib/prisma");
+            return await prisma.permission.findMany({
+              where: {
+                studentId: { in: studentIds },
+                status: { in: ['allowed', 'approved', 'pending'] }
+              },
+              select: {
+                id: true,
+                studentId: true,
+                status: true,
+                reason: true,
+                fromDateTime: true,
+                toDateTime: true
+              }
+            });
+          } catch (e) {
+            return [];
+          }
+        })() : Promise.resolve([])
+      ]);
+
       openPasses = gatePassResult.records || [];
 
       // Create a map of studentId -> outing details for efficient lookup
@@ -717,34 +746,21 @@ export async function GET(request: NextRequest) {
         delete s.faceDescriptor;
         delete s.webAuthnCredentials;
         delete s.deviceHistory;
-
       });
 
-      // 2. Fetch Active Permissions to enrich student leave information (lean, no relation overhead)
+      // 2. Enrich student leave information from active permissions
       try {
-        const permsResult = await db.permissions.list({}, { limit: 500, populate: false });
-        const permsList = Array.isArray(permsResult) ? permsResult : (permsResult?.records || (permsResult as any)?.permissions || []);
         const permsById = new Map<string, any>();
-        const permsByReg = new Map<string, any>();
-        const permsByName = new Map<string, any>();
-        permsList.forEach((perm: any) => {
+        (permsList || []).forEach((perm: any) => {
           const pSid = typeof perm.studentId === 'object' ? (perm.studentId?._id || perm.studentId?.id) : perm.studentId;
           if (pSid && !permsById.has(pSid.toString())) {
             permsById.set(pSid.toString(), perm);
-          }
-          if (perm.registrationId && !permsByReg.has(perm.registrationId)) {
-            permsByReg.set(perm.registrationId, perm);
-          }
-          if (perm.name && !permsByName.has(perm.name.trim().toLowerCase())) {
-            permsByName.set(perm.name.trim().toLowerCase(), perm);
           }
         });
 
         students.forEach((s: any) => {
           const sId = (s.id || s._id)?.toString();
-          const perm = (sId ? permsById.get(sId) : null) || 
-                       (s.registrationId ? permsByReg.get(s.registrationId) : null) ||
-                       (s.name ? permsByName.get(s.name.trim().toLowerCase()) : null);
+          const perm = sId ? permsById.get(sId) : null;
           if (perm) {
             if (perm.fromDateTime) s.leaveFrom = perm.fromDateTime;
             if (perm.toDateTime) s.leaveTo = perm.toDateTime;

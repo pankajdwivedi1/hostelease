@@ -7,41 +7,42 @@ export const dynamic = "force-dynamic";
 
 export async function GET(request: NextRequest) {
     try {
-        let settings: any = null;
-        try {
-            settings = await db.settings.get();
-        } catch (err: any) {
-            console.error("Warning loading settings from DB, using defaults:", err?.message || err);
-        }
+        // ⚡ CONCURRENT EXECUTION: Run settings, platformConfig, and hostels queries in parallel
+        const [settingsRes, platformConfigRes, allHostelsRes] = await Promise.allSettled([
+            db.settings.get(),
+            (async () => {
+                const { prisma } = await import("@/lib/prisma");
+                return await prisma.platformSetting.findUnique({
+                    where: { id: 'boss_payment_config' }
+                });
+            })(),
+            db.hostels.getAll()
+        ]);
+
+        const settings = settingsRes.status === "fulfilled" ? settingsRes.value : null;
+        const platformConfig = platformConfigRes.status === "fulfilled" ? platformConfigRes.value : null;
+        const allHostels = allHostelsRes.status === "fulfilled" ? allHostelsRes.value : [];
+
         const cookieStore = await cookies();
         const userType = cookieStore.get("userType")?.value;
         const isAdmin = userType === "admin" || userType === "superadmin";
 
         let enforceMandatoryPush = false;
-        try {
-            const { prisma } = await import("@/lib/prisma");
-            const platformConfig = await prisma.platformSetting.findUnique({
-                where: { id: 'boss_payment_config' }
-            });
-            if (platformConfig?.settings) {
-                const s = platformConfig.settings as any;
-                if (s.enforceMandatoryPush === true) enforceMandatoryPush = true;
-            }
-        } catch (e) {}
+        if (platformConfig?.settings) {
+            const s = platformConfig.settings as any;
+            if (s.enforceMandatoryPush === true) enforceMandatoryPush = true;
+        }
 
         if (settings?.notificationSettings?.enforceMandatoryPush === true) {
             enforceMandatoryPush = true;
         }
 
         let hostelAlertsMap: Record<string, boolean> = {};
-        try {
-            const allHostels = await db.hostels.getAll();
-            (allHostels || []).forEach((h: any) => {
-                if (h.name) {
-                    hostelAlertsMap[h.name.toUpperCase()] = h.allowStudentNotification !== false;
-                }
-            });
-        } catch (e) {}
+        (allHostels || []).forEach((h: any) => {
+            if (h?.name) {
+                hostelAlertsMap[h.name.toUpperCase()] = h.allowStudentNotification !== false;
+            }
+        });
 
         return createCachedResponse({
             success: true,

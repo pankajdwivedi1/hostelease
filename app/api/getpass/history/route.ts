@@ -2,6 +2,7 @@ export const dynamic = "force-dynamic";
 
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/dbAdapter";
+import { jsonWithEtag } from "@/lib/etag";
 
 /**
  * GET /api/getpass/history
@@ -32,20 +33,21 @@ export async function GET(request: NextRequest) {
 
         const filters: any = {};
 
-        if (studentId || registrationId || erpId || firebaseUID) {
+        // ⚡ FAST PATH: Avoid redundant student lookup when studentId or registrationId is already known
+        if (studentId) {
+            filters.studentId = studentId;
+            if (registrationId) filters.registrationId = registrationId;
+        } else if (registrationId) {
+            filters.registrationId = registrationId;
+        } else if (erpId || firebaseUID) {
             const student = await db.students.findOne({
-                ...(studentId ? { _id: studentId } : {}),
-                ...(registrationId ? { registrationId } : {}),
                 ...(erpId ? { erpInformation: erpId } : {}),
                 ...(firebaseUID ? { firebaseUID } : {})
             }, { minimal: true });
 
             if (student) {
-                filters.studentId = (student._id || student.id || studentId)?.toString();
-                filters.registrationId = student.registrationId || registrationId;
-            } else {
-                if (studentId) filters.studentId = studentId;
-                if (registrationId) filters.registrationId = registrationId;
+                filters.studentId = (student._id || student.id)?.toString();
+                filters.registrationId = student.registrationId;
             }
         }
 
@@ -68,30 +70,56 @@ export async function GET(request: NextRequest) {
         const populateParam = searchParams.get("populate");
         const populate = populateParam === "false" ? false : true;
 
-        // ⚡ ENSURE COUNTS ARE INDEPENDENT: Remove 'type' from stats filters so counts stay global for the search
-        const statsFilters = { ...filters };
-        delete statsFilters.type;
-
-        const [historyRes, leaveCountRes, passCountRes] = await Promise.all([
+        // ⚡ HIGH-PERFORMANCE STATS: Run history list and single groupBy aggregation in parallel
+        const [historyRes, typeCounts] = await Promise.all([
             db.gatePasses.list(filters, { page, limit, populate }),
-            db.gatePasses.list({ ...statsFilters, type: "leave" }, { countOnly: true }),
-            db.gatePasses.list({ ...statsFilters, type: "outing" }, { countOnly: true })
+            (async () => {
+                try {
+                    const { prisma } = await import("@/lib/prisma");
+                    let tenantId: string | null = null;
+                    try { tenantId = await db.getTenantIdOrThrow(); } catch (e) {}
+                    const statsWhere: any = {};
+                    if (tenantId) statsWhere.tenantId = tenantId;
+                    if (filters.studentId) statsWhere.studentId = filters.studentId;
+                    if (filters.registrationId) statsWhere.registrationId = { equals: filters.registrationId, mode: 'insensitive' };
+                    if (filters.hostelName && filters.hostelName !== 'all') statsWhere.hostelName = { equals: filters.hostelName, mode: 'insensitive' };
+                    if (filters.status && filters.status !== 'all') statsWhere.status = filters.status;
+                    return await prisma.gatePass.groupBy({
+                        by: ['type'],
+                        where: statsWhere,
+                        _count: { id: true }
+                    });
+                } catch (e) {
+                    return [];
+                }
+            })()
         ]);
 
         const { records, total } = historyRes;
-        const leaveCount = leaveCountRes.total || 0;
-        const passCount = passCountRes.total || 0;
+        let leaveCount = 0;
+        let passCount = 0;
+        (typeCounts || []).forEach((tc: any) => {
+            const rawT = String(tc.type || '').toLowerCase().trim();
+            if (rawT === 'leave' || rawT === 'home-leave' || rawT === 'hleave' || rawT === 'home') {
+                leaveCount += (tc._count?.id || 0);
+            } else {
+                passCount += (tc._count?.id || 0);
+            }
+        });
 
-        // Enrich records with linked permission reason if available
+        // ⚡ TARGETED ENRICHMENT: Only fetch reason for the exact permission IDs present in this page
         try {
             const permissionIds = (records || []).map((r: any) => r.permissionId || r.permission_id).filter(Boolean);
-            if (permissionIds.length > 0) {
-                const permsRes = await db.permissions.list({}, { limit: 500, populate: false });
-                const permsList = Array.isArray(permsRes) ? permsRes : (permsRes?.records || (permsRes as any)?.permissions || []);
+            const uniquePermIds: string[] = Array.from(new Set(permissionIds.map((id: any) => String(id).trim()))).filter(Boolean) as string[];
+            if (uniquePermIds.length > 0) {
+                const { prisma } = await import("@/lib/prisma");
+                const matchedPerms = await prisma.permission.findMany({
+                    where: { id: { in: uniquePermIds } },
+                    select: { id: true, reason: true }
+                });
                 const permsMap = new Map<string, any>();
-                permsList.forEach((p: any) => {
-                    const pid = (p._id || p.id)?.toString();
-                    if (pid) permsMap.set(pid, p);
+                matchedPerms.forEach((p: any) => {
+                    if (p.id) permsMap.set(p.id, p);
                 });
 
                 records.forEach((r: any) => {
@@ -112,7 +140,7 @@ export async function GET(request: NextRequest) {
         // Calculate grand total from the independent counts
         const grandTotal = leaveCount + passCount;
 
-        return NextResponse.json({
+        return jsonWithEtag(request, {
             success: true,
             records,
             summary: {

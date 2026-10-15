@@ -287,17 +287,24 @@ export async function assertTenantActive() {
     return { allowed: true, status };
 }
 
+const tenantByIdCache = new Map<string, { tenant: any, expires: number }>();
+
 /**
  * Finds a tenant by its internal ID.
  */
 export async function getTenantById(id: string) {
     if (!id) return null;
+    const cached = tenantByIdCache.get(id);
+    if (cached && cached.expires > Date.now()) {
+        return cached.tenant;
+    }
+
     const tenant = await prisma.tenant.findUnique({
         where: { id }
     });
     
     if (!tenant) return null;
-    return {
+    const resolved = {
         _id: tenant.id,
         name: tenant.name,
         slug: tenant.slug,
@@ -305,5 +312,12 @@ export async function getTenantById(id: string) {
         subscriptionEndDate: tenant.subscriptionEndDate,
         subscriptionStatus: tenant.subscriptionStatus
     };
+
+    tenantByIdCache.set(id, {
+        tenant: resolved,
+        expires: Date.now() + 5 * 60 * 1000 // 5 minutes cache
+    });
+
+    return resolved;
 }
 

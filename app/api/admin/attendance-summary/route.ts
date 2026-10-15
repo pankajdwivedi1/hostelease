@@ -98,11 +98,13 @@ export async function GET(request: NextRequest) {
             formattedSummary[name] = 0;
         });
 
-        // 5. Fetch Attendance Summary from DB
+        // 5. Fetch Attendance Summary, settings, and pending count in parallel
         const tenantIdForLog = await db.getTenantIdOrThrow();
-        console.log(`[ATTENDANCE_SUMMARY] Fetching for date: ${date}, tenantId: ${tenantIdForLog}`);
-        const result = await db.attendance.summary(date);
-        console.log(`[ATTENDANCE_SUMMARY] result.presentStudentIds count:`, result?.presentStudentIds?.length);
+        const [result, settings, pendingCountResult] = await Promise.all([
+            db.attendance.summary(date),
+            db.settings.get(),
+            db.permissions.count({ status: 'pending' })
+        ]);
 
         let summaryData = result;
         if (!summaryData) {
@@ -124,11 +126,7 @@ export async function GET(request: NextRequest) {
         }
 
         // 7. Get global settings for manual attendance toggle
-        const settings = await db.settings.get();
         const enableManualAttendance = settings?.enableManualAttendance ?? false;
-
-        // ⚡ MAJOR OPTIMIZATION: Use parallel aggregate count queries instead of downloading entire database
-        const pendingCountResult = await db.permissions.count({ status: 'pending' });
         const pendingCount = typeof pendingCountResult === 'number' ? pendingCountResult : 0;
 
 

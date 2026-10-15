@@ -867,6 +867,33 @@ export const db = {
                 tenantId = await getTenantIdOrThrow();
             } catch (err) {}
 
+            // ⚡ FAST-PATH: Direct unique index seek (sub-millisecond)
+            try {
+                let s = null;
+                if (filter.firebaseUID || filter.firebaseUid) {
+                    const uid = String(filter.firebaseUID || filter.firebaseUid).trim();
+                    s = await prisma.student.findUnique({ where: { firebaseUid: uid } });
+                } else if (filter._id || filter.id) {
+                    const idVal = String(filter._id || filter.id).trim();
+                    s = await prisma.student.findUnique({ where: { id: idVal } });
+                } else if (filter.registrationId) {
+                    const reg = String(filter.registrationId).trim();
+                    s = await prisma.student.findUnique({ where: { registrationId: reg } });
+                } else if (filter.email) {
+                    const cleanEmail = String(filter.email).toLowerCase().trim();
+                    s = await prisma.student.findUnique({ where: { email: cleanEmail } });
+                }
+                if (s && (!tenantId || s.tenantId === tenantId)) {
+                    const mapped = mapStudentToCamelCase(s);
+                    if (options.minimal) {
+                        delete mapped.faceDescriptor;
+                        delete mapped.webAuthnCredentials;
+                        delete mapped.deviceHistory;
+                    }
+                    return mapped;
+                }
+            } catch (fastErr) {}
+
             const searchOR: any[] = [];
             if (filter.firebaseUID || filter.firebaseUid) {
                 const uid = String(filter.firebaseUID || filter.firebaseUid).trim();
@@ -927,32 +954,79 @@ export const db = {
                 });
             }
 
-            return student ? mapStudentToCamelCase(student) : null;
+            if (!student) return null;
+            const mapped = mapStudentToCamelCase(student);
+            if (options.minimal) {
+                delete mapped.faceDescriptor;
+                delete mapped.webAuthnCredentials;
+                delete mapped.deviceHistory;
+            }
+            return mapped;
         },
 
         findOneFast: async (filter: { firebaseUID?: string; email?: string; phoneNumber?: string }, options: { minimal?: boolean } = {}) => {
-            const conditions: any[] = [];
+            let student = null;
             if (filter.firebaseUID) {
                 const uid = String(filter.firebaseUID).trim();
-                conditions.push({ id: uid }, { firebaseUid: uid }, { supabaseId: uid });
+                try {
+                    student = await prisma.student.findUnique({
+                        where: { firebaseUid: uid }
+                    });
+                } catch (e) {}
+                if (!student) {
+                    try {
+                        student = await prisma.student.findUnique({
+                            where: { id: uid }
+                        });
+                    } catch (e) {}
+                }
             }
-            if (filter.email) {
+            if (!student && filter.email) {
                 const cleanEmail = String(filter.email).toLowerCase().trim();
-                conditions.push({ email: { equals: cleanEmail, mode: 'insensitive' } });
+                try {
+                    student = await prisma.student.findUnique({
+                        where: { email: cleanEmail }
+                    });
+                } catch (e) {}
             }
-            if (filter.phoneNumber) {
-                conditions.push({ phoneNumber: String(filter.phoneNumber).trim() });
+            if (!student && filter.phoneNumber) {
+                const cleanPhone = String(filter.phoneNumber).trim();
+                try {
+                    student = await prisma.student.findFirst({
+                        where: { phoneNumber: cleanPhone }
+                    });
+                } catch (e) {}
             }
-            if (conditions.length === 0) return null;
+            if (!student) {
+                const conditions: any[] = [];
+                if (filter.firebaseUID) {
+                    const uid = String(filter.firebaseUID).trim();
+                    conditions.push({ id: uid }, { firebaseUid: uid }, { supabaseId: uid });
+                }
+                if (filter.email) {
+                    const cleanEmail = String(filter.email).toLowerCase().trim();
+                    conditions.push({ email: { equals: cleanEmail, mode: 'insensitive' } });
+                }
+                if (filter.phoneNumber) {
+                    conditions.push({ phoneNumber: String(filter.phoneNumber).trim() });
+                }
+                if (conditions.length > 0) {
+                    try {
+                        student = await prisma.student.findFirst({
+                            where: { OR: conditions }
+                        });
+                    } catch (e) {}
+                }
+            }
 
-            let student = null;
-            try {
-                student = await prisma.student.findFirst({
-                    where: { OR: conditions }
-                });
-            } catch (e) {}
-
-            return student ? mapStudentToCamelCase(student) : null;
+            if (!student) return null;
+            const mappedFast = mapStudentToCamelCase(student);
+            if (options.minimal) {
+                delete mappedFast.faceDescriptor;
+                delete mappedFast.webAuthnCredentials;
+                delete mappedFast.deviceHistory;
+            }
+            return mappedFast;
         },
 
         list: async (filter: any = {}, options: { light?: boolean; limit?: number; offset?: number; select?: string; includeBiometrics?: boolean } = {}) => {
@@ -1989,23 +2063,18 @@ export const db = {
 
             const whereClause: any = {};
             if (tenantId) whereClause.tenantId = tenantId;
-            const orConditions: any[] = [];
+
+            // ⚡ DIRECT INDEXED SEEK: Use direct indexed columns on gate_passes instead of heavy OR joins
             if (filter.studentId) {
-                orConditions.push({ studentId: filter.studentId });
-                orConditions.push({ student: { id: filter.studentId } });
-            }
-            if (filter.registrationId) {
-                orConditions.push({ registrationId: { equals: filter.registrationId, mode: 'insensitive' } });
-                orConditions.push({ student: { registrationId: { equals: filter.registrationId, mode: 'insensitive' } } });
-            }
-            if (filter.email) {
-                orConditions.push({ student: { email: { equals: filter.email, mode: 'insensitive' } } });
-            }
-            if (orConditions.length > 0) {
-                whereClause.OR = orConditions;
+                whereClause.studentId = filter.studentId;
+            } else if (filter.registrationId) {
+                whereClause.registrationId = { equals: filter.registrationId, mode: 'insensitive' };
             } else if (filter.firebaseUID) {
                 whereClause.firebaseUid = filter.firebaseUID;
+            } else if (filter.email) {
+                whereClause.student = { email: { equals: filter.email, mode: 'insensitive' } };
             }
+
             if (filter.status) whereClause.status = filter.status;
             if (filter.type) {
                 const rawT = String(filter.type).toLowerCase().trim();
@@ -2082,44 +2151,46 @@ export const db = {
             if (sortField === 'updated_at') sortField = 'updatedAt';
             if (sortField === 'created_at') sortField = 'createdAt';
 
-            const total = options.skipCount ? 0 : await prisma.gatePass.count({ where: whereClause });
-            const records = await prisma.gatePass.findMany({
-                where: whereClause,
-                take,
-                skip,
-                orderBy: { [sortField]: (options.sortOrder || 'desc') as any },
-                ...(options.populate ? {
-                    include: {
-                        student: {
-                            select: {
-                                id: true,
-                                name: true,
-                                registrationId: true,
-                                erpInformation: true,
-                                erpId: true,
-                                phoneNumber: true,
-                                email: true,
-                                fatherName: true,
-                                fatherNumber: true,
-                                motherName: true,
-                                motherNumber: true,
-                                hostelName: true,
-                                roomNumber: true,
-                                collegeName: true,
-                                branch: true,
-                                year: true,
-                                semester: true,
-                                permanentAddress: true,
-                                homeState: true,
-                                studentStatus: true,
-                                profilePicture: true,
-                                dynamicFields: true
+            // ⚡ CONCURRENT EXECUTION: Run count and findMany in parallel
+            const [total, records] = await Promise.all([
+                options.skipCount ? Promise.resolve(0) : prisma.gatePass.count({ where: whereClause }),
+                prisma.gatePass.findMany({
+                    where: whereClause,
+                    take,
+                    skip,
+                    orderBy: { [sortField]: (options.sortOrder || 'desc') as any },
+                    ...(options.populate ? {
+                        include: {
+                            student: {
+                                select: {
+                                    id: true,
+                                    name: true,
+                                    registrationId: true,
+                                    erpInformation: true,
+                                    erpId: true,
+                                    phoneNumber: true,
+                                    email: true,
+                                    fatherName: true,
+                                    fatherNumber: true,
+                                    motherName: true,
+                                    motherNumber: true,
+                                    hostelName: true,
+                                    roomNumber: true,
+                                    collegeName: true,
+                                    branch: true,
+                                    year: true,
+                                    semester: true,
+                                    permanentAddress: true,
+                                    homeState: true,
+                                    studentStatus: true,
+                                    profilePicture: true,
+                                    dynamicFields: true
+                                }
                             }
                         }
-                    }
-                } : {})
-
-            });
+                    } : {})
+                })
+            ]);
 
             const mapped = records.map(mapGatePassToCamelCase);
             const result: any = {
@@ -2533,7 +2604,7 @@ export const db = {
     },
 
     permissions: {
-        list: async (filters: any = {}, options: { limit?: number; offset?: number; populate?: boolean } = {}) => {
+        list: async (filters: any = {}, options: { limit?: number; offset?: number; populate?: boolean; skipCount?: boolean; countOnly?: boolean } = {}) => {
             let tenantId: string | null = null;
             try {
                 tenantId = await getTenantIdOrThrow();
@@ -2545,20 +2616,13 @@ export const db = {
                 andConditions.push({ student: { tenantId } });
             }
 
-            const studentOrConditions: any[] = [];
+            // ⚡ DIRECT INDEX SEEK: If studentId is known, query directly on permissions.student_id
             if (filters.studentId) {
-                studentOrConditions.push({ studentId: filters.studentId });
-                studentOrConditions.push({ student: { id: filters.studentId } });
-            }
-            if (filters.registrationId) {
-                studentOrConditions.push({ student: { registrationId: { equals: filters.registrationId, mode: 'insensitive' } } });
-            }
-            if (filters.email) {
-                studentOrConditions.push({ student: { email: { equals: filters.email, mode: 'insensitive' } } });
-            }
-
-            if (studentOrConditions.length > 0) {
-                andConditions.push({ OR: studentOrConditions });
+                andConditions.push({ studentId: filters.studentId });
+            } else if (filters.registrationId) {
+                andConditions.push({ student: { registrationId: { equals: filters.registrationId, mode: 'insensitive' } } });
+            } else if (filters.email) {
+                andConditions.push({ student: { email: { equals: filters.email, mode: 'insensitive' } } });
             } else if (filters.firebaseUID || filters.firebaseUid) {
                 andConditions.push({
                     student: {
@@ -2616,42 +2680,51 @@ export const db = {
                 whereClause.student = { ...(whereClause.student || {}), hostelName: { in: hostelVariations } };
             }
 
+            if (options.countOnly) {
+                const total = await prisma.permission.count({ where: whereClause }).catch(() => 0);
+                return { records: [], total };
+            }
+
             let total = 0;
             let records: any[] = [];
             try {
-                total = await prisma.permission.count({ where: whereClause });
-                records = await prisma.permission.findMany({
-                    where: whereClause,
-                    orderBy: { createdAt: 'desc' },
-                    take: options.limit || undefined,
-                    skip: options.offset || undefined,
-                    include: options.populate !== false ? {
-                        student: {
-                            select: {
-                                id: true,
-                                name: true,
-                                registrationId: true,
-                                erpInformation: true,
-                                erpId: true,
-                                phoneNumber: true,
-                                email: true,
-                                fatherName: true,
-                                fatherNumber: true,
-                                motherName: true,
-                                motherNumber: true,
-                                hostelName: true,
-                                roomNumber: true,
-                                collegeName: true,
-                                branch: true,
-                                year: true,
-                                semester: true,
-                                studentStatus: true,
-                                profilePicture: true
+                // ⚡ CONCURRENT EXECUTION: Run count and findMany in parallel
+                const [countRes, recordsRes] = await Promise.all([
+                    options.skipCount ? Promise.resolve(0) : prisma.permission.count({ where: whereClause }),
+                    prisma.permission.findMany({
+                        where: whereClause,
+                        orderBy: { createdAt: 'desc' },
+                        take: options.limit || undefined,
+                        skip: options.offset || undefined,
+                        include: options.populate !== false ? {
+                            student: {
+                                select: {
+                                    id: true,
+                                    name: true,
+                                    registrationId: true,
+                                    erpInformation: true,
+                                    erpId: true,
+                                    phoneNumber: true,
+                                    email: true,
+                                    fatherName: true,
+                                    fatherNumber: true,
+                                    motherName: true,
+                                    motherNumber: true,
+                                    hostelName: true,
+                                    roomNumber: true,
+                                    collegeName: true,
+                                    branch: true,
+                                    year: true,
+                                    semester: true,
+                                    studentStatus: true,
+                                    profilePicture: true
+                                }
                             }
-                        }
-                    } : undefined
-
-                });
+                        } : undefined
+                    })
+                ]);
+                total = countRes;
+                records = recordsRes;
             } catch (dbErr) {
                 console.error("Error in db.permissions.list:", dbErr);
                 total = 0;
