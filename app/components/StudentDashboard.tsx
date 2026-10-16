@@ -491,6 +491,26 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
         return includeQuestionMark ? `?tenant=${tenant}` : `&tenant=${tenant}`;
     };
 
+    const [tenantLogo, setTenantLogo] = useState<string>("");
+
+    useEffect(() => {
+        if (typeof window !== 'undefined') {
+            const cachedLogo = localStorage.getItem("lastTenantLogo") || localStorage.getItem("tenantLogo");
+            if (cachedLogo) setTenantLogo(cachedLogo);
+        }
+        fetch(`/api/tenant/config${getTenantParam()}`, { cache: 'no-store' })
+            .then(res => res.ok ? res.json() : null)
+            .then(data => {
+                if (data?.logo) {
+                    setTenantLogo(data.logo);
+                    if (typeof window !== 'undefined') {
+                        localStorage.setItem("lastTenantLogo", data.logo);
+                    }
+                }
+            })
+            .catch(() => {});
+    }, []);
+
     const fetchAttendanceHistory = async () => {
         if (!studentProfile) return;
         setIsLoadingAttendanceHistory(true);
@@ -8522,8 +8542,8 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
 
                             {/* Undertaking Agreement Text */}
                             <div 
-                                className="bg-slate-50/80 border border-slate-200/70 rounded-2xl p-4 sm:p-5 whitespace-pre-wrap font-sans text-xs sm:text-[13px] leading-relaxed text-slate-800 select-text text-justify"
-                                style={{ textAlign: 'justify', textJustify: 'inter-word', hyphens: 'auto' }}
+                                className="bg-slate-50/80 border border-slate-200/70 rounded-2xl p-4 sm:p-5 whitespace-pre-wrap font-sans text-xs sm:text-[13px] text-slate-800 select-text text-justify"
+                                style={{ textAlign: 'justify', textJustify: 'inter-word', hyphens: 'auto', lineHeight: '1.65' }}
                             >
                                 {getFormattedUndertaking()}
                             </div>
@@ -8562,7 +8582,8 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
                                         studentProfile,
                                         wardenContactInfo,
                                         deanContactInfo,
-                                        hosteleazeId: displayHostelId
+                                        hosteleazeId: displayHostelId,
+                                        tenantLogo
                                     });
                                 }}
                                 className="px-3.5 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-black uppercase tracking-wider transition-all flex items-center gap-1.5 shadow-md active:scale-95"

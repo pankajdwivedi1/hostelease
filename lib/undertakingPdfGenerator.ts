@@ -3,10 +3,13 @@
  * Exclusively for Hosteleaze Smart Campus Automation System
  * 
  * Features:
- * - Guaranteed single-page A4 portrait fit
+ * - Guaranteed single-page A4 portrait fit filling down to bottom margin
+ * - Proportional line spacing & clause separation for maximum legibility
+ * - Tenant college logo with automatic fallback to Hosteleaze "UVW" logo (/uvw_logo.jpg)
  * - Complete Undertaking text (Clauses 1 to 16, Preamble, Declarations)
  * - Complete Hostel Authority details (Dean Hostel & Respective Assigned Warden)
  * - Both sides text justification (flush right margin)
+ * - Clean deduplication of hostel title for warden
  * - Crisp vector typography, native print & Save-as-PDF dialog
  */
 
@@ -17,6 +20,7 @@ export interface UndertakingPDFData {
   wardenContactInfo?: { name: string; phone: string; designation?: string };
   deanContactInfo?: { name: string; phone: string; email?: string; designation?: string };
   hosteleazeId?: string;
+  tenantLogo?: string;
   customWindow?: Window | null;
 }
 
@@ -25,6 +29,7 @@ export function generateUndertakingPDF({
   wardenContactInfo,
   deanContactInfo,
   hosteleazeId,
+  tenantLogo,
   customWindow
 }: UndertakingPDFData): void {
   const printWindow = customWindow !== undefined ? customWindow : window.open("", "_blank");
@@ -86,10 +91,34 @@ export function generateUndertakingPDF({
   const deanEmail = deanContactInfo?.email || "vijendrasinghthakur@oriental.ac.in";
 
   const wardenName = wardenContactInfo?.name || "Rahul Yadav";
-  const wardenDesig = wardenContactInfo?.designation || "Hostel Warden";
+  const rawWardenDesig = wardenContactInfo?.designation || "Hostel Warden";
   const wardenPhone = wardenContactInfo?.phone || "9039761287";
 
-  const logoUrl = typeof window !== "undefined" ? `${window.location.origin}/logo.jpeg` : "/logo.jpeg";
+  // Clean deduplication for warden designation (avoids "GHB HOSTEL (GHB HOSTEL)")
+  let wardenDisplayDesig = rawWardenDesig;
+  if (resolvedHostel && !wardenDisplayDesig.toUpperCase().includes(resolvedHostel.toUpperCase())) {
+    wardenDisplayDesig += ` (${resolvedHostel})`;
+  }
+
+  // Tenant Logo resolution with UVW default fallback
+  const origin = typeof window !== "undefined" ? window.location.origin : "";
+  const uvwFallbackLogo = `${origin}/uvw_logo.jpg`;
+  const tenantLogoCandidate = (
+    tenantLogo ||
+    p.tenantLogo ||
+    p.collegeLogo ||
+    p.tenant?.logo ||
+    p.tenant?.logoUrl ||
+    (typeof window !== "undefined" ? (localStorage.getItem("lastTenantLogo") || localStorage.getItem("tenantLogo")) : null) ||
+    ""
+  ).trim();
+
+  const resolvedLogo = tenantLogoCandidate
+    ? (tenantLogoCandidate.startsWith("http") || tenantLogoCandidate.startsWith("/")
+        ? tenantLogoCandidate
+        : `${origin}/${tenantLogoCandidate}`)
+    : uvwFallbackLogo;
+
   const docFilename = `Hosteleaze_Undertaking_${resolvedName.replace(/[^a-zA-Z0-9]/g, "_")}_${cleanReg}.pdf`;
 
   printWindow.document.write(`<!DOCTYPE html>
@@ -101,7 +130,7 @@ export function generateUndertakingPDF({
   <style>
     @page {
       size: A4 portrait;
-      margin: 6mm 10mm 6mm 10mm;
+      margin: 7mm 10mm 7mm 10mm;
     }
     * {
       box-sizing: border-box;
@@ -113,15 +142,17 @@ export function generateUndertakingPDF({
       padding: 0;
       font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
       color: #0f172a;
-      background: #f8fafc;
-      font-size: 8pt;
-      line-height: 1.25;
+      background: #f1f5f9;
+      font-size: 8.2pt;
+      line-height: 1.38;
       -webkit-font-smoothing: antialiased;
     }
     @media print {
-      body {
+      html, body {
         background: #fff !important;
         padding: 0 !important;
+        margin: 0 !important;
+        height: 100% !important;
       }
       .no-print {
         display: none !important;
@@ -133,26 +164,28 @@ export function generateUndertakingPDF({
         margin: 0 !important;
         width: 100% !important;
         max-width: 100% !important;
+        page-break-inside: avoid !important;
+        break-inside: avoid !important;
       }
     }
     .sheet {
-      max-width: 780px;
+      max-width: 790px;
       margin: 16px auto;
       background: #fff;
       border: 1px solid #cbd5e1;
       border-radius: 8px;
-      box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
-      padding: 20px 24px;
+      box-shadow: 0 4px 24px rgba(0, 0, 0, 0.08);
+      padding: 22px 26px;
       page-break-inside: avoid;
       break-inside: avoid;
     }
     .action-bar {
-      max-width: 780px;
+      max-width: 790px;
       margin: 12px auto 0;
       background: #0f172a;
       color: #fff;
       border-radius: 8px;
-      padding: 10px 16px;
+      padding: 10px 18px;
       display: flex;
       align-items: center;
       justify-content: space-between;
@@ -163,10 +196,10 @@ export function generateUndertakingPDF({
       background: #2563eb;
       color: #fff;
       border: none;
-      padding: 8px 18px;
+      padding: 9px 20px;
       border-radius: 6px;
       font-weight: 800;
-      font-size: 11px;
+      font-size: 11.5px;
       letter-spacing: 0.3px;
       text-transform: uppercase;
       cursor: pointer;
@@ -193,8 +226,8 @@ export function generateUndertakingPDF({
     }
     .header-box {
       border-bottom: 2px solid #0f172a;
-      padding-bottom: 8px;
-      margin-bottom: 8px;
+      padding-bottom: 9px;
+      margin-bottom: 10px;
       display: flex;
       align-items: center;
       justify-content: space-between;
@@ -203,98 +236,103 @@ export function generateUndertakingPDF({
     .header-left {
       display: flex;
       align-items: center;
-      gap: 10px;
+      gap: 12px;
     }
     .header-logo {
-      width: 44px;
-      height: 44px;
+      width: 50px;
+      height: 50px;
       object-fit: contain;
-      border-radius: 6px;
+      border-radius: 8px;
+      background: #fff;
+      box-shadow: 0 1px 4px rgba(0,0,0,0.06);
     }
     .inst-title {
-      font-size: 13.5pt;
+      font-size: 14pt;
       font-weight: 900;
       color: #0f172a;
       letter-spacing: 0.4px;
       text-transform: uppercase;
-      line-height: 1.1;
+      line-height: 1.15;
     }
     .undertaking-title {
-      font-size: 9.5pt;
+      font-size: 10.5pt;
       font-weight: 800;
       color: #1e40af;
       letter-spacing: 0.6px;
       text-transform: uppercase;
-      margin-top: 2px;
+      margin-top: 3px;
     }
     .inst-sub {
-      font-size: 7.5pt;
+      font-size: 8pt;
       font-weight: 600;
       color: #64748b;
+      margin-top: 2px;
     }
     .badge-verified {
       background: #ecfdf5;
       border: 1px solid #10b981;
       color: #065f46;
-      font-size: 7.5pt;
+      font-size: 8pt;
       font-weight: 900;
-      padding: 2px 8px;
+      padding: 3px 9px;
       border-radius: 4px;
       text-transform: uppercase;
       letter-spacing: 0.5px;
       display: inline-block;
     }
     .badge-id {
-      font-size: 9pt;
+      font-size: 9.5pt;
       font-weight: 900;
       color: #92400e;
-      margin-top: 3px;
+      margin-top: 4px;
       letter-spacing: 0.5px;
     }
     .info-table {
       width: 100%;
       border-collapse: collapse;
-      margin-bottom: 8px;
-      font-size: 7.5pt;
+      margin-bottom: 10px;
+      font-size: 8.4pt;
       border: 1px solid #cbd5e1;
     }
     .info-table td {
-      padding: 3.5px 6px;
+      padding: 5px 8px;
       border: 1px solid #e2e8f0;
       vertical-align: middle;
+      line-height: 1.35;
     }
     .info-label {
       font-weight: 700;
       color: #475569;
       background: #f8fafc;
-      width: 14%;
+      width: 15%;
     }
     .info-val {
       font-weight: 800;
       color: #0f172a;
-      width: 36%;
+      width: 35%;
     }
     .preamble {
-      font-size: 7.8pt;
+      font-size: 8.8pt;
       font-weight: 600;
-      line-height: 1.28;
+      line-height: 1.45;
       text-align: justify;
       text-justify: inter-word;
       color: #1e293b;
-      margin: 0 0 6px 0;
+      margin: 0 0 10px 0;
       background: #f8fafc;
       border-left: 3px solid #2563eb;
-      padding: 4px 8px;
+      padding: 6px 10px;
+      border-radius: 0 4px 4px 0;
     }
     .rules-list {
-      margin: 0 0 7px 0;
-      padding-left: 17px;
-      font-size: 7.4pt;
-      line-height: 1.21;
+      margin: 0 0 10px 0;
+      padding-left: 18px;
+      font-size: 8.2pt;
+      line-height: 1.42;
       color: #334155;
     }
     .rules-list li {
-      margin-bottom: 2px;
+      margin-bottom: 5.5px;
       text-align: justify;
       text-justify: inter-word;
     }
@@ -302,13 +340,13 @@ export function generateUndertakingPDF({
       background: #f8fafc;
       border: 1px solid #e2e8f0;
       border-radius: 6px;
-      padding: 6px 8px;
-      margin-bottom: 7px;
+      padding: 8px 12px;
+      margin-bottom: 10px;
     }
     .decl-text {
-      margin: 0 0 5px 0;
-      font-size: 7.4pt;
-      line-height: 1.24;
+      margin: 0 0 7px 0;
+      font-size: 8.2pt;
+      line-height: 1.4;
       font-style: italic;
       color: #1e293b;
       text-align: justify;
@@ -317,70 +355,71 @@ export function generateUndertakingPDF({
     .sig-row {
       display: flex;
       justify-content: space-between;
-      gap: 12px;
+      gap: 14px;
     }
     .sig-col {
       flex: 1;
       border: 1px dashed #cbd5e1;
       border-radius: 4px;
-      padding: 4px 7px;
+      padding: 6px 10px;
       background: #fff;
     }
     .sig-label {
-      font-size: 6.8pt;
+      font-size: 7.2pt;
       font-weight: 700;
       color: #64748b;
       text-transform: uppercase;
+      letter-spacing: 0.3px;
     }
     .sig-name {
-      font-size: 9pt;
+      font-size: 10.5pt;
       font-weight: 900;
       color: #1e3a8a;
       font-family: 'Courier New', monospace;
-      margin: 1px 0;
+      margin: 3px 0;
     }
     .sig-sub {
-      font-size: 6.8pt;
+      font-size: 7.2pt;
       color: #475569;
     }
     .contacts-box {
       border: 1.5px solid #2563eb;
       border-radius: 6px;
-      padding: 5px 8px;
+      padding: 8px 12px;
       background: #eff6ff;
       display: flex;
       justify-content: space-between;
       align-items: center;
-      gap: 12px;
-      margin-bottom: 6px;
+      gap: 14px;
+      margin-bottom: 8px;
     }
     .contact-col {
       flex: 1;
     }
     .contact-head {
-      font-size: 7pt;
+      font-size: 7.5pt;
       font-weight: 800;
       color: #1e40af;
       text-transform: uppercase;
       letter-spacing: 0.4px;
     }
     .contact-title {
-      font-size: 7.8pt;
+      font-size: 8.8pt;
       font-weight: 800;
       color: #0f172a;
-      margin: 1px 0;
+      margin: 2px 0;
     }
     .contact-detail {
-      font-size: 7.2pt;
+      font-size: 8pt;
       color: #1e40af;
     }
     .footer-bar {
-      border-top: 1px solid #e2e8f0;
-      padding-top: 4px;
+      border-top: 1px solid #cbd5e1;
+      padding-top: 6px;
       display: flex;
       justify-content: space-between;
       align-items: center;
-      font-size: 6.8pt;
+      font-size: 7.5pt;
       color: #64748b;
     }
   </style>
@@ -401,7 +440,7 @@ export function generateUndertakingPDF({
     <!-- Header -->
     <div class="header-box">
       <div class="header-left">
-        <img class="header-logo" src="${logoUrl}" alt="Logo" onerror="this.style.display='none'" />
+        <img class="header-logo" src="${resolvedLogo}" alt="College / Hosteleaze Logo" onerror="if (this.src !== '${uvwFallbackLogo}') { this.src = '${uvwFallbackLogo}'; }" />
         <div>
           <div class="inst-title">ORIENTAL GROUP OF INSTITUTES, BHOPAL</div>
           <div class="undertaking-title">HOSTEL ADMISSION & DISCIPLINARY UNDERTAKING</div>
@@ -443,7 +482,7 @@ export function generateUndertakingPDF({
       I, <strong>${resolvedName}</strong>, ${parentRelation} <strong>${resolvedParent}</strong>, student of <strong>${resolvedCollege}</strong> (Email: ${resolvedEmail}, Mobile: ${resolvedPhone}), hereby undertake that I shall abide by the following terms and conditions governing my stay in the hostel:
     </div>
 
-    <!-- The 16 Clauses (Numbered & Justified) -->
+    <!-- The 16 Clauses (Numbered, Spacious & Justified) -->
     <ol class="rules-list">
       <li>I shall maintain discipline, decorum, and good conduct at all times within the hostel premises and shall not indulge in any act of indiscipline or misconduct.</li>
       <li>I shall not leave the hostel premises without obtaining prior permission from the competent authority, wherever applicable.</li>
@@ -482,16 +521,16 @@ export function generateUndertakingPDF({
       </div>
     </div>
 
-    <!-- Official Contacts (Dean & Assigned Hostel Warden) -->
+    <!-- Official Contacts (Dean & Respective Assigned Hostel Warden) -->
     <div class="contacts-box">
       <div class="contact-col">
         <div class="contact-head">Hostel Administration & Grievances</div>
         <div class="contact-title">${deanName} (${deanDesig})</div>
         <div class="contact-detail">Mob: <strong>${deanPhone}</strong> • Email: ${deanEmail}</div>
       </div>
-      <div class="contact-col" style="border-left: 1px solid #bfdbfe; padding-left: 10px;">
+      <div class="contact-col" style="border-left: 1px solid #bfdbfe; padding-left: 14px;">
         <div class="contact-head">Respective Hostel Warden</div>
-        <div class="contact-title">${wardenName} - ${wardenDesig} (${resolvedHostel})</div>
+        <div class="contact-title">${wardenName} - ${wardenDisplayDesig}</div>
         <div class="contact-detail">Mob: <strong>${wardenPhone}</strong></div>
       </div>
     </div>
