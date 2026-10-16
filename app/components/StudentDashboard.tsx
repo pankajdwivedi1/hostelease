@@ -5351,6 +5351,10 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
                                                                 lbl.includes('guardian') || id.includes('guardian');
                                                         } else {
                                                             // Personal tab — explicitly include permanentAddress & address fields (not guardian)
+                                                            // Exclude room number on mobile since it's already prominently displayed in the top "HOSTEL & ROOM" card
+                                                            const isRoom = lbl.includes('room') || id.includes('room');
+                                                            if (isRoom) return false;
+
                                                             const isPhone = (lbl.includes('phone') || id.includes('phone')) && !lbl.includes('father') && !lbl.includes('mother') && !lbl.includes('guardian');
                                                             const isAddress = (lbl.includes('address') || id.includes('address') || lbl.includes('permanent') || id.includes('permanent')) && !lbl.includes('guardian') && !id.includes('guardian');
                                                             return isPhone || isAddress ||
@@ -5360,7 +5364,7 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
                                                                 lbl.includes('state') || id.includes('state') ||
                                                                 lbl.includes('hostel') || id.includes('hostel') ||
                                                                 lbl.includes('floor') || id.includes('floor') ||
-                                                                lbl.includes('room') || id.includes('room');
+                                                                lbl.includes('joining') || id.includes('joining');
                                                         }
                                                     }).sort((a, b) => {
                                                         if (mobileProfileTab === 'academic') {
@@ -5377,6 +5381,23 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
                                                                 return 8;
                                                             };
                                                             return getAcademicRank(a) - getAcademicRank(b);
+                                                        }
+                                                        if (mobileProfileTab === 'personal') {
+                                                            const getPersonalRank = (f: any) => {
+                                                                const id = f.id.toLowerCase();
+                                                                const lbl = (f.label || '').toLowerCase();
+                                                                if (lbl.includes('gender') || id.includes('gender')) return 1;
+                                                                if ((lbl.includes('phone') || id.includes('phone')) && !lbl.includes('father') && !lbl.includes('mother') && !lbl.includes('guardian')) return 2;
+                                                                if (lbl.includes('birth') || lbl.includes('dob') || id.includes('dob')) return 3;
+                                                                if (lbl.includes('category') || id.includes('category')) return 4;
+                                                                if (lbl.includes('state') || id.includes('state')) return 5;
+                                                                if (lbl.includes('hostel') && !lbl.includes('joining') && !lbl.includes('floor') && !lbl.includes('room')) return 6;
+                                                                if (lbl.includes('floor') || id.includes('floor')) return 7;
+                                                                if (lbl.includes('joining') || id.includes('joining')) return 8;
+                                                                if (lbl.includes('address') || lbl.includes('permanent') || id.includes('address') || id.includes('permanent')) return 99;
+                                                                return 50;
+                                                            };
+                                                            return getPersonalRank(a) - getPersonalRank(b);
                                                         }
                                                         const lblA = (a.label || '').toLowerCase();
                                                         const lblB = (b.label || '').toLowerCase();
