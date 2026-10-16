@@ -587,15 +587,15 @@ export default function StudentScannerPage() {
     return (
         <div style={{
             position: "relative",
-            minHeight: "100vh",
+            height: "100vh",
+            maxHeight: "100dvh",
             backgroundColor: "#030712",
             color: "#f3f4f6",
             fontFamily: "system-ui, -apple-system, sans-serif",
             display: "flex",
             flexDirection: "column",
-            overflowY: "auto",
-            WebkitOverflowScrolling: "touch",
-            paddingBottom: "40px"
+            overflow: "hidden",
+            paddingBottom: "0px"
         }}>
             {/* Top Navigation Bar */}
             <div style={{
@@ -817,7 +817,7 @@ export default function StudentScannerPage() {
 
             {/* Outing History */}
             <div style={{
-                padding: "4px 14px 28px",
+                padding: "2px 14px 4px",
                 maxWidth: "540px",
                 width: "100%",
                 margin: "0 auto",
@@ -826,10 +826,10 @@ export default function StudentScannerPage() {
                     display: "flex",
                     justifyContent: "space-between",
                     alignItems: "center",
-                    marginBottom: "12px",
+                    marginBottom: "6px",
                 }}>
                     <h3 style={{
-                        fontSize: "11px",
+                        fontSize: "10.5px",
                         fontWeight: "800",
                         color: "#9ca3af",
                         textTransform: "uppercase",
@@ -844,11 +844,11 @@ export default function StudentScannerPage() {
 
                     {outingHistory.length > 0 && (
                         <span style={{
-                            fontSize: "10px",
+                            fontSize: "9.5px",
                             fontWeight: "700",
                             color: "#9ca3af",
                             backgroundColor: "rgba(255, 255, 255, 0.05)",
-                            padding: "2px 8px",
+                            padding: "2px 7px",
                             borderRadius: "9999px",
                             border: "1px solid rgba(255, 255, 255, 0.1)"
                         }}>
@@ -858,7 +858,7 @@ export default function StudentScannerPage() {
                 </div>
 
                 {loadingHistory ? (
-                    <div style={{ padding: "24px", textAlign: "center", color: "#6b7280", fontSize: "11px" }}>
+                    <div style={{ padding: "16px", textAlign: "center", color: "#6b7280", fontSize: "11px" }}>
                         Loading Outing History...
                     </div>
                 ) : (
@@ -866,18 +866,18 @@ export default function StudentScannerPage() {
                         {/* CALENDAR COMPONENT (Marked Blue Area) */}
                         <div style={{
                             backgroundColor: "#0d1527",
-                            borderRadius: "14px",
+                            borderRadius: "12px",
                             border: "1px solid rgba(255, 255, 255, 0.1)",
-                            padding: "12px 14px 10px",
-                            boxShadow: "0 6px 20px rgba(0, 0, 0, 0.35)",
-                            marginBottom: "14px"
+                            padding: "7px 10px 5px",
+                            boxShadow: "0 4px 16px rgba(0, 0, 0, 0.35)",
+                            marginBottom: "6px"
                         }}>
                             {/* Calendar Header: Month/Year & Navigation */}
                             <div style={{
                                 display: "flex",
                                 alignItems: "center",
                                 justifyContent: "space-between",
-                                marginBottom: "10px"
+                                marginBottom: "5px"
                             }}>
                                 <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
                                     <button
@@ -1032,7 +1032,7 @@ export default function StudentScannerPage() {
                                 columnGap: "3px"
                             }}>
                                 {Array.from({ length: startDayOfWeek }).map((_, i) => (
-                                    <div key={`empty-${i}`} style={{ height: "27px" }} />
+                                    <div key={`empty-${i}`} style={{ height: "23px" }} />
                                 ))}
                                 {Array.from({ length: daysInMonth }).map((_, i) => {
                                     const day = i + 1;
@@ -1054,8 +1054,8 @@ export default function StudentScannerPage() {
                                             }}
                                             style={{
                                                 position: "relative",
-                                                height: "27px",
-                                                borderRadius: "6px",
+                                                height: "23px",
+                                                borderRadius: "5px",
                                                 border: isSelected
                                                     ? "2px solid #3b82f6"
                                                     : isToday
@@ -1082,7 +1082,7 @@ export default function StudentScannerPage() {
                                             }}
                                         >
                                             <span style={{
-                                                fontSize: "11px",
+                                                fontSize: "10.5px",
                                                 fontWeight: isSelected || hasOuting || isToday ? "800" : "500",
                                                 lineHeight: "1"
                                             }}>
@@ -1092,8 +1092,8 @@ export default function StudentScannerPage() {
                                             {/* Dot indicator for outing or home leave */}
                                             {hasOuting && (
                                                 <span style={{
-                                                    width: "4px",
-                                                    height: "4px",
+                                                    width: "3.5px",
+                                                    height: "3.5px",
                                                     borderRadius: "50%",
                                                     backgroundColor: isSelected
                                                         ? "#fbbf24"
@@ -1114,10 +1114,10 @@ export default function StudentScannerPage() {
                                 display: "flex",
                                 alignItems: "center",
                                 justifyContent: "space-between",
-                                marginTop: "8px",
-                                paddingTop: "7px",
+                                marginTop: "4px",
+                                paddingTop: "4px",
                                 borderTop: "1px solid rgba(255, 255, 255, 0.08)",
-                                fontSize: "9px",
+                                fontSize: "8.5px",
                                 fontWeight: "700",
                                 color: "#9ca3af"
                             }}>
@@ -1208,21 +1208,21 @@ export default function StudentScannerPage() {
                                             key={record._id}
                                             style={{
                                                 backgroundColor: "#ffffff",
-                                                borderRadius: "12px",
+                                                borderRadius: "10px",
                                                 border: "1px solid rgba(229, 231, 235, 0.9)",
-                                                padding: "12px 14px",
+                                                padding: "7px 12px",
                                                 boxShadow: "0 2px 8px rgba(0, 0, 0, 0.04)",
                                                 display: "flex",
                                                 flexDirection: "column",
-                                                gap: "8px",
+                                                gap: "4px",
                                             }}
                                         >
                                             {/* Top Row: Type Pill + Status Pill */}
                                             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
                                                 <span style={{
-                                                    padding: "2px 7px",
+                                                    padding: "1px 6px",
                                                     borderRadius: "9999px",
-                                                    fontSize: "8.5px",
+                                                    fontSize: "8px",
                                                     fontWeight: "800",
                                                     textTransform: "uppercase",
                                                     letterSpacing: "0.05em",
@@ -1233,9 +1233,9 @@ export default function StudentScannerPage() {
                                                 </span>
 
                                                 <span style={{
-                                                    padding: "2px 7px",
+                                                    padding: "1px 6px",
                                                     borderRadius: "9999px",
-                                                    fontSize: "8.5px",
+                                                    fontSize: "8px",
                                                     fontWeight: "800",
                                                     textTransform: "uppercase",
                                                     letterSpacing: "0.05em",
@@ -1248,26 +1248,26 @@ export default function StudentScannerPage() {
                                             </div>
 
                                             {/* Middle Rows: Full horizontal row matching Screenshot 2 */}
-                                            <div style={{ display: "flex", flexDirection: "column", gap: "6px", paddingTop: "4px" }}>
-                                                <div style={{ display: "flex", alignItems: "center", fontSize: "11px", fontWeight: "800", color: "#111827" }}>
-                                                    <span style={{ width: "85px", textTransform: "uppercase", letterSpacing: "-0.02em", flexShrink: 0 }}>CHECK OUT</span>
-                                                    <span style={{ color: "#d1d5db", fontWeight: "normal", padding: "0 8px", flexShrink: 0 }}>|</span>
+                                            <div style={{ display: "flex", flexDirection: "column", gap: "3px", paddingTop: "2px" }}>
+                                                <div style={{ display: "flex", alignItems: "center", fontSize: "10.5px", fontWeight: "800", color: "#111827" }}>
+                                                    <span style={{ width: "80px", textTransform: "uppercase", letterSpacing: "-0.02em", flexShrink: 0 }}>CHECK OUT</span>
+                                                    <span style={{ color: "#d1d5db", fontWeight: "normal", padding: "0 6px", flexShrink: 0 }}>|</span>
                                                     <span style={{ textAlign: "center", flex: 1, fontVariantNumeric: "tabular-nums" }}>{record.checkOutISTTime}</span>
-                                                    <span style={{ color: "#d1d5db", fontWeight: "normal", padding: "0 8px", flexShrink: 0 }}>|</span>
+                                                    <span style={{ color: "#d1d5db", fontWeight: "normal", padding: "0 6px", flexShrink: 0 }}>|</span>
                                                     <span style={{ textAlign: "right", flex: 1, fontVariantNumeric: "tabular-nums" }}>{formatDateDDMMYYYY(record.checkOutISTDate || record.checkOutTime)}</span>
                                                 </div>
 
-                                                <div style={{ display: "flex", alignItems: "center", fontSize: "11px", fontWeight: "800", color: "#111827" }}>
-                                                    <span style={{ width: "85px", textTransform: "uppercase", letterSpacing: "-0.02em", flexShrink: 0 }}>CHECK IN</span>
-                                                    <span style={{ color: "#d1d5db", fontWeight: "normal", padding: "0 8px", flexShrink: 0 }}>|</span>
+                                                <div style={{ display: "flex", alignItems: "center", fontSize: "10.5px", fontWeight: "800", color: "#111827" }}>
+                                                    <span style={{ width: "80px", textTransform: "uppercase", letterSpacing: "-0.02em", flexShrink: 0 }}>CHECK IN</span>
+                                                    <span style={{ color: "#d1d5db", fontWeight: "normal", padding: "0 6px", flexShrink: 0 }}>|</span>
                                                     {record.status === "in" || record.status === "auto-resolved" ? (
                                                         <>
                                                             <span style={{ textAlign: "center", flex: 1, fontVariantNumeric: "tabular-nums" }}>{record.checkInISTTime || "---"}</span>
-                                                            <span style={{ color: "#d1d5db", fontWeight: "normal", padding: "0 8px", flexShrink: 0 }}>|</span>
+                                                            <span style={{ color: "#d1d5db", fontWeight: "normal", padding: "0 6px", flexShrink: 0 }}>|</span>
                                                             <span style={{ textAlign: "right", flex: 1, fontVariantNumeric: "tabular-nums" }}>{formatDateDDMMYYYY(record.checkInISTDate || record.checkInTime || record.checkOutISTDate)}</span>
                                                         </>
                                                     ) : (
-                                                        <span style={{ flex: 1, textAlign: "center", color: "#f43f5e", fontWeight: "800", textTransform: "uppercase", letterSpacing: "0.05em", fontSize: "10px" }}>
+                                                        <span style={{ flex: 1, textAlign: "center", color: "#f43f5e", fontWeight: "800", textTransform: "uppercase", letterSpacing: "0.05em", fontSize: "9.5px" }}>
                                                             Outside Campus
                                                         </span>
                                                     )}
@@ -1277,12 +1277,12 @@ export default function StudentScannerPage() {
                                             {/* Bottom Row: Centered TOTAL DURATION */}
                                             {record.durationMinutes !== undefined && record.durationMinutes !== null && (
                                                 <div style={{
-                                                    fontSize: "10.5px",
+                                                    fontSize: "9.5px",
                                                     fontWeight: "800",
                                                     color: "#111827",
                                                     textTransform: "uppercase",
                                                     letterSpacing: "0.05em",
-                                                    paddingTop: "6px",
+                                                    paddingTop: "3px",
                                                     borderTop: "1px solid #f3f4f6",
                                                     textAlign: "center"
                                                 }}>
@@ -1416,7 +1416,7 @@ const styles: { [key: string]: React.CSSProperties } = {
     },
 
     scannerArea: {
-        padding: "8px 16px 4px",
+        padding: "4px 14px 2px",
     },
 
     cameraContainer: {
@@ -1560,14 +1560,14 @@ const styles: { [key: string]: React.CSSProperties } = {
         display: "flex",
         flexDirection: "column" as const,
         alignItems: "center",
-        padding: "8px 16px 6px",
-        gap: "8px",
+        padding: "3px 14px 2px",
+        gap: "4px",
     },
 
     scanIconContainer: {
-        width: "56px",
-        height: "56px",
-        borderRadius: "16px",
+        width: "44px",
+        height: "44px",
+        borderRadius: "12px",
         background: "rgba(0, 255, 136, 0.1)",
         border: "1.5px solid rgba(0, 255, 136, 0.25)",
         display: "flex",
@@ -1577,11 +1577,11 @@ const styles: { [key: string]: React.CSSProperties } = {
     },
 
     scanIcon: {
-        fontSize: "26px",
+        fontSize: "22px",
     },
 
     scanTitle: {
-        fontSize: "17px",
+        fontSize: "15px",
         fontWeight: "800",
         color: "#fff",
         margin: 0,
@@ -1589,23 +1589,23 @@ const styles: { [key: string]: React.CSSProperties } = {
     },
 
     scanDescription: {
-        fontSize: "11.5px",
+        fontSize: "10.5px",
         color: "rgba(255,255,255,0.6)",
         textAlign: "center" as const,
         margin: 0,
-        maxWidth: "280px",
-        lineHeight: "1.4",
+        maxWidth: "270px",
+        lineHeight: "1.3",
     },
 
     scanButton: {
-        padding: "9px 24px",
-        borderRadius: "12px",
+        padding: "7px 22px",
+        borderRadius: "10px",
         border: "none",
         color: "#fff",
-        fontSize: "13.5px",
+        fontSize: "12.5px",
         fontWeight: "800",
         cursor: "pointer",
-        marginTop: "2px",
+        marginTop: "1px",
         boxShadow: "0 4px 16px rgba(0, 255, 136, 0.25)",
         transition: "all 0.2s ease",
     },
