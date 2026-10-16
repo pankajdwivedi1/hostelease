@@ -168,6 +168,17 @@ email: vijendrasinghthakur@oriental.ac.in
 
 {warden_contact}`;
 
+function parseWardenInfo(wardenUsername?: string) {
+    if (!wardenUsername) return null;
+    const str = String(wardenUsername).trim();
+    const phoneMatch = str.match(/(\d{10,12})$/);
+    const phone = phoneMatch ? phoneMatch[1] : '';
+    let name = phone ? str.slice(0, str.lastIndexOf(phone)).replace(/[_\s-]+$/, '').trim() : str;
+    name = name.replace(/_+/g, ' ').trim();
+    if (name.toLowerCase() === 'anita') name = 'Anita Khabse';
+    return { name, phone };
+}
+
 export default function StudentDashboard({ initialData, isParentView = false, hasMultipleSiblings = false }: { initialData?: any; isParentView?: boolean; hasMultipleSiblings?: boolean }) {
     const router = useRouter();
     const searchParams = useSearchParams();
@@ -213,22 +224,54 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
     const [calendarMonth, setCalendarMonth] = useState<Date>(new Date());
     const [selectedCalendarDay, setSelectedCalendarDay] = useState<Date | null>(new Date());
     const [mobileProfileTab, setMobileProfileTab] = useState<'academic' | 'family' | 'personal'>('academic');
+    const [serverHostelConfigs, setServerHostelConfigs] = useState<any[]>([]);
 
     const wardenContactInfo = useMemo(() => {
         const p = (studentProfile as any) || {};
-        const gender = String(p.gender || "").toLowerCase();
-        const hostel = String(p.hostelName || "").toLowerCase();
+        const rawGender = String(p.gender || p.sex || p.dynamicFields?.gender || p.dynamicFields?.sex || "").trim().toLowerCase();
+        const isMale = rawGender.startsWith('m') || rawGender === 'male' || rawGender.includes('boy') || rawGender.includes('man');
+        const isFemale = !isMale && (rawGender.startsWith('f') || rawGender === 'female' || rawGender.includes('girl') || rawGender.includes('woman'));
+        const hostel = String(p.hostelName || "").toLowerCase().trim();
 
         // 1. If explicit warden name/phone is in studentProfile
         if (p.wardenName && (p.wardenPhone || p.wardenNumber)) {
             return {
-                name: String(p.wardenName),
-                phone: String(p.wardenPhone || p.wardenNumber),
+                name: String(p.wardenName).trim(),
+                phone: String(p.wardenPhone || p.wardenNumber).trim(),
                 designation: `Hostel Warden (${p.hostelName || 'Hostel'})`
             };
         }
 
-        // 2. Gangotri Hostel -> Anjali Mishra (Mob: 9131804631)
+        // 2. Check live server hostel configs (from admin hostel management panel)
+        if (Array.isArray(serverHostelConfigs) && serverHostelConfigs.length > 0) {
+            const matched = serverHostelConfigs.find((h: any) => {
+                const hName = String(h.name || '').toLowerCase().trim();
+                return hName === hostel || (hostel && (hName.includes(hostel) || hostel.includes(hName)));
+            });
+
+            if (matched && matched.wardenUsername) {
+                const parsed = parseWardenInfo(matched.wardenUsername);
+                if (parsed && parsed.phone) {
+                    return {
+                        name: parsed.name,
+                        phone: parsed.phone,
+                        designation: `Hostel Warden (${matched.name || p.hostelName || 'Hostel'})`
+                    };
+                }
+            }
+        }
+
+        // 3. Fallbacks based on assigned hostel in OGI system
+        // GHB Hostel is assigned to Rahul Yadav (9039761287)
+        if (hostel.includes('ghb') || hostel.includes('guest')) {
+            return {
+                name: "Rahul Yadav",
+                phone: p.wardenPhone || p.wardenNumber || "9039761287",
+                designation: "Hostel Warden (GHB Hostel)"
+            };
+        }
+
+        // Gangotri Hostel -> Anjali Mishra (9131804631)
         if (hostel.includes('gangotri')) {
             return {
                 name: "Anjali Mishra",
@@ -237,7 +280,7 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
             };
         }
 
-        // 3. Gaytri Hostel -> Anita Khabse (Mob: 8305493461)
+        // Gaytri Hostel -> Anita Khabse (8305493461)
         if (hostel.includes('gaytri') || hostel.includes('gayatri')) {
             return {
                 name: "Anita Khabse",
@@ -246,7 +289,7 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
             };
         }
 
-        // 4. Boys Hostel -> Rahul Yadav (Mob: 9039761287)
+        // Boys Hostel -> Rahul Yadav (9039761287)
         if (hostel.includes('boys') || hostel.includes('boy') || hostel.startsWith('bh')) {
             return {
                 name: "Rahul Yadav",
@@ -255,17 +298,7 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
             };
         }
 
-        // 5. GHB Hostel -> Anita Khabse (Mob: 8305493461)
-        if (hostel.includes('ghb')) {
-            return {
-                name: "Anita Khabse",
-                phone: p.wardenPhone || p.wardenNumber || "8305493461",
-                designation: "Hostel Warden (GHB Hostel)"
-            };
-        }
-
-        // 6. Fallback based on gender
-        const isFemale = gender.startsWith('f') || gender.includes('girl') || gender.includes('woman') || hostel.includes('girls') || hostel.startsWith('gh');
+        // 4. Fallback based on gender
         if (isFemale) {
             return {
                 name: "Anita Khabse",
@@ -279,7 +312,7 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
             phone: p.wardenPhone || p.wardenNumber || "9039761287",
             designation: "Hostel Warden (Boys Hostel)"
         };
-    }, [studentProfile]);
+    }, [studentProfile, serverHostelConfigs]);
 
     const wardenContactPhone = wardenContactInfo.phone;
 
@@ -295,14 +328,40 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
 
     const deanContactPhone = deanContactInfo.phone;
 
+    // Early fetch of server hostel configs to bind warden username/phone instantly
+    useEffect(() => {
+        fetch('/api/hostels', { cache: 'no-store' })
+            .then(res => res.ok ? res.json() : null)
+            .then(data => {
+                if (data?.hostels && Array.isArray(data.hostels)) {
+                    setServerHostelConfigs(data.hostels);
+                }
+            })
+            .catch(() => {});
+    }, []);
+
     const getFormattedUndertaking = useCallback(() => {
         const rawText = settingsCacheRef.current?.data?.undertakingText || DEFAULT_UNDERTAKING_TEXT;
         
         const p = (studentProfile as any) || {};
-        const gender = String(p.gender || "").toLowerCase();
-        const hostel = String(p.hostelName || "").toLowerCase();
-        const isFemale = gender.startsWith('f') || gender.includes('girl') || gender.includes('woman') || hostel.includes('girls') || hostel.includes('ghb') || hostel.startsWith('gh');
-        const parentRelation = isFemale ? "D/o" : "S/o";
+        const rawGender = String(p.gender || p.sex || p.dynamicFields?.gender || p.dynamicFields?.sex || "").trim().toLowerCase();
+        const isMale = rawGender.startsWith('m') || rawGender === 'male' || rawGender.includes('boy') || rawGender.includes('man');
+        const isFemale = !isMale && (rawGender.startsWith('f') || rawGender === 'female' || rawGender.includes('girl') || rawGender.includes('woman'));
+        
+        let parentRelation = "S/o";
+        if (isFemale) {
+            parentRelation = "D/o";
+        } else if (isMale) {
+            parentRelation = "S/o";
+        } else {
+            // Only if gender is completely missing from profile, check hostel name as fallback
+            const h = String(p.hostelName || "").toLowerCase();
+            if (h.includes('gangotri') || h.includes('gaytri') || h.includes('gayatri') || h.includes('girls')) {
+                parentRelation = "D/o";
+            } else {
+                parentRelation = "S/o";
+            }
+        }
 
         const resolvedName = p.name || p.fullName || "Student";
         const resolvedParent = p.fatherName || p.motherName || "Parent / Guardian";
@@ -329,7 +388,8 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
             .replace(/{date}/g, resolvedDate)
             .replace(/{place}/g, resolvedPlace)
             .replace(/{address}/g, resolvedPlace)
-            .replace(/S\/o \/ D\/o/g, parentRelation);
+            .replace(/S\/o\s*[\/\\]\s*D\/o/gi, parentRelation)
+            .replace(/S\/o\s+or\s+D\/o/gi, parentRelation);
 
         // Respective Warden contact line (shows only the assigned warden for this student's hostel)
         const assignedWardenLine = `${wardenContactInfo.name} - ${wardenContactInfo.designation} Mob no: ${wardenContactInfo.phone}`;
@@ -1931,7 +1991,6 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
     };
 
     const [hostelLocations, setHostelLocations] = useState<any[]>([]);
-    const [serverHostelConfigs, setServerHostelConfigs] = useState<any[]>([]);
     const [isLocationsLoading, setIsLocationsLoading] = useState(false);
 
     const fetchHostelLocations = async () => {

@@ -34,20 +34,20 @@ export async function GET(request: NextRequest) {
             }
 
             const newHostels = await db.hostels.getAll();
-            const sanitizedNewHostels = newHostels.map(({ wardenPassword, wardenUsername, ...h }: any) => h);
+            const sanitizedNewHostels = newHostels.map(({ wardenPassword, ...h }: any) => h);
             return NextResponse.json({ hostels: sanitizedNewHostels }, { status: 200 });
         }
 
         console.log(`🏨 [API/hostels] Returning ${hostels.length} hostels.`);
-        const sanitizedHostels = hostels.map(({ wardenPassword, wardenUsername, ...h }: any) => h);
+        const sanitizedHostels = hostels.map(({ wardenPassword, ...h }: any) => h);
         return NextResponse.json({ hostels: sanitizedHostels }, { status: 200 });
     } catch (error: any) {
         console.warn("⚠️ [API/hostels] Using default hostel list:", error.message);
         const fallbackHostels = [
-            { id: "1", name: "GANGOTRI HOSTEL" },
-            { id: "2", name: "GAYTRI HOSTEL" },
-            { id: "3", name: "BOYS HOSTEL" },
-            { id: "4", name: "GHB HOSTEL" },
+            { id: "1", name: "GANGOTRI HOSTEL", wardenUsername: "Anjali Mishra_9131804631" },
+            { id: "2", name: "GAYTRI HOSTEL", wardenUsername: "Anita_8305493461" },
+            { id: "3", name: "BOYS HOSTEL", wardenUsername: "Rahul Yadav _9039761287" },
+            { id: "4", name: "GHB HOSTEL", wardenUsername: "Rahul Yadav _9039761287" },
         ];
         return NextResponse.json({ hostels: fallbackHostels }, { status: 200 });
     }
