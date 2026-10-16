@@ -4230,7 +4230,7 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
 
     return (
         <div 
-            className="min-h-screen bg-white relative"
+            className="min-h-screen bg-white relative flex flex-col justify-between overflow-x-hidden"
             onTouchStart={handleTouchStart}
             onTouchMove={handleTouchMove}
             onTouchEnd={handleTouchEnd}
@@ -4260,7 +4260,7 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
             </div>
 
             <main className="w-full max-w-4xl mx-auto">
-                <div className="p-4 md:p-6 space-y-4 md:space-y-6">
+                <div className="px-3.5 pt-2.5 pb-1 sm:p-6 space-y-2.5 sm:space-y-6">
                     {!showProfile ? (
                         <>
                             {isParentView && showSoundBanner && (
@@ -4292,7 +4292,7 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
                                 </div>
                             )}
                             {/* Header section: Profile @ Top-Right, Logout next to Name */}
-                            <div className="flex items-start justify-between gap-4 mb-6">
+                            <div className="flex items-start justify-between gap-3 sm:gap-4 mb-2 sm:mb-6">
                                 <div className="flex-1 min-w-0">
                                     <div className="flex items-center flex-wrap gap-3 mb-1">
                                         <h1 className="text-xl md:text-3xl font-bold text-gray-900 leading-tight">
@@ -5198,32 +5198,32 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
 
                             {/* Detailed Student Information Section */}
                             <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
-                                <div className="bg-gray-50/50 px-3.5 sm:px-6 py-3 sm:py-4 border-b border-gray-100 flex items-center justify-between">
+                                <div className="bg-gray-50/50 px-3 sm:px-6 py-2 sm:py-4 border-b border-gray-100 flex items-center justify-between">
                                     <h2 className="text-[11px] sm:text-[12px] font-bold text-gray-800 uppercase tracking-wider">Student Profile Details</h2>
-                                    <span className="text-[9.5px] sm:text-[10px] bg-blue-100 text-blue-700 px-2 py-0.5 rounded-md font-bold border border-blue-200">Official Record</span>
+                                    <span className="text-[9px] sm:text-[10px] bg-blue-100 text-blue-700 px-2 py-0.5 rounded-md font-bold border border-blue-200">Official Record</span>
                                 </div>
 
-                                <div className="p-3 sm:p-6">
+                                <div className="p-2 sm:p-6">
                                     {/* 📱 MOBILE CATEGORY TABS (Visible on mobile screens only) */}
-                                    <div className="flex sm:hidden items-center bg-slate-100 p-1 rounded-xl border border-slate-200/80 mb-3 gap-1">
+                                    <div className="flex sm:hidden items-center bg-slate-100 p-0.5 sm:p-1 rounded-xl border border-slate-200/80 mb-2 sm:mb-3 gap-1">
                                         <button
                                             type="button"
                                             onClick={() => setMobileProfileTab('academic')}
-                                            className={`flex-1 py-1.5 px-2 rounded-lg text-[9.5px] font-black uppercase tracking-wider transition-all flex items-center justify-center gap-1 ${mobileProfileTab === 'academic' ? 'bg-white text-blue-700 shadow-sm border border-slate-200' : 'text-slate-500 hover:text-slate-800'}`}
+                                            className={`flex-1 py-1 px-1.5 rounded-lg text-[9px] font-black uppercase tracking-wider transition-all flex items-center justify-center gap-1 ${mobileProfileTab === 'academic' ? 'bg-white text-blue-700 shadow-sm border border-slate-200' : 'text-slate-500 hover:text-slate-800'}`}
                                         >
                                             🎓 Academic
                                         </button>
                                         <button
                                             type="button"
                                             onClick={() => setMobileProfileTab('family')}
-                                            className={`flex-1 py-1.5 px-2 rounded-lg text-[9.5px] font-black uppercase tracking-wider transition-all flex items-center justify-center gap-1 ${mobileProfileTab === 'family' ? 'bg-white text-amber-700 shadow-sm border border-slate-200' : 'text-slate-500 hover:text-slate-800'}`}
+                                            className={`flex-1 py-1 px-1.5 rounded-lg text-[9px] font-black uppercase tracking-wider transition-all flex items-center justify-center gap-1 ${mobileProfileTab === 'family' ? 'bg-white text-amber-700 shadow-sm border border-slate-200' : 'text-slate-500 hover:text-slate-800'}`}
                                         >
                                             👨‍👩‍👦 Family
                                         </button>
                                         <button
                                             type="button"
                                             onClick={() => setMobileProfileTab('personal')}
-                                            className={`flex-1 py-1.5 px-2 rounded-lg text-[9.5px] font-black uppercase tracking-wider transition-all flex items-center justify-center gap-1 ${mobileProfileTab === 'personal' ? 'bg-white text-emerald-700 shadow-sm border border-slate-200' : 'text-slate-500 hover:text-slate-800'}`}
+                                            className={`flex-1 py-1 px-1.5 rounded-lg text-[9px] font-black uppercase tracking-wider transition-all flex items-center justify-center gap-1 ${mobileProfileTab === 'personal' ? 'bg-white text-emerald-700 shadow-sm border border-slate-200' : 'text-slate-500 hover:text-slate-800'}`}
                                         >
                                             📍 Personal
                                         </button>
@@ -5329,7 +5329,7 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
                                         return (
                                             <>
                                                 {/* 📱 MOBILE VIEW: Filtered Grid */}
-                                                <div className="grid grid-cols-2 gap-2 sm:hidden text-xs">
+                                                <div className="grid grid-cols-6 gap-1.5 sm:hidden text-xs">
                                                     {fieldsToRender.filter(f => {
                                                         const id = f.id.toLowerCase();
                                                         const lbl = (f.label || '').toLowerCase();
@@ -5363,6 +5363,21 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
                                                                 lbl.includes('room') || id.includes('room');
                                                         }
                                                     }).sort((a, b) => {
+                                                        if (mobileProfileTab === 'academic') {
+                                                            const getAcademicRank = (f: any) => {
+                                                                const id = f.id.toLowerCase();
+                                                                const lbl = (f.label || '').toLowerCase();
+                                                                if ((lbl.includes('name') || id.includes('name')) && !lbl.includes('father') && !lbl.includes('mother')) return 1;
+                                                                if (lbl.includes('erp') || id.includes('erp') || id.includes('reg')) return 2;
+                                                                if (lbl.includes('college') || id.includes('college')) return 3;
+                                                                if (lbl.includes('branch') || id.includes('branch')) return 4;
+                                                                if (lbl.includes('year') || id.includes('year')) return 5;
+                                                                if (lbl.includes('sem') || id.includes('sem')) return 6;
+                                                                if (lbl.includes('section') || id.includes('sec')) return 7;
+                                                                return 8;
+                                                            };
+                                                            return getAcademicRank(a) - getAcademicRank(b);
+                                                        }
                                                         const lblA = (a.label || '').toLowerCase();
                                                         const lblB = (b.label || '').toLowerCase();
                                                         const aIsAddress = lblA.includes('address') || lblA.includes('permanent') || a.id.toLowerCase().includes('address') || a.id.toLowerCase().includes('permanent');
@@ -5373,21 +5388,31 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
                                                     }).map((field) => {
                                                         const { value, displayValue } = getFieldValue(field);
                                                         const lbl = (field.label || '').toLowerCase();
-                                                        const isLongField = lbl.includes('address') || lbl.includes('permanent') || field.id.toLowerCase().includes('address') || String(displayValue).length > 20;
-                                                        const isPhone = (field.type === 'tel' || field.id.toLowerCase().includes('phone') || field.id.toLowerCase().includes('mobile') || (field.id.toLowerCase().includes('number') && (field.id.toLowerCase().includes('father') || field.id.toLowerCase().includes('mother') || field.id.toLowerCase().includes('guardian') || field.id.toLowerCase().includes('parent') || field.id.toLowerCase().includes('contact')))) && !field.id.toLowerCase().includes('room') && !field.id.toLowerCase().includes('floor') && !field.id.toLowerCase().includes('erp') && !field.id.toLowerCase().includes('reg') && value !== "N/A";
-                                                        const fieldIcon = field.id.toLowerCase().includes('floor') ? '🏢 ' : field.id.toLowerCase().includes('hostel') ? '🏬 ' : field.id.toLowerCase().includes('state') ? '🗺️ ' : (field.id.toLowerCase().includes('birth') || field.id.toLowerCase().includes('dob')) ? '🎂 ' : field.id.toLowerCase().includes('category') ? '🏷️ ' : (field.id.toLowerCase().includes('joining') || field.id.toLowerCase().includes('date')) ? '🗓️ ' : field.id.toLowerCase().includes('gender') ? '👤 ' : '';
+                                                        const id = field.id.toLowerCase();
+                                                        const isAcademic = mobileProfileTab === 'academic';
+                                                        const isYearSemSec = isAcademic && (lbl.includes('year') || id.includes('year') || lbl.includes('sem') || id.includes('sem') || lbl.includes('section') || id.includes('sec'));
+                                                        const isAddressField = lbl.includes('address') || lbl.includes('permanent') || id.includes('address') || id.includes('permanent');
+                                                        const isLongField = isAddressField || String(displayValue).length > 28;
+                                                        const isPhone = (field.type === 'tel' || id.includes('phone') || id.includes('mobile') || (id.includes('number') && (id.includes('father') || id.includes('mother') || id.includes('guardian') || id.includes('parent') || id.includes('contact')))) && !id.includes('room') && !id.includes('floor') && !id.includes('erp') && !id.includes('reg') && value !== "N/A";
+                                                        const fieldIcon = id.includes('floor') ? '🏢 ' : id.includes('hostel') ? '🏬 ' : id.includes('state') ? '🗺️ ' : (id.includes('birth') || id.includes('dob')) ? '🎂 ' : id.includes('category') ? '🏷️ ' : (id.includes('joining') || id.includes('date')) ? '🗓️ ' : id.includes('gender') ? '👤 ' : '';
+
+                                                        const colSpanClass = isYearSemSec
+                                                            ? "col-span-2"
+                                                            : isLongField
+                                                                ? "col-span-6 bg-amber-50/30 border-amber-100"
+                                                                : "col-span-3";
 
                                                         return (
-                                                            <div key={field.id} className={`flex flex-col bg-slate-50/80 border border-slate-100 p-2 rounded-lg ${isLongField ? "col-span-2 bg-amber-50/30 border-amber-100" : ""}`}>
-                                                                <p className="text-[9px] font-bold text-gray-400 uppercase tracking-widest mb-0.5">{field.label}</p>
+                                                            <div key={field.id} className={`flex flex-col bg-slate-50/80 border border-slate-100 p-1.5 sm:p-2 rounded-lg ${colSpanClass}`}>
+                                                                <p className="text-[8.5px] font-bold text-gray-400 uppercase tracking-wider mb-0.5 truncate">{field.label}</p>
                                                                 {isProfileLoading ? (
                                                                     <div className="h-4 w-16 bg-gray-100 animate-pulse rounded mt-1"></div>
                                                                 ) : isPhone ? (
-                                                                    <a href={`tel:${value}`} title="Click to call" className="text-[11px] font-black text-blue-600 hover:underline flex items-center gap-1">
+                                                                    <a href={`tel:${value}`} title="Click to call" className="text-[10.5px] font-black text-blue-600 hover:underline flex items-center gap-1">
                                                                         <span>📞</span> {displayValue}
                                                                     </a>
                                                                 ) : (
-                                                                    <p className={`text-[11px] font-extrabold break-words ${field.id === 'roomNumber' || field.id === 'floorNumber' ? 'text-blue-600' : 'text-gray-900'}`}>
+                                                                    <p className={`text-[10.5px] font-extrabold break-words ${field.id === 'roomNumber' || field.id === 'floorNumber' ? 'text-blue-600' : 'text-gray-900'}`}>
                                                                         {fieldIcon}{field.id === 'roomNumber' && value !== 'N/A' && !value.startsWith('#') ? '#' : ''}{displayValue}
                                                                     </p>
                                                                 )}
@@ -8073,12 +8098,12 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
                 onClose={() => setActiveConsentVideoUrl(null)}
             />
 
-            <footer className="mt-2 py-6 border-t border-gray-100/50">
-                <div className="flex flex-col items-center gap-1.5 text-center px-4">
-                    <p className="text-[9px] sm:text-[11px] font-bold tracking-widest text-gray-400/80 uppercase">
+            <footer className="mt-auto py-2 sm:py-6 border-t border-gray-100/50">
+                <div className="flex flex-col items-center gap-0.5 sm:gap-1.5 text-center px-4">
+                    <p className="text-[8.5px] sm:text-[11px] font-bold tracking-widest text-gray-400/80 uppercase">
                         &copy; 2026 HOSTELEAZE. All Rights Reserved.
                     </p>
-                    <p className="text-[8px] sm:text-[9px] font-medium text-gray-300 uppercase tracking-[0.15em] opacity-60">
+                    <p className="text-[7.5px] sm:text-[9px] font-medium text-gray-300 uppercase tracking-[0.15em] opacity-60">
                         Unauthorized copying, modification, or distribution is strictly prohibited
                     </p>
                 </div>
