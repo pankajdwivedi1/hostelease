@@ -1455,8 +1455,6 @@ I certify that my ward will abide by the above undertaking.
 Name of the Parent: {parent}          Signature: {parent}
 Place: {place}                          Date: {date}
 
-───────────────────────────────────────────────────────────────────────────────────
-
 For hostel related enquiry please contact:
 Dr Vijendra Singh (Dean Hostel) Mob no: 9981414729
 email: vijendrasinghthakur@oriental.ac.in
