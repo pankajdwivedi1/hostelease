@@ -7264,7 +7264,7 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
                         </>
                     ) : (
                         <>
-                            <div className="flex items-center gap-4 mb-6">
+                            <div className="flex items-center gap-3 sm:gap-4 mb-2.5 sm:mb-6">
                                 <button
                                     onClick={() => {
                                         if (missingRequiredFields.length > 0) {
@@ -7273,7 +7273,7 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
                                         }
                                         setShowProfile(false);
                                     }}
-                                    className={`w-10 h-10 rounded-full border border-solid border-[#9CA3AF] bg-white text-foreground flex items-center justify-center transition-colors hover:bg-filler flex-shrink-0 ${missingRequiredFields.length > 0 ? 'opacity-50 cursor-not-allowed' : ''}`}
+                                    className={`w-9 h-9 sm:w-10 sm:h-10 rounded-full border border-solid border-[#9CA3AF] bg-white text-foreground flex items-center justify-center transition-colors hover:bg-filler flex-shrink-0 ${missingRequiredFields.length > 0 ? 'opacity-50 cursor-not-allowed' : ''}`}
                                 >
                                     <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
@@ -7312,9 +7312,9 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
                                     </div>
                                 )}
 
-                                <div className="space-y-4">
+                                <div className="space-y-2 sm:space-y-4">
                                     {/* 💳 Smart Student ID Badge Header (Light Abstract Card Style) */}
-                                    <div className="bg-gradient-to-r from-orange-50/80 via-amber-50/40 to-blue-50/60 border border-orange-200/80 rounded-2xl p-2.5 sm:p-4 text-slate-900 shadow-sm relative">
+                                    <div className="bg-gradient-to-r from-orange-50/80 via-amber-50/40 to-blue-50/60 border border-orange-200/80 rounded-2xl p-2 sm:p-4 text-slate-900 shadow-sm relative">
                                         <div className="flex items-center justify-between gap-3">
                                             <div className="flex-1 space-y-1 min-w-0">
                                                 <span className="inline-block text-[8px] sm:text-[9px] font-black uppercase tracking-widest bg-orange-100/80 text-orange-800 px-2.5 py-0.5 rounded-full border border-orange-200">
@@ -7358,7 +7358,7 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
                                             </div>
 
                                             {/* 🖼️ Square Border Photo on Top Right Corner */}
-                                            <div className="w-16 h-20 sm:w-20 sm:h-24 rounded-xl border-2 border-white bg-slate-900 text-white flex items-center justify-center font-black text-base flex-shrink-0 overflow-hidden shadow-md ring-2 ring-orange-200/60">
+                                            <div className="w-14 h-16 sm:w-20 sm:h-24 rounded-xl border-2 border-white bg-slate-900 text-white flex items-center justify-center font-black text-base flex-shrink-0 overflow-hidden shadow-md ring-2 ring-orange-200/60">
                                                 {studentProfile.profilePicture ? (
                                                     <img
                                                         src={studentProfile.profilePicture}
@@ -7372,7 +7372,7 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
                                         </div>
 
                                         {/* 🏢 Single Line for Hostel, Room, College & Branch (No Background Box) */}
-                                        <div className="mt-2.5 pt-0.5 flex items-center justify-between gap-1 sm:gap-2 overflow-x-auto no-scrollbar text-slate-700">
+                                        <div className="mt-1.5 sm:mt-2.5 pt-0.5 flex items-center justify-between gap-1 sm:gap-2 overflow-x-auto no-scrollbar text-slate-700">
                                             <div className="flex items-center gap-1 min-w-0">
                                                 <span className="text-[8px]">🏢</span>
                                                 <span className="text-[9px] sm:text-[10px] font-extrabold whitespace-nowrap text-slate-800">{studentProfile.hostelName || "BOYS HOSTEL"}</span>
@@ -7396,16 +7396,16 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
 
                                         {/* 🎟️ Compact Integrated Barcode Strip */}
                                         {studentProfile.registrationId && (
-                                            <div className="mt-2.5 bg-white border border-slate-200/80 text-slate-900 rounded-xl p-2 flex items-center justify-between gap-2 shadow-sm">
+                                            <div className="mt-1.5 sm:mt-2.5 bg-white border border-slate-200/80 text-slate-900 rounded-xl p-1.5 sm:p-2 flex items-center justify-between gap-2 shadow-sm">
                                                 <div className="flex flex-col justify-center pl-1 min-w-0">
                                                     <span className="text-[7.5px] font-black text-orange-600 uppercase tracking-widest">Registration ID</span>
                                                     <span className="text-[11px] sm:text-xs font-black text-slate-900 tracking-wider truncate">{studentProfile.registrationId}</span>
                                                 </div>
-                                                <div className="scale-[0.8] sm:scale-90 flex-shrink-0 flex items-center justify-end overflow-hidden max-h-[34px]">
+                                                <div className="scale-[0.8] sm:scale-90 flex-shrink-0 flex items-center justify-end overflow-hidden max-h-[30px]">
                                                     <Barcode
                                                         value={studentProfile.registrationId}
                                                         width={1.2}
-                                                        height={30}
+                                                        height={24}
                                                         fontSize={10}
                                                         background="transparent"
                                                         lineColor="#1e293b"
@@ -7417,8 +7417,8 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
                                     </div>
 
                                     {/* 📋 Detailed Student Profile Attributes Grid */}
-                                    <div className="bg-white border border-slate-200 rounded-2xl p-2.5 sm:p-4 shadow-sm space-y-2.5">
-                                        <div className="flex items-center justify-between border-b border-slate-100 pb-2">
+                                    <div className="bg-white border border-slate-200 rounded-2xl p-2 sm:p-4 shadow-sm space-y-2 sm:space-y-2.5">
+                                        <div className="flex items-center justify-between border-b border-slate-100 pb-1.5 sm:pb-2">
                                             <h4 className="text-[10px] sm:text-xs font-black uppercase text-slate-500 tracking-wider flex items-center gap-1.5">
                                                 📋 Official Student Record
                                             </h4>
@@ -7428,25 +7428,25 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
                                         </div>
 
                                         {/* 📱 MOBILE CATEGORY TABS (Visible on mobile screens only) */}
-                                        <div className="flex sm:hidden items-center bg-slate-100 p-1 rounded-xl border border-slate-200/80 mb-2.5 gap-1">
+                                        <div className="flex sm:hidden items-center bg-slate-100 p-0.5 sm:p-1 rounded-xl border border-slate-200/80 mb-2 sm:mb-2.5 gap-1">
                                             <button
                                                 type="button"
                                                 onClick={() => setMobileProfileTab('academic')}
-                                                className={`flex-1 py-1.5 px-2 rounded-lg text-[9.5px] font-black uppercase tracking-wider transition-all flex items-center justify-center gap-1 ${mobileProfileTab === 'academic' ? 'bg-white text-blue-700 shadow-sm border border-slate-200' : 'text-slate-500 hover:text-slate-800'}`}
+                                                className={`flex-1 py-1 px-1.5 rounded-lg text-[9px] font-black uppercase tracking-wider transition-all flex items-center justify-center gap-1 ${mobileProfileTab === 'academic' ? 'bg-white text-blue-700 shadow-sm border border-slate-200' : 'text-slate-500 hover:text-slate-800'}`}
                                             >
                                                 🎓 Academic
                                             </button>
                                             <button
                                                 type="button"
                                                 onClick={() => setMobileProfileTab('family')}
-                                                className={`flex-1 py-1.5 px-2 rounded-lg text-[9.5px] font-black uppercase tracking-wider transition-all flex items-center justify-center gap-1 ${mobileProfileTab === 'family' ? 'bg-white text-amber-700 shadow-sm border border-slate-200' : 'text-slate-500 hover:text-slate-800'}`}
+                                                className={`flex-1 py-1 px-1.5 rounded-lg text-[9px] font-black uppercase tracking-wider transition-all flex items-center justify-center gap-1 ${mobileProfileTab === 'family' ? 'bg-white text-amber-700 shadow-sm border border-slate-200' : 'text-slate-500 hover:text-slate-800'}`}
                                             >
                                                 👨‍👩‍👦 Family
                                             </button>
                                             <button
                                                 type="button"
                                                 onClick={() => setMobileProfileTab('personal')}
-                                                className={`flex-1 py-1.5 px-2 rounded-lg text-[9.5px] font-black uppercase tracking-wider transition-all flex items-center justify-center gap-1 ${mobileProfileTab === 'personal' ? 'bg-white text-emerald-700 shadow-sm border border-slate-200' : 'text-slate-500 hover:text-slate-800'}`}
+                                                className={`flex-1 py-1 px-1.5 rounded-lg text-[9px] font-black uppercase tracking-wider transition-all flex items-center justify-center gap-1 ${mobileProfileTab === 'personal' ? 'bg-white text-emerald-700 shadow-sm border border-slate-200' : 'text-slate-500 hover:text-slate-800'}`}
                                             >
                                                 📍 Personal
                                             </button>
@@ -7551,7 +7551,7 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
                                             return (
                                                 <>
                                                     {/* 📱 MOBILE VIEW: Filtered by Selected Category Tab */}
-                                                    <div className="grid grid-cols-2 gap-2 sm:hidden text-xs">
+                                                    <div className="grid grid-cols-6 gap-1.5 sm:hidden text-xs">
                                                         {fieldsToRenderModal.filter(f => {
                                                             const id = f.id.toLowerCase();
                                                             const lbl = (f.label || '').toLowerCase();
@@ -7571,7 +7571,10 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
                                                                     lbl.includes('mother') || id.includes('mother') ||
                                                                     lbl.includes('guardian') || id.includes('guardian');
                                                             } else {
-                                                                // Personal
+                                                                // Personal tab: Exclude room number on mobile since it's already shown in Digital ID Card above
+                                                                const isRoom = lbl.includes('room') || id.includes('room');
+                                                                if (isRoom) return false;
+
                                                                 const isPhone = (lbl.includes('phone') || id.includes('phone')) && !lbl.includes('father') && !lbl.includes('mother') && !lbl.includes('guardian');
                                                                 const isAddress = (lbl.includes('address') || id.includes('address') || lbl.includes('permanent') || id.includes('permanent')) && !lbl.includes('guardian') && !id.includes('guardian');
                                                                 return isPhone || isAddress ||
@@ -7581,9 +7584,41 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
                                                                     lbl.includes('state') || id.includes('state') ||
                                                                     lbl.includes('hostel') || id.includes('hostel') ||
                                                                     lbl.includes('floor') || id.includes('floor') ||
-                                                                    lbl.includes('room') || id.includes('room');
+                                                                    lbl.includes('joining') || id.includes('joining');
                                                             }
                                                         }).sort((a, b) => {
+                                                            if (mobileProfileTab === 'academic') {
+                                                                const getAcademicRank = (f: any) => {
+                                                                    const id = f.id.toLowerCase();
+                                                                    const lbl = (f.label || '').toLowerCase();
+                                                                    if ((lbl.includes('name') || id.includes('name')) && !lbl.includes('father') && !lbl.includes('mother')) return 1;
+                                                                    if (lbl.includes('erp') || id.includes('erp') || id.includes('reg')) return 2;
+                                                                    if (lbl.includes('college') || id.includes('college')) return 3;
+                                                                    if (lbl.includes('branch') || id.includes('branch')) return 4;
+                                                                    if (lbl.includes('year') || id.includes('year')) return 5;
+                                                                    if (lbl.includes('sem') || id.includes('sem')) return 6;
+                                                                    if (lbl.includes('section') || id.includes('sec')) return 7;
+                                                                    return 8;
+                                                                };
+                                                                return getAcademicRank(a) - getAcademicRank(b);
+                                                            }
+                                                            if (mobileProfileTab === 'personal') {
+                                                                const getPersonalRank = (f: any) => {
+                                                                    const id = f.id.toLowerCase();
+                                                                    const lbl = (f.label || '').toLowerCase();
+                                                                    if (lbl.includes('gender') || id.includes('gender')) return 1;
+                                                                    if ((lbl.includes('phone') || id.includes('phone')) && !lbl.includes('father') && !lbl.includes('mother') && !lbl.includes('guardian')) return 2;
+                                                                    if (lbl.includes('birth') || lbl.includes('dob') || id.includes('dob')) return 3;
+                                                                    if (lbl.includes('category') || id.includes('category')) return 4;
+                                                                    if (lbl.includes('state') || id.includes('state')) return 5;
+                                                                    if (lbl.includes('hostel') && !lbl.includes('joining') && !lbl.includes('floor') && !lbl.includes('room')) return 6;
+                                                                    if (lbl.includes('floor') || id.includes('floor')) return 7;
+                                                                    if (lbl.includes('joining') || id.includes('joining')) return 8;
+                                                                    if (lbl.includes('address') || lbl.includes('permanent') || id.includes('address') || id.includes('permanent')) return 99;
+                                                                    return 50;
+                                                                };
+                                                                return getPersonalRank(a) - getPersonalRank(b);
+                                                            }
                                                             const lblA = (a.label || '').toLowerCase();
                                                             const lblB = (b.label || '').toLowerCase();
                                                             const aIsAddress = lblA.includes('address') || lblA.includes('permanent') || a.id.toLowerCase().includes('address') || a.id.toLowerCase().includes('permanent');
@@ -7594,22 +7629,34 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
                                                         }).map((field) => {
                                                             const { value, displayValue } = getFieldValueModal(field);
                                                             const lbl = (field.label || '').toLowerCase();
-                                                            const isLongField = lbl.includes('address') || lbl.includes('permanent') || field.id.toLowerCase().includes('address') || String(displayValue).length > 20;
-                                                            const isPhoneModal = (field.type === 'tel' || field.id.toLowerCase().includes('phone') || field.id.toLowerCase().includes('mobile') || (field.id.toLowerCase().includes('number') && (field.id.toLowerCase().includes('father') || field.id.toLowerCase().includes('mother') || field.id.toLowerCase().includes('guardian') || field.id.toLowerCase().includes('parent') || field.id.toLowerCase().includes('contact')))) && !field.id.toLowerCase().includes('room') && !field.id.toLowerCase().includes('floor') && !field.id.toLowerCase().includes('erp') && !field.id.toLowerCase().includes('reg') && value !== "N/A";
-                                                            const fieldIconModal = field.id.toLowerCase().includes('floor') ? '🏢 ' : field.id.toLowerCase().includes('hostel') ? '🏬 ' : field.id.toLowerCase().includes('state') ? '🗺️ ' : (field.id.toLowerCase().includes('birth') || field.id.toLowerCase().includes('dob')) ? '🎂 ' : field.id.toLowerCase().includes('category') ? '🏷️ ' : (field.id.toLowerCase().includes('joining') || field.id.toLowerCase().includes('date')) ? '🗓️ ' : field.id.toLowerCase().includes('gender') ? '👤 ' : '';
+                                                            const id = field.id.toLowerCase();
+                                                            const isAcademic = mobileProfileTab === 'academic';
+                                                            const isYearSemSec = isAcademic && (lbl.includes('year') || id.includes('year') || lbl.includes('sem') || id.includes('sem') || lbl.includes('section') || id.includes('sec'));
+                                                            const isAddressField = lbl.includes('address') || lbl.includes('permanent') || id.includes('address') || id.includes('permanent');
+                                                            const isLongField = isAddressField || String(displayValue).length > 28;
+                                                            const isPhoneModal = (field.type === 'tel' || id.includes('phone') || id.includes('mobile') || (id.includes('number') && (id.includes('father') || id.includes('mother') || id.includes('guardian') || id.includes('parent') || id.includes('contact')))) && !id.includes('room') && !id.includes('floor') && !id.includes('erp') && !id.includes('reg') && value !== "N/A";
+                                                            const fieldIconModal = id.includes('floor') ? '🏢 ' : id.includes('hostel') ? '🏬 ' : id.includes('state') ? '🗺️ ' : (id.includes('birth') || id.includes('dob')) ? '🎂 ' : id.includes('category') ? '🏷️ ' : (id.includes('joining') || id.includes('date')) ? '🗓️ ' : id.includes('gender') ? '👤 ' : '';
+
+                                                            const colSpanClass = isYearSemSec
+                                                                ? "col-span-2"
+                                                                : isLongField
+                                                                    ? "col-span-6 bg-amber-50/30 border-amber-100"
+                                                                    : "col-span-3";
 
                                                             return (
                                                                 <div 
                                                                     key={field.id} 
-                                                                    className={`flex flex-col bg-slate-50/80 border border-slate-100 p-2 rounded-lg ${isLongField ? 'col-span-2 bg-amber-50/30 border-amber-100' : ''}`}
+                                                                    className={`flex flex-col bg-slate-50/80 border border-slate-100 p-1.5 sm:p-2 rounded-lg ${colSpanClass}`}
                                                                 >
-                                                                    <p className="text-[9px] font-bold text-slate-400 uppercase tracking-wider mb-0.5">{field.label}</p>
+                                                                    <p className="text-[8.5px] font-bold text-slate-400 uppercase tracking-wider mb-0.5 truncate">{field.label}</p>
                                                                     {isPhoneModal ? (
-                                                                        <a href={`tel:${value}`} className="text-blue-600 font-black break-words text-[11px] leading-relaxed flex items-center gap-1">
+                                                                        <a href={`tel:${value}`} className="text-blue-600 font-black break-words text-[10.5px] leading-relaxed flex items-center gap-1">
                                                                             <span>📞</span> {displayValue}
                                                                         </a>
                                                                     ) : (
-                                                                        <p className="text-slate-800 font-extrabold break-words text-[11px] leading-relaxed">{fieldIconModal}{field.id === 'roomNumber' && value !== 'N/A' && !String(value).startsWith('#') ? '#' : ''}{displayValue}</p>
+                                                                        <p className={`text-[10.5px] font-extrabold break-words ${field.id === 'roomNumber' || field.id === 'floorNumber' ? 'text-blue-600' : 'text-slate-800'}`}>
+                                                                            {fieldIconModal}{field.id === 'roomNumber' && value !== 'N/A' && !String(value).startsWith('#') ? '#' : ''}{displayValue}
+                                                                        </p>
                                                                     )}
                                                                 </div>
                                                             );
@@ -7641,7 +7688,7 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
                                 </div>
                             </div>
 
-                            <div className="mt-6">
+                            <div className="mt-2.5 sm:mt-6">
                                 {studentProfile.isProfileLocked ? (
                                     <div className="w-full px-4 py-3 rounded-lg bg-red-50 border border-red-200 flex items-center justify-center gap-2 text-sm font-semibold text-red-700">
                                         <svg className="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -7655,7 +7702,7 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
                                         <button
                                             onClick={handleRegisterDevice}
                                             disabled={isRegisteringDevice}
-                                            className={`w-full px-4 py-3 rounded-xl text-sm font-black uppercase tracking-widest transition-all active:scale-95 flex items-center justify-center gap-2 ${studentProfile.webAuthnCredentials?.length ? 'bg-green-50 text-green-700 border-2 border-green-200' : 'bg-blue-600 text-white shadow-lg shadow-blue-200 hover:bg-blue-700'}`}
+                                            className={`w-full px-3.5 py-2.5 sm:py-3 rounded-xl text-xs sm:text-sm font-black uppercase tracking-widest transition-all active:scale-95 flex items-center justify-center gap-2 ${studentProfile.webAuthnCredentials?.length ? 'bg-green-50 text-green-700 border-2 border-green-200' : 'bg-blue-600 text-white shadow-lg shadow-blue-200 hover:bg-blue-700'}`}
                                         >
                                             {isRegisteringDevice ? (
                                                 <>
