@@ -132,11 +132,49 @@ const getPermDurationStr = (item: any) => {
     }
 };
 
+const DEFAULT_UNDERTAKING_TEXT = `I, {name}, S/o / D/o {parent}, student of {college} (Email: {email}, Mobile: {phone}), hereby undertake that I shall abide by the following terms and conditions governing my stay in the hostel:
+1. I shall maintain discipline, decorum, and good conduct at all times within the hostel premises and shall not indulge in any act of indiscipline or misconduct.
+2. I shall not leave the hostel premises without obtaining prior permission from the competent authority, wherever applicable.
+3. I shall not keep or use any prohibited electrical or electronic appliances in the hostel. Any violation of this provision shall render me liable to disciplinary action as recommended by the Discipline Committee.
+4. I shall neither possess, consume, nor distribute any intoxicating substances, alcoholic beverages, tobacco, cigarettes, vaping devices, or any other smoking materials within the hostel premises. Violation of this condition may result in disciplinary action, including expulsion from the hostel.
+5. I shall neither engage in nor encourage ragging or any other form of harassment, bullying, or in disciplinary activity. I further undertake to immediately report any such incident to the hostel administration or the appropriate institutional authority.
+6. I shall strictly comply with all the rules, regulations, instructions, and guidelines issued by the hostel administration and the mess management from time to time.
+7. I shall not permit any unauthorized person or non-hosteller to stay in or occupy my hostel room without prior written permission from the hostel administration.
+8. I acknowledge that I am solely responsible for the safety and security of my personal belongings, cash, valuables, and other possessions. The institution and hostel administration shall not be held liable for any loss, theft, or damage to the same.
+9. I undertake to promptly inform the institution of any change in my residential address, contact details, or the contact details of my parent(s)/guardian(s).
+10. A student securing less than 75% attendance in any two semesters shall not be eligible for hostel admission or renewal of hostel accommodation for the subsequent academic session.
+11. The hostel allotment shall remain valid only up to 30 June of the respective academic session unless otherwise notified by the institution.
+12. In the event of vacating the hostel before the completion of the academic session, I shall be liable to pay the full hostel fee for the entire academic year and mess charges up to the month in which I vacate the hostel. The hostel fee shall be non-refundable under any circumstances.
+13. The hostel administration reserves the absolute right to change, shift, or reassign my hostel room at any time in the interest of administration, discipline, maintenance, or any other institutional requirement.
+14. I understand and agree that the hostel fee is subject to revision from the subsequent academic session as determined by the competent authority of the institution.
+15. I further undertake to comply with any additional rules, regulations, or instructions issued by the institution or hostel administration from time to time. Failure to comply with any of the above conditions may result in disciplinary action, including suspension or cancellation of hostel accommodation, without prejudice to any other action deemed appropriate by the institution.
+16. I will not remain in hostel room during the class hours, without any valid reason. In case there is a reason, the warden will be informed by me. In case I fail to do so, action may be taken against me.
+
+I hereby declare that I have carefully read, understood, and accepted all the above terms and conditions. I agree to abide by them throughout my stay in the hostel.
+
+Name of Student: {name}                Signature of Student: {name}
+Place: {place}                          Date: {date}
+
+I certify that my ward will abide by the above undertaking.
+
+Name of the Parent: {parent}          Signature: {parent}
+Place: {place}                          Date: {date}
+
+───────────────────────────────────────────────────────────────────────────────────
+
+For hostel related enquiry please contact:
+Dr Vijendra Singh (Dean Hostel) Mob no: 9981414729
+email: vijendrasinghthakur@oriental.ac.in
+
+1. Rahul Yadav - Hostel Warden (Boys) Mob no: 9039761287
+2. Anita Khabse - Hostel Warden (Girls) Mob no: 8305493461`;
+
 export default function StudentDashboard({ initialData, isParentView = false, hasMultipleSiblings = false }: { initialData?: any; isParentView?: boolean; hasMultipleSiblings?: boolean }) {
     const router = useRouter();
     const searchParams = useSearchParams();
     const [showRequestForm, setShowRequestForm] = useState(false);
     const [showProfile, setShowProfile] = useState(false);
+    const [showUndertakingModal, setShowUndertakingModal] = useState(false);
     const [showPermissionsHistory, setShowPermissionsHistory] = useState(false);
     const [showAttendanceHistory, setShowAttendanceHistory] = useState(false);
     const [attendanceHistory, setAttendanceHistory] = useState<any[]>([]);
@@ -176,6 +214,56 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
     const [calendarMonth, setCalendarMonth] = useState<Date>(new Date());
     const [selectedCalendarDay, setSelectedCalendarDay] = useState<Date | null>(new Date());
     const [mobileProfileTab, setMobileProfileTab] = useState<'academic' | 'family' | 'personal'>('academic');
+
+    const wardenContactPhone = useMemo(() => {
+        const p = (studentProfile as any) || {};
+        const gender = String(p.gender || "").toLowerCase();
+        const hostel = String(p.hostelName || "").toLowerCase();
+        const isFemale = gender.startsWith('f') || gender.includes('girl') || gender.includes('woman') || hostel.includes('girls') || hostel.includes('ghb') || hostel.startsWith('gh');
+        return p.wardenPhone || p.wardenNumber || (isFemale ? "8305493461" : "9039761287");
+    }, [studentProfile]);
+
+    const deanContactPhone = useMemo(() => {
+        const p = (studentProfile as any) || {};
+        return p.deanPhone || p.deanNumber || "9981414729";
+    }, [studentProfile]);
+
+    const getFormattedUndertaking = useCallback(() => {
+        const rawText = settingsCacheRef.current?.data?.undertakingText || DEFAULT_UNDERTAKING_TEXT;
+        
+        const p = (studentProfile as any) || {};
+        const gender = String(p.gender || "").toLowerCase();
+        const hostel = String(p.hostelName || "").toLowerCase();
+        const isFemale = gender.startsWith('f') || gender.includes('girl') || gender.includes('woman') || hostel.includes('girls') || hostel.includes('ghb') || hostel.startsWith('gh');
+        const parentRelation = isFemale ? "D/o" : "S/o";
+
+        const resolvedName = p.name || p.fullName || "Student";
+        const resolvedParent = p.fatherName || p.motherName || "Parent / Guardian";
+        const resolvedCollege = p.collegeName || "OIST";
+        let resolvedEmail = p.email || "";
+        if (!resolvedEmail && p.dynamicFields) {
+            for (const [k, v] of Object.entries(p.dynamicFields)) {
+                if (typeof v === 'string' && v.includes('@') && v.includes('.')) {
+                    resolvedEmail = v;
+                    break;
+                }
+            }
+        }
+        const resolvedPhone = p.phoneNumber || p.phone || p.studentPhone || "N/A";
+        const resolvedDate = p.joiningDate ? formatDateDDMMYYYY(p.joiningDate) : formatDateDDMMYYYY(new Date());
+        const resolvedPlace = p.permanentAddress || p.homeState || "Campus Hostel";
+
+        return rawText
+            .replace(/{name}/g, resolvedName)
+            .replace(/{parent}/g, resolvedParent)
+            .replace(/{college}/g, resolvedCollege)
+            .replace(/{email}/g, resolvedEmail || "N/A")
+            .replace(/{phone}/g, resolvedPhone)
+            .replace(/{date}/g, resolvedDate)
+            .replace(/{place}/g, resolvedPlace)
+            .replace(/{address}/g, resolvedPlace)
+            .replace(/S\/o \/ D\/o/g, parentRelation);
+    }, [studentProfile]);
 
     // Swipe gestures for calendar month navigation
     const touchStartRef = useRef<number | null>(null);
@@ -5473,6 +5561,37 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
                                 </div>
                             </div>
 
+                            {/* 📞 QUICK CONTACTS & 📜 UNDERTAKING STRIP */}
+                            <div className="grid grid-cols-3 gap-2 mt-2 sm:mt-3">
+                                <a
+                                    href={`tel:${wardenContactPhone}`}
+                                    className="flex items-center justify-center gap-1.5 py-2 px-2 rounded-xl bg-blue-50/90 hover:bg-blue-100 text-blue-800 border border-blue-200/90 shadow-xs transition-all active:scale-95 group text-center"
+                                    title={`Call Hostel Warden (${wardenContactPhone})`}
+                                >
+                                    <span className="text-xs sm:text-sm group-hover:scale-110 transition-transform">📞</span>
+                                    <span className="text-[10px] sm:text-xs font-black tracking-tight truncate">Call Warden</span>
+                                </a>
+
+                                <a
+                                    href={`tel:${deanContactPhone}`}
+                                    className="flex items-center justify-center gap-1.5 py-2 px-2 rounded-xl bg-indigo-50/90 hover:bg-indigo-100 text-indigo-800 border border-indigo-200/90 shadow-xs transition-all active:scale-95 group text-center"
+                                    title={`Call Hostel Dean (${deanContactPhone})`}
+                                >
+                                    <span className="text-xs sm:text-sm group-hover:scale-110 transition-transform">📞</span>
+                                    <span className="text-[10px] sm:text-xs font-black tracking-tight truncate">Call Dean</span>
+                                </a>
+
+                                <button
+                                    type="button"
+                                    onClick={() => setShowUndertakingModal(true)}
+                                    className="flex items-center justify-center gap-1.5 py-2 px-2 rounded-xl bg-amber-50/90 hover:bg-amber-100 text-amber-900 border border-amber-200/90 shadow-xs transition-all active:scale-95 group text-center cursor-pointer"
+                                    title="View My Undertaking Agreement"
+                                >
+                                    <span className="text-xs sm:text-sm group-hover:scale-110 transition-transform">📜</span>
+                                    <span className="text-[10px] sm:text-xs font-black tracking-tight truncate">My Undertaking</span>
+                                </button>
+                            </div>
+
 
                             {showFeeDetailsModal && (
                                 <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm animate-in fade-in">
@@ -7688,6 +7807,37 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
                                 </div>
                             </div>
 
+                            {/* 📞 QUICK CONTACTS & 📜 UNDERTAKING STRIP */}
+                            <div className="grid grid-cols-3 gap-2 mt-2 sm:mt-3">
+                                <a
+                                    href={`tel:${wardenContactPhone}`}
+                                    className="flex items-center justify-center gap-1.5 py-2 px-2 rounded-xl bg-blue-50/90 hover:bg-blue-100 text-blue-800 border border-blue-200/90 shadow-xs transition-all active:scale-95 group text-center"
+                                    title={`Call Hostel Warden (${wardenContactPhone})`}
+                                >
+                                    <span className="text-xs sm:text-sm group-hover:scale-110 transition-transform">📞</span>
+                                    <span className="text-[10px] sm:text-xs font-black tracking-tight truncate">Call Warden</span>
+                                </a>
+
+                                <a
+                                    href={`tel:${deanContactPhone}`}
+                                    className="flex items-center justify-center gap-1.5 py-2 px-2 rounded-xl bg-indigo-50/90 hover:bg-indigo-100 text-indigo-800 border border-indigo-200/90 shadow-xs transition-all active:scale-95 group text-center"
+                                    title={`Call Hostel Dean (${deanContactPhone})`}
+                                >
+                                    <span className="text-xs sm:text-sm group-hover:scale-110 transition-transform">📞</span>
+                                    <span className="text-[10px] sm:text-xs font-black tracking-tight truncate">Call Dean</span>
+                                </a>
+
+                                <button
+                                    type="button"
+                                    onClick={() => setShowUndertakingModal(true)}
+                                    className="flex items-center justify-center gap-1.5 py-2 px-2 rounded-xl bg-amber-50/90 hover:bg-amber-100 text-amber-900 border border-amber-200/90 shadow-xs transition-all active:scale-95 group text-center cursor-pointer"
+                                    title="View My Undertaking Agreement"
+                                >
+                                    <span className="text-xs sm:text-sm group-hover:scale-110 transition-transform">📜</span>
+                                    <span className="text-[10px] sm:text-xs font-black tracking-tight truncate">My Undertaking</span>
+                                </button>
+                            </div>
+
                             <div className="mt-2.5 sm:mt-6">
                                 {studentProfile.isProfileLocked ? (
                                     <div className="w-full px-4 py-3 rounded-lg bg-red-50 border border-red-200 flex items-center justify-center gap-2 text-sm font-semibold text-red-700">
@@ -8165,6 +8315,104 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
                 url={activeConsentVideoUrl}
                 onClose={() => setActiveConsentVideoUrl(null)}
             />
+
+            {/* 📜 Student Undertaking Modal */}
+            {showUndertakingModal && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-slate-900/60 backdrop-blur-sm animate-in fade-in duration-200 font-outfit">
+                    <div className="bg-white w-full max-w-2xl max-h-[90vh] rounded-3xl shadow-2xl flex flex-col overflow-hidden border border-slate-100 animate-in zoom-in-95 duration-200">
+                        {/* Header */}
+                        <div className="p-4 sm:p-5 border-b border-slate-100 bg-gradient-to-r from-slate-50 via-amber-50/30 to-blue-50/30 flex items-center justify-between">
+                            <div className="flex items-center gap-3">
+                                <div className="w-10 h-10 rounded-2xl bg-amber-100 text-amber-700 flex items-center justify-center text-xl shadow-xs border border-amber-200/80">
+                                    📜
+                                </div>
+                                <div>
+                                    <div className="flex items-center gap-2">
+                                        <h3 className="text-base sm:text-lg font-black text-slate-800 tracking-tight">Hostel Undertaking</h3>
+                                        <span className="text-[9px] font-black uppercase tracking-wider bg-emerald-100 text-emerald-800 px-2 py-0.5 rounded-full border border-emerald-200">
+                                            Digitally Signed
+                                        </span>
+                                    </div>
+                                    <p className="text-[11px] font-bold text-slate-400">Official rules, regulations & signed declaration from onboarding</p>
+                                </div>
+                            </div>
+                            <button
+                                type="button"
+                                onClick={() => setShowUndertakingModal(false)}
+                                className="w-8 h-8 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-500 hover:text-slate-800 flex items-center justify-center transition-colors font-bold text-sm"
+                            >
+                                ✕
+                            </button>
+                        </div>
+
+                        {/* Scrollable Body */}
+                        <div className="overflow-y-auto p-4 sm:p-6 space-y-4 text-xs sm:text-sm text-slate-700 leading-relaxed">
+                            {/* Official Stamp Banner */}
+                            <div className="bg-amber-50/70 border border-amber-200/80 rounded-2xl p-3 sm:p-4 flex items-center justify-between gap-3">
+                                <div className="flex items-center gap-2.5">
+                                    <span className="text-2xl">🛡️</span>
+                                    <div>
+                                        <p className="text-[11px] sm:text-xs font-black text-amber-900 uppercase tracking-wider">Digitally Verified & Legally Binding</p>
+                                        <p className="text-[10px] sm:text-[11px] text-amber-700 font-medium">Accepted with timestamp, IP & digital signature during admission onboarding.</p>
+                                    </div>
+                                </div>
+                                <span className="hidden sm:inline-block px-2.5 py-1 bg-white/90 border border-amber-300 rounded-lg text-[10px] font-black text-amber-800 uppercase tracking-widest shrink-0 shadow-xs">
+                                    HostelEase ID-SEC
+                                </span>
+                            </div>
+
+                            {/* Undertaking Agreement Text */}
+                            <div className="bg-slate-50/80 border border-slate-200/70 rounded-2xl p-4 sm:p-5 whitespace-pre-wrap font-sans text-xs sm:text-[13px] leading-relaxed text-slate-800 select-text">
+                                {getFormattedUndertaking()}
+                            </div>
+
+                            {/* Direct Action Contacts */}
+                            <div className="bg-blue-50/60 border border-blue-100 rounded-2xl p-3 sm:p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                                <div>
+                                    <p className="text-[11px] font-black text-blue-900 uppercase tracking-wider">Hostel Administration & Grievances</p>
+                                    <p className="text-[10px] text-blue-700">Need clarification? Contact hostel authorities directly.</p>
+                                </div>
+                                <div className="flex items-center gap-2 shrink-0">
+                                    <a
+                                        href={`tel:${wardenContactPhone}`}
+                                        className="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-black uppercase tracking-wider transition-all flex items-center gap-1 shadow-xs"
+                                    >
+                                        <span>📞</span> Warden
+                                    </a>
+                                    <a
+                                        href={`tel:${deanContactPhone}`}
+                                        className="px-3 py-1.5 bg-slate-800 hover:bg-slate-900 text-white rounded-xl text-xs font-black uppercase tracking-wider transition-all flex items-center gap-1 shadow-xs"
+                                    >
+                                        <span>📞</span> Dean
+                                    </a>
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* Footer */}
+                        <div className="p-3 sm:p-4 border-t border-slate-100 bg-slate-50/50 flex items-center justify-between gap-2">
+                            <button
+                                type="button"
+                                onClick={() => {
+                                    if (typeof window !== 'undefined') {
+                                        window.print();
+                                    }
+                                }}
+                                className="px-3.5 py-2 bg-white hover:bg-slate-100 border border-slate-200 rounded-xl text-slate-700 text-xs font-black uppercase tracking-wider transition-all flex items-center gap-1.5 shadow-xs"
+                            >
+                                <span>🖨️</span> Print / Save
+                            </button>
+                            <button
+                                type="button"
+                                onClick={() => setShowUndertakingModal(false)}
+                                className="px-6 py-2 bg-slate-900 hover:bg-slate-800 text-white rounded-xl text-xs font-black uppercase tracking-wider transition-all shadow-md active:scale-95"
+                            >
+                                Close
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
 
             <footer className="mt-auto py-2 sm:py-6 border-t border-gray-100/50">
                 <div className="flex flex-col items-center gap-0.5 sm:gap-1.5 text-center px-4">
