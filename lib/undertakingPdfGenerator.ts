@@ -106,7 +106,7 @@ export function generateUndertakingPDF({
   // Tenant Logo resolution with UVW default fallback
   const origin = typeof window !== "undefined" ? window.location.origin : "";
   const uvwFallbackLogo = `${origin}/uvw_logo.jpg`;
-  const tenantLogoCandidate = (
+  let tenantLogoCandidate = (
     tenantLogo ||
     p.tenantLogo ||
     p.collegeLogo ||
@@ -116,11 +116,42 @@ export function generateUndertakingPDF({
     ""
   ).trim();
 
-  const resolvedLogo = tenantLogoCandidate
-    ? (tenantLogoCandidate.startsWith("http") || tenantLogoCandidate.startsWith("/")
-        ? tenantLogoCandidate
-        : `${origin}/${tenantLogoCandidate}`)
-    : uvwFallbackLogo;
+  // If candidate is missing, check if student belongs to OGI / Oriental group
+  if (!tenantLogoCandidate) {
+    const college = String(p.collegeName || "").toUpperCase();
+    const hostel = String(p.hostelName || p.hostel || "").toUpperCase();
+    if (
+      college.includes("OIST") ||
+      college.includes("OCT") ||
+      college.includes("OCP") ||
+      college.includes("OPM") ||
+      college.includes("OIPR") ||
+      college.includes("ORIENTAL") ||
+      hostel.includes("GHB") ||
+      hostel.includes("GANGOTRI") ||
+      hostel.includes("GAYTRI") ||
+      hostel.includes("GAYATRI") ||
+      hostel.includes("BOYS HOSTEL")
+    ) {
+      tenantLogoCandidate = "https://cdn.hosteleaze.in/tenants/ogi/logo.png";
+    }
+  }
+
+  let resolvedLogo = uvwFallbackLogo;
+  if (tenantLogoCandidate) {
+    if (
+      tenantLogoCandidate.startsWith("data:") ||
+      tenantLogoCandidate.startsWith("http://") ||
+      tenantLogoCandidate.startsWith("https://") ||
+      tenantLogoCandidate.startsWith("//")
+    ) {
+      resolvedLogo = tenantLogoCandidate;
+    } else if (tenantLogoCandidate.startsWith("/")) {
+      resolvedLogo = `${origin}${tenantLogoCandidate}`;
+    } else {
+      resolvedLogo = `${origin}/${tenantLogoCandidate}`;
+    }
+  }
 
   const docFilename = `Hosteleaze_Undertaking_${resolvedName.replace(/[^a-zA-Z0-9]/g, "_")}_${cleanReg}.pdf`;
 
@@ -546,8 +577,7 @@ export function generateUndertakingPDF({
   </div>
 
   <script>
-    // Auto-trigger print dialog after layout stabilizes
-    window.addEventListener('DOMContentLoaded', () => {
+    function triggerPrint() {
       setTimeout(() => {
         try {
           window.focus();
@@ -555,8 +585,13 @@ export function generateUndertakingPDF({
         } catch (e) {
           console.error(e);
         }
-      }, 350);
-    });
+      }, 400);
+    }
+    if (document.readyState === 'complete' || document.readyState === 'interactive') {
+      triggerPrint();
+    } else {
+      window.addEventListener('load', triggerPrint);
+    }
   </script>
 </body>
 </html>`);

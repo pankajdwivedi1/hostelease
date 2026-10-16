@@ -90,19 +90,28 @@ export const getTenantFromRequest = cache(async () => {
 
     let tenant: any = null;
     try {
+        const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(normalizedSlug);
         tenant = await prisma.tenant.findFirst({
-            where: { slug: normalizedSlug, isActive: true, isDeleted: false }
+            where: {
+                OR: [
+                    { slug: normalizedSlug },
+                    ...(isUuid ? [{ id: normalizedSlug }] : [])
+                ],
+                isActive: true,
+                isDeleted: false
+            }
         });
     } catch (prismaErr: any) {
         console.warn(`⚠️ [Tenant] Prisma lookup failed for "${normalizedSlug}":`, prismaErr?.message);
     }
 
     // Default fallback for OGI / OIST tenant if database server is unreachable during startup
-    if (!tenant && (normalizedSlug === 'ogi' || normalizedSlug === 'oist')) {
+    if (!tenant && (normalizedSlug === 'ogi' || normalizedSlug === 'oist' || normalizedSlug === '26739d24-0214-409b-aa81-42e628e88c2b')) {
         tenant = {
             id: "26739d24-0214-409b-aa81-42e628e88c2b",
             name: "ORIENTAL GROUP OF INSTITUTES",
             slug: "ogi",
+            logoUrl: "https://cdn.hosteleaze.in/tenants/ogi/logo.png",
             subscriptionStatus: "active",
             subscriptionEndDate: "2028-12-31T23:59:59.999Z",
             isActive: true

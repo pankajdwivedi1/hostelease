@@ -489,7 +489,12 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
         }
         if (!tenant && studentProfile) {
             const rawSlug = (studentProfile as any).tenantId || (studentProfile as any).collegeName || '';
-            tenant = String(rawSlug).toUpperCase() === 'OIST' ? 'ogi' : rawSlug;
+            const upper = String(rawSlug).toUpperCase();
+            if (upper === 'OIST' || upper === 'OCT' || upper === 'OCP' || upper === 'OPM' || upper === 'OIPR' || rawSlug === '26739d24-0214-409b-aa81-42e628e88c2b') {
+                tenant = 'ogi';
+            } else {
+                tenant = rawSlug;
+            }
         }
         if (!tenant) return "";
         return includeQuestionMark ? `?tenant=${tenant}` : `&tenant=${tenant}`;
@@ -508,12 +513,14 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
                 if (data?.logo) {
                     setTenantLogo(data.logo);
                     if (typeof window !== 'undefined') {
-                        localStorage.setItem("lastTenantLogo", data.logo);
+                        try {
+                            localStorage.setItem("lastTenantLogo", data.logo);
+                        } catch (e) {}
                     }
                 }
             })
             .catch(() => {});
-    }, []);
+    }, [studentProfile?.tenantId, studentProfile?.collegeName]);
 
     const fetchAttendanceHistory = async () => {
         if (!studentProfile) return;
@@ -8506,9 +8513,17 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
                         {/* Header */}
                         <div className="p-4 sm:p-5 border-b border-slate-100 bg-gradient-to-r from-slate-50 via-amber-50/30 to-blue-50/30 flex items-center justify-between">
                             <div className="flex items-center gap-3">
-                                <div className="w-10 h-10 rounded-2xl bg-amber-100 text-amber-700 flex items-center justify-center text-xl shadow-xs border border-amber-200/80">
-                                    📜
-                                </div>
+                                {tenantLogo ? (
+                                    <img
+                                        src={tenantLogo}
+                                        alt="College Logo"
+                                        className="w-10 h-10 rounded-2xl object-contain bg-white p-1 border border-amber-200/80 shadow-xs shrink-0"
+                                    />
+                                ) : (
+                                    <div className="w-10 h-10 rounded-2xl bg-amber-100 text-amber-700 flex items-center justify-center text-xl shadow-xs border border-amber-200/80 shrink-0">
+                                        📜
+                                    </div>
+                                )}
                                 <div>
                                     <div className="flex items-center gap-2">
                                         <h3 className="text-base sm:text-lg font-black text-slate-800 tracking-tight">Hostel Undertaking</h3>
