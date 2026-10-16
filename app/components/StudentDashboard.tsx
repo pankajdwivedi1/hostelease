@@ -21,6 +21,7 @@ import {
 import { getInstallationId } from "@/lib/installationId";
 import LiveFaceCaptureModal from "./LiveFaceCaptureModal";
 import { formatToDDMMYYYY, formatDateDDMMYYYY, formatDateTimeDDMMYYYY } from "@/lib/dateFormat";
+import { generateUndertakingPDF } from "@/lib/undertakingPdfGenerator";
 
 interface Permission {
     _id: string;
@@ -327,6 +328,22 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
     }, [studentProfile]);
 
     const deanContactPhone = deanContactInfo.phone;
+
+    const displayHostelId = useMemo(() => {
+        const p = (studentProfile as any) || {};
+        const rawReg = String(p.registrationId || "").trim();
+        if (rawReg) {
+            const clean = rawReg.replace(/^hostel[e|a]z?e[\s-_]*id[\s-_]*/i, "").trim();
+            return `Hosteleaze ID-${clean}`;
+        }
+        const rawGender = String(p.gender || p.sex || p.dynamicFields?.gender || p.dynamicFields?.sex || "").trim().toLowerCase();
+        const isFemale = rawGender.startsWith('f') || rawGender === 'female' || rawGender.includes('girl') || rawGender.includes('woman') ||
+                         String(p.hostelName || p.hostel || '').toLowerCase().includes('girls') ||
+                         String(p.hostelName || p.hostel || '').toLowerCase().includes('gangotri') ||
+                         String(p.hostelName || p.hostel || '').toLowerCase().includes('gaytri') ||
+                         String(p.hostelName || p.hostel || '').toLowerCase().includes('gayatri');
+        return `Hosteleaze ID-${isFemale ? 'GIRLS-0001' : 'BOYS-0001'}`;
+    }, [studentProfile]);
 
     // Early fetch of server hostel configs to bind warden username/phone instantly
     useEffect(() => {
@@ -8498,13 +8515,16 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
                                         <p className="text-[10px] sm:text-[11px] text-amber-700 font-medium">Accepted with timestamp, IP & digital signature during admission onboarding.</p>
                                     </div>
                                 </div>
-                                <span className="hidden sm:inline-block px-2.5 py-1 bg-white/90 border border-amber-300 rounded-lg text-[10px] font-black text-amber-800 uppercase tracking-widest shrink-0 shadow-xs">
-                                    HostelEase ID-SEC
+                                <span className="inline-block px-2.5 py-1 bg-white/90 border border-amber-300 rounded-lg text-[10px] sm:text-[11px] font-black text-amber-800 uppercase tracking-wider shrink-0 shadow-xs">
+                                    {displayHostelId}
                                 </span>
                             </div>
 
                             {/* Undertaking Agreement Text */}
-                            <div className="bg-slate-50/80 border border-slate-200/70 rounded-2xl p-4 sm:p-5 whitespace-pre-wrap font-sans text-xs sm:text-[13px] leading-relaxed text-slate-800 select-text">
+                            <div 
+                                className="bg-slate-50/80 border border-slate-200/70 rounded-2xl p-4 sm:p-5 whitespace-pre-wrap font-sans text-xs sm:text-[13px] leading-relaxed text-slate-800 select-text text-justify"
+                                style={{ textAlign: 'justify', textJustify: 'inter-word', hyphens: 'auto' }}
+                            >
                                 {getFormattedUndertaking()}
                             </div>
 
@@ -8538,13 +8558,16 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
                             <button
                                 type="button"
                                 onClick={() => {
-                                    if (typeof window !== 'undefined') {
-                                        window.print();
-                                    }
+                                    generateUndertakingPDF({
+                                        studentProfile,
+                                        wardenContactInfo,
+                                        deanContactInfo,
+                                        hosteleazeId: displayHostelId
+                                    });
                                 }}
-                                className="px-3.5 py-2 bg-white hover:bg-slate-100 border border-slate-200 rounded-xl text-slate-700 text-xs font-black uppercase tracking-wider transition-all flex items-center gap-1.5 shadow-xs"
+                                className="px-3.5 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-black uppercase tracking-wider transition-all flex items-center gap-1.5 shadow-md active:scale-95"
                             >
-                                <span>🖨️</span> Print / Save
+                                <span>🖨️</span> Print / Save 1-Page PDF
                             </button>
                             <button
                                 type="button"

@@ -4517,7 +4517,7 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
         : formTemplates.find(t => t.id === selectedTemplateId);
       
       let exportData: any[] = [];
-      let filename = "hostelease_form_template_sample.xlsx";
+      let filename = "hosteleaze_form_template_sample.xlsx";
       
       if (activeTpl && Array.isArray(activeTpl.fields) && activeTpl.fields.length > 0) {
         exportData = activeTpl.fields.map((f: any) => ({
@@ -4532,7 +4532,7 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
         
         // Clean name for the filename
         const cleanName = activeTpl.name.toLowerCase().replace(/[^a-z0-9]/g, "_");
-        filename = `hostelease_${cleanName}_template.xlsx`;
+        filename = `hosteleaze_${cleanName}_template.xlsx`;
       } else {
         // Fallback default sample fields
         exportData = [
