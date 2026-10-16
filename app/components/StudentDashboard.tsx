@@ -166,8 +166,7 @@ For hostel related enquiry please contact:
 Dr Vijendra Singh (Dean Hostel) Mob no: 9981414729
 email: vijendrasinghthakur@oriental.ac.in
 
-1. Rahul Yadav - Hostel Warden (Boys) Mob no: 9039761287
-2. Anita Khabse - Hostel Warden (Girls) Mob no: 8305493461`;
+{warden_contact}`;
 
 export default function StudentDashboard({ initialData, isParentView = false, hasMultipleSiblings = false }: { initialData?: any; isParentView?: boolean; hasMultipleSiblings?: boolean }) {
     const router = useRouter();
@@ -215,18 +214,86 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
     const [selectedCalendarDay, setSelectedCalendarDay] = useState<Date | null>(new Date());
     const [mobileProfileTab, setMobileProfileTab] = useState<'academic' | 'family' | 'personal'>('academic');
 
-    const wardenContactPhone = useMemo(() => {
+    const wardenContactInfo = useMemo(() => {
         const p = (studentProfile as any) || {};
         const gender = String(p.gender || "").toLowerCase();
         const hostel = String(p.hostelName || "").toLowerCase();
-        const isFemale = gender.startsWith('f') || gender.includes('girl') || gender.includes('woman') || hostel.includes('girls') || hostel.includes('ghb') || hostel.startsWith('gh');
-        return p.wardenPhone || p.wardenNumber || (isFemale ? "8305493461" : "9039761287");
+
+        // 1. If explicit warden name/phone is in studentProfile
+        if (p.wardenName && (p.wardenPhone || p.wardenNumber)) {
+            return {
+                name: String(p.wardenName),
+                phone: String(p.wardenPhone || p.wardenNumber),
+                designation: `Hostel Warden (${p.hostelName || 'Hostel'})`
+            };
+        }
+
+        // 2. Gangotri Hostel -> Anjali Mishra (Mob: 9131804631)
+        if (hostel.includes('gangotri')) {
+            return {
+                name: "Anjali Mishra",
+                phone: p.wardenPhone || p.wardenNumber || "9131804631",
+                designation: "Hostel Warden (Gangotri Hostel)"
+            };
+        }
+
+        // 3. Gaytri Hostel -> Anita Khabse (Mob: 8305493461)
+        if (hostel.includes('gaytri') || hostel.includes('gayatri')) {
+            return {
+                name: "Anita Khabse",
+                phone: p.wardenPhone || p.wardenNumber || "8305493461",
+                designation: "Hostel Warden (Gaytri Hostel)"
+            };
+        }
+
+        // 4. Boys Hostel -> Rahul Yadav (Mob: 9039761287)
+        if (hostel.includes('boys') || hostel.includes('boy') || hostel.startsWith('bh')) {
+            return {
+                name: "Rahul Yadav",
+                phone: p.wardenPhone || p.wardenNumber || "9039761287",
+                designation: "Hostel Warden (Boys Hostel)"
+            };
+        }
+
+        // 5. GHB Hostel -> Anita Khabse (Mob: 8305493461)
+        if (hostel.includes('ghb')) {
+            return {
+                name: "Anita Khabse",
+                phone: p.wardenPhone || p.wardenNumber || "8305493461",
+                designation: "Hostel Warden (GHB Hostel)"
+            };
+        }
+
+        // 6. Fallback based on gender
+        const isFemale = gender.startsWith('f') || gender.includes('girl') || gender.includes('woman') || hostel.includes('girls') || hostel.startsWith('gh');
+        if (isFemale) {
+            return {
+                name: "Anita Khabse",
+                phone: p.wardenPhone || p.wardenNumber || "8305493461",
+                designation: "Hostel Warden (Girls Hostel)"
+            };
+        }
+
+        return {
+            name: "Rahul Yadav",
+            phone: p.wardenPhone || p.wardenNumber || "9039761287",
+            designation: "Hostel Warden (Boys Hostel)"
+        };
     }, [studentProfile]);
 
-    const deanContactPhone = useMemo(() => {
+    const wardenContactPhone = wardenContactInfo.phone;
+
+    const deanContactInfo = useMemo(() => {
         const p = (studentProfile as any) || {};
-        return p.deanPhone || p.deanNumber || "9981414729";
+        return {
+            name: p.deanName || "Dr Vijendra Singh",
+            phone: p.deanPhone || p.deanNumber || "9981414729",
+            email: p.deanEmail || "vijendrasinghthakur@oriental.ac.in",
+            designation: "Dean Hostel"
+        };
     }, [studentProfile]);
+
+    const deanContactPhone = deanContactInfo.phone;
 
     const getFormattedUndertaking = useCallback(() => {
         const rawText = settingsCacheRef.current?.data?.undertakingText || DEFAULT_UNDERTAKING_TEXT;
@@ -253,7 +320,7 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
         const resolvedDate = p.joiningDate ? formatDateDDMMYYYY(p.joiningDate) : formatDateDDMMYYYY(new Date());
         const resolvedPlace = p.permanentAddress || p.homeState || "Campus Hostel";
 
-        return rawText
+        let formatted = rawText
             .replace(/{name}/g, resolvedName)
             .replace(/{parent}/g, resolvedParent)
             .replace(/{college}/g, resolvedCollege)
@@ -263,7 +330,23 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
             .replace(/{place}/g, resolvedPlace)
             .replace(/{address}/g, resolvedPlace)
             .replace(/S\/o \/ D\/o/g, parentRelation);
-    }, [studentProfile]);
+
+        // Respective Warden contact line (shows only the assigned warden for this student's hostel)
+        const assignedWardenLine = `${wardenContactInfo.name} - ${wardenContactInfo.designation} Mob no: ${wardenContactInfo.phone}`;
+        const deanBlock = `${deanContactInfo.name} (${deanContactInfo.designation}) Mob no: ${deanContactInfo.phone}\nemail: ${deanContactInfo.email}`;
+
+        // Replace placeholders if present
+        formatted = formatted.replace(/{dean_contact}/g, deanBlock);
+        formatted = formatted.replace(/{warden_contact}/g, assignedWardenLine);
+
+        // Replace any multi-warden list lines (1. Rahul Yadav..., 2. Anita Khabse..., 3. Anjali Mishra...) with ONLY the student's assigned warden
+        const multiWardenListRegex = /(?:1\.\s*Rahul\s*Yadav[^\n]*\r?\n?)?\s*(?:2\.\s*Anita\s*Khabse[^\n]*\r?\n?)?\s*(?:3\.\s*Anjali\s*Mishra[^\n]*)?/gi;
+        formatted = formatted.replace(multiWardenListRegex, (match) => {
+            return match.trim() ? assignedWardenLine : match;
+        });
+
+        return formatted;
+    }, [studentProfile, wardenContactInfo, deanContactInfo]);
 
     // Swipe gestures for calendar month navigation
     const touchStartRef = useRef<number | null>(null);
@@ -5566,7 +5649,7 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
                                 <a
                                     href={`tel:${wardenContactPhone}`}
                                     className="flex items-center justify-center gap-1.5 py-2 px-2 rounded-xl bg-blue-50/90 hover:bg-blue-100 text-blue-800 border border-blue-200/90 shadow-xs transition-all active:scale-95 group text-center"
-                                    title={`Call Hostel Warden (${wardenContactPhone})`}
+                                    title={`Call Hostel Warden: ${wardenContactInfo.name} (${wardenContactPhone})`}
                                 >
                                     <span className="text-xs sm:text-sm group-hover:scale-110 transition-transform">📞</span>
                                     <span className="text-[10px] sm:text-xs font-black tracking-tight truncate">Call Warden</span>
@@ -5575,7 +5658,7 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
                                 <a
                                     href={`tel:${deanContactPhone}`}
                                     className="flex items-center justify-center gap-1.5 py-2 px-2 rounded-xl bg-indigo-50/90 hover:bg-indigo-100 text-indigo-800 border border-indigo-200/90 shadow-xs transition-all active:scale-95 group text-center"
-                                    title={`Call Hostel Dean (${deanContactPhone})`}
+                                    title={`Call Hostel Dean: ${deanContactInfo.name} (${deanContactPhone})`}
                                 >
                                     <span className="text-xs sm:text-sm group-hover:scale-110 transition-transform">📞</span>
                                     <span className="text-[10px] sm:text-xs font-black tracking-tight truncate">Call Dean</span>
@@ -7812,7 +7895,7 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
                                 <a
                                     href={`tel:${wardenContactPhone}`}
                                     className="flex items-center justify-center gap-1.5 py-2 px-2 rounded-xl bg-blue-50/90 hover:bg-blue-100 text-blue-800 border border-blue-200/90 shadow-xs transition-all active:scale-95 group text-center"
-                                    title={`Call Hostel Warden (${wardenContactPhone})`}
+                                    title={`Call Hostel Warden: ${wardenContactInfo.name} (${wardenContactPhone})`}
                                 >
                                     <span className="text-xs sm:text-sm group-hover:scale-110 transition-transform">📞</span>
                                     <span className="text-[10px] sm:text-xs font-black tracking-tight truncate">Call Warden</span>
@@ -7821,7 +7904,7 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
                                 <a
                                     href={`tel:${deanContactPhone}`}
                                     className="flex items-center justify-center gap-1.5 py-2 px-2 rounded-xl bg-indigo-50/90 hover:bg-indigo-100 text-indigo-800 border border-indigo-200/90 shadow-xs transition-all active:scale-95 group text-center"
-                                    title={`Call Hostel Dean (${deanContactPhone})`}
+                                    title={`Call Hostel Dean: ${deanContactInfo.name} (${deanContactPhone})`}
                                 >
                                     <span className="text-xs sm:text-sm group-hover:scale-110 transition-transform">📞</span>
                                     <span className="text-[10px] sm:text-xs font-black tracking-tight truncate">Call Dean</span>
@@ -8375,12 +8458,14 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
                                 <div className="flex items-center gap-2 shrink-0">
                                     <a
                                         href={`tel:${wardenContactPhone}`}
+                                        title={`Call ${wardenContactInfo.name} (${wardenContactPhone})`}
                                         className="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-black uppercase tracking-wider transition-all flex items-center gap-1 shadow-xs"
                                     >
-                                        <span>📞</span> Warden
+                                        <span>📞</span> Warden ({wardenContactInfo.name.split(' ')[0]})
                                     </a>
                                     <a
                                         href={`tel:${deanContactPhone}`}
+                                        title={`Call Dean Dr. Vijendra Singh (${deanContactPhone})`}
                                         className="px-3 py-1.5 bg-slate-800 hover:bg-slate-900 text-white rounded-xl text-xs font-black uppercase tracking-wider transition-all flex items-center gap-1 shadow-xs"
                                     >
                                         <span>📞</span> Dean
