@@ -81,7 +81,10 @@ export function generateUndertakingPDF({
 
   // ID Resolution
   const rawReg = (p.registrationId || "").trim();
-  const cleanReg = rawReg ? rawReg.replace(/^hostel[e|a]z?e[\s-_]*id[\s-_]*/i, "").trim() : (isFemale ? "GIRLS-0001" : "BOYS-0001");
+  const isGuest = !rawReg || rawReg.toUpperCase().includes("GUEST") || rawReg.toUpperCase() === "SEC";
+  const cleanReg = !isGuest 
+    ? rawReg.replace(/^hostel[e|a]z?e[\s-_]*id[\s-_]*/i, "").trim() 
+    : (isFemale ? "GIRLS-0001" : "BOYS-0001");
   const displayId = hosteleazeId || `Hosteleaze ID-${cleanReg}`;
 
   // Authority Contacts

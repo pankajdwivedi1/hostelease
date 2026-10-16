@@ -330,16 +330,19 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
     const displayHostelId = useMemo(() => {
         const p = (studentProfile as any) || {};
         const rawReg = String(p.registrationId || "").trim();
-        if (rawReg) {
-            const clean = rawReg.replace(/^hostel[e|a]z?e[\s-_]*id[\s-_]*/i, "").trim();
-            return `Hosteleaze ID-${clean}`;
-        }
+        const isGuest = !rawReg || rawReg.toUpperCase().includes('GUEST') || rawReg.toUpperCase() === 'SEC';
+
         const rawGender = String(p.gender || p.sex || p.dynamicFields?.gender || p.dynamicFields?.sex || "").trim().toLowerCase();
         const isFemale = rawGender.startsWith('f') || rawGender === 'female' || rawGender.includes('girl') || rawGender.includes('woman') ||
                          String(p.hostelName || p.hostel || '').toLowerCase().includes('girls') ||
                          String(p.hostelName || p.hostel || '').toLowerCase().includes('gangotri') ||
                          String(p.hostelName || p.hostel || '').toLowerCase().includes('gaytri') ||
                          String(p.hostelName || p.hostel || '').toLowerCase().includes('gayatri');
+
+        if (!isGuest) {
+            const clean = rawReg.replace(/^hostel[e|a]z?e[\s-_]*id[\s-_]*/i, "").trim();
+            return `Hosteleaze ID-${clean}`;
+        }
         return `Hosteleaze ID-${isFemale ? 'GIRLS-0001' : 'BOYS-0001'}`;
     }, [studentProfile]);
 
@@ -8527,18 +8530,24 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
 
                         {/* Scrollable Body */}
                         <div className="overflow-y-auto p-4 sm:p-6 space-y-4 text-xs sm:text-sm text-slate-700 leading-relaxed">
-                            {/* Official Stamp Banner */}
-                            <div className="bg-amber-50/70 border border-amber-200/80 rounded-2xl p-3 sm:p-4 flex items-center justify-between gap-3">
-                                <div className="flex items-center gap-2.5">
-                                    <span className="text-2xl">🛡️</span>
-                                    <div>
-                                        <p className="text-[11px] sm:text-xs font-black text-amber-900 uppercase tracking-wider">Digitally Verified & Legally Binding</p>
-                                        <p className="text-[10px] sm:text-[11px] text-amber-700 font-medium">Accepted with timestamp, IP & digital signature during admission onboarding.</p>
+                            {/* Official Stamp Banner - Fully Mobile Responsive */}
+                            <div className="bg-amber-50/70 border border-amber-200/80 rounded-2xl p-3 sm:p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 sm:gap-3">
+                                <div className="flex items-start sm:items-center gap-2.5 min-w-0">
+                                    <span className="text-xl sm:text-2xl shrink-0 mt-0.5 sm:mt-0">🛡️</span>
+                                    <div className="min-w-0 flex-1">
+                                        <p className="text-xs sm:text-xs font-black text-amber-900 uppercase tracking-wide leading-tight">
+                                            Digitally Verified & Legally Binding
+                                        </p>
+                                        <p className="text-[10px] sm:text-[11px] text-amber-700 font-medium leading-snug mt-1">
+                                            Accepted with timestamp, IP & digital signature during admission onboarding.
+                                        </p>
                                     </div>
                                 </div>
-                                <span className="inline-block px-2.5 py-1 bg-white/90 border border-amber-300 rounded-lg text-[10px] sm:text-[11px] font-black text-amber-800 uppercase tracking-wider shrink-0 shadow-xs">
-                                    {displayHostelId}
-                                </span>
+                                <div className="flex justify-end sm:justify-start shrink-0 pt-0.5 sm:pt-0">
+                                    <span className="inline-block px-2.5 py-1 bg-white/95 border border-amber-300 rounded-lg text-[10px] sm:text-[11px] font-black text-amber-800 uppercase tracking-wider shadow-xs">
+                                        {displayHostelId}
+                                    </span>
+                                </div>
                             </div>
 
                             {/* Undertaking Agreement Text */}
