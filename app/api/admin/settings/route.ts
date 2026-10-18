@@ -24,8 +24,10 @@ export async function GET(request: NextRequest) {
         const allHostels = allHostelsRes.status === "fulfilled" ? allHostelsRes.value : [];
 
         const cookieStore = await cookies();
-        const userType = cookieStore.get("userType")?.value;
-        const isAdmin = userType === "admin" || userType === "superadmin";
+        const cookieUserType = cookieStore.get("userType")?.value;
+        const headerUserType = request.headers.get("x-user-type") || request.headers.get("user-type");
+        const userType = cookieUserType || headerUserType;
+        const isAdmin = userType === "admin" || userType === "superadmin" || userType === "dean";
 
         let enforceMandatoryPush = false;
         if (platformConfig?.settings) {
@@ -59,7 +61,9 @@ export async function GET(request: NextRequest) {
             isPaymentEnabled: settings?.isPaymentEnabled || false,
             wardenPassword: isAdmin ? (settings?.wardenPassword || "warden456") : "••••••••",
             adminPassword: isAdmin ? (settings?.adminPassword || "pankajdwivedi81") : "••••••••",
+            deanPhone: settings?.deanPhone || settings?.universityBankDetails?.deanPhone || "",
             developerPassword: isAdmin ? (settings?.developerPassword || "Pankaj1258") : "••••••••",
+            superAdminPhone: settings?.superAdminPhone || settings?.universityBankDetails?.superAdminPhone || "",
             overlapRadius: settings?.overlapRadius || false,
             prioritizeAssignedHostel: settings?.prioritizeAssignedHostel || false,
             getpassPassword: isAdmin ? (settings?.getpassPassword || "GET456") : "••••••••",
@@ -154,6 +158,28 @@ export async function POST(request: NextRequest) {
         if (notificationSettings !== undefined) updateData.notificationSettings = notificationSettings;
         if (leaveApprovalMethod !== undefined) updateData.leaveApprovalMethod = leaveApprovalMethod;
         if (qrScanCooldownMinutes !== undefined) updateData.qrScanCooldownMinutes = Number(qrScanCooldownMinutes);
+        if (body.deanPhone !== undefined) {
+            let cleanPhone = String(body.deanPhone).replace(/\D/g, "");
+            if (cleanPhone.length > 10) cleanPhone = cleanPhone.slice(-10);
+            updateData.deanPhone = cleanPhone;
+            const currentSettings = await db.settings.get();
+            const bankDetails = (currentSettings?.universityBankDetails as any) || {};
+            updateData.universityBankDetails = {
+                ...bankDetails,
+                deanPhone: cleanPhone
+            };
+        }
+        if (body.superAdminPhone !== undefined) {
+            let cleanPhone = String(body.superAdminPhone).replace(/\D/g, "");
+            if (cleanPhone.length > 10) cleanPhone = cleanPhone.slice(-10);
+            updateData.superAdminPhone = cleanPhone;
+            const currentSettings = await db.settings.get();
+            const bankDetails = (currentSettings?.universityBankDetails as any) || (updateData.universityBankDetails || {});
+            updateData.universityBankDetails = {
+                ...bankDetails,
+                superAdminPhone: cleanPhone
+            };
+        }
 
         // Dynamic field safeguard rules
         if (body.enforceUniqueErpId !== undefined) updateData.enforceUniqueErpId = body.enforceUniqueErpId;

@@ -33,7 +33,8 @@ import {
     ArrowUp,
     ArrowDown,
     ArrowUpDown,
-    GripVertical
+    GripVertical,
+    Bell
 } from "lucide-react";
 import { generateOfficialInvoicePDF } from "@/lib/invoicePdfGenerator";
 import { formatToDDMMYYYY, formatDateDDMMYYYY, formatDateTimeDDMMYYYY } from "@/lib/dateFormat";
@@ -141,7 +142,7 @@ const LiveDbSwitch = () => {
             onClick={toggle}
             disabled={loading}
             title={`Current Active DB: ${source}. Click to switch to ${source === 'RAILWAY' ? 'SUPABASE' : 'RAILWAY'}`}
-            className={`h-10 sm:h-11 px-3 sm:px-4 rounded-xl text-[10px] sm:text-xs font-black uppercase tracking-widest transition-all border shadow-sm active:scale-95 flex items-center gap-1.5 justify-center w-full sm:w-auto ${
+            className={`h-7 sm:h-11 px-2 sm:px-4 rounded-lg sm:rounded-xl text-[8px] sm:text-xs font-black uppercase tracking-wider sm:tracking-widest transition-all border shadow-xs active:scale-95 flex items-center gap-1 sm:gap-1.5 justify-center w-full sm:w-auto ${
                 source === 'RAILWAY'
                     ? 'bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100'
                     : 'bg-orange-50 text-orange-700 border-orange-200 hover:bg-orange-100'
@@ -149,8 +150,8 @@ const LiveDbSwitch = () => {
         >
             {loading ? 'Switching...' : (
                 <>
-                    <span className={`w-2 h-2 rounded-full ${source === 'RAILWAY' ? 'bg-emerald-500 animate-pulse' : 'bg-orange-500 animate-pulse'}`}></span>
-                    {source === 'RAILWAY' ? 'RAILWAY' : 'SUPABASE'}
+                    <span className={`w-1.5 h-1.5 sm:w-2 sm:h-2 rounded-full ${source === 'RAILWAY' ? 'bg-emerald-500 animate-pulse' : 'bg-orange-500 animate-pulse'}`}></span>
+                    <span>{source === 'RAILWAY' ? 'RAILWAY' : 'SUPABASE'}</span>
                 </>
             )}
         </button>
@@ -204,9 +205,9 @@ const SyncDbButton = () => {
                 onClick={() => setShowModal(!showModal)}
                 disabled={syncing}
                 title="Sync data between Railway and Supabase PostgreSQL"
-                className="h-10 sm:h-11 px-3 sm:px-4 bg-purple-50 text-purple-700 border border-purple-200 hover:bg-purple-100 rounded-xl text-[10px] sm:text-xs font-black uppercase tracking-widest transition-all shadow-sm active:scale-95 flex items-center gap-1.5 justify-center w-full sm:w-auto"
+                className="h-7 sm:h-11 px-2 sm:px-4 bg-purple-50 text-purple-700 border border-purple-200 hover:bg-purple-100 rounded-lg sm:rounded-xl text-[8px] sm:text-xs font-black uppercase tracking-wider sm:tracking-widest transition-all shadow-xs active:scale-95 flex items-center gap-1 sm:gap-1.5 justify-center w-full sm:w-auto"
             >
-                <Zap className="w-3.5 h-3.5 text-purple-600 animate-pulse" />
+                <Zap className="w-2.5 h-2.5 sm:w-3.5 sm:h-3.5 text-purple-600 animate-pulse" />
                 <span>{syncing ? 'Syncing...' : 'Sync DB'}</span>
             </button>
 
@@ -420,16 +421,16 @@ const GenerateEmbeddingsButton = () => {
             onClick={handleGenerateEmbeddings}
             disabled={isGenerating}
             title="Pre-calculate 128-D face embeddings for all students to enable instant <30ms verification"
-            className="h-10 sm:h-11 px-3 sm:px-4 bg-emerald-50 text-emerald-700 border border-emerald-200 hover:bg-emerald-100 rounded-xl text-[10px] sm:text-xs font-black uppercase tracking-widest transition-all shadow-sm active:scale-95 flex items-center gap-1.5 justify-center w-full sm:w-auto"
+            className="h-7 sm:h-11 px-2 sm:px-4 bg-emerald-50 text-emerald-700 border border-emerald-200 hover:bg-emerald-100 rounded-lg sm:rounded-xl text-[8px] sm:text-xs font-black uppercase tracking-wider sm:tracking-widest transition-all shadow-xs active:scale-95 flex items-center gap-1 sm:gap-1.5 justify-center w-full sm:w-auto"
         >
             {isGenerating ? (
                 <>
-                    <Loader2 className="w-3.5 h-3.5 animate-spin text-emerald-600" />
+                    <Loader2 className="w-2.5 h-2.5 sm:w-3.5 sm:h-3.5 animate-spin text-emerald-600" />
                     <span>{processedCount > 0 ? `${processedCount}/${totalMissing}` : "Loading AI..."}</span>
                 </>
             ) : (
                 <>
-                    <ShieldCheck className="w-3.5 h-3.5 text-emerald-600" />
+                    <ShieldCheck className="w-2.5 h-2.5 sm:w-3.5 sm:h-3.5 text-emerald-600" />
                     <span>⚡ AI Face Vectors</span>
                 </>
             )}
@@ -573,6 +574,8 @@ export default function SuperAdminDashboard() {
 
     const [showPaymentSettingsModal, setShowPaymentSettingsModal] = useState(false);
     const [isSavingPaymentSettings, setIsSavingPaymentSettings] = useState(false);
+    const [showNotificationSettingsModal, setShowNotificationSettingsModal] = useState(false);
+    const [isSavingNotificationSettings, setIsSavingNotificationSettings] = useState(false);
     const [paymentSettings, setPaymentSettings] = useState({
         bankName: "PNB Bank",
         accountName: "DR. PANKAJ DWIVEDI",
@@ -1133,6 +1136,30 @@ export default function SuperAdminDashboard() {
         }
     };
 
+    const saveNotificationSettings = async (e: React.FormEvent) => {
+        e.preventDefault();
+        setIsSavingNotificationSettings(true);
+        try {
+            const res = await fetch('/api/super-admin/settings', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(paymentSettings)
+            });
+            const data = await res.json();
+            if (data.success) {
+                logAdminAction("UPDATE_NOTIFICATION_RULES", `Updated global notification rules and curfew scheduler settings`);
+                alert("Notification & Scheduler Rules updated successfully!");
+                setShowNotificationSettingsModal(false);
+            } else {
+                alert("Failed to save rules: " + data.error);
+            }
+        } catch (error) {
+            alert("Error saving notification rules");
+        } finally {
+            setIsSavingNotificationSettings(false);
+        }
+    };
+
     useEffect(() => {
         if (isAuthorized && isMounted) {
             fetchTenants();
@@ -1433,28 +1460,28 @@ export default function SuperAdminDashboard() {
     return (
         <div className="min-h-screen bg-[#fcfcfd] flex flex-col font-sans">
             {/* Header */}
-            <header className="bg-white/70 backdrop-blur-md border-b border-gray-100 flex flex-col sm:flex-row items-start sm:items-center justify-between px-4 sm:px-8 py-4 sm:py-5 sticky top-0 z-40 transition-shadow gap-4 sm:gap-0">
-                <div className="flex items-center gap-3 sm:gap-4 w-full sm:w-auto">
-                    <div className="w-10 h-10 sm:w-12 sm:h-12 bg-white rounded-xl sm:rounded-2xl flex items-center justify-center shadow-lg shadow-gray-200 shrink-0 overflow-hidden border border-gray-100">
+            <header className="bg-white/70 backdrop-blur-md border-b border-gray-100 flex flex-col sm:flex-row items-start sm:items-center justify-between px-3 sm:px-8 py-2.5 sm:py-5 sticky top-0 z-40 transition-shadow gap-2.5 sm:gap-0">
+                <div className="flex items-center gap-2.5 sm:gap-4 w-full sm:w-auto">
+                    <div className="w-8 h-8 sm:w-12 sm:h-12 bg-white rounded-lg sm:rounded-2xl flex items-center justify-center shadow-md shadow-gray-200 shrink-0 overflow-hidden border border-gray-100">
                         <img src="/logo.jpeg" alt="Hosteleaze Logo" className="w-full h-full object-cover" />
                     </div>
                     <div className="min-w-0">
-                        <h2 className="text-lg sm:text-xl font-black text-gray-900 uppercase tracking-tighter truncate">Hosteleaze Boss Control</h2>
-                        <div className="flex items-center gap-2">
+                        <h2 className="text-sm sm:text-xl font-black text-gray-900 uppercase tracking-tight sm:tracking-tighter truncate">Hosteleaze Boss Control</h2>
+                        <div className="flex items-center gap-1.5 sm:gap-2">
                             <div className="flex gap-0.5 shrink-0">
                                 <span className="w-1 h-2 sm:w-1 sm:h-3 bg-blue-500 rounded-full animate-bounce"></span>
                                 <span className="w-1 h-2 sm:w-1 sm:h-3 bg-blue-400 rounded-full animate-bounce delay-75"></span>
                                 <span className="w-1 h-2 sm:w-1 sm:h-3 bg-blue-300 rounded-full animate-bounce delay-150"></span>
                             </div>
-                            <span className="text-[8px] sm:text-[10px] text-gray-400 font-black uppercase tracking-widest truncate">SuperAdmin Authorization Active</span>
+                            <span className="text-[7.5px] sm:text-[10px] text-gray-400 font-black uppercase tracking-wider sm:tracking-widest truncate">SuperAdmin Authorization Active</span>
                         </div>
                     </div>
                 </div>
 
-                <div className="grid grid-cols-2 sm:flex sm:flex-wrap sm:items-center gap-2 w-full sm:w-auto">
-                    <div className="h-10 sm:h-11 px-3 sm:px-4 bg-emerald-50 text-emerald-700 border border-emerald-200 rounded-xl flex items-center gap-1.5 text-[10px] sm:text-xs font-black uppercase tracking-widest shadow-sm justify-center w-full sm:w-auto">
+                <div className="grid grid-cols-2 sm:flex sm:flex-wrap sm:items-center gap-1.5 sm:gap-2 w-full sm:w-auto">
+                    <div className="h-7 sm:h-11 px-2 sm:px-4 bg-emerald-50 text-emerald-700 border border-emerald-200 rounded-lg sm:rounded-xl flex items-center gap-1 sm:gap-1.5 text-[8px] sm:text-xs font-black uppercase tracking-wider sm:tracking-widest shadow-xs justify-center w-full sm:w-auto">
                         <span className="w-1.5 h-1.5 bg-emerald-500 rounded-full animate-pulse shrink-0"></span>
-                        <span>Pulse: {globalStats?.totalActiveTraffic || 0} <span className="text-[8px] font-bold opacity-60 italic">Att/M</span></span>
+                        <span>Pulse: {globalStats?.totalActiveTraffic || 0} <span className="text-[7px] sm:text-[8px] font-bold opacity-60 italic">Att/M</span></span>
                     </div>
 
                     <LiveDbSwitch />
@@ -1490,7 +1517,7 @@ export default function SuperAdminDashboard() {
                                 showToast("Critical Error: " + e.message, "error");
                             }
                         }}
-                        className="h-10 sm:h-11 px-3 sm:px-4 bg-purple-50 text-purple-700 border border-purple-200 rounded-xl text-[10px] sm:text-xs font-black uppercase tracking-widest hover:bg-purple-100 transition-all shadow-sm active:scale-95 flex items-center gap-1.5 justify-center w-full sm:w-auto"
+                        className="h-7 sm:h-11 px-2 sm:px-4 bg-purple-50 text-purple-700 border border-purple-200 rounded-lg sm:rounded-xl text-[8px] sm:text-xs font-black uppercase tracking-wider sm:tracking-widest hover:bg-purple-100 transition-all shadow-xs active:scale-95 flex items-center gap-1 sm:gap-1.5 justify-center w-full sm:w-auto"
                     >
                         🚀 Migration
                     </button>
@@ -1500,17 +1527,17 @@ export default function SuperAdminDashboard() {
                             localStorage.removeItem("superadmin_session");
                             setIsAuthorized(false);
                         }}
-                        className="h-10 sm:h-11 px-3 sm:px-4 bg-rose-50 hover:bg-rose-100 text-rose-600 border border-rose-200/50 rounded-xl font-black flex items-center gap-1.5 transition-all active:scale-95 text-[10px] sm:text-xs uppercase tracking-widest justify-center w-full sm:w-auto"
+                        className="h-7 sm:h-11 px-2 sm:px-4 bg-rose-50 hover:bg-rose-100 text-rose-600 border border-rose-200/50 rounded-lg sm:rounded-xl font-black flex items-center gap-1 sm:gap-1.5 transition-all active:scale-95 text-[8px] sm:text-xs uppercase tracking-wider sm:tracking-widest justify-center w-full sm:w-auto"
                     >
-                        <LogOut className="w-3.5 h-3.5 text-rose-500" />
+                        <LogOut className="w-2.5 h-2.5 sm:w-3.5 sm:h-3.5 text-rose-500" />
                         <span>Log Out</span>
                     </button>
 
                     <button
                         onClick={() => setShowAddModal(true)}
-                        className="h-10 sm:h-11 col-span-2 sm:col-auto px-4 sm:px-6 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-black flex items-center gap-1.5 transition-all shadow-lg shadow-blue-500/20 active:scale-95 text-[10px] sm:text-xs uppercase tracking-widest justify-center w-full sm:w-auto"
+                        className="h-8 sm:h-11 col-span-2 sm:col-auto px-3 sm:px-6 bg-blue-600 hover:bg-blue-700 text-white rounded-lg sm:rounded-xl font-black flex items-center gap-1.5 transition-all shadow-md shadow-blue-500/20 active:scale-95 text-[9px] sm:text-xs uppercase tracking-wider sm:tracking-widest justify-center w-full sm:w-auto"
                     >
-                        <Plus className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+                        <Plus className="w-3 h-3 sm:w-4 sm:h-4" />
                         <span className="whitespace-nowrap">Provision Node</span>
                     </button>
                 </div>
@@ -1551,8 +1578,8 @@ export default function SuperAdminDashboard() {
                 );
             })()}
 
-            <div className="px-4 sm:px-8 pt-6 sm:pt-8">
-                <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2 sm:gap-4">
+            <div className="px-3 sm:px-8 pt-3 sm:pt-8">
+                <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-1.5 sm:gap-4">
                     {[
                         { icon: Users, label: "Total Students", value: tenants.reduce((acc, t) => acc + (t.studentCount || 0), 0), sub: "Across nodes", trend: "+12.4%", color: "blue" },
                         { icon: Zap, label: "Active Nodes", value: globalStats?.revenueSummary?.active || 0, sub: "Subscribed", trend: "Stable", color: "amber" },
@@ -1574,20 +1601,20 @@ export default function SuperAdminDashboard() {
                             color: "purple"
                         }
                     ].map((stat, i, arr) => (
-                        <div key={i} className={`bg-white p-2.5 sm:p-7 rounded-[16px] sm:rounded-[32px] border border-gray-100 shadow-sm hover:shadow-xl hover:shadow-gray-200/40 transition-all duration-500 group ${
+                        <div key={i} className={`bg-white p-2 sm:p-7 rounded-xl sm:rounded-[32px] border border-gray-100 shadow-2xs hover:shadow-xl hover:shadow-gray-200/40 transition-all duration-500 group ${
                             i === arr.length - 1 ? 'col-span-2 sm:col-span-1' : ''
                         }`}>
-                            <div className="flex justify-between items-center mb-2 sm:mb-4">
-                                <div className={`w-6 h-6 sm:w-12 sm:h-12 rounded-lg sm:rounded-2xl flex items-center justify-center bg-${stat.color}-50 text-${stat.color}-600 group-hover:bg-${stat.color}-600 group-hover:text-white transition-colors`}>
-                                    <stat.icon className="w-3 h-3 sm:w-6 sm:h-6" />
+                            <div className="flex justify-between items-center mb-1.5 sm:mb-4">
+                                <div className={`w-5 h-5 sm:w-12 sm:h-12 rounded-md sm:rounded-2xl flex items-center justify-center bg-${stat.color}-50 text-${stat.color}-600 group-hover:bg-${stat.color}-600 group-hover:text-white transition-colors`}>
+                                    <stat.icon className="w-2.5 h-2.5 sm:w-6 sm:h-6" />
                                 </div>
                                 <div className={`text-[6px] sm:text-[10px] font-black px-1 py-0.5 sm:px-2 sm:py-1 rounded sm:rounded-lg bg-${stat.color}-50 text-${stat.color}-600 uppercase tracking-tighter leading-none`}>
                                     {stat.trend}
                                 </div>
                             </div>
                             <div>
-                                <h3 className="text-sm sm:text-3xl font-black text-gray-900 leading-none tracking-tighter">{stat.value}</h3>
-                                <p className="text-[7px] sm:text-[10px] text-gray-400 font-bold uppercase tracking-widest mt-0.5">{stat.label}</p>
+                                <h3 className="text-xs sm:text-3xl font-black text-gray-900 leading-none tracking-tight sm:tracking-tighter">{stat.value}</h3>
+                                <p className="text-[6.5px] sm:text-[10px] text-gray-400 font-bold uppercase tracking-wider sm:tracking-widest mt-0.5">{stat.label}</p>
                                 <p className="hidden sm:block text-[8px] sm:text-[9px] text-gray-300 font-medium italic mt-2 truncate">{stat.sub}</p>
                             </div>
                         </div>
@@ -1596,84 +1623,103 @@ export default function SuperAdminDashboard() {
             </div>
 
             {/* Main Content Area */}
-            <main className="px-4 sm:px-8 py-2 sm:py-8 grid grid-cols-1 lg:grid-cols-12 gap-6 sm:gap-8">
+            <main className="px-3 sm:px-8 py-2 sm:py-8 grid grid-cols-1 lg:grid-cols-12 gap-4 sm:gap-8">
                 
                 {/* View Switcher & Header */}
-                <div className="lg:col-span-12 flex flex-col md:flex-row md:items-center justify-between gap-3 mb-3 sm:mb-8 mt-2 sm:mt-12 border-t border-gray-100 pt-4 sm:pt-12">
-                    <div className="flex items-center gap-3">
-                        <Activity className="w-5 h-5 text-blue-600" />
-                        <h2 className="text-lg sm:text-xl font-black text-gray-900 uppercase tracking-tighter">Infrastructure Control</h2>
+                <div className="lg:col-span-12 flex flex-col md:flex-row md:items-center justify-between gap-2.5 sm:gap-3 mb-2 sm:mb-8 mt-2 sm:mt-12 border-t border-gray-100 pt-3 sm:pt-12">
+                    <div className="flex items-center gap-2 sm:gap-3">
+                        <Activity className="w-4 h-4 sm:w-5 sm:h-5 text-blue-600" />
+                        <h2 className="text-sm sm:text-xl font-black text-gray-900 uppercase tracking-tight sm:tracking-tighter">Infrastructure Control</h2>
                     </div>
 
-                    <div className="flex items-center gap-0.5 bg-gray-100 p-1 rounded-xl sm:rounded-2xl border border-gray-200 w-full sm:w-auto">
-                        <button 
-                            onClick={() => setShowPaymentSettingsModal(true)}
-                            className="flex-1 min-w-0 px-0.5 sm:px-6 py-1.5 sm:py-2 rounded-lg sm:rounded-xl text-[6px] sm:text-[10px] font-black uppercase tracking-tight sm:tracking-widest transition-all bg-emerald-50 text-emerald-600 hover:bg-emerald-100 border border-emerald-200 flex items-center justify-center gap-1 whitespace-normal leading-tight text-center"
-                        >
-                            <CreditCard className="w-2 h-2 shrink-0 sm:w-3.5 sm:h-3.5" />
-                            <span>Payment Config</span>
-                        </button>
-                        <div className="w-px h-5 bg-gray-300 shrink-0"></div>
-                        <button 
-                            onClick={() => setViewMode('active')}
-                            className={`flex-1 min-w-0 px-0.5 sm:px-6 py-1.5 sm:py-2 rounded-lg sm:rounded-xl text-[6px] sm:text-[10px] font-black uppercase tracking-tight sm:tracking-widest transition-all text-center whitespace-normal leading-tight ${viewMode === 'active' ? 'bg-white text-blue-600 shadow-md border border-gray-200' : 'text-gray-400 hover:text-gray-600'}`}
-                        >
-                            Active Nodes
-                        </button>
-                        <button 
-                            onClick={() => setViewMode('recycle')}
-                            className={`flex-1 min-w-0 px-0.5 sm:px-6 py-1.5 sm:py-2 rounded-lg sm:rounded-xl text-[6px] sm:text-[10px] font-black uppercase tracking-tight sm:tracking-widest transition-all text-center whitespace-normal leading-tight ${viewMode === 'recycle' ? 'bg-white text-red-600 shadow-md border border-gray-200' : 'text-gray-400 hover:text-red-400'}`}
-                        >
-                            Recycle Bin
-                        </button>
-                        <button 
-                            onClick={() => setViewMode('audit')}
-                            className={`flex-1 min-w-0 px-0.5 sm:px-6 py-1.5 sm:py-2 rounded-lg sm:rounded-xl text-[6px] sm:text-[10px] font-black uppercase tracking-tight sm:tracking-widest transition-all text-center whitespace-normal leading-tight ${viewMode === 'audit' ? 'bg-white text-purple-600 shadow-md border border-gray-200' : 'text-gray-400 hover:text-purple-400'}`}
-                        >
-                            Audit Logs
-                        </button>
-                        <button 
-                            onClick={() => setViewMode('billing')}
-                            className={`flex-1 min-w-0 px-0.5 sm:px-6 py-1.5 sm:py-2 rounded-lg sm:rounded-xl text-[6px] sm:text-[10px] font-black uppercase tracking-tight sm:tracking-widest transition-all text-center whitespace-normal leading-tight ${viewMode === 'billing' ? 'bg-white text-emerald-600 shadow-md border border-gray-200' : 'text-gray-400 hover:text-emerald-400'}`}
-                        >
-                            Billing Ledger
-                        </button>
-                        <button 
-                            onClick={() => setViewMode('expired')}
-                            className={`flex-1 min-w-0 px-0.5 sm:px-6 py-1.5 sm:py-2 rounded-lg sm:rounded-xl text-[6px] sm:text-[10px] font-black uppercase tracking-tight sm:tracking-widest transition-all text-center whitespace-normal leading-tight flex items-center justify-center gap-1 ${viewMode === 'expired' ? 'bg-white text-rose-600 shadow-md border border-gray-200' : 'text-gray-400 hover:text-rose-400'}`}
-                        >
-                            {globalStats?.revenueSummary?.expired > 0 && viewMode !== 'expired' && (
-                                <span className="w-4 h-4 rounded-full bg-rose-500 text-white text-[7px] font-black flex items-center justify-center shrink-0">{globalStats.revenueSummary.expired}</span>
-                            )}
-                            Expired
-                        </button>
+                    <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-1.5 sm:gap-1 bg-gray-100 p-1.5 rounded-xl sm:rounded-2xl border border-gray-200 w-full sm:w-auto">
+                        {/* Line 1 on Mobile: Config Actions */}
+                        <div className="grid grid-cols-2 sm:flex sm:items-center gap-1.5 sm:gap-1 w-full sm:w-auto">
+                            <button 
+                                onClick={() => setShowPaymentSettingsModal(true)}
+                                className="px-2.5 sm:px-4 py-1.5 sm:py-2 rounded-lg sm:rounded-xl text-[8px] sm:text-[10px] font-black uppercase tracking-tight sm:tracking-widest transition-all bg-emerald-50 text-emerald-700 hover:bg-emerald-100 border border-emerald-200/80 flex items-center justify-center gap-1 whitespace-nowrap active:scale-95 shadow-xs w-full sm:w-auto"
+                            >
+                                <CreditCard className="w-2.5 h-2.5 sm:w-3.5 sm:h-3.5 shrink-0 text-emerald-600" />
+                                <span>Payment Config</span>
+                            </button>
+                            <button 
+                                onClick={() => setShowNotificationSettingsModal(true)}
+                                className="px-2.5 sm:px-4 py-1.5 sm:py-2 rounded-lg sm:rounded-xl text-[8px] sm:text-[10px] font-black uppercase tracking-tight sm:tracking-widest transition-all bg-amber-50 text-amber-800 hover:bg-amber-100 border border-amber-200/80 flex items-center justify-center gap-1 whitespace-nowrap active:scale-95 shadow-xs w-full sm:w-auto"
+                            >
+                                <Bell className="w-2.5 h-2.5 sm:w-3.5 sm:h-3.5 shrink-0 text-amber-600" />
+                                <span>Rules & Alerts</span>
+                            </button>
+                        </div>
+
+                        <div className="hidden sm:block w-px h-5 bg-gray-300 shrink-0 mx-0.5"></div>
+
+                        {/* Line 2 on Mobile: View Switcher Tabs (Non-scrollable, all 5 visible) */}
+                        <div className="grid grid-cols-5 sm:flex sm:items-center gap-1 w-full sm:w-auto bg-gray-200/50 sm:bg-transparent p-0.5 sm:p-0 rounded-lg sm:rounded-none">
+                            <button 
+                                onClick={() => setViewMode('active')}
+                                className={`px-1 sm:px-4 py-1.5 sm:py-2 rounded-md sm:rounded-xl text-[7.5px] sm:text-[10px] font-black uppercase tracking-tight sm:tracking-widest transition-all whitespace-nowrap text-center ${viewMode === 'active' ? 'bg-white text-blue-600 shadow-xs border border-gray-200' : 'text-gray-500 hover:text-gray-700'}`}
+                            >
+                                <span className="sm:hidden">Active</span>
+                                <span className="hidden sm:inline">Active Nodes</span>
+                            </button>
+                            <button 
+                                onClick={() => setViewMode('recycle')}
+                                className={`px-1 sm:px-4 py-1.5 sm:py-2 rounded-md sm:rounded-xl text-[7.5px] sm:text-[10px] font-black uppercase tracking-tight sm:tracking-widest transition-all whitespace-nowrap text-center ${viewMode === 'recycle' ? 'bg-white text-red-600 shadow-xs border border-gray-200' : 'text-gray-500 hover:text-red-500'}`}
+                            >
+                                <span className="sm:hidden">Trash</span>
+                                <span className="hidden sm:inline">Recycle Bin</span>
+                            </button>
+                            <button 
+                                onClick={() => setViewMode('audit')}
+                                className={`px-1 sm:px-4 py-1.5 sm:py-2 rounded-md sm:rounded-xl text-[7.5px] sm:text-[10px] font-black uppercase tracking-tight sm:tracking-widest transition-all whitespace-nowrap text-center ${viewMode === 'audit' ? 'bg-white text-purple-600 shadow-xs border border-gray-200' : 'text-gray-500 hover:text-purple-500'}`}
+                            >
+                                <span className="sm:hidden">Audit</span>
+                                <span className="hidden sm:inline">Audit Logs</span>
+                            </button>
+                            <button 
+                                onClick={() => setViewMode('billing')}
+                                className={`px-1 sm:px-4 py-1.5 sm:py-2 rounded-md sm:rounded-xl text-[7.5px] sm:text-[10px] font-black uppercase tracking-tight sm:tracking-widest transition-all whitespace-nowrap text-center ${viewMode === 'billing' ? 'bg-white text-emerald-600 shadow-xs border border-gray-200' : 'text-gray-500 hover:text-emerald-500'}`}
+                            >
+                                <span className="sm:hidden">Billing</span>
+                                <span className="hidden sm:inline">Billing Ledger</span>
+                            </button>
+                            <button 
+                                onClick={() => setViewMode('expired')}
+                                className={`px-1 sm:px-4 py-1.5 sm:py-2 rounded-md sm:rounded-xl text-[7.5px] sm:text-[10px] font-black uppercase tracking-tight sm:tracking-widest transition-all whitespace-nowrap flex items-center justify-center gap-0.5 sm:gap-1 ${viewMode === 'expired' ? 'bg-white text-rose-600 shadow-xs border border-gray-200' : 'text-gray-500 hover:text-rose-500'}`}
+                            >
+                                {globalStats?.revenueSummary?.expired > 0 && viewMode !== 'expired' && (
+                                    <span className="w-3 h-3 sm:w-4 sm:h-4 rounded-full bg-rose-500 text-white text-[6.5px] sm:text-[7px] font-black flex items-center justify-center shrink-0">{globalStats.revenueSummary.expired}</span>
+                                )}
+                                <span>Expired</span>
+                            </button>
+                        </div>
                     </div>
                 </div>
 
-                <div className="lg:col-span-12 space-y-6">
+                <div className="lg:col-span-12 space-y-4 sm:space-y-6">
                     <div className="flex items-center justify-between">
-                         <div className="flex items-center gap-3">
-                            <p className="text-[10px] font-black text-gray-400 uppercase tracking-[0.2em]">
+                         <div className="flex items-center gap-2 sm:gap-3">
+                            <p className="text-[8.5px] sm:text-[10px] font-black text-gray-400 uppercase tracking-wider sm:tracking-[0.2em]">
                                 {viewMode === 'active' ? 'Operational Hub' : viewMode === 'recycle' ? 'Trash Registry' : viewMode === 'audit' ? 'HQ Security Logs' : viewMode === 'expired' ? '⚠️ Expired Subscriptions' : 'Subscription Billing Ledger'}
                             </p>
                          </div>
                          <div className="flex gap-2">
-                             <div className="px-3 py-1 bg-white rounded-lg border border-gray-100 text-[9px] font-black text-gray-400 uppercase tracking-widest">
+                             <div className="px-2.5 sm:px-3 py-1 bg-white rounded-md sm:rounded-lg border border-gray-100 text-[8px] sm:text-[9px] font-black text-gray-400 uppercase tracking-wider sm:tracking-widest">
                                 {viewMode === 'active' ? `Total Active Nodes: ${tenants.length}` : viewMode === 'recycle' ? `Deleted Nodes: ${tenants.length}` : viewMode === 'audit' ? `Audit Records: ${auditLogs.length}` : viewMode === 'expired' ? `Expired Nodes: ${tenants.length}` : `Ledger Transactions: ${billingLogs.length}`}
                              </div>
                          </div>
                     </div>
                     <div className="bg-white sm:bg-transparent rounded-[32px] sm:rounded-none overflow-hidden">
                         {viewMode === 'billing' ? (
-                            <div className="bg-white p-6 rounded-[24px] sm:rounded-[32px] border border-slate-100 shadow-sm">
-                                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
+                            <div className="bg-white p-3.5 sm:p-8 rounded-2xl sm:rounded-[36px] border border-slate-100 shadow-xs sm:shadow-sm">
+                                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 sm:gap-4 mb-4 sm:mb-6">
                                     <div>
-                                        <h3 className="font-black text-gray-900 uppercase tracking-tight text-sm">Subscription Billing Ledger</h3>
-                                        <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest mt-0.5">Logs of all approved payments, complimentary setups, and deferred credits</p>
+                                        <h3 className="font-black text-gray-900 uppercase tracking-tight text-xs sm:text-base">Subscription Billing Ledger</h3>
+                                        <p className="text-[9px] sm:text-xs text-slate-400 font-bold uppercase tracking-wider sm:tracking-widest mt-0.5">Logs of all approved payments, complimentary setups, and deferred credits</p>
                                     </div>
-                                    <div className="flex flex-wrap items-center gap-2">
+                                    <div className="grid grid-cols-2 gap-2 sm:flex sm:flex-wrap sm:items-center w-full sm:w-auto">
                                         {isReorderingLedger && (
-                                            <span className="text-[9px] font-black text-indigo-600 bg-indigo-50 border border-indigo-100 px-2.5 py-1.5 rounded-lg animate-pulse flex items-center gap-1">
+                                            <span className="col-span-2 sm:col-auto text-[8.5px] sm:text-[9px] font-black text-indigo-600 bg-indigo-50 border border-indigo-100 px-2.5 py-1.5 rounded-lg animate-pulse flex items-center justify-center gap-1">
                                                 <Loader2 className="w-3 h-3 animate-spin" /> Saving order...
                                             </span>
                                         )}
@@ -1686,7 +1732,7 @@ export default function SuperAdminDashboard() {
                                                     e.target.value = "";
                                                 }
                                             }}
-                                            className="bg-slate-50 hover:bg-slate-100 text-slate-700 border border-slate-200 px-3 py-2 rounded-xl text-[9px] font-black uppercase tracking-wider transition-all cursor-pointer focus:outline-none"
+                                            className="w-full sm:w-auto bg-slate-50 hover:bg-slate-100 text-slate-700 border border-slate-200 px-2 sm:px-3 py-2 rounded-xl text-[8.5px] sm:text-[9px] font-black uppercase tracking-wider transition-all cursor-pointer focus:outline-none truncate text-center"
                                             title="Quick sort transactions"
                                         >
                                             <option value="" disabled>↕ Sort Transactions</option>
@@ -1697,7 +1743,7 @@ export default function SuperAdminDashboard() {
                                         <button 
                                             onClick={handleRetrieveAllInvoicesFromR2}
                                             disabled={isRetrievingR2}
-                                            className="bg-sky-600 hover:bg-sky-700 text-white px-4 py-2 rounded-xl text-[9px] font-black uppercase tracking-widest active:scale-95 transition-all shadow-md shadow-sky-500/20 flex items-center justify-center gap-1.5 cursor-pointer disabled:opacity-50"
+                                            className="w-full sm:w-auto bg-sky-600 hover:bg-sky-700 text-white px-2.5 sm:px-4 py-2 rounded-xl text-[8.5px] sm:text-[9px] font-black uppercase tracking-wider sm:tracking-widest active:scale-95 transition-all shadow-md shadow-sky-500/20 flex items-center justify-center gap-1 sm:gap-1.5 cursor-pointer disabled:opacity-50 whitespace-nowrap"
                                             title="Deep-scan & retrieve all permanent invoices stored on Cloudflare R2 bucket"
                                         >
                                             {isRetrievingR2 ? (
@@ -1706,41 +1752,155 @@ export default function SuperAdminDashboard() {
                                                 </>
                                             ) : (
                                                 <>
-                                                    <Cloud className="w-3.5 h-3.5" /> ☁️ Retrieve from Cloudflare
+                                                    <Cloud className="w-3.5 h-3.5 shrink-0" />
+                                                    <span className="truncate">☁️ Cloudflare R2</span>
                                                 </>
                                             )}
                                         </button>
                                         <button 
                                             onClick={handleOpenCreateInvoiceModal}
-                                            className="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-xl text-[9px] font-black uppercase tracking-widest active:scale-95 transition-all shadow-md shadow-indigo-500/20 flex items-center justify-center gap-1.5 cursor-pointer"
+                                            className="w-full sm:w-auto bg-indigo-600 hover:bg-indigo-700 text-white px-2.5 sm:px-4 py-2 rounded-xl text-[8.5px] sm:text-[9px] font-black uppercase tracking-wider sm:tracking-widest active:scale-95 transition-all shadow-md shadow-indigo-500/20 flex items-center justify-center gap-1 sm:gap-1.5 cursor-pointer whitespace-nowrap"
                                         >
-                                            <Plus className="w-3.5 h-3.5" /> Generate New Invoice
+                                            <Plus className="w-3.5 h-3.5 shrink-0" />
+                                            <span className="truncate">Generate Invoice</span>
                                         </button>
                                         <button 
                                             onClick={fetchBillingLedger}
                                             disabled={loadingBilling}
-                                            className="bg-emerald-50 text-emerald-600 border border-emerald-100 hover:bg-emerald-100 px-4 py-2 rounded-xl text-[9px] font-black uppercase tracking-widest active:scale-95 transition-all flex items-center justify-center gap-2 cursor-pointer"
+                                            className="w-full sm:w-auto bg-emerald-50 text-emerald-600 border border-emerald-100 hover:bg-emerald-100 px-2.5 sm:px-4 py-2 rounded-xl text-[8.5px] sm:text-[9px] font-black uppercase tracking-wider sm:tracking-widest active:scale-95 transition-all flex items-center justify-center gap-1 sm:gap-2 cursor-pointer whitespace-nowrap"
                                         >
-                                            {loadingBilling ? 'Syncing...' : '🔄 Refresh Ledger'}
+                                            <span className="truncate">{loadingBilling ? 'Syncing...' : '🔄 Refresh Ledger'}</span>
                                         </button>
                                     </div>
                                 </div>
 
-                                <div className="overflow-x-auto">
-                                    <table className="w-full text-left border-collapse text-[10px]">
+                                {/* Mobile Non-Scrollable 2-Line Header Bar */}
+                                <div className="sm:hidden bg-slate-100/90 border border-slate-200/80 p-2.5 rounded-xl text-[8px] font-black uppercase tracking-wider text-slate-500 mb-2">
+                                    <div className="flex justify-between items-center">
+                                        <span>Institution / Tenant</span>
+                                        <span>Amount</span>
+                                    </div>
+                                    <div className="flex justify-between items-center text-slate-400 pt-1 mt-1 border-t border-slate-200/60">
+                                        <span>Billing Plan • Students • UTR</span>
+                                        <span>Actions / PDF</span>
+                                    </div>
+                                </div>
+
+                                {/* Mobile Non-Scrollable 2-Line Records */}
+                                <div className="sm:hidden space-y-2">
+                                    {billingLogs.length === 0 ? (
+                                        <div className="py-8 text-center text-slate-400 italic text-xs">No billing records found.</div>
+                                    ) : (
+                                        billingLogs.map((log: any, idx: number) => (
+                                            <div key={log.id || idx} className="bg-slate-50/70 border border-slate-200/70 rounded-xl p-2 sm:p-2.5 space-y-1.5 transition-all">
+                                                {/* Line 1: Order, College, Date, Proof & Amount */}
+                                                <div className="flex items-center justify-between gap-1.5">
+                                                    <div className="flex items-center gap-1 min-w-0 flex-1">
+                                                        <span className="text-[6.5px] font-black px-1 py-0.2 rounded bg-white text-indigo-700 border border-slate-200 shrink-0">
+                                                            #{idx + 1}
+                                                        </span>
+                                                        <span className="font-bold text-slate-900 text-[8px] sm:text-[10px] leading-tight truncate" title={log.tenantName}>
+                                                            {log.tenantName}
+                                                        </span>
+                                                        {log.screenshotUrl && (
+                                                            <a 
+                                                                href={log.screenshotUrl} 
+                                                                target="_blank" 
+                                                                rel="noreferrer"
+                                                                className="text-indigo-600 hover:text-indigo-800 text-[6.5px] bg-indigo-50 px-1 py-0.2 rounded border border-indigo-200 shrink-0 font-bold"
+                                                                title="Proof Screenshot on Cloudflare R2"
+                                                            >
+                                                                📷
+                                                            </a>
+                                                        )}
+                                                        <span className="text-[6.5px] text-slate-400 font-medium shrink-0">
+                                                            ({formatDateDDMMYYYY(log.date)})
+                                                        </span>
+                                                    </div>
+                                                    <div className="text-right shrink-0 font-black text-[9.5px] text-slate-900">
+                                                        {log.amount > 0 ? `₹${log.amount.toLocaleString("en-IN")}` : "₹0"}
+                                                    </div>
+                                                </div>
+
+                                                {/* Line 2: Plan Badge, Period, Students, UTR, Discount & Action Buttons */}
+                                                <div className="flex items-center justify-between gap-1.5 pt-1 border-t border-slate-200/50">
+                                                    <div className="flex items-center flex-wrap gap-1 min-w-0">
+                                                        <span className={`px-1.5 py-0.5 rounded text-[7px] font-black uppercase tracking-tight ${
+                                                            log.billingType === 'Verified Payment' ? 'bg-emerald-50 text-emerald-600 border border-emerald-100' :
+                                                            log.billingType === 'Complimentary' ? 'bg-purple-50 text-purple-600 border border-purple-100' :
+                                                            'bg-amber-50 text-amber-600 border border-amber-100'
+                                                        }`}>
+                                                            {log.billingType}
+                                                        </span>
+                                                        <span className="text-slate-600 font-bold text-[7.5px] bg-white px-1.5 py-0.5 rounded border border-slate-200">
+                                                            {log.billingPeriod}
+                                                        </span>
+                                                        <span className="text-slate-500 font-bold text-[7.5px]">
+                                                            {log.studentCount || 500} Std
+                                                        </span>
+                                                        {log.utr && log.utr !== "N/A" && (
+                                                            <span className="font-mono text-[7px] text-slate-500 truncate max-w-[75px]" title={log.utr}>
+                                                                UTR:{log.utr}
+                                                            </span>
+                                                        )}
+                                                        {log.extraDiscountAmount && Number(log.extraDiscountAmount) > 0 && (
+                                                            <span className="text-[7px] text-purple-600 font-black bg-purple-50 px-1 py-0.2 rounded border border-purple-100">
+                                                                -₹{Number(log.extraDiscountAmount).toLocaleString("en-IN")}
+                                                            </span>
+                                                        )}
+                                                    </div>
+                                                    
+                                                    {/* Actions */}
+                                                    <div className="flex items-center gap-1 shrink-0">
+                                                        <button
+                                                            onClick={() => handleViewInvoicePDF(log)}
+                                                            className="px-2 py-0.5 bg-blue-50 text-blue-700 border border-blue-200 rounded text-[8px] font-black uppercase tracking-wider active:scale-95 flex items-center gap-0.5"
+                                                            title="View PDF"
+                                                        >
+                                                            <FileText className="w-2.5 h-2.5" /> PDF
+                                                        </button>
+                                                        <button
+                                                            onClick={() => handleOpenEditInvoiceModal(log)}
+                                                            className="p-1 bg-indigo-50 text-indigo-700 border border-indigo-200 rounded text-[8px] active:scale-95"
+                                                            title="Edit"
+                                                        >
+                                                            <Edit3 className="w-2.5 h-2.5" />
+                                                        </button>
+                                                        <button
+                                                            onClick={() => handleDeleteInvoice(log.id, log.tenantName)}
+                                                            disabled={isDeletingInvoiceId === log.id}
+                                                            className="p-1 bg-red-50 text-red-600 border border-red-200 rounded text-[8px] active:scale-95 disabled:opacity-50"
+                                                            title="Delete"
+                                                        >
+                                                            {isDeletingInvoiceId === log.id ? (
+                                                                <Loader2 className="w-2.5 h-2.5 animate-spin" />
+                                                            ) : (
+                                                                <Trash2 className="w-2.5 h-2.5" />
+                                                            )}
+                                                        </button>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        ))
+                                    )}
+                                </div>
+
+                                {/* Desktop 11-Column Table View */}
+                                <div className="hidden sm:block overflow-x-auto">
+                                    <table className="w-full text-left border-collapse text-[10px] sm:text-xs">
                                         <thead>
-                                            <tr className="border-b border-slate-100 text-slate-400 font-black uppercase tracking-wider text-[8px]">
-                                                <th className="py-3 px-4 w-32">Order / Move</th>
-                                                <th className="py-3 px-4">Date</th>
-                                                <th className="py-3 px-4">College/University</th>
-                                                <th className="py-3 px-4">Students</th>
-                                                <th className="py-3 px-4">Billing Type</th>
-                                                <th className="py-3 px-4">Billing Period</th>
-                                                <th className="py-3 px-4">UTR Number</th>
-                                                <th className="py-3 px-4">Amount</th>
-                                                <th className="py-3 px-4">Extra Disc</th>
-                                                <th className="py-3 px-4">Remarks</th>
-                                                <th className="py-3 px-4 text-right">Actions</th>
+                                            <tr className="border-b border-slate-100 text-slate-400 font-black uppercase tracking-wider text-[8px] sm:text-[10px]">
+                                                <th className="py-3 sm:py-4 px-3 sm:px-5 w-32">Order / Move</th>
+                                                <th className="py-3 sm:py-4 px-3 sm:px-5">Date</th>
+                                                <th className="py-3 sm:py-4 px-3 sm:px-5">College/University</th>
+                                                <th className="py-3 sm:py-4 px-3 sm:px-5">Students</th>
+                                                <th className="py-3 sm:py-4 px-3 sm:px-5">Billing Type</th>
+                                                <th className="py-3 sm:py-4 px-3 sm:px-5">Billing Period</th>
+                                                <th className="py-3 sm:py-4 px-3 sm:px-5">UTR Number</th>
+                                                <th className="py-3 sm:py-4 px-3 sm:px-5">Amount</th>
+                                                <th className="py-3 sm:py-4 px-3 sm:px-5">Extra Disc</th>
+                                                <th className="py-3 sm:py-4 px-3 sm:px-5">Remarks</th>
+                                                <th className="py-3 sm:py-4 px-3 sm:px-5 text-right">Actions</th>
                                             </tr>
                                         </thead>
                                         <tbody className="divide-y divide-slate-50 font-bold">
@@ -1763,7 +1923,7 @@ export default function SuperAdminDashboard() {
                                                     }}
                                                     className="hover:bg-slate-50 transition-colors group cursor-default"
                                                 >
-                                                    <td className="py-3 px-4 whitespace-nowrap">
+                                                    <td className="py-3 sm:py-4 px-3 sm:px-5 whitespace-nowrap">
                                                         <div className="flex items-center gap-1.5 bg-slate-50/80 p-1 rounded-lg border border-slate-200/60 w-fit">
                                                             <div 
                                                                 className="cursor-grab active:cursor-grabbing text-slate-300 hover:text-slate-600 p-0.5" 
@@ -1811,8 +1971,8 @@ export default function SuperAdminDashboard() {
                                                             </select>
                                                         </div>
                                                     </td>
-                                                    <td className="py-3 px-4 text-slate-500 whitespace-nowrap">{formatDateDDMMYYYY(log.date)}</td>
-                                                    <td className="py-3 px-4 text-slate-900 font-extrabold">
+                                                    <td className="py-3 sm:py-4 px-3 sm:px-5 text-slate-500 whitespace-nowrap">{formatDateDDMMYYYY(log.date)}</td>
+                                                    <td className="py-3 sm:py-4 px-3 sm:px-5 text-slate-900 font-extrabold text-xs sm:text-sm">
                                                         <div className="flex items-center gap-1.5">
                                                             <span>{log.tenantName}</span>
                                                             {log.screenshotUrl && (
@@ -1828,12 +1988,12 @@ export default function SuperAdminDashboard() {
                                                             )}
                                                         </div>
                                                     </td>
-                                                    <td className="py-3 px-4 text-slate-700 font-black">
+                                                    <td className="py-3 sm:py-4 px-3 sm:px-5 text-slate-700 font-black">
                                                         <span className="px-2 py-0.5 bg-slate-100 rounded-md text-slate-800 text-[9px]">
                                                             {log.studentCount || 500}
                                                         </span>
                                                     </td>
-                                                    <td className="py-3 px-4">
+                                                    <td className="py-3 sm:py-4 px-3 sm:px-5">
                                                         <span className={`px-2 py-1 rounded-md text-[8px] font-black uppercase tracking-tighter ${
                                                             log.billingType === 'Verified Payment' ? 'bg-emerald-50 text-emerald-600 border border-emerald-100' :
                                                             log.billingType === 'Complimentary' ? 'bg-purple-50 text-purple-600 border border-purple-100' :
@@ -1842,12 +2002,12 @@ export default function SuperAdminDashboard() {
                                                             {log.billingType}
                                                         </span>
                                                     </td>
-                                                    <td className="py-3 px-4 text-slate-600">{log.billingPeriod}</td>
-                                                    <td className="py-3 px-4 text-slate-700 font-mono select-all">{log.utr || "N/A"}</td>
-                                                    <td className="py-3 px-4 text-slate-900 font-black">
+                                                    <td className="py-3 sm:py-4 px-3 sm:px-5 text-slate-600">{log.billingPeriod}</td>
+                                                    <td className="py-3 sm:py-4 px-3 sm:px-5 text-slate-700 font-mono select-all">{log.utr || "N/A"}</td>
+                                                    <td className="py-3 sm:py-4 px-3 sm:px-5 text-slate-900 font-black text-xs sm:text-sm">
                                                         {log.amount > 0 ? `₹${log.amount.toLocaleString("en-IN")}` : "₹0"}
                                                     </td>
-                                                    <td className="py-3 px-4">
+                                                    <td className="py-3 sm:py-4 px-3 sm:px-5">
                                                         {(log.extraDiscountType === "amount" || (log.extraDiscountAmount && Number(log.extraDiscountAmount) > 0)) ? (
                                                             <span className="px-2 py-0.5 rounded bg-purple-50 text-purple-700 font-black border border-purple-200 text-[8px] whitespace-nowrap">
                                                                 -₹{(Number(log.extraDiscountAmount) || Number(log.extraDiscountValue) || 0).toLocaleString("en-IN")}
@@ -1860,33 +2020,33 @@ export default function SuperAdminDashboard() {
                                                             <span className="text-slate-300 font-bold">-</span>
                                                         )}
                                                     </td>
-                                                    <td className="py-3 px-4 text-slate-500 leading-normal max-w-xs truncate" title={log.remarks}>{log.remarks || "-"}</td>
-                                                    <td className="py-3 px-4 text-right whitespace-nowrap">
+                                                    <td className="py-3 sm:py-4 px-3 sm:px-5 text-slate-500 leading-normal max-w-xs truncate" title={log.remarks}>{log.remarks || "-"}</td>
+                                                    <td className="py-3 sm:py-4 px-3 sm:px-5 text-right whitespace-nowrap">
                                                         <div className="flex items-center justify-end gap-1.5">
                                                             <button
                                                                 onClick={() => handleViewInvoicePDF(log)}
-                                                                className="px-2.5 py-1 bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200 rounded-lg text-[9px] font-black uppercase tracking-wider transition-all cursor-pointer flex items-center gap-1 active:scale-95 shadow-2xs"
+                                                                className="px-2.5 sm:px-3 py-1 sm:py-1.5 bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200 rounded-lg text-[9px] sm:text-[10px] font-black uppercase tracking-wider transition-all cursor-pointer flex items-center gap-1 active:scale-95 shadow-2xs"
                                                                 title="View / Print Official Tax Invoice PDF"
                                                             >
-                                                                <FileText className="w-3 h-3" /> PDF
+                                                                <FileText className="w-3 h-3 sm:w-3.5 sm:h-3.5" /> PDF
                                                             </button>
                                                             <button
                                                                 onClick={() => handleOpenEditInvoiceModal(log)}
-                                                                className="px-2.5 py-1 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 rounded-lg text-[9px] font-black uppercase tracking-wider transition-all cursor-pointer flex items-center gap-1 active:scale-95 shadow-2xs"
+                                                                className="px-2.5 sm:px-3 py-1 sm:py-1.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 rounded-lg text-[9px] sm:text-[10px] font-black uppercase tracking-wider transition-all cursor-pointer flex items-center gap-1 active:scale-95 shadow-2xs"
                                                                 title="Edit this invoice"
                                                             >
-                                                                <Edit3 className="w-3 h-3" /> Edit
+                                                                <Edit3 className="w-3 h-3 sm:w-3.5 sm:h-3.5" /> Edit
                                                             </button>
                                                             <button
                                                                 onClick={() => handleDeleteInvoice(log.id, log.tenantName)}
                                                                 disabled={isDeletingInvoiceId === log.id}
-                                                                className="px-2.5 py-1 bg-red-50 hover:bg-red-100 text-red-600 border border-red-200 rounded-lg text-[9px] font-black uppercase tracking-wider transition-all cursor-pointer disabled:opacity-50 flex items-center gap-1 active:scale-95 shadow-2xs"
+                                                                className="px-2.5 sm:px-3 py-1 sm:py-1.5 bg-red-50 hover:bg-red-100 text-red-600 border border-red-200 rounded-lg text-[9px] sm:text-[10px] font-black uppercase tracking-wider transition-all cursor-pointer disabled:opacity-50 flex items-center gap-1 active:scale-95 shadow-2xs"
                                                                 title="Delete this invoice"
                                                             >
                                                                 {isDeletingInvoiceId === log.id ? (
-                                                                    <Loader2 className="w-3 h-3 animate-spin" />
+                                                                    <Loader2 className="w-3 h-3 sm:w-3.5 sm:h-3.5 animate-spin" />
                                                                 ) : (
-                                                                    <Trash2 className="w-3 h-3" />
+                                                                    <Trash2 className="w-3 h-3 sm:w-3.5 sm:h-3.5" />
                                                                 )}
                                                                 Delete
                                                             </button>
@@ -1992,19 +2152,19 @@ export default function SuperAdminDashboard() {
                                 </div>
                             </div>
                         ) : (
-                            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+                            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3 sm:gap-6">
                                 {loading ? (
-                                    <div className="col-span-full bg-white p-12 rounded-[32px] border border-gray-100 text-center flex flex-col items-center gap-4">
-                                         <div className="w-12 h-12 border-4 border-gray-100 border-t-blue-600 rounded-full animate-spin"></div>
+                                    <div className="col-span-full bg-white p-8 sm:p-12 rounded-2xl sm:rounded-[32px] border border-gray-100 text-center flex flex-col items-center gap-4">
+                                         <div className="w-10 h-10 sm:w-12 sm:h-12 border-4 border-gray-100 border-t-blue-600 rounded-full animate-spin"></div>
                                          <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Syncing Nodes...</p>
                                     </div>
                                 ) : tenants.length === 0 ? (
-                                    <div className="col-span-full bg-white p-8 rounded-[32px] border border-gray-100 text-center flex flex-col items-center gap-3">
+                                    <div className="col-span-full bg-white p-6 sm:p-8 rounded-2xl sm:rounded-[32px] border border-gray-100 text-center flex flex-col items-center gap-3">
                                         <Globe className="w-8 h-8 text-gray-200 mx-auto" />
                                         <p className="text-gray-400 text-[10px] italic font-bold">No global nodes provisioned yet.</p>
                                     </div>
                                 ) : tenants.map((tenant) => (
-                                    <div key={tenant._id} className="bg-white rounded-[24px] sm:rounded-[32px] p-4 sm:p-6 shadow-sm border border-slate-100 hover:shadow-2xl hover:shadow-blue-500/10 hover:-translate-y-1 transition-all duration-300 flex flex-col group">
+                                    <div key={tenant._id} className="bg-white rounded-2xl sm:rounded-[32px] p-3.5 sm:p-6 shadow-xs sm:shadow-sm border border-slate-100 hover:shadow-2xl hover:shadow-blue-500/10 hover:-translate-y-1 transition-all duration-300 flex flex-col group">
                                         <div className="flex items-start justify-between gap-3">
                                             <div className="flex flex-col min-w-0">
                                                 <div className="flex items-center flex-wrap gap-1.5">
@@ -2247,57 +2407,63 @@ export default function SuperAdminDashboard() {
                 
 
                 {/* Boss Overrides Section */}
-                <div className="lg:col-span-12 mt-8 sm:mt-12">
-                     <div className="bg-slate-900 rounded-[32px] sm:rounded-[48px] px-4 py-6 sm:p-12 text-white relative overflow-hidden shadow-2xl shadow-blue-900/40">
+                <div className="lg:col-span-12 mt-4 sm:mt-12">
+                     <div className="bg-slate-900 rounded-2xl sm:rounded-[48px] p-4 sm:p-12 text-white relative overflow-hidden shadow-2xl shadow-blue-900/40">
                         {/* Decorative background circle */}
                         <div className="absolute top-0 right-0 w-64 h-64 sm:w-96 sm:h-96 bg-blue-600/10 rounded-full blur-[60px] sm:blur-[100px] -mr-32 -mt-32 sm:-mr-48 sm:-mt-48"></div>
                         <div className="absolute bottom-0 left-0 w-64 h-64 sm:w-96 sm:h-96 bg-indigo-600/10 rounded-full blur-[60px] sm:blur-[100px] -ml-32 -mb-32 sm:-ml-48 -mb-48"></div>
 
-                        <div className="relative z-10 flex flex-col xl:flex-row items-start sm:items-center justify-between gap-8 sm:gap-12">
+                        <div className="relative z-10 flex flex-col xl:flex-row items-start sm:items-center justify-between gap-6 sm:gap-12">
                             <div className="w-full xl:max-w-2xl">
-                                <div className="inline-flex items-center gap-2 sm:gap-3 px-4 sm:px-5 py-1.5 sm:py-2 rounded-full bg-blue-500/10 border border-blue-500/20 mb-6 sm:mb-8">
-                                    <ShieldCheck className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-blue-400" />
-                                    <span className="text-[9px] sm:text-[11px] font-black uppercase tracking-[0.2em] sm:tracking-[0.3em] text-blue-400">Boss Overrides Management</span>
+                                <div className="inline-flex items-center gap-1.5 sm:gap-3 px-3 sm:px-5 py-1 sm:py-2 rounded-full bg-blue-500/10 border border-blue-500/20 mb-3 sm:mb-8">
+                                    <ShieldCheck className="w-3 h-3 sm:w-4 sm:h-4 text-blue-400" />
+                                    <span className="text-[7.5px] sm:text-[11px] font-black uppercase tracking-[0.2em] sm:tracking-[0.3em] text-blue-400">Boss Overrides Management</span>
                                 </div>
-                                <h3 className="text-2xl sm:text-4xl lg:text-5xl font-black tracking-tight uppercase mb-4 sm:mb-6 leading-tight lg:leading-none">Global Network <br className="hidden sm:inline" /> <span className="text-blue-500">Infrastructure.</span></h3>
-                                <p className="text-slate-400 font-medium text-xs sm:text-base mb-6 sm:mb-10 leading-relaxed max-w-xl">
+                                <h3 className="text-base sm:text-4xl lg:text-5xl font-black tracking-tight uppercase mb-2 sm:mb-6 leading-tight lg:leading-none">Global Network <br className="hidden sm:inline" /> <span className="text-blue-500">Infrastructure.</span></h3>
+                                <p className="text-slate-400 font-medium text-[9.5px] sm:text-base mb-4 sm:mb-10 leading-relaxed max-w-xl">
                                     Maintain total control over the registration ecosystem. Force system-wide updates, push core maintenance flags, and broadcast alerts across all university nodes simultaneously.
                                 </p>
 
-                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 max-w-xl">
-                                     <button className="flex items-center justify-start sm:justify-center gap-3 bg-white/5 hover:bg-white/10 border border-white/10 p-4 sm:p-6 rounded-[20px] sm:rounded-[28px] transition-all group w-full">
-                                         <Lock className="w-5 h-5 sm:w-6 sm:h-6 text-orange-400 group-hover:scale-110 transition-transform shrink-0" />
-                                         <div className="text-left">
-                                             <p className="text-[8px] sm:text-[10px] font-black uppercase tracking-widest text-slate-500">Secure Mode</p>
-                                             <p className="font-black text-xs sm:text-sm whitespace-nowrap">Force Password Reset</p>
+                                <div className="grid grid-cols-2 gap-2 sm:gap-4 max-w-xl">
+                                     <button className="flex flex-col sm:flex-row items-center justify-center sm:justify-start gap-1.5 sm:gap-3 bg-white/5 hover:bg-white/10 border border-white/10 p-2.5 sm:p-6 rounded-xl sm:rounded-[28px] transition-all group w-full">
+                                         <Lock className="w-4 h-4 sm:w-6 sm:h-6 text-orange-400 group-hover:scale-110 transition-transform shrink-0" />
+                                         <div className="text-center sm:text-left min-w-0">
+                                             <p className="text-[7px] sm:text-[10px] font-black uppercase tracking-wider sm:tracking-widest text-slate-500">Secure Mode</p>
+                                             <p className="font-black text-[9px] sm:text-sm whitespace-nowrap">
+                                                 <span className="sm:hidden">Reset Pass</span>
+                                                 <span className="hidden sm:inline">Force Password Reset</span>
+                                             </p>
                                          </div>
                                      </button>
-                                     <button onClick={() => setShowBroadcastModal(true)} className="flex items-center justify-start sm:justify-center gap-3 bg-white/5 hover:bg-white/10 border border-white/10 p-4 sm:p-6 rounded-[20px] sm:rounded-[28px] transition-all group w-full">
-                                         <ArrowUpRight className="w-5 h-5 sm:w-6 sm:h-6 text-blue-400 group-hover:scale-110 transition-transform shrink-0" />
-                                         <div className="text-left">
-                                             <p className="text-[8px] sm:text-[10px] font-black uppercase tracking-widest text-slate-500">System Comms</p>
-                                             <p className="font-black text-xs sm:text-sm whitespace-nowrap">Broadcast Global Alert</p>
+                                     <button onClick={() => setShowBroadcastModal(true)} className="flex flex-col sm:flex-row items-center justify-center sm:justify-start gap-1.5 sm:gap-3 bg-white/5 hover:bg-white/10 border border-white/10 p-2.5 sm:p-6 rounded-xl sm:rounded-[28px] transition-all group w-full">
+                                         <ArrowUpRight className="w-4 h-4 sm:w-6 sm:h-6 text-blue-400 group-hover:scale-110 transition-transform shrink-0" />
+                                         <div className="text-center sm:text-left min-w-0">
+                                             <p className="text-[7px] sm:text-[10px] font-black uppercase tracking-wider sm:tracking-widest text-slate-500">System Comms</p>
+                                             <p className="font-black text-[9px] sm:text-sm whitespace-nowrap">
+                                                 <span className="sm:hidden">Global Alert</span>
+                                                 <span className="hidden sm:inline">Broadcast Global Alert</span>
+                                             </p>
                                          </div>
                                      </button>
                                 </div>
                             </div>
 
                             <div className="w-full xl:w-auto grid grid-cols-1 gap-4">
-                                <div className="bg-white/5 border border-white/10 px-4 py-6 sm:p-8 rounded-[32px] sm:rounded-[40px] backdrop-blur-xl">
-                                    <h4 className="text-[10px] sm:text-[11px] font-black uppercase tracking-[0.2em] sm:tracking-[0.3em] text-blue-400 mb-6 flex items-center gap-2">
-                                        <Activity className="w-4 h-4" />
+                                <div className="bg-white/5 border border-white/10 p-3.5 sm:p-8 rounded-2xl sm:rounded-[40px] backdrop-blur-xl">
+                                    <h4 className="text-[8.5px] sm:text-[11px] font-black uppercase tracking-[0.2em] sm:tracking-[0.3em] text-blue-400 mb-3 sm:mb-6 flex items-center gap-1.5 sm:gap-2">
+                                        <Activity className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
                                         Infrastructure Capacity
                                     </h4>
-                                    <div className="space-y-6">
+                                    <div className="space-y-3 sm:space-y-6">
                                         {[
                                             { label: "Total Network Nodes", val: `${tenants.length}`, color: "blue", percent: Math.min((tenants.length / 50) * 100, 100) },
                                             { label: "Active Connections", val: `${tenants.reduce((acc, t) => acc + (t.liveTraffic || 0), 0)}`, color: "emerald", percent: 80 },
                                             { label: "Database Persistence", val: `${tenants.reduce((acc, t) => acc + (t.studentCount || 0) + (t.liveTraffic || 0) * 15, 0).toLocaleString()} Rows`, color: "blue", percent: 60 },
                                         ].map((stat, i) => (
-                                            <div key={i} className="flex flex-col gap-2">
+                                            <div key={i} className="flex flex-col gap-1.5 sm:gap-2">
                                                 <div className="flex justify-between items-end">
-                                                    <span className="text-[8px] sm:text-[9px] font-black text-slate-500 uppercase tracking-widest">{stat.label}</span>
-                                                    <span className="text-[10px] sm:text-[11px] font-black text-white">{stat.val}</span>
+                                                    <span className="text-[7.5px] sm:text-[9px] font-black text-slate-500 uppercase tracking-widest">{stat.label}</span>
+                                                    <span className="text-[9px] sm:text-[11px] font-black text-white">{stat.val}</span>
                                                 </div>
                                                 <div className="w-full h-1 bg-white/5 rounded-full overflow-hidden">
                                                     <div 
@@ -2308,7 +2474,7 @@ export default function SuperAdminDashboard() {
                                             </div>
                                         ))}
                                     </div>
-                                    <button className="mt-8 sm:mt-10 w-full py-4 sm:py-5 bg-blue-600 hover:bg-blue-700 rounded-2xl sm:rounded-3xl font-black uppercase tracking-widest transition-all shadow-2xl shadow-blue-500/20 active:scale-95 text-[10px] sm:text-xs">
+                                    <button className="mt-4 sm:mt-10 w-full py-2.5 sm:py-5 bg-blue-600 hover:bg-blue-700 rounded-xl sm:rounded-3xl font-black uppercase tracking-wider sm:tracking-widest transition-all shadow-xl shadow-blue-500/20 active:scale-95 text-[9px] sm:text-xs">
                                         Deploy Platform Wide Update
                                     </button>
                                 </div>
@@ -2320,34 +2486,34 @@ export default function SuperAdminDashboard() {
 
             {/* Add Modal */}
             {showAddModal && (
-                <div className="fixed inset-0 bg-gray-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-6 transition-all animate-in fade-in">
-                    <div className="bg-white w-full max-w-lg rounded-[32px] sm:rounded-[48px] shadow-2xl overflow-hidden border border-white animate-in zoom-in slide-in-from-bottom-12 duration-500 max-h-[90vh] sm:max-h-[85vh] flex flex-col">
-                        <div className="bg-gray-900 p-6 sm:p-10 text-white relative shrink-0">
+                <div className="fixed inset-0 bg-gray-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-3 sm:p-6 transition-all animate-in fade-in">
+                    <div className="bg-white w-full max-w-lg rounded-2xl sm:rounded-[48px] shadow-2xl overflow-hidden border border-white animate-in zoom-in slide-in-from-bottom-12 duration-500 max-h-[92vh] sm:max-h-[85vh] flex flex-col">
+                        <div className="bg-gray-900 p-4 sm:p-10 text-white relative shrink-0">
                             <div className="absolute top-0 right-0 p-8 sm:p-12 opacity-5 scale-150">
                                 <Building2 className="w-16 h-16 sm:w-24 sm:h-24" />
                             </div>
-                            <h3 className="text-xl sm:text-3xl font-black uppercase tracking-tighter">Provision New Node</h3>
-                            <p className="text-blue-200/60 text-[8px] sm:text-[10px] font-black uppercase tracking-widest mt-1">Establishing Virtual Infrastructure</p>
-                            <button onClick={() => setShowAddModal(false)} className="absolute top-6 sm:top-10 right-6 sm:right-10 text-gray-500 hover:text-white transition-colors bg-white/10 h-8 w-8 sm:h-10 sm:w-10 rounded-full flex items-center justify-center hover:rotate-90">
-                                <X className="w-4 h-4 sm:w-6 sm:h-6" />
+                            <h3 className="text-lg sm:text-3xl font-black uppercase tracking-tight sm:tracking-tighter">Provision New Node</h3>
+                            <p className="text-blue-200/60 text-[7.5px] sm:text-[10px] font-black uppercase tracking-wider sm:tracking-widest mt-0.5">Establishing Virtual Infrastructure</p>
+                            <button onClick={() => setShowAddModal(false)} className="absolute top-4 sm:top-10 right-4 sm:right-10 text-gray-400 hover:text-white transition-colors bg-white/10 h-7 w-7 sm:h-10 sm:w-10 rounded-full flex items-center justify-center hover:rotate-90">
+                                <X className="w-3.5 h-3.5 sm:w-6 sm:h-6" />
                             </button>
                         </div>
 
-                        <form onSubmit={handleCreateTenant} className="p-6 sm:p-10 space-y-6 sm:space-y-8 overflow-y-auto flex-1">
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                <div className="space-y-2">
-                                    <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest px-1">University Name</label>
+                        <form onSubmit={handleCreateTenant} className="p-4 sm:p-10 space-y-4 sm:space-y-8 overflow-y-auto flex-1">
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-3 sm:gap-4">
+                                <div className="space-y-1.5 sm:space-y-2">
+                                    <label className="text-[9px] sm:text-[10px] font-black text-gray-400 uppercase tracking-wider sm:tracking-widest px-1">University Name</label>
                                     <input
                                         type="text"
                                         required
                                         value={newTenant.name}
                                         onChange={(e) => setNewTenant({ ...newTenant, name: e.target.value })}
                                         placeholder="e.g. Oxford University"
-                                        className="w-full bg-slate-50 border-transparent p-4 sm:p-5 rounded-2xl font-bold focus:ring-2 focus:ring-blue-500/20 outline-none transition-all placeholder:text-gray-300"
+                                        className="w-full bg-slate-50 border-transparent p-3 sm:p-5 rounded-xl sm:rounded-2xl font-bold focus:ring-2 focus:ring-blue-500/20 outline-none transition-all placeholder:text-gray-300 text-xs sm:text-base"
                                     />
                                 </div>
-                                <div className="space-y-2">
-                                    <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest px-1">Subdomain Slug</label>
+                                <div className="space-y-1.5 sm:space-y-2">
+                                    <label className="text-[9px] sm:text-[10px] font-black text-gray-400 uppercase tracking-wider sm:tracking-widest px-1">Subdomain Slug</label>
                                     <div className="flex items-center relative">
                                         <input
                                             type="text"
@@ -2355,31 +2521,31 @@ export default function SuperAdminDashboard() {
                                             value={newTenant.slug}
                                             onChange={(e) => setNewTenant({ ...newTenant, slug: e.target.value.toLowerCase().replace(/[^a-z0-9]/g, '') })}
                                             placeholder="oxford"
-                                            className="w-full bg-slate-50 border-transparent p-4 sm:p-5 rounded-2xl font-bold focus:ring-2 focus:ring-blue-500/20 outline-none transition-all placeholder:text-gray-300 lowercase px-4 sm:px-5"
+                                            className="w-full bg-slate-50 border-transparent p-3 sm:p-5 rounded-xl sm:rounded-2xl font-bold focus:ring-2 focus:ring-blue-500/20 outline-none transition-all placeholder:text-gray-300 lowercase px-3 sm:px-5 text-xs sm:text-base"
                                         />
-                                        <Globe className="absolute right-5 w-4 h-4 text-gray-300" />
+                                        <Globe className="absolute right-3.5 sm:right-5 w-4 h-4 text-gray-300" />
                                     </div>
                                 </div>
                             </div>
 
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                <div className="space-y-2">
-                                    <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest px-1">Global Admin Contact</label>
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-3 sm:gap-4">
+                                <div className="space-y-1.5 sm:space-y-2">
+                                    <label className="text-[9px] sm:text-[10px] font-black text-gray-400 uppercase tracking-wider sm:tracking-widest px-1">Global Admin Contact</label>
                                     <input
                                         type="email"
                                         required
                                         value={newTenant.adminEmail}
                                         onChange={(e) => setNewTenant({ ...newTenant, adminEmail: e.target.value })}
                                         placeholder="admin@oxford.edu"
-                                        className="w-full bg-slate-50 border-transparent p-4 sm:p-5 rounded-2xl font-bold focus:ring-2 focus:ring-blue-500/20 outline-none transition-all placeholder:text-gray-300"
+                                        className="w-full bg-slate-50 border-transparent p-3 sm:p-5 rounded-xl sm:rounded-2xl font-bold focus:ring-2 focus:ring-blue-500/20 outline-none transition-all placeholder:text-gray-300 text-xs sm:text-base"
                                     />
                                 </div>
-                                <div className="space-y-2">
-                                    <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest px-1">Subscription Plan</label>
+                                <div className="space-y-1.5 sm:space-y-2">
+                                    <label className="text-[9px] sm:text-[10px] font-black text-gray-400 uppercase tracking-wider sm:tracking-widest px-1">Subscription Plan</label>
                                     <select
                                         value={newTenant.subscriptionStatus}
                                         onChange={(e) => setNewTenant({ ...newTenant, subscriptionStatus: e.target.value as any })}
-                                        className="w-full bg-slate-50 border-transparent p-4 sm:p-5 rounded-2xl font-bold focus:ring-2 focus:ring-blue-500/20 outline-none transition-all text-gray-700"
+                                        className="w-full bg-slate-50 border-transparent p-3 sm:p-5 rounded-xl sm:rounded-2xl font-bold focus:ring-2 focus:ring-blue-500/20 outline-none transition-all text-gray-700 text-xs sm:text-base"
                                     >
                                         <option value="trial">14-Day Free Trial</option>
                                         <option value="active">Active (Paid)</option>
@@ -2387,45 +2553,45 @@ export default function SuperAdminDashboard() {
                                 </div>
                             </div>
 
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                <div className="space-y-2">
-                                    <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest px-1">Contact Name</label>
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-3 sm:gap-4">
+                                <div className="space-y-1.5 sm:space-y-2">
+                                    <label className="text-[9px] sm:text-[10px] font-black text-gray-400 uppercase tracking-wider sm:tracking-widest px-1">Contact Name</label>
                                     <input
                                         type="text"
                                         required
                                         value={newTenant.contactName}
                                         onChange={(e) => setNewTenant({ ...newTenant, contactName: e.target.value })}
                                         placeholder="e.g. John Doe"
-                                        className="w-full bg-slate-50 border-transparent p-4 sm:p-5 rounded-2xl font-bold focus:ring-2 focus:ring-blue-500/20 outline-none transition-all placeholder:text-gray-300"
+                                        className="w-full bg-slate-50 border-transparent p-3 sm:p-5 rounded-xl sm:rounded-2xl font-bold focus:ring-2 focus:ring-blue-500/20 outline-none transition-all placeholder:text-gray-300 text-xs sm:text-base"
                                     />
                                 </div>
-                                <div className="space-y-2">
-                                    <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest px-1">Contact Phone</label>
+                                <div className="space-y-1.5 sm:space-y-2">
+                                    <label className="text-[9px] sm:text-[10px] font-black text-gray-400 uppercase tracking-wider sm:tracking-widest px-1">Contact Phone</label>
                                     <input
                                         type="tel"
                                         required
                                         value={newTenant.contactPhone}
                                         onChange={(e) => setNewTenant({ ...newTenant, contactPhone: e.target.value })}
                                         placeholder="+91 9876543210"
-                                        className="w-full bg-slate-50 border-transparent p-4 sm:p-5 rounded-2xl font-bold focus:ring-2 focus:ring-blue-500/20 outline-none transition-all placeholder:text-gray-300"
+                                        className="w-full bg-slate-50 border-transparent p-3 sm:p-5 rounded-xl sm:rounded-2xl font-bold focus:ring-2 focus:ring-blue-500/20 outline-none transition-all placeholder:text-gray-300 text-xs sm:text-base"
                                     />
                                 </div>
                             </div>
 
-                            <div className="grid grid-cols-2 gap-4 pt-4">
+                            <div className="grid grid-cols-2 gap-3 sm:gap-4 pt-2 sm:pt-4">
                                 <button
                                     type="button"
                                     onClick={() => setShowAddModal(false)}
-                                    className="p-4 sm:p-5 rounded-2xl bg-slate-50 text-slate-500 font-black uppercase text-xs tracking-widest hover:bg-slate-100"
+                                    className="p-3 sm:p-5 rounded-xl sm:rounded-2xl bg-slate-50 text-slate-500 font-black uppercase text-[10px] sm:text-xs tracking-wider sm:tracking-widest hover:bg-slate-100"
                                 >
                                     Cancel
                                 </button>
                                 <button
                                     disabled={isCreating}
-                                    className="p-4 sm:p-5 rounded-2xl bg-blue-600 text-white font-black uppercase text-xs tracking-widest shadow-2xl shadow-blue-500/30 active:scale-95 transition-all flex items-center justify-center gap-2"
+                                    className="p-3 sm:p-5 rounded-xl sm:rounded-2xl bg-blue-600 text-white font-black uppercase text-[10px] sm:text-xs tracking-wider sm:tracking-widest shadow-xl shadow-blue-500/30 active:scale-95 transition-all flex items-center justify-center gap-1.5 sm:gap-2"
                                 >
                                     {isCreating ? "Deploying..." : (
-                                        <>Deploy Node <ArrowRight className="w-4 h-4" /></>
+                                        <>Deploy Node <ArrowRight className="w-3.5 h-3.5 sm:w-4 sm:h-4" /></>
                                     )}
                                 </button>
                             </div>
@@ -2436,14 +2602,14 @@ export default function SuperAdminDashboard() {
 
             {/* Config Modal */}
             {editingTenant && (
-                <div className="fixed inset-0 bg-gray-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-6 animate-in fade-in duration-300">
-                    <div className="bg-white w-full max-w-lg rounded-[32px] shadow-2xl overflow-hidden animate-in zoom-in duration-500 border border-white max-h-[90vh] flex flex-col">
-                        <div className="bg-slate-800 px-6 py-4 text-white flex justify-between items-center shrink-0">
+                <div className="fixed inset-0 bg-gray-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-3 sm:p-6 animate-in fade-in duration-300">
+                    <div className="bg-white w-full max-w-lg rounded-2xl sm:rounded-[32px] shadow-2xl overflow-hidden animate-in zoom-in duration-500 border border-white max-h-[92vh] sm:max-h-[90vh] flex flex-col">
+                        <div className="bg-slate-800 px-4 sm:px-6 py-3 sm:py-4 text-white flex justify-between items-center shrink-0">
                             <div>
-                                <h3 className="text-xl font-black uppercase tracking-tighter">Configure Node</h3>
-                                <p className="text-slate-400 text-[9px] font-black uppercase tracking-widest mt-0.5">{editingTenant?.name}</p>
+                                <h3 className="text-base sm:text-xl font-black uppercase tracking-tight sm:tracking-tighter">Configure Node</h3>
+                                <p className="text-slate-400 text-[8px] sm:text-[9px] font-black uppercase tracking-wider sm:tracking-widest mt-0.5">{editingTenant?.name}</p>
                             </div>
-                            <X className="w-5 h-5 text-slate-400 hover:text-white cursor-pointer transition-colors" onClick={() => setEditingTenant(null)} />
+                            <X className="w-4 h-4 sm:w-5 sm:h-5 text-slate-400 hover:text-white cursor-pointer transition-colors" onClick={() => setEditingTenant(null)} />
                         </div>
 
                         <form onSubmit={handleUpdateTenant} className="p-5 sm:p-6 space-y-4 animate-in fade-in duration-300 overflow-y-auto flex-1 [&::-webkit-scrollbar]:w-1.5 [&::-webkit-scrollbar-thumb]:bg-slate-200 [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-track]:bg-transparent">
@@ -2827,33 +2993,33 @@ export default function SuperAdminDashboard() {
             )}
             {/* Deletion Confirmation Modal */}
             {deletingTenant && (
-                <div className="fixed inset-0 bg-red-900/20 backdrop-blur-xl z-[100] flex items-center justify-center p-6 animate-in fade-in duration-300">
-                    <div className="bg-white w-full max-w-lg rounded-[48px] shadow-2xl overflow-hidden border border-red-100 animate-in zoom-in duration-500">
-                        <div className="bg-red-600 p-10 text-white relative">
-                            <div className="absolute top-0 right-0 p-12 opacity-10">
-                                <Trash2 className="w-24 h-24" />
+                <div className="fixed inset-0 bg-red-900/20 backdrop-blur-xl z-[100] flex items-center justify-center p-3 sm:p-6 animate-in fade-in duration-300">
+                    <div className="bg-white w-full max-w-lg rounded-2xl sm:rounded-[48px] shadow-2xl overflow-hidden border border-red-100 animate-in zoom-in duration-500">
+                        <div className="bg-red-600 p-4 sm:p-10 text-white relative">
+                            <div className="absolute top-0 right-0 p-8 sm:p-12 opacity-10">
+                                <Trash2 className="w-16 h-16 sm:w-24 sm:h-24" />
                             </div>
-                            <h3 className="text-3xl font-black uppercase tracking-tighter">Critical Purge</h3>
-                            <p className="text-red-100/60 text-[10px] font-black uppercase tracking-widest mt-1 italic">Permanent Database Destruction</p>
+                            <h3 className="text-xl sm:text-3xl font-black uppercase tracking-tight sm:tracking-tighter">Critical Purge</h3>
+                            <p className="text-red-100/60 text-[8px] sm:text-[10px] font-black uppercase tracking-wider sm:tracking-widest mt-0.5 italic">Permanent Database Destruction</p>
                         </div>
 
-                        <div className="p-10 space-y-8">
-                            <div className="bg-red-50 border border-red-100 p-6 rounded-[28px] space-y-3">
-                                <div className="flex items-center gap-3 text-red-600">
-                                    <AlertCircle className="w-5 h-5" />
-                                    <p className="text-xs font-black uppercase tracking-tight">Warning: Irreversible Action</p>
+                        <div className="p-4 sm:p-10 space-y-4 sm:space-y-8">
+                            <div className="bg-red-50 border border-red-100 p-3.5 sm:p-6 rounded-xl sm:rounded-[28px] space-y-2 sm:space-y-3">
+                                <div className="flex items-center gap-2 sm:gap-3 text-red-600">
+                                    <AlertCircle className="w-4 h-4 sm:w-5 sm:h-5 shrink-0" />
+                                    <p className="text-[10px] sm:text-xs font-black uppercase tracking-tight">Warning: Irreversible Action</p>
                                 </div>
-                                <p className="text-xs text-red-800 font-medium leading-relaxed">
+                                <p className="text-[10px] sm:text-xs text-red-800 font-medium leading-relaxed">
                                     This will permanently delete <span className="font-black underline">{deletingTenant?.name || 'this node'}</span> along with all <span className="font-black underline">{deletingTenant?.studentCount || 0} registered students</span> and every single record associated with it, including attendance history and gatepasses.
                                 </p>
                             </div>
 
-                            <div className="space-y-4">
-                                <div className="space-y-2">
-                                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest px-1">
+                            <div className="space-y-2 sm:space-y-4">
+                                <div className="space-y-1 sm:space-y-2">
+                                    <label className="text-[9px] sm:text-[10px] font-black text-slate-400 uppercase tracking-wider sm:tracking-widest px-1">
                                         Type the following to confirm (You can copy this text):
                                     </label>
-                                    <div className="bg-slate-100 p-4 rounded-2xl select-all cursor-text font-black text-slate-600 text-[11px] uppercase tracking-wider text-center border border-slate-200">
+                                    <div className="bg-slate-100 p-3 sm:p-4 rounded-xl sm:rounded-2xl select-all cursor-text font-black text-slate-600 text-[10px] sm:text-[11px] uppercase tracking-wider text-center border border-slate-200">
                                         DELETE {deletingTenant?.name?.toUpperCase()}
                                     </div>
                                 </div>
@@ -2863,17 +3029,17 @@ export default function SuperAdminDashboard() {
                                     value={deleteConfirmText}
                                     onChange={(e) => setDeleteConfirmText(e.target.value)}
                                     placeholder="Type confirmation here..."
-                                    className="w-full bg-slate-50 border-slate-100 p-5 rounded-2xl font-black text-center focus:ring-4 focus:ring-red-500/10 focus:bg-white outline-none transition-all uppercase tracking-widest text-xs"
+                                    className="w-full bg-slate-50 border-slate-100 p-3.5 sm:p-5 rounded-xl sm:rounded-2xl font-black text-center focus:ring-4 focus:ring-red-500/10 focus:bg-white outline-none transition-all uppercase tracking-widest text-[10px] sm:text-xs"
                                 />
                             </div>
 
-                            <div className="flex gap-4">
+                            <div className="flex gap-2.5 sm:gap-4">
                                 <button
                                     onClick={() => {
                                         setDeletingTenant(null);
                                         setDeleteConfirmText("");
                                     }}
-                                    className="flex-1 p-5 rounded-2xl bg-slate-100 text-slate-500 font-black uppercase text-[10px] tracking-widest hover:bg-slate-200 transition-all"
+                                    className="flex-1 p-3 sm:p-5 rounded-xl sm:rounded-2xl bg-slate-100 text-slate-500 font-black uppercase text-[9px] sm:text-[10px] tracking-wider sm:tracking-widest hover:bg-slate-200 transition-all"
                                 >
                                     Abort
                                 </button>
@@ -2884,7 +3050,7 @@ export default function SuperAdminDashboard() {
                                         !deletingTenant ||
                                         deleteConfirmText.trim().toUpperCase().replace(/\s+/g, ' ') !== `DELETE ${deletingTenant?.name?.toUpperCase()}`.trim().replace(/\s+/g, ' ')
                                     }
-                                    className="flex-1 p-5 rounded-2xl bg-red-600 text-white font-black uppercase text-[10px] tracking-widest shadow-xl shadow-red-500/20 active:scale-95 disabled:opacity-30 disabled:grayscale transition-all"
+                                    className="flex-1 p-3 sm:p-5 rounded-xl sm:rounded-2xl bg-red-600 text-white font-black uppercase text-[9px] sm:text-[10px] tracking-wider sm:tracking-widest shadow-xl shadow-red-500/20 active:scale-95 disabled:opacity-30 disabled:grayscale transition-all"
                                 >
                                     {isDeleting ? "Purging..." : "Confirm Purge"}
                                 </button>
@@ -2896,31 +3062,31 @@ export default function SuperAdminDashboard() {
             
             {/* Soft Delete Confirmation Modal */}
             {softDeletingTenant && (
-                <div className="fixed inset-0 bg-[#7c2d12]/20 backdrop-blur-xl z-[100] flex items-center justify-center p-6 animate-in fade-in duration-300">
-                    <div className="bg-white w-full max-w-lg rounded-[48px] shadow-2xl overflow-hidden border border-amber-100 animate-in zoom-in duration-500">
-                        <div className="bg-amber-500 p-10 text-white relative">
-                            <div className="absolute top-0 right-0 p-12 opacity-10">
-                                <Trash2 className="w-24 h-24" />
+                <div className="fixed inset-0 bg-[#7c2d12]/20 backdrop-blur-xl z-[100] flex items-center justify-center p-3 sm:p-6 animate-in fade-in duration-300">
+                    <div className="bg-white w-full max-w-lg rounded-2xl sm:rounded-[48px] shadow-2xl overflow-hidden border border-amber-100 animate-in zoom-in duration-500">
+                        <div className="bg-amber-500 p-4 sm:p-10 text-white relative">
+                            <div className="absolute top-0 right-0 p-8 sm:p-12 opacity-10">
+                                <Trash2 className="w-16 h-16 sm:w-24 sm:h-24" />
                             </div>
-                            <h3 className="text-3xl font-black uppercase tracking-tighter">Deactivate Node</h3>
-                            <p className="text-amber-100/60 text-[10px] font-black uppercase tracking-widest mt-1 italic">Move to Recycle Bin</p>
+                            <h3 className="text-xl sm:text-3xl font-black uppercase tracking-tight sm:tracking-tighter">Deactivate Node</h3>
+                            <p className="text-amber-100/60 text-[8px] sm:text-[10px] font-black uppercase tracking-wider sm:tracking-widest mt-0.5 italic">Move to Recycle Bin</p>
                         </div>
 
-                        <div className="p-10 space-y-8">
-                            <div className="bg-amber-50 border border-amber-100 p-6 rounded-[28px] space-y-3">
-                                <div className="flex items-center gap-3 text-amber-600">
-                                    <AlertCircle className="w-5 h-5" />
-                                    <p className="text-xs font-black uppercase tracking-tight">Warning: Temporary Suspension</p>
+                        <div className="p-4 sm:p-10 space-y-4 sm:space-y-8">
+                            <div className="bg-amber-50 border border-amber-100 p-3.5 sm:p-6 rounded-xl sm:rounded-[28px] space-y-2 sm:space-y-3">
+                                <div className="flex items-center gap-2 sm:gap-3 text-amber-600">
+                                    <AlertCircle className="w-4 h-4 sm:w-5 sm:h-5 shrink-0" />
+                                    <p className="text-[10px] sm:text-xs font-black uppercase tracking-tight">Warning: Temporary Suspension</p>
                                 </div>
-                                <p className="text-xs text-amber-850 font-medium leading-relaxed">
+                                <p className="text-[10px] sm:text-xs text-amber-850 font-medium leading-relaxed">
                                     Are you sure you want to move <span className="font-black underline">{softDeletingTenant.name}</span> to the Recycle Bin? All students and admins will lose access immediately.
                                 </p>
                             </div>
 
-                            <div className="flex gap-4">
+                            <div className="flex gap-2.5 sm:gap-4">
                                 <button
                                     onClick={() => setSoftDeletingTenant(null)}
-                                    className="flex-1 p-5 rounded-2xl bg-slate-100 text-slate-500 font-black uppercase text-[10px] tracking-widest hover:bg-slate-200 transition-all"
+                                    className="flex-1 p-3 sm:p-5 rounded-xl sm:rounded-2xl bg-slate-100 text-slate-500 font-black uppercase text-[9px] sm:text-[10px] tracking-wider sm:tracking-widest hover:bg-slate-200 transition-all"
                                 >
                                     Cancel
                                 </button>
@@ -2930,7 +3096,7 @@ export default function SuperAdminDashboard() {
                                         setSoftDeletingTenant(null);
                                         handleSoftDelete(id);
                                     }}
-                                    className="flex-1 p-5 rounded-2xl bg-amber-500 text-white font-black uppercase text-[10px] tracking-widest shadow-xl shadow-amber-500/20 active:scale-95 transition-all"
+                                    className="flex-1 p-3 sm:p-5 rounded-xl sm:rounded-2xl bg-amber-500 text-white font-black uppercase text-[9px] sm:text-[10px] tracking-wider sm:tracking-widest shadow-xl shadow-amber-500/20 active:scale-95 transition-all"
                                 >
                                     Move to Recycle Bin
                                 </button>
@@ -2942,41 +3108,41 @@ export default function SuperAdminDashboard() {
 
             {/* Broadcast Modal */}
             {showBroadcastModal && (
-                <div className="fixed inset-0 bg-gray-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-6 animate-in fade-in duration-300">
-                    <div className="bg-white w-full max-w-lg rounded-[48px] shadow-2xl overflow-hidden border border-white animate-in zoom-in duration-500">
-                        <div className="bg-indigo-600 p-10 text-white relative">
-                            <h3 className="text-3xl font-black uppercase tracking-tighter">Global Broadcast</h3>
-                            <p className="text-indigo-200 text-[10px] font-black uppercase tracking-widest mt-1">Push Alert to All Nodes</p>
-                            <button onClick={() => setShowBroadcastModal(false)} className="absolute top-10 right-10 text-indigo-300 hover:text-white transition-colors bg-white/10 h-10 w-10 rounded-full flex items-center justify-center hover:rotate-90">
-                                <X className="w-6 h-6" />
+                <div className="fixed inset-0 bg-gray-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-3 sm:p-6 animate-in fade-in duration-300">
+                    <div className="bg-white w-full max-w-lg rounded-2xl sm:rounded-[48px] shadow-2xl overflow-hidden border border-white animate-in zoom-in duration-500">
+                        <div className="bg-indigo-600 p-4 sm:p-10 text-white relative">
+                            <h3 className="text-xl sm:text-3xl font-black uppercase tracking-tight sm:tracking-tighter">Global Broadcast</h3>
+                            <p className="text-indigo-200 text-[8px] sm:text-[10px] font-black uppercase tracking-wider sm:tracking-widest mt-0.5">Push Alert to All Nodes</p>
+                            <button onClick={() => setShowBroadcastModal(false)} className="absolute top-4 sm:top-10 right-4 sm:right-10 text-indigo-300 hover:text-white transition-colors bg-white/10 h-7 w-7 sm:h-10 sm:w-10 rounded-full flex items-center justify-center hover:rotate-90">
+                                <X className="w-4 h-4 sm:w-6 sm:h-6" />
                             </button>
                         </div>
-                        <form onSubmit={handleBroadcast} className="p-10 space-y-6">
-                            <div className="space-y-2">
-                                <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest px-1">Broadcast Type</label>
+                        <form onSubmit={handleBroadcast} className="p-4 sm:p-10 space-y-4 sm:space-y-6">
+                            <div className="space-y-1.5 sm:space-y-2">
+                                <label className="text-[9px] sm:text-[10px] font-black text-gray-400 uppercase tracking-wider sm:tracking-widest px-1">Broadcast Type</label>
                                 <select 
                                     value={broadcastType} 
                                     onChange={(e) => setBroadcastType(e.target.value as any)}
-                                    className="w-full bg-slate-50 border-transparent p-5 rounded-2xl font-bold focus:ring-2 focus:ring-indigo-500/20 outline-none appearance-none transition-all text-slate-700"
+                                    className="w-full bg-slate-50 border-transparent p-3 sm:p-5 rounded-xl sm:rounded-2xl font-bold focus:ring-2 focus:ring-indigo-500/20 outline-none appearance-none transition-all text-slate-700 text-xs sm:text-base"
                                 >
                                     <option value="info">Information (Blue)</option>
                                     <option value="warning">Warning (Yellow)</option>
                                     <option value="alert">Critical Alert (Red)</option>
                                 </select>
                             </div>
-                            <div className="space-y-2">
-                                <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest px-1">Message Content (Leave empty to clear)</label>
+                            <div className="space-y-1.5 sm:space-y-2">
+                                <label className="text-[9px] sm:text-[10px] font-black text-gray-400 uppercase tracking-wider sm:tracking-widest px-1">Message Content (Leave empty to clear)</label>
                                 <textarea
                                     value={broadcastMessage}
                                     onChange={(e) => setBroadcastMessage(e.target.value)}
                                     placeholder="System will be undergoing maintenance..."
-                                    className="w-full bg-slate-50 border-transparent p-5 rounded-2xl font-bold focus:ring-2 focus:ring-indigo-500/20 outline-none transition-all placeholder:text-gray-300 min-h-[120px] text-slate-700"
+                                    className="w-full bg-slate-50 border-transparent p-3 sm:p-5 rounded-xl sm:rounded-2xl font-bold focus:ring-2 focus:ring-indigo-500/20 outline-none transition-all placeholder:text-gray-300 min-h-[90px] sm:min-h-[120px] text-slate-700 text-xs sm:text-base"
                                 />
                             </div>
                             <button
                                 type="submit"
                                 disabled={isBroadcasting}
-                                className="w-full p-5 rounded-2xl bg-indigo-600 text-white font-black uppercase text-[10px] tracking-widest shadow-2xl shadow-indigo-500/20 active:scale-95 transition-all"
+                                className="w-full p-3 sm:p-5 rounded-xl sm:rounded-2xl bg-indigo-600 text-white font-black uppercase text-[10px] sm:text-xs tracking-wider sm:tracking-widest shadow-xl shadow-indigo-500/20 active:scale-95 transition-all"
                             >
                                 {isBroadcasting ? "Transmitting..." : "Send Broadcast"}
                             </button>
@@ -2987,28 +3153,35 @@ export default function SuperAdminDashboard() {
 
             {/* Boss Payment Settings Modal */}
             {showPaymentSettingsModal && (
-                <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-md animate-in fade-in">
-                    <div className="bg-white rounded-[32px] w-full max-w-2xl max-h-[90vh] overflow-hidden shadow-2xl flex flex-col font-sans">
-                        <div className="p-6 border-b border-gray-100 flex items-center justify-between bg-gray-50/50">
-                            <div>
-                                <h3 className="text-xl font-black text-gray-900 tracking-tighter uppercase">Payment Configuration</h3>
-                                <p className="text-xs text-gray-500 font-medium">Control what colleges see when they renew subscriptions</p>
+                <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/70 backdrop-blur-md animate-in fade-in">
+                    <div className="bg-white rounded-[24px] sm:rounded-[32px] w-full max-w-2xl max-h-[92vh] sm:max-h-[90vh] overflow-hidden shadow-2xl flex flex-col font-sans border border-slate-100">
+                        {/* Header */}
+                        <div className="px-4 py-3.5 sm:px-6 sm:py-4 border-b border-gray-100 flex items-center justify-between bg-gray-50/70 shrink-0">
+                            <div className="flex items-center gap-3">
+                                <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-xl bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center text-emerald-600 shrink-0">
+                                    <CreditCard className="w-4 h-4 sm:w-5 sm:h-5" />
+                                </div>
+                                <div>
+                                    <h3 className="text-base sm:text-lg font-black text-gray-900 tracking-tight uppercase">Payment Configuration</h3>
+                                    <p className="text-[10px] sm:text-xs text-gray-500 font-medium">Control what colleges see when they renew subscriptions</p>
+                                </div>
                             </div>
-                            <button onClick={() => setShowPaymentSettingsModal(false)} className="p-2 hover:bg-gray-200 rounded-full transition-colors bg-white shadow-sm border border-gray-100">
-                                <X className="w-5 h-5 text-gray-500" />
+                            <button onClick={() => setShowPaymentSettingsModal(false)} className="p-1.5 sm:p-2 hover:bg-gray-200 rounded-full transition-colors bg-white shadow-sm border border-gray-100">
+                                <X className="w-4 h-4 sm:w-5 sm:h-5 text-gray-500" />
                             </button>
                         </div>
 
-                        <div className="overflow-y-auto p-6 sm:p-8 flex-1 custom-scrollbar">
-                            <form id="payment-settings-form" onSubmit={savePaymentSettings} className="space-y-8">
+                        {/* Body */}
+                        <div className="overflow-y-auto p-4 sm:p-6 md:p-8 flex-1 custom-scrollbar">
+                            <form id="payment-settings-form" onSubmit={savePaymentSettings} className="space-y-6">
                                 {/* Razorpay Toggle Section */}
-                                <div className="bg-indigo-50/50 border border-indigo-100 rounded-2xl p-6 relative overflow-hidden">
-                                    <div className="flex items-center justify-between relative z-10">
+                                <div className="bg-gradient-to-br from-indigo-50/60 via-indigo-50/30 to-blue-50/40 border border-indigo-100 rounded-2xl p-4 sm:p-6 relative overflow-hidden">
+                                    <div className="flex items-center justify-between relative z-10 gap-3">
                                         <div>
-                                            <h4 className="font-black text-indigo-900 text-sm uppercase tracking-wider mb-1 flex items-center gap-2">
-                                                <CreditCard className="w-4 h-4" /> Razorpay Integration
+                                            <h4 className="font-black text-indigo-900 text-xs sm:text-sm uppercase tracking-wider mb-0.5 flex items-center gap-2">
+                                                <CreditCard className="w-4 h-4 text-indigo-600" /> Razorpay Integration
                                             </h4>
-                                            <p className="text-xs text-indigo-700/70 font-medium">Enable to allow colleges to pay instantly via Razorpay.</p>
+                                            <p className="text-[11px] sm:text-xs text-indigo-700/70 font-medium">Enable to allow colleges to pay instantly via Razorpay.</p>
                                         </div>
                                         <label className="relative inline-flex items-center cursor-pointer shrink-0">
                                             <input 
@@ -3017,41 +3190,41 @@ export default function SuperAdminDashboard() {
                                                 checked={paymentSettings.enableRazorpay}
                                                 onChange={e => setPaymentSettings({...paymentSettings, enableRazorpay: e.target.checked})}
                                             />
-                                            <div className="w-11 h-6 bg-gray-300 peer-focus:outline-none rounded-full peer peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-indigo-600 shadow-inner"></div>
+                                            <div className="w-11 h-6 bg-gray-300 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-indigo-600 shadow-inner"></div>
                                         </label>
                                     </div>
                                     
                                     {paymentSettings.enableRazorpay && (
-                                        <div className="mt-4 pt-4 border-t border-indigo-100/50 animate-in slide-in-from-top-2 relative z-10 space-y-4">
-                                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                                        <div className="mt-4 pt-4 border-t border-indigo-100/60 animate-in slide-in-from-top-2 relative z-10 space-y-4">
+                                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
                                                 <div>
-                                                    <label className="block text-xs font-black text-indigo-900 uppercase tracking-widest mb-2">Razorpay Key ID</label>
+                                                    <label className="block text-[10px] sm:text-xs font-black text-indigo-900 uppercase tracking-widest mb-1.5">Razorpay Key ID</label>
                                                     <input
                                                         type="text"
                                                         required
                                                         value={paymentSettings.razorpayKeyId || ""}
                                                         onChange={e => setPaymentSettings({...paymentSettings, razorpayKeyId: e.target.value})}
-                                                        className="w-full border-2 border-indigo-100 rounded-xl px-4 py-3 text-sm focus:ring-4 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none transition-all font-mono font-bold bg-white text-indigo-900"
+                                                        className="w-full border-2 border-indigo-100 rounded-xl px-3.5 py-2.5 text-xs sm:text-sm focus:ring-4 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none transition-all font-mono font-bold bg-white text-indigo-900"
                                                         placeholder="rzp_test_..."
                                                     />
                                                 </div>
                                                 <div>
-                                                    <label className="block text-xs font-black text-indigo-900 uppercase tracking-widest mb-2">Razorpay Key Secret</label>
+                                                    <label className="block text-[10px] sm:text-xs font-black text-indigo-900 uppercase tracking-widest mb-1.5">Razorpay Key Secret</label>
                                                     <input
                                                         type="password"
                                                         required
                                                         value={paymentSettings.razorpayKeySecret || ""}
                                                         onChange={e => setPaymentSettings({...paymentSettings, razorpayKeySecret: e.target.value})}
-                                                        className="w-full border-2 border-indigo-100 rounded-xl px-4 py-3 text-sm focus:ring-4 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none transition-all font-mono font-bold bg-white text-indigo-900"
+                                                        className="w-full border-2 border-indigo-100 rounded-xl px-3.5 py-2.5 text-xs sm:text-sm focus:ring-4 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none transition-all font-mono font-bold bg-white text-indigo-900"
                                                         placeholder="••••••••••••••••••••••••"
                                                     />
                                                 </div>
                                             </div>
                                             <div>
-                                                <label className="block text-xs font-black text-indigo-900 uppercase tracking-widest mb-2">Subscription Price per Student per Month (INR)</label>
+                                                <label className="block text-[10px] sm:text-xs font-black text-indigo-900 uppercase tracking-widest mb-1.5">Subscription Price per Student per Month (INR)</label>
                                                 <div className="relative">
-                                                    <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
-                                                        <span className="text-indigo-500 font-bold">₹</span>
+                                                    <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none">
+                                                        <span className="text-indigo-500 font-bold text-xs sm:text-sm">₹</span>
                                                     </div>
                                                     <input
                                                         type="number"
@@ -3059,25 +3232,25 @@ export default function SuperAdminDashboard() {
                                                         min="1"
                                                         value={paymentSettings.pricePerStudentPerMonth || 30}
                                                         onChange={e => setPaymentSettings({...paymentSettings, pricePerStudentPerMonth: Number(e.target.value)})}
-                                                        className="w-full border-2 border-indigo-100 rounded-xl pl-9 pr-4 py-3 text-sm focus:ring-4 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none transition-all font-black bg-white text-indigo-900"
+                                                        className="w-full border-2 border-indigo-100 rounded-xl pl-8 sm:pl-9 pr-4 py-2.5 text-xs sm:text-sm focus:ring-4 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none transition-all font-black bg-white text-indigo-900"
                                                         placeholder="30"
                                                     />
                                                 </div>
-                                                <p className="text-[10px] text-indigo-600 mt-2 font-medium">This will be multiplied by the college's student count and automatically billed via Razorpay Orders.</p>
+                                                <p className="text-[10px] text-indigo-600 mt-1.5 font-medium">This will be multiplied by the college's student count and automatically billed via Razorpay Orders.</p>
                                             </div>
 
                                             {/* Discount Percentages Controls */}
-                                            <div className="pt-4 border-t border-indigo-100">
-                                                <label className="block text-xs font-black text-indigo-900 uppercase tracking-widest mb-1">
+                                            <div className="pt-3 border-t border-indigo-100/70">
+                                                <label className="block text-[10px] sm:text-xs font-black text-indigo-900 uppercase tracking-widest mb-0.5">
                                                     🏷️ Global Subscription Plan Discount Controls (%)
                                                 </label>
-                                                <p className="text-[10px] text-indigo-600 mb-3 font-medium">
+                                                <p className="text-[10px] text-indigo-600 mb-2.5 font-medium">
                                                     Set discount percentages for each subscription duration. Changes update instantly across all campus portals.
                                                 </p>
 
-                                                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 sm:gap-3">
-                                                    <div className="bg-white p-2.5 sm:p-3 rounded-xl border border-indigo-100">
-                                                        <label className="block text-[7.5px] sm:text-[8.5px] font-black text-slate-500 uppercase tracking-tight whitespace-nowrap overflow-hidden text-ellipsis mb-1">1 Month Discount</label>
+                                                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 sm:gap-2.5">
+                                                    <div className="bg-white p-2.5 rounded-xl border border-indigo-100">
+                                                        <label className="block text-[8px] sm:text-[9px] font-black text-slate-500 uppercase tracking-tight truncate mb-1">1 Month Discount</label>
                                                         <div className="relative">
                                                             <input
                                                                 type="number"
@@ -3085,14 +3258,14 @@ export default function SuperAdminDashboard() {
                                                                 max="100"
                                                                 value={paymentSettings.discount1Month ?? 0}
                                                                 onChange={e => setPaymentSettings({...paymentSettings, discount1Month: Number(e.target.value)})}
-                                                                className="w-full border border-slate-200 rounded-lg px-2.5 sm:px-3 py-1.5 text-xs font-black outline-none bg-slate-50 text-slate-900 focus:bg-white focus:border-indigo-500 pr-6"
+                                                                className="w-full border border-slate-200 rounded-lg px-2 sm:px-2.5 py-1 text-xs font-black outline-none bg-slate-50 text-slate-900 focus:bg-white focus:border-indigo-500 pr-5"
                                                             />
-                                                            <span className="absolute right-2 top-1.5 text-xs font-bold text-slate-400">%</span>
+                                                            <span className="absolute right-1.5 top-1 text-xs font-bold text-slate-400">%</span>
                                                         </div>
                                                     </div>
 
-                                                    <div className="bg-white p-2.5 sm:p-3 rounded-xl border border-indigo-100">
-                                                        <label className="block text-[7.5px] sm:text-[8.5px] font-black text-slate-500 uppercase tracking-tight whitespace-nowrap overflow-hidden text-ellipsis mb-1">3 Months Discount</label>
+                                                    <div className="bg-white p-2.5 rounded-xl border border-indigo-100">
+                                                        <label className="block text-[8px] sm:text-[9px] font-black text-slate-500 uppercase tracking-tight truncate mb-1">3 Months Discount</label>
                                                         <div className="relative">
                                                             <input
                                                                 type="number"
@@ -3100,14 +3273,14 @@ export default function SuperAdminDashboard() {
                                                                 max="100"
                                                                 value={paymentSettings.discount3Month ?? 5}
                                                                 onChange={e => setPaymentSettings({...paymentSettings, discount3Month: Number(e.target.value)})}
-                                                                className="w-full border border-slate-200 rounded-lg px-2.5 sm:px-3 py-1.5 text-xs font-black outline-none bg-slate-50 text-slate-900 focus:bg-white focus:border-indigo-500 pr-6"
+                                                                className="w-full border border-slate-200 rounded-lg px-2 sm:px-2.5 py-1 text-xs font-black outline-none bg-slate-50 text-slate-900 focus:bg-white focus:border-indigo-500 pr-5"
                                                             />
-                                                            <span className="absolute right-2 top-1.5 text-xs font-bold text-slate-400">%</span>
+                                                            <span className="absolute right-1.5 top-1 text-xs font-bold text-slate-400">%</span>
                                                         </div>
                                                     </div>
 
-                                                    <div className="bg-white p-2.5 sm:p-3 rounded-xl border border-indigo-100">
-                                                        <label className="block text-[7.5px] sm:text-[8.5px] font-black text-slate-500 uppercase tracking-tight whitespace-nowrap overflow-hidden text-ellipsis mb-1">6 Months Discount</label>
+                                                    <div className="bg-white p-2.5 rounded-xl border border-indigo-100">
+                                                        <label className="block text-[8px] sm:text-[9px] font-black text-slate-500 uppercase tracking-tight truncate mb-1">6 Months Discount</label>
                                                         <div className="relative">
                                                             <input
                                                                 type="number"
@@ -3115,14 +3288,14 @@ export default function SuperAdminDashboard() {
                                                                 max="100"
                                                                 value={paymentSettings.discount6Month ?? 10}
                                                                 onChange={e => setPaymentSettings({...paymentSettings, discount6Month: Number(e.target.value)})}
-                                                                className="w-full border border-slate-200 rounded-lg px-2.5 sm:px-3 py-1.5 text-xs font-black outline-none bg-slate-50 text-slate-900 focus:bg-white focus:border-indigo-500 pr-6"
+                                                                className="w-full border border-slate-200 rounded-lg px-2 sm:px-2.5 py-1 text-xs font-black outline-none bg-slate-50 text-slate-900 focus:bg-white focus:border-indigo-500 pr-5"
                                                             />
-                                                            <span className="absolute right-2 top-1.5 text-xs font-bold text-slate-400">%</span>
+                                                            <span className="absolute right-1.5 top-1 text-xs font-bold text-slate-400">%</span>
                                                         </div>
                                                     </div>
 
-                                                    <div className="bg-white p-2.5 sm:p-3 rounded-xl border border-indigo-100">
-                                                        <label className="block text-[7.5px] sm:text-[8.5px] font-black text-slate-500 uppercase tracking-tight whitespace-nowrap overflow-hidden text-ellipsis mb-1">1 Year Discount</label>
+                                                    <div className="bg-white p-2.5 rounded-xl border border-indigo-100">
+                                                        <label className="block text-[8px] sm:text-[9px] font-black text-slate-500 uppercase tracking-tight truncate mb-1">1 Year Discount</label>
                                                         <div className="relative">
                                                             <input
                                                                 type="number"
@@ -3130,16 +3303,16 @@ export default function SuperAdminDashboard() {
                                                                 max="100"
                                                                 value={paymentSettings.discount12Month ?? 20}
                                                                 onChange={e => setPaymentSettings({...paymentSettings, discount12Month: Number(e.target.value)})}
-                                                                className="w-full border border-slate-200 rounded-lg px-2.5 sm:px-3 py-1.5 text-xs font-black outline-none bg-slate-50 text-slate-900 focus:bg-white focus:border-indigo-500 pr-6"
+                                                                className="w-full border border-slate-200 rounded-lg px-2 sm:px-2.5 py-1 text-xs font-black outline-none bg-slate-50 text-slate-900 focus:bg-white focus:border-indigo-500 pr-5"
                                                             />
-                                                            <span className="absolute right-2 top-1.5 text-xs font-bold text-slate-400">%</span>
+                                                            <span className="absolute right-1.5 top-1 text-xs font-bold text-slate-400">%</span>
                                                         </div>
                                                     </div>
                                                 </div>
 
                                                 {/* Live Rate Preview Card */}
-                                                <div className="mt-3 p-3 bg-indigo-900 text-white rounded-xl text-[10px] font-mono flex flex-col sm:flex-row items-start sm:items-center justify-between gap-1">
-                                                    <span className="font-sans font-bold text-indigo-200">Live Sample Calculation (500 Students @ ₹{paymentSettings.pricePerStudentPerMonth || 30}/mo):</span>
+                                                <div className="mt-2.5 p-3 bg-indigo-950 text-white rounded-xl text-[10px] font-mono flex flex-col sm:flex-row items-start sm:items-center justify-between gap-1 shadow-xs">
+                                                    <span className="font-sans font-bold text-indigo-200">Sample Live Calc (500 Students @ ₹{paymentSettings.pricePerStudentPerMonth || 30}/mo):</span>
                                                     <span className="font-bold text-emerald-300">
                                                         1 Mo: ₹{(500 * (paymentSettings.pricePerStudentPerMonth || 30) * 1 * (100 - (paymentSettings.discount1Month ?? 0)) / 100).toLocaleString('en-IN')} | 
                                                         1 Yr: ₹{(500 * (paymentSettings.pricePerStudentPerMonth || 30) * 12 * (100 - (paymentSettings.discount12Month ?? 20)) / 100).toLocaleString('en-IN')}
@@ -3150,279 +3323,82 @@ export default function SuperAdminDashboard() {
                                     )}
                                 </div>
 
-                                {/* Global Notification & Scheduler Rules Section */}
-                                <div className="bg-amber-50/40 border border-amber-100 rounded-2xl p-6 relative overflow-hidden space-y-4">
-                                    <div>
-                                        <h4 className="font-black text-amber-900 text-sm uppercase tracking-wider mb-1 flex items-center gap-2">
-                                            🔔 Global Notification & Scheduler Rules
-                                        </h4>
-                                        <p className="text-xs text-amber-850/70 font-medium">Configure global push notification rules and curfew scheduling options.</p>
-                                    </div>
-
-                                    {/* Master Push Toggle */}
-                                    <div className="flex items-center justify-between border-b border-amber-100/50 pb-4">
-                                        <div>
-                                            <p className="text-xs font-black text-amber-950 uppercase tracking-wide">Master Push Notifications</p>
-                                            <p className="text-[10px] text-amber-700 font-medium">Turn ON/OFF all Web Push alerts across the entire system.</p>
-                                        </div>
-                                        <label className="relative inline-flex items-center cursor-pointer shrink-0">
-                                            <input 
-                                                type="checkbox" 
-                                                className="sr-only peer"
-                                                checked={paymentSettings.globalPushEnabled}
-                                                onChange={e => setPaymentSettings({...paymentSettings, globalPushEnabled: e.target.checked})}
-                                            />
-                                            <div className="w-11 h-6 bg-gray-300 peer-focus:outline-none rounded-full peer peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-amber-600 shadow-inner"></div>
-                                        </label>
-                                    </div>
-
-                                    {/* Mandatory Student Push Notification Enforcement */}
-                                    <div className="flex items-center justify-between border-b border-amber-100/50 pb-4 bg-amber-50/80 p-3.5 rounded-2xl border border-amber-200">
-                                        <div>
-                                            <div className="flex items-center gap-2">
-                                                <p className="text-xs font-black text-amber-950 uppercase tracking-wide">Mandatory Student Notification Lock</p>
-                                                <span className="text-[8px] font-black uppercase tracking-wider px-2 py-0.5 rounded-full bg-amber-200 text-amber-900 border border-amber-300">Boss Control</span>
-                                            </div>
-                                            <p className="text-[10px] text-amber-800 font-medium mt-0.5">When enabled, students cannot use their dashboard until phone/browser notifications are switched ON.</p>
-                                        </div>
-                                        <label className="relative inline-flex items-center cursor-pointer shrink-0">
-                                            <input 
-                                                type="checkbox" 
-                                                className="sr-only peer"
-                                                checked={paymentSettings.enforceMandatoryPush}
-                                                onChange={e => setPaymentSettings({...paymentSettings, enforceMandatoryPush: e.target.checked})}
-                                            />
-                                            <div className="w-11 h-6 bg-gray-300 peer-focus:outline-none rounded-full peer peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-amber-600 shadow-inner"></div>
-                                        </label>
-                                    </div>
-
-                                    {paymentSettings.globalPushEnabled && (
-                                        <div className="space-y-4 pt-2 animate-in fade-in">
-                                            {/* Curfew Timer Configuration */}
-                                            <div className="bg-white p-4 rounded-xl border border-amber-200/50 space-y-4">
-                                                <p className="text-[10px] font-black text-amber-800 uppercase tracking-widest">Curfew Scheduler Timings</p>
-                                                <div className="grid grid-cols-3 gap-2.5">
-                                                    <div>
-                                                        <div className="min-h-[22px] flex items-end mb-1.5">
-                                                            <label className="block text-[8px] font-black text-slate-500 uppercase tracking-widest leading-none">Curfew Start</label>
-                                                        </div>
-                                                        <input 
-                                                            type="time" 
-                                                            value={paymentSettings.curfewStart}
-                                                            onChange={e => setPaymentSettings({...paymentSettings, curfewStart: e.target.value})}
-                                                            className="w-full h-9 border border-slate-200 rounded-lg px-2 py-1 text-[11px] font-bold outline-none bg-white text-slate-800"
-                                                        />
-                                                    </div>
-                                                    <div>
-                                                        <div className="min-h-[22px] flex items-end mb-1.5">
-                                                            <label className="block text-[8px] font-black text-slate-500 uppercase tracking-widest leading-none">Curfew End</label>
-                                                        </div>
-                                                        <input 
-                                                            type="time" 
-                                                            value={paymentSettings.curfewEnd}
-                                                            onChange={e => setPaymentSettings({...paymentSettings, curfewEnd: e.target.value})}
-                                                            className="w-full h-9 border border-slate-200 rounded-lg px-2 py-1 text-[11px] font-bold outline-none bg-white text-slate-800"
-                                                        />
-                                                    </div>
-                                                    <div>
-                                                        <div className="min-h-[22px] flex items-end mb-1.5">
-                                                            <label className="block text-[8px] font-black text-slate-500 uppercase tracking-widest leading-none">Grace Mins</label>
-                                                        </div>
-                                                        <input 
-                                                            type="number" 
-                                                            min="0"
-                                                            value={paymentSettings.gracePeriodMinutes}
-                                                            onChange={e => setPaymentSettings({...paymentSettings, gracePeriodMinutes: Number(e.target.value) || 0})}
-                                                            className="w-full h-9 border border-slate-200 rounded-lg px-2 py-1 text-[11px] font-bold outline-none bg-white text-slate-800"
-                                                        />
-                                                    </div>
-                                                </div>
-                                                <p className="text-[9px] text-amber-700 font-medium">The system automatically calculates the alert time as <strong>Curfew End + Grace Period</strong> (e.g., {paymentSettings.curfewEnd} + {paymentSettings.gracePeriodMinutes} mins).</p>
-                                            </div>
-
-                                            {/* Sub Toggles */}
-                                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                                                {/* Parent Curfew Absent */}
-                                                <label className="flex items-center justify-between p-3 rounded-xl border border-solid border-amber-200/50 bg-white cursor-pointer hover:bg-amber-50/20 transition-all">
-                                                    <div>
-                                                        <span className="text-[10px] font-black text-slate-800 uppercase tracking-wide block">Parent Curfew Alerts</span>
-                                                        <span className="text-[8px] text-slate-500 font-medium block">Send auto push to parents at cutoff</span>
-                                                    </div>
-                                                    <input type="checkbox" checked={paymentSettings.parentCurfewAbsentEnabled} onChange={e => setPaymentSettings({...paymentSettings, parentCurfewAbsentEnabled: e.target.checked})} className="w-3.5 h-3.5 rounded text-amber-600 focus:ring-amber-500" />
-                                                </label>
-
-                                                {/* Parent Gate Scan */}
-                                                <label className="flex items-center justify-between p-3 rounded-xl border border-solid border-amber-200/50 bg-white cursor-pointer hover:bg-amber-50/20 transition-all">
-                                                    <div>
-                                                        <span className="text-[10px] font-black text-slate-800 uppercase tracking-wide block">Parent Gate Alerts</span>
-                                                        <span className="text-[8px] text-slate-500 font-medium block">Notify parents on gate pass scan</span>
-                                                    </div>
-                                                    <input type="checkbox" checked={paymentSettings.parentGateScanInOutEnabled} onChange={e => setPaymentSettings({...paymentSettings, parentGateScanInOutEnabled: e.target.checked})} className="w-3.5 h-3.5 rounded text-amber-600 focus:ring-amber-500" />
-                                                </label>
-
-                                                {/* Warden Leave Request */}
-                                                <label className="flex items-center justify-between p-3 rounded-xl border border-solid border-amber-200/50 bg-white cursor-pointer hover:bg-amber-50/20 transition-all">
-                                                    <div>
-                                                        <span className="text-[10px] font-black text-slate-800 uppercase tracking-wide block">Warden Leave Alerts</span>
-                                                        <span className="text-[8px] text-slate-500 font-medium block">Notify wardens on leave request</span>
-                                                    </div>
-                                                    <input type="checkbox" checked={paymentSettings.wardenLeaveRequestEnabled} onChange={e => setPaymentSettings({...paymentSettings, wardenLeaveRequestEnabled: e.target.checked})} className="w-3.5 h-3.5 rounded text-amber-600 focus:ring-amber-500" />
-                                                </label>
-
-                                                {/* Dean Leave Request */}
-                                                <label className="flex items-center justify-between p-3 rounded-xl border border-solid border-amber-200/50 bg-white cursor-pointer hover:bg-amber-50/20 transition-all">
-                                                    <div>
-                                                        <span className="text-[10px] font-black text-slate-800 uppercase tracking-wide block">Dean Leave Alerts</span>
-                                                        <span className="text-[8px] text-slate-500 font-medium block">Notify deans on leave request</span>
-                                                    </div>
-                                                    <input type="checkbox" checked={paymentSettings.deanLeaveRequestEnabled} onChange={e => setPaymentSettings({...paymentSettings, deanLeaveRequestEnabled: e.target.checked})} className="w-3.5 h-3.5 rounded text-amber-600 focus:ring-amber-500" />
-                                                </label>
-
-                                                {/* Student Leave Decision */}
-                                                <label className="flex items-center justify-between p-3 rounded-xl border border-solid border-amber-200/50 bg-white cursor-pointer hover:bg-amber-50/20 transition-all">
-                                                    <div>
-                                                        <span className="text-[10px] font-black text-slate-800 uppercase tracking-wide block">Leave Decision Alerts</span>
-                                                        <span className="text-[8px] text-slate-500 font-medium block">Notify students/parents when leave is decided</span>
-                                                    </div>
-                                                    <input type="checkbox" checked={paymentSettings.leaveDecisionEnabled} onChange={e => setPaymentSettings({...paymentSettings, leaveDecisionEnabled: e.target.checked})} className="w-3.5 h-3.5 rounded text-amber-600 focus:ring-amber-500" />
-                                                </label>
-
-                                                {/* Parent Consent Video Uploaded */}
-                                                <label className="flex items-center justify-between p-3 rounded-xl border border-solid border-amber-200/50 bg-white cursor-pointer hover:bg-amber-50/20 transition-all">
-                                                    <div>
-                                                        <span className="text-[10px] font-black text-slate-800 uppercase tracking-wide block">Parent Video Consent Alerts</span>
-                                                        <span className="text-[8px] text-slate-500 font-medium block">Notify warden/dean on video upload</span>
-                                                    </div>
-                                                    <input type="checkbox" checked={paymentSettings.parentConsentVideoUploadedEnabled} onChange={e => setPaymentSettings({...paymentSettings, parentConsentVideoUploadedEnabled: e.target.checked})} className="w-3.5 h-3.5 rounded text-amber-600 focus:ring-amber-500" />
-                                                </label>
-
-                                                {/* Outing Overdue Alerts */}
-                                                <label className="flex items-center justify-between p-3 rounded-xl border border-solid border-amber-200/50 bg-white cursor-pointer hover:bg-amber-50/20 transition-all">
-                                                    <div>
-                                                        <span className="text-[10px] font-black text-slate-800 uppercase tracking-wide block">Outing Overdue Alerts</span>
-                                                        <span className="text-[8px] text-slate-500 font-medium block">Notify when student is late returning</span>
-                                                    </div>
-                                                    <input type="checkbox" checked={paymentSettings.outingOverdueEnabled} onChange={e => setPaymentSettings({...paymentSettings, outingOverdueEnabled: e.target.checked})} className="w-3.5 h-3.5 rounded text-amber-600 focus:ring-amber-500" />
-                                                </label>
-
-                                                {/* Payment Verification Alerts */}
-                                                <label className="flex items-center justify-between p-3 rounded-xl border border-solid border-amber-200/50 bg-white cursor-pointer hover:bg-amber-50/20 transition-all">
-                                                    <div>
-                                                        <span className="text-[10px] font-black text-slate-800 uppercase tracking-wide block">Payment Verified Alerts</span>
-                                                        <span className="text-[8px] text-slate-500 font-medium block">Notify student when fee is verified</span>
-                                                    </div>
-                                                    <input type="checkbox" checked={paymentSettings.paymentVerifiedEnabled} onChange={e => setPaymentSettings({...paymentSettings, paymentVerifiedEnabled: e.target.checked})} className="w-3.5 h-3.5 rounded text-amber-600 focus:ring-amber-500" />
-                                                </label>
-                                            </div>
-
-                                            {/* Outing Overdue Timings */}
-                                            {paymentSettings.outingOverdueEnabled && (
-                                                <div className="bg-white p-4 rounded-xl border border-amber-200/50 space-y-4 animate-in slide-in-from-top-2">
-                                                    <p className="text-[10px] font-black text-amber-800 uppercase tracking-widest">Outing Overdue Config</p>
-                                                    <div className="grid grid-cols-2 gap-3">
-                                                        <div>
-                                                            <div className="min-h-[22px] flex items-end mb-1.5">
-                                                                <label className="block text-[8px] font-black text-slate-500 uppercase tracking-widest leading-none">Grace Mins</label>
-                                                            </div>
-                                                            <input 
-                                                                type="number" 
-                                                                min="0"
-                                                                value={paymentSettings.outingGracePeriod}
-                                                                onChange={e => setPaymentSettings({...paymentSettings, outingGracePeriod: Number(e.target.value) || 0})}
-                                                                className="w-full h-9 border border-slate-200 rounded-lg px-2 py-1 text-[11px] font-bold outline-none bg-white text-slate-800"
-                                                            />
-                                                        </div>
-                                                        <div>
-                                                            <div className="min-h-[22px] flex items-end mb-1.5">
-                                                                <label className="block text-[8px] font-black text-slate-500 uppercase tracking-widest leading-none">Cutoff Time</label>
-                                                            </div>
-                                                            <input 
-                                                                type="time" 
-                                                                value={paymentSettings.absoluteOutingCutoff}
-                                                                onChange={e => setPaymentSettings({...paymentSettings, absoluteOutingCutoff: e.target.value})}
-                                                                className="w-full h-9 border border-slate-200 rounded-lg px-2 py-1 text-[11px] font-bold outline-none bg-white text-slate-800"
-                                                            />
-                                                        </div>
-                                                    </div>
-                                                    <p className="text-[9px] text-amber-700 font-medium">Outing alert triggers if student is overdue by more than <strong>{paymentSettings.outingGracePeriod} mins</strong> or is out past <strong>{paymentSettings.absoluteOutingCutoff}</strong> (IST).</p>
-                                                </div>
-                                            )}
-                                        </div>
-                                    )}
-                                </div>
-
                                 {/* Direct Bank Transfer Section */}
                                 <div>
-                                    <h4 className="font-black text-gray-900 text-sm uppercase tracking-wider mb-4 border-b border-gray-100 pb-2">Direct Bank Transfer Details</h4>
-                                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                                    <div className="flex items-center gap-2 mb-3.5 border-b border-gray-100 pb-2">
+                                        <Building2 className="w-4 h-4 text-blue-600" />
+                                        <h4 className="font-black text-gray-900 text-xs sm:text-sm uppercase tracking-wider">Direct Bank Transfer Details</h4>
+                                    </div>
+
+                                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
                                         <div>
-                                            <label className="block text-xs font-black text-gray-500 uppercase tracking-widest mb-1.5">Bank Name</label>
+                                            <label className="block text-[10px] sm:text-xs font-black text-gray-500 uppercase tracking-widest mb-1.5">Bank Name</label>
                                             <input
                                                 type="text"
                                                 required
                                                 value={paymentSettings.bankName}
                                                 onChange={e => setPaymentSettings({...paymentSettings, bankName: e.target.value})}
-                                                className="w-full border-2 border-gray-100 rounded-xl px-4 py-2.5 text-sm focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 outline-none transition-all font-bold"
+                                                className="w-full border-2 border-gray-100 rounded-xl px-3.5 py-2.5 text-xs sm:text-sm focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 outline-none transition-all font-bold"
                                                 placeholder="e.g. PNB Bank"
                                             />
                                         </div>
                                         <div>
-                                            <label className="block text-xs font-black text-gray-500 uppercase tracking-widest mb-1.5">Account Name</label>
+                                            <label className="block text-[10px] sm:text-xs font-black text-gray-500 uppercase tracking-widest mb-1.5">Account Name</label>
                                             <input
                                                 type="text"
                                                 required
                                                 value={paymentSettings.accountName}
                                                 onChange={e => setPaymentSettings({...paymentSettings, accountName: e.target.value})}
-                                                className="w-full border-2 border-gray-100 rounded-xl px-4 py-2.5 text-sm focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 outline-none transition-all font-bold"
+                                                className="w-full border-2 border-gray-100 rounded-xl px-3.5 py-2.5 text-xs sm:text-sm focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 outline-none transition-all font-bold"
                                                 placeholder="e.g. DR. PANKAJ DWIVEDI"
                                             />
                                         </div>
                                         <div>
-                                            <label className="block text-xs font-black text-gray-500 uppercase tracking-widest mb-1.5">Account Number</label>
+                                            <label className="block text-[10px] sm:text-xs font-black text-gray-500 uppercase tracking-widest mb-1.5">Account Number</label>
                                             <input
                                                 type="text"
                                                 required
                                                 value={paymentSettings.accountNumber}
                                                 onChange={e => setPaymentSettings({...paymentSettings, accountNumber: e.target.value})}
-                                                className="w-full border-2 border-gray-100 rounded-xl px-4 py-2.5 text-sm focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 outline-none transition-all font-bold font-mono tracking-wider"
+                                                className="w-full border-2 border-gray-100 rounded-xl px-3.5 py-2.5 text-xs sm:text-sm focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 outline-none transition-all font-bold font-mono tracking-wider"
                                             />
                                         </div>
                                         <div>
-                                            <label className="block text-xs font-black text-gray-500 uppercase tracking-widest mb-1.5">IFSC Code</label>
+                                            <label className="block text-[10px] sm:text-xs font-black text-gray-500 uppercase tracking-widest mb-1.5">IFSC Code</label>
                                             <input
                                                 type="text"
                                                 required
                                                 value={paymentSettings.ifsc}
                                                 onChange={e => setPaymentSettings({...paymentSettings, ifsc: e.target.value})}
-                                                className="w-full border-2 border-gray-100 rounded-xl px-4 py-2.5 text-sm focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 outline-none transition-all font-bold uppercase font-mono tracking-wider"
+                                                className="w-full border-2 border-gray-100 rounded-xl px-3.5 py-2.5 text-xs sm:text-sm focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 outline-none transition-all font-bold uppercase font-mono tracking-wider"
                                             />
                                         </div>
                                         <div>
-                                            <label className="block text-xs font-black text-gray-500 uppercase tracking-widest mb-1.5">UPI ID</label>
+                                            <label className="block text-[10px] sm:text-xs font-black text-gray-500 uppercase tracking-widest mb-1.5">UPI ID</label>
                                             <input
                                                 type="text"
                                                 required
                                                 value={paymentSettings.upiId}
                                                 onChange={e => setPaymentSettings({...paymentSettings, upiId: e.target.value})}
-                                                className="w-full border-2 border-gray-100 rounded-xl px-4 py-2.5 text-sm focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 outline-none transition-all font-bold text-blue-600"
+                                                className="w-full border-2 border-gray-100 rounded-xl px-3.5 py-2.5 text-xs sm:text-sm focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 outline-none transition-all font-bold text-blue-600"
                                                 placeholder="username@bank"
                                             />
                                         </div>
                                         <div>
-                                            <label className="block text-xs font-black text-gray-500 uppercase tracking-widest mb-1.5">Support WhatsApp Mobile Number</label>
+                                            <label className="block text-[10px] sm:text-xs font-black text-gray-500 uppercase tracking-widest mb-1.5">Support WhatsApp Mobile Number</label>
                                             <input
                                                 type="text"
                                                 required
                                                 value={paymentSettings.supportWhatsappNumber || "8269418956"}
                                                 onChange={e => setPaymentSettings({...paymentSettings, supportWhatsappNumber: e.target.value})}
-                                                className="w-full border-2 border-emerald-100 rounded-xl px-4 py-2.5 text-sm focus:ring-4 focus:ring-emerald-500/10 focus:border-emerald-500 outline-none transition-all font-bold text-emerald-800"
+                                                className="w-full border-2 border-emerald-100 rounded-xl px-3.5 py-2.5 text-xs sm:text-sm focus:ring-4 focus:ring-emerald-500/10 focus:border-emerald-500 outline-none transition-all font-bold text-emerald-800"
                                                 placeholder="8269418956"
                                             />
                                         </div>
-                                        <div className="sm:col-span-2 bg-emerald-50/60 border border-emerald-200/80 p-4 rounded-2xl">
-                                            <label className="block text-xs font-black text-emerald-950 uppercase tracking-widest mb-1 flex items-center justify-between">
+                                        <div className="sm:col-span-2 bg-emerald-50/70 border border-emerald-200/80 p-3.5 sm:p-4 rounded-xl">
+                                            <label className="block text-[10px] sm:text-xs font-black text-emerald-950 uppercase tracking-widest mb-1 flex items-center justify-between">
                                                 <span>🎁 Direct Bank Transfer Extra Cash Discount (%)</span>
-                                                <span className="text-[9px] px-2.5 py-0.5 bg-emerald-200 text-emerald-900 rounded-full font-bold">UTR Cash Offer</span>
+                                                <span className="text-[9px] px-2 py-0.5 bg-emerald-200 text-emerald-900 rounded-full font-bold">UTR Cash Offer</span>
                                             </label>
                                             <p className="text-[10px] text-emerald-700 font-medium mb-2">
                                                 Give colleges an additional instant discount percentage when paying directly to your bank account / QR code.
@@ -3435,17 +3411,17 @@ export default function SuperAdminDashboard() {
                                                     max="50"
                                                     value={paymentSettings.bankTransferDiscount ?? 2.5}
                                                     onChange={e => setPaymentSettings({...paymentSettings, bankTransferDiscount: Number(e.target.value)})}
-                                                    className="w-full border-2 border-emerald-200 rounded-xl px-4 py-2.5 text-sm font-black outline-none bg-white text-emerald-950 focus:ring-4 focus:ring-emerald-500/20 focus:border-emerald-500 pr-8"
+                                                    className="w-full border-2 border-emerald-200 rounded-xl px-3.5 py-2 text-xs sm:text-sm font-black outline-none bg-white text-emerald-950 focus:ring-4 focus:ring-emerald-500/20 focus:border-emerald-500 pr-8"
                                                     placeholder="2.5"
                                                 />
-                                                <span className="absolute right-3 top-2.5 text-sm font-black text-emerald-600">%</span>
+                                                <span className="absolute right-3 top-2 text-xs sm:text-sm font-black text-emerald-600">%</span>
                                             </div>
                                         </div>
                                         <div className="sm:col-span-2">
-                                            <label className="block text-xs font-black text-gray-500 uppercase tracking-widest mb-1.5">Custom QR Code Image (Optional)</label>
-                                            <div className="flex items-center gap-4">
+                                            <label className="block text-[10px] sm:text-xs font-black text-gray-500 uppercase tracking-widest mb-1.5">Custom QR Code Image (Optional)</label>
+                                            <div className="flex flex-col sm:flex-row sm:items-center gap-3">
                                                 {paymentSettings.customQrCodeUrl && paymentSettings.customQrCodeUrl.startsWith('data:image') && (
-                                                    <div className="w-16 h-16 rounded-xl border-2 border-gray-100 overflow-hidden shrink-0 shadow-sm">
+                                                    <div className="w-16 h-16 rounded-xl border-2 border-gray-100 overflow-hidden shrink-0 shadow-sm self-start sm:self-center">
                                                         <img src={paymentSettings.customQrCodeUrl} alt="QR Preview" className="w-full h-full object-cover" />
                                                     </div>
                                                 )}
@@ -3463,15 +3439,15 @@ export default function SuperAdminDashboard() {
                                                                 reader.readAsDataURL(file);
                                                             }
                                                         }}
-                                                        className="w-full border-2 border-gray-100 rounded-xl px-2 py-1.5 text-sm focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 outline-none transition-all file:mr-4 file:py-1.5 file:px-4 file:rounded-lg file:border-0 file:text-[10px] file:uppercase file:tracking-wider file:font-black file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100 cursor-pointer"
+                                                        className="w-full border-2 border-gray-100 rounded-xl px-2 py-1.5 text-xs sm:text-sm focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 outline-none transition-all file:mr-3 file:py-1 file:px-3 file:rounded-lg file:border-0 file:text-[9px] sm:file:text-[10px] file:uppercase file:tracking-wider file:font-black file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100 cursor-pointer"
                                                     />
-                                                    <p className="text-[10px] text-gray-400 mt-2 font-medium leading-relaxed">Upload a QR code image directly from your gallery or computer. If provided, this will override the auto-generated UPI QR code.</p>
+                                                    <p className="text-[9px] sm:text-[10px] text-gray-400 mt-1.5 font-medium leading-relaxed">Upload a QR code image directly from your gallery or computer. If provided, this will override the auto-generated UPI QR code.</p>
                                                 </div>
                                                 {paymentSettings.customQrCodeUrl && (
                                                     <button 
                                                         type="button" 
                                                         onClick={() => setPaymentSettings({ ...paymentSettings, customQrCodeUrl: "" })}
-                                                        className="text-[10px] text-red-600 hover:text-red-700 font-black uppercase tracking-widest px-4 py-3 border-2 border-red-100 hover:border-red-200 bg-red-50 hover:bg-red-100 rounded-xl transition-all"
+                                                        className="text-[9px] sm:text-[10px] text-red-600 hover:text-red-700 font-black uppercase tracking-widest px-3 py-2 border-2 border-red-100 hover:border-red-200 bg-red-50 hover:bg-red-100 rounded-xl transition-all self-start sm:self-center shrink-0"
                                                     >
                                                         Remove
                                                     </button>
@@ -3483,11 +3459,12 @@ export default function SuperAdminDashboard() {
                             </form>
                         </div>
 
-                        <div className="p-4 sm:p-6 border-t border-gray-100 bg-gray-50 flex justify-end gap-2.5 shrink-0">
+                        {/* Footer */}
+                        <div className="p-3.5 sm:p-5 border-t border-gray-100 bg-gray-50 flex items-center justify-end gap-2 shrink-0">
                             <button
                                 type="button"
                                 onClick={() => setShowPaymentSettingsModal(false)}
-                                className="px-4 py-2.5 sm:px-6 sm:py-3 rounded-xl border-2 border-gray-200 text-gray-600 font-black text-[10px] sm:text-xs uppercase tracking-widest hover:bg-gray-100 transition-all"
+                                className="px-4 py-2 sm:px-6 sm:py-2.5 rounded-xl border border-gray-200 text-gray-600 font-black text-[10px] sm:text-xs uppercase tracking-widest hover:bg-gray-100 transition-all"
                             >
                                 Cancel
                             </button>
@@ -3495,9 +3472,241 @@ export default function SuperAdminDashboard() {
                                 type="submit"
                                 form="payment-settings-form"
                                 disabled={isSavingPaymentSettings}
-                                className="px-5 py-2.5 sm:px-8 sm:py-3 rounded-xl bg-blue-600 text-white font-black text-[10px] sm:text-xs uppercase tracking-widest hover:bg-blue-700 active:scale-95 transition-all shadow-lg shadow-blue-500/20 disabled:opacity-50"
+                                className="px-5 py-2 sm:px-7 sm:py-2.5 rounded-xl bg-blue-600 text-white font-black text-[10px] sm:text-xs uppercase tracking-widest hover:bg-blue-700 active:scale-95 transition-all shadow-md shadow-blue-500/20 disabled:opacity-50"
                             >
                                 {isSavingPaymentSettings ? 'Saving...' : 'Save Settings'}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* Boss Global Notification & Scheduler Rules Modal */}
+            {showNotificationSettingsModal && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/70 backdrop-blur-md animate-in fade-in">
+                    <div className="bg-white rounded-[24px] sm:rounded-[32px] w-full max-w-2xl max-h-[92vh] sm:max-h-[90vh] overflow-hidden shadow-2xl flex flex-col font-sans border border-slate-100">
+                        {/* Header */}
+                        <div className="px-4 py-3.5 sm:px-6 sm:py-4 border-b border-gray-100 flex items-center justify-between bg-amber-50/50 shrink-0">
+                            <div className="flex items-center gap-3">
+                                <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-xl bg-amber-500/10 border border-amber-500/20 flex items-center justify-center text-amber-600 shrink-0">
+                                    <Bell className="w-4 h-4 sm:w-5 sm:h-5" />
+                                </div>
+                                <div>
+                                    <h3 className="text-base sm:text-lg font-black text-gray-900 tracking-tight uppercase">Notification & Scheduler Rules</h3>
+                                    <p className="text-[10px] sm:text-xs text-amber-800/80 font-medium">Configure global web push alerts, student notification locks, and curfew timings</p>
+                                </div>
+                            </div>
+                            <button onClick={() => setShowNotificationSettingsModal(false)} className="p-1.5 sm:p-2 hover:bg-gray-200 rounded-full transition-colors bg-white shadow-sm border border-gray-100">
+                                <X className="w-4 h-4 sm:w-5 sm:h-5 text-gray-500" />
+                            </button>
+                        </div>
+
+                        {/* Body */}
+                        <div className="overflow-y-auto p-4 sm:p-6 md:p-8 flex-1 custom-scrollbar">
+                            <form id="notification-settings-form" onSubmit={saveNotificationSettings} className="space-y-4 sm:space-y-5">
+                                {/* Master Push Toggle */}
+                                <div className="bg-amber-50/50 border border-amber-200/70 rounded-2xl p-4 sm:p-5 flex items-center justify-between gap-3">
+                                    <div>
+                                        <p className="text-xs sm:text-sm font-black text-amber-950 uppercase tracking-wide">Master Push Notifications</p>
+                                        <p className="text-[10px] sm:text-xs text-amber-800 font-medium mt-0.5">Turn ON/OFF all Web Push alerts across the entire system.</p>
+                                    </div>
+                                    <label className="relative inline-flex items-center cursor-pointer shrink-0">
+                                        <input 
+                                            type="checkbox" 
+                                            className="sr-only peer"
+                                            checked={paymentSettings.globalPushEnabled}
+                                            onChange={e => setPaymentSettings({...paymentSettings, globalPushEnabled: e.target.checked})}
+                                        />
+                                        <div className="w-11 h-6 bg-gray-300 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-amber-600 shadow-inner"></div>
+                                    </label>
+                                </div>
+
+                                {/* Mandatory Student Push Notification Enforcement */}
+                                <div className="bg-gradient-to-r from-amber-100/70 via-orange-50/60 to-amber-50/60 border border-amber-300 rounded-2xl p-4 sm:p-5 flex items-center justify-between gap-3">
+                                    <div>
+                                        <div className="flex items-center gap-2">
+                                            <p className="text-xs sm:text-sm font-black text-amber-950 uppercase tracking-wide">Mandatory Student Notification Lock</p>
+                                            <span className="text-[8px] font-black uppercase tracking-wider px-2 py-0.5 rounded-full bg-amber-200 text-amber-900 border border-amber-300 shrink-0">Boss Control</span>
+                                        </div>
+                                        <p className="text-[10px] sm:text-xs text-amber-900 font-medium mt-0.5">When enabled, students cannot use their dashboard until phone/browser notifications are switched ON.</p>
+                                    </div>
+                                    <label className="relative inline-flex items-center cursor-pointer shrink-0">
+                                        <input 
+                                            type="checkbox" 
+                                            className="sr-only peer"
+                                            checked={paymentSettings.enforceMandatoryPush}
+                                            onChange={e => setPaymentSettings({...paymentSettings, enforceMandatoryPush: e.target.checked})}
+                                        />
+                                        <div className="w-11 h-6 bg-gray-300 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-amber-600 shadow-inner"></div>
+                                    </label>
+                                </div>
+
+                                {paymentSettings.globalPushEnabled && (
+                                    <div className="space-y-4 pt-1 animate-in fade-in">
+                                        {/* Curfew Timer Configuration */}
+                                        <div className="bg-white p-4 sm:p-5 rounded-2xl border border-slate-200 shadow-xs space-y-3.5">
+                                            <p className="text-xs font-black text-slate-800 uppercase tracking-widest flex items-center gap-1.5">
+                                                <Clock className="w-3.5 h-3.5 text-amber-600" /> Curfew Scheduler Timings
+                                            </p>
+                                            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5 sm:gap-3">
+                                                <div>
+                                                    <label className="block text-[9px] font-black text-slate-500 uppercase tracking-widest mb-1">Curfew Start</label>
+                                                    <input 
+                                                        type="time" 
+                                                        value={paymentSettings.curfewStart}
+                                                        onChange={e => setPaymentSettings({...paymentSettings, curfewStart: e.target.value})}
+                                                        className="w-full h-9 border border-slate-200 rounded-lg px-2.5 py-1 text-xs font-bold outline-none bg-slate-50 focus:bg-white focus:border-amber-500 text-slate-800"
+                                                    />
+                                                </div>
+                                                <div>
+                                                    <label className="block text-[9px] font-black text-slate-500 uppercase tracking-widest mb-1">Curfew End</label>
+                                                    <input 
+                                                        type="time" 
+                                                        value={paymentSettings.curfewEnd}
+                                                        onChange={e => setPaymentSettings({...paymentSettings, curfewEnd: e.target.value})}
+                                                        className="w-full h-9 border border-slate-200 rounded-lg px-2.5 py-1 text-xs font-bold outline-none bg-slate-50 focus:bg-white focus:border-amber-500 text-slate-800"
+                                                    />
+                                                </div>
+                                                <div>
+                                                    <label className="block text-[9px] font-black text-slate-500 uppercase tracking-widest mb-1">Grace Mins</label>
+                                                    <input 
+                                                        type="number" 
+                                                        min="0"
+                                                        value={paymentSettings.gracePeriodMinutes}
+                                                        onChange={e => setPaymentSettings({...paymentSettings, gracePeriodMinutes: Number(e.target.value) || 0})}
+                                                        className="w-full h-9 border border-slate-200 rounded-lg px-2.5 py-1 text-xs font-bold outline-none bg-slate-50 focus:bg-white focus:border-amber-500 text-slate-800"
+                                                    />
+                                                </div>
+                                            </div>
+                                            <p className="text-[10px] text-amber-800 font-medium">The system automatically calculates the alert time as <strong>Curfew End + Grace Period</strong> (e.g., {paymentSettings.curfewEnd} + {paymentSettings.gracePeriodMinutes} mins).</p>
+                                        </div>
+
+                                        {/* Sub Toggles */}
+                                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 sm:gap-3">
+                                            {/* Parent Curfew Absent */}
+                                            <label className="flex items-center justify-between p-3 rounded-xl border border-slate-200 bg-white cursor-pointer hover:bg-amber-50/20 transition-all shadow-xs">
+                                                <div>
+                                                    <span className="text-[11px] font-black text-slate-800 uppercase tracking-wide block">Parent Curfew Alerts</span>
+                                                    <span className="text-[9px] text-slate-500 font-medium block">Send auto push to parents at cutoff</span>
+                                                </div>
+                                                <input type="checkbox" checked={paymentSettings.parentCurfewAbsentEnabled} onChange={e => setPaymentSettings({...paymentSettings, parentCurfewAbsentEnabled: e.target.checked})} className="w-4 h-4 rounded text-amber-600 focus:ring-amber-500 cursor-pointer" />
+                                            </label>
+
+                                            {/* Parent Gate Scan */}
+                                            <label className="flex items-center justify-between p-3 rounded-xl border border-slate-200 bg-white cursor-pointer hover:bg-amber-50/20 transition-all shadow-xs">
+                                                <div>
+                                                    <span className="text-[11px] font-black text-slate-800 uppercase tracking-wide block">Parent Gate Alerts</span>
+                                                    <span className="text-[9px] text-slate-500 font-medium block">Notify parents on gate pass scan</span>
+                                                </div>
+                                                <input type="checkbox" checked={paymentSettings.parentGateScanInOutEnabled} onChange={e => setPaymentSettings({...paymentSettings, parentGateScanInOutEnabled: e.target.checked})} className="w-4 h-4 rounded text-amber-600 focus:ring-amber-500 cursor-pointer" />
+                                            </label>
+
+                                            {/* Warden Leave Request */}
+                                            <label className="flex items-center justify-between p-3 rounded-xl border border-slate-200 bg-white cursor-pointer hover:bg-amber-50/20 transition-all shadow-xs">
+                                                <div>
+                                                    <span className="text-[11px] font-black text-slate-800 uppercase tracking-wide block">Warden Leave Alerts</span>
+                                                    <span className="text-[9px] text-slate-500 font-medium block">Notify wardens on leave request</span>
+                                                </div>
+                                                <input type="checkbox" checked={paymentSettings.wardenLeaveRequestEnabled} onChange={e => setPaymentSettings({...paymentSettings, wardenLeaveRequestEnabled: e.target.checked})} className="w-4 h-4 rounded text-amber-600 focus:ring-amber-500 cursor-pointer" />
+                                            </label>
+
+                                            {/* Dean Leave Request */}
+                                            <label className="flex items-center justify-between p-3 rounded-xl border border-slate-200 bg-white cursor-pointer hover:bg-amber-50/20 transition-all shadow-xs">
+                                                <div>
+                                                    <span className="text-[11px] font-black text-slate-800 uppercase tracking-wide block">Dean Leave Alerts</span>
+                                                    <span className="text-[9px] text-slate-500 font-medium block">Notify deans on leave request</span>
+                                                </div>
+                                                <input type="checkbox" checked={paymentSettings.deanLeaveRequestEnabled} onChange={e => setPaymentSettings({...paymentSettings, deanLeaveRequestEnabled: e.target.checked})} className="w-4 h-4 rounded text-amber-600 focus:ring-amber-500 cursor-pointer" />
+                                            </label>
+
+                                            {/* Student Leave Decision */}
+                                            <label className="flex items-center justify-between p-3 rounded-xl border border-slate-200 bg-white cursor-pointer hover:bg-amber-50/20 transition-all shadow-xs">
+                                                <div>
+                                                    <span className="text-[11px] font-black text-slate-800 uppercase tracking-wide block">Leave Decision Alerts</span>
+                                                    <span className="text-[9px] text-slate-500 font-medium block">Notify students/parents when leave is decided</span>
+                                                </div>
+                                                <input type="checkbox" checked={paymentSettings.leaveDecisionEnabled} onChange={e => setPaymentSettings({...paymentSettings, leaveDecisionEnabled: e.target.checked})} className="w-4 h-4 rounded text-amber-600 focus:ring-amber-500 cursor-pointer" />
+                                            </label>
+
+                                            {/* Parent Consent Video Uploaded */}
+                                            <label className="flex items-center justify-between p-3 rounded-xl border border-slate-200 bg-white cursor-pointer hover:bg-amber-50/20 transition-all shadow-xs">
+                                                <div>
+                                                    <span className="text-[11px] font-black text-slate-800 uppercase tracking-wide block">Parent Video Consent Alerts</span>
+                                                    <span className="text-[9px] text-slate-500 font-medium block">Notify warden/dean on video upload</span>
+                                                </div>
+                                                <input type="checkbox" checked={paymentSettings.parentConsentVideoUploadedEnabled} onChange={e => setPaymentSettings({...paymentSettings, parentConsentVideoUploadedEnabled: e.target.checked})} className="w-4 h-4 rounded text-amber-600 focus:ring-amber-500 cursor-pointer" />
+                                            </label>
+
+                                            {/* Outing Overdue Alerts */}
+                                            <label className="flex items-center justify-between p-3 rounded-xl border border-slate-200 bg-white cursor-pointer hover:bg-amber-50/20 transition-all shadow-xs">
+                                                <div>
+                                                    <span className="text-[11px] font-black text-slate-800 uppercase tracking-wide block">Outing Overdue Alerts</span>
+                                                    <span className="text-[9px] text-slate-500 font-medium block">Notify when student is late returning</span>
+                                                </div>
+                                                <input type="checkbox" checked={paymentSettings.outingOverdueEnabled} onChange={e => setPaymentSettings({...paymentSettings, outingOverdueEnabled: e.target.checked})} className="w-4 h-4 rounded text-amber-600 focus:ring-amber-500 cursor-pointer" />
+                                            </label>
+
+                                            {/* Payment Verification Alerts */}
+                                            <label className="flex items-center justify-between p-3 rounded-xl border border-slate-200 bg-white cursor-pointer hover:bg-amber-50/20 transition-all shadow-xs">
+                                                <div>
+                                                    <span className="text-[11px] font-black text-slate-800 uppercase tracking-wide block">Payment Verified Alerts</span>
+                                                    <span className="text-[9px] text-slate-500 font-medium block">Notify student when fee is verified</span>
+                                                </div>
+                                                <input type="checkbox" checked={paymentSettings.paymentVerifiedEnabled} onChange={e => setPaymentSettings({...paymentSettings, paymentVerifiedEnabled: e.target.checked})} className="w-4 h-4 rounded text-amber-600 focus:ring-amber-500 cursor-pointer" />
+                                            </label>
+                                        </div>
+
+                                        {/* Outing Overdue Timings */}
+                                        {paymentSettings.outingOverdueEnabled && (
+                                            <div className="bg-white p-4 sm:p-5 rounded-2xl border border-slate-200 shadow-xs space-y-3.5 animate-in slide-in-from-top-2">
+                                                <p className="text-xs font-black text-slate-800 uppercase tracking-widest flex items-center gap-1.5">
+                                                    <Clock className="w-3.5 h-3.5 text-amber-600" /> Outing Overdue Config
+                                                </p>
+                                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                                                    <div>
+                                                        <label className="block text-[9px] font-black text-slate-500 uppercase tracking-widest mb-1">Grace Mins</label>
+                                                        <input 
+                                                            type="number" 
+                                                            min="0"
+                                                            value={paymentSettings.outingGracePeriod}
+                                                            onChange={e => setPaymentSettings({...paymentSettings, outingGracePeriod: Number(e.target.value) || 0})}
+                                                            className="w-full h-9 border border-slate-200 rounded-lg px-2.5 py-1 text-xs font-bold outline-none bg-slate-50 focus:bg-white focus:border-amber-500 text-slate-800"
+                                                        />
+                                                    </div>
+                                                    <div>
+                                                        <label className="block text-[9px] font-black text-slate-500 uppercase tracking-widest mb-1">Cutoff Time</label>
+                                                        <input 
+                                                            type="time" 
+                                                            value={paymentSettings.absoluteOutingCutoff}
+                                                            onChange={e => setPaymentSettings({...paymentSettings, absoluteOutingCutoff: e.target.value})}
+                                                            className="w-full h-9 border border-slate-200 rounded-lg px-2.5 py-1 text-xs font-bold outline-none bg-slate-50 focus:bg-white focus:border-amber-500 text-slate-800"
+                                                        />
+                                                    </div>
+                                                </div>
+                                                <p className="text-[10px] text-amber-800 font-medium">Outing alert triggers if student is overdue by more than <strong>{paymentSettings.outingGracePeriod} mins</strong> or is out past <strong>{paymentSettings.absoluteOutingCutoff}</strong> (IST).</p>
+                                            </div>
+                                        )}
+                                    </div>
+                                )}
+                            </form>
+                        </div>
+
+                        {/* Footer */}
+                        <div className="p-3.5 sm:p-5 border-t border-gray-100 bg-gray-50 flex items-center justify-end gap-2 shrink-0">
+                            <button
+                                type="button"
+                                onClick={() => setShowNotificationSettingsModal(false)}
+                                className="px-4 py-2 sm:px-6 sm:py-2.5 rounded-xl border border-gray-200 text-gray-600 font-black text-[10px] sm:text-xs uppercase tracking-widest hover:bg-gray-100 transition-all"
+                            >
+                                Cancel
+                            </button>
+                            <button
+                                type="submit"
+                                form="notification-settings-form"
+                                disabled={isSavingNotificationSettings}
+                                className="px-5 py-2 sm:px-7 sm:py-2.5 rounded-xl bg-amber-600 text-white font-black text-[10px] sm:text-xs uppercase tracking-widest hover:bg-amber-700 active:scale-95 transition-all shadow-md shadow-amber-500/20 disabled:opacity-50"
+                            >
+                                {isSavingNotificationSettings ? 'Saving...' : 'Save Rules'}
                             </button>
                         </div>
                     </div>

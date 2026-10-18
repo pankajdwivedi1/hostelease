@@ -960,6 +960,105 @@ function HostelLogsModal({ hostelName, onClose }: { hostelName: string; onClose:
   );
 }
 
+function WardenCredentialsInput({
+  hostel,
+  onSave
+}: {
+  hostel: any;
+  onSave: (combined: string) => void;
+}) {
+  const parseValue = (raw?: string) => {
+    if (!raw) return { username: "", mobile: "" };
+    const str = String(raw).trim();
+    if (str.includes("_")) {
+      const idx = str.indexOf("_");
+      return {
+        username: str.substring(0, idx).trim(),
+        mobile: str.substring(idx + 1).trim()
+      };
+    }
+    // If it's pure numbers/commas/spaces (just mobile)
+    if (/^[\d,\s+]+$/.test(str)) {
+      return { username: "", mobile: str };
+    }
+    return { username: str, mobile: "" };
+  };
+
+  const initial = parseValue(hostel.wardenUsername);
+  const [username, setUsername] = useState(initial.username);
+  const [mobile, setMobile] = useState(initial.mobile);
+
+  useEffect(() => {
+    const parsed = parseValue(hostel.wardenUsername);
+    setUsername(parsed.username);
+    setMobile(parsed.mobile);
+  }, [hostel.wardenUsername]);
+
+  const handleBlur = (newUname?: string, newMob?: string) => {
+    const u = (newUname !== undefined ? newUname : username).trim();
+    const m = (newMob !== undefined ? newMob : mobile).trim();
+    let combined = "";
+    if (u && m) {
+      combined = `${u}_${m}`;
+    } else if (m) {
+      combined = m;
+    } else {
+      combined = u;
+    }
+    if (combined !== (hostel.wardenUsername || "")) {
+      onSave(combined);
+    }
+  };
+
+  return (
+    <div>
+      {/* Dual Header Label matching user's blue mark */}
+      <div className="grid grid-cols-2 gap-1 text-[8px] sm:text-[10px] font-black uppercase tracking-widest mb-1 px-0.5">
+        <span className="text-slate-500">Username</span>
+        <span className="text-slate-500 pl-1 whitespace-nowrap">Mo. Number</span>
+      </div>
+
+      {/* Same compact single box divided by vertical blue separator */}
+      <div className="flex items-center gap-1 sm:gap-2 bg-white p-1.5 sm:p-2.5 rounded-lg border border-slate-200 shadow-sm focus-within:border-blue-400 focus-within:ring-1 focus-within:ring-blue-100 transition-all">
+        <div className="h-1.5 w-1.5 rounded-full bg-emerald-500 shrink-0" />
+        
+        {/* Left Sub-input: Username */}
+        <input
+          type="text"
+          value={username}
+          onChange={(e) => setUsername(e.target.value)}
+          onBlur={() => handleBlur()}
+          placeholder="e.g. Anita"
+          className="font-bold sm:font-black text-slate-700 text-[10px] sm:text-xs bg-transparent border-none outline-none focus:ring-0 p-0 w-1/2 min-w-0"
+        />
+
+        {/* Vertical divider line marked with blue pen */}
+        <div className="w-[1.5px] h-4 sm:h-5 bg-blue-500 shrink-0" />
+
+        {/* Right Sub-input: Mobile Number */}
+        <input
+          type="text"
+          value={mobile}
+          onChange={(e) => setMobile(e.target.value)}
+          onBlur={() => handleBlur()}
+          placeholder="e.g. 8305493461"
+          className="font-bold sm:font-black text-slate-700 text-[10px] sm:text-xs bg-transparent border-none outline-none focus:ring-0 p-0 w-1/2 min-w-0"
+        />
+      </div>
+    </div>
+  );
+}
+
+const getHostelCategory = (hostelName: string): string | null => {
+  if (!hostelName) return null;
+  const name = hostelName.toLowerCase();
+  if (name.includes("gaytri") || name.includes("hostel a")) return "GAYTRI HOSTEL";
+  if (name.includes("gangotri") || name.includes("hostel b")) return "GANGOTRI HOSTEL";
+  if (name.includes("guest") || name.includes("ghb") || name.includes("hostel d")) return "GHB HOSTEL";
+  if (name.includes("boys") || name.includes("hostel c")) return "BOYS HOSTEL";
+  return hostelName;
+};
+
 export default function HostelManagementModal({
   hostels,
   hostelsConfig,
@@ -974,16 +1073,63 @@ export default function HostelManagementModal({
   handleManageWardenAccount,
   handleUpdateHostelMode,
   handleSyncAllStudents,
-  wifiWhitelist
+  wifiWhitelist,
+  students
 }: any) {
   const [visiblePasswords, setVisiblePasswords] = useState<Set<string>>(new Set());
   const [isCreatingAccount, setIsCreatingAccount] = useState(false);
   const [editingAccountId, setEditingAccountId] = useState<string | null>(null);
   const [newAccountForm, setNewAccountForm] = useState({ username: "", password: "", hostels: [] as string[] });
   const [activeLogHostel, setActiveLogHostel] = useState<string | null>(null);
-  const effectiveHostels = (hostelsConfig && hostelsConfig.length > 0) 
-    ? hostelsConfig 
-    : ((hostels && hostels.length > 0) ? hostels : []);
+  const [localHostels, setLocalHostels] = useState<any[]>([]);
+  const [localStudents, setLocalStudents] = useState<any[]>(Array.isArray(students) ? students : []);
+
+  useEffect(() => {
+    if (Array.isArray(students) && students.length > 0) {
+      setLocalStudents(students);
+    } else {
+      fetch("/api/students?light=true")
+        .then(res => res.json())
+        .then(data => {
+          if (data && Array.isArray(data.students)) {
+            setLocalStudents(data.students);
+          }
+        })
+        .catch(err => console.warn("Failed to fetch students in HostelManagementModal", err));
+    }
+  }, [students]);
+
+  useEffect(() => {
+    let isMounted = true;
+    const refreshHostels = async () => {
+      try {
+        const res = await fetch("/api/admin/hostels", { cache: "no-store" });
+        if (res.ok) {
+          const data = await res.json();
+          if (data.success && Array.isArray(data.hostels) && isMounted) {
+            setLocalHostels(data.hostels);
+          }
+        }
+      } catch (e) {
+        console.warn("Silent fallback: Error refreshing hostels in modal", e);
+      }
+    };
+    refreshHostels();
+    const interval = setInterval(refreshHostels, 8000);
+    const handleFocus = () => refreshHostels();
+    window.addEventListener("focus", handleFocus);
+    return () => {
+      isMounted = false;
+      clearInterval(interval);
+      window.removeEventListener("focus", handleFocus);
+    };
+  }, []);
+
+  const effectiveHostels = (localHostels && localHostels.length > 0)
+    ? localHostels
+    : ((hostelsConfig && hostelsConfig.length > 0) 
+      ? hostelsConfig 
+      : ((hostels && hostels.length > 0) ? hostels : []));
 
   return (
     <div className="fixed inset-0 z-[60] bg-black/50 lg:bg-slate-50 backdrop-blur-sm lg:backdrop-blur-none flex items-center justify-center p-1 sm:p-4 lg:p-0 animate-in fade-in duration-200">
@@ -1049,9 +1195,24 @@ export default function HostelManagementModal({
 
           <div className="grid gap-6">
             {effectiveHostels.map((hostel: any) => {
-              const matchedHostel = (hostels || []).find((h: any) => (h._id && h._id === (hostel._id || hostel.id)) || (h.id && h.id === (hostel._id || hostel.id)) || h.name === hostel.name) || hostel;
+              const matchedHostel = (localHostels || []).find((h: any) => (h._id && h._id === (hostel._id || hostel.id)) || (h.id && h.id === (hostel._id || hostel.id)) || h.name === hostel.name)
+                || (hostels || []).find((h: any) => (h._id && h._id === (hostel._id || hostel.id)) || (h.id && h.id === (hostel._id || hostel.id)) || h.name === hostel.name)
+                || hostel;
               const hostelKey = hostel._id || hostel.id || hostel.name;
               const isLoading = updatingHostelId === (matchedHostel._id || matchedHostel.id);
+
+              const targetCat = (getHostelCategory(matchedHostel.name) || matchedHostel.name || "").trim().toLowerCase();
+              const matchingStudents = localStudents.filter((s: any) => {
+                const rawH = s.hostelName || "";
+                const sCat = (getHostelCategory(rawH) || rawH).trim().toLowerCase();
+                return sCat === targetCat || rawH.trim().toLowerCase() === targetCat;
+              });
+              const totalStudentsCount = matchingStudents.length;
+              const detectedRoomsCount = new Set(
+                matchingStudents
+                  .map((s: any) => (s.room_number || s.roomNumber || "").trim())
+                  .filter((r: string) => r && r.toLowerCase() !== "unassigned")
+              ).size;
 
               return (
                 <div key={hostel._id} className="bg-white border-2 border-slate-100 p-3 sm:p-6 rounded-2xl hover:border-indigo-100 hover:shadow-xl transition-all relative overflow-hidden group">
@@ -1069,12 +1230,12 @@ export default function HostelManagementModal({
                       <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
                         <button
                           onClick={async () => {
-                            const newPass = await showPrompt("Enter new password for " + hostel.name + ":", (hostel.wardenPassword || "").trim());
+                            const newPass = await showPrompt("Enter new password for " + hostel.name + ":", (matchedHostel.wardenPassword || hostel.wardenPassword || "").trim());
                             if (newPass !== null) {
-                              handleUpdateHostelConfig({ ...hostel, id: hostel._id, wardenPassword: newPass.trim() });
+                              handleUpdateHostelConfig({ ...matchedHostel, id: matchedHostel._id, wardenPassword: newPass.trim() });
                               setVisiblePasswords(prev => {
                                 const newSet = new Set(prev);
-                                newSet.add(hostel._id);
+                                newSet.add(matchedHostel._id || hostel._id);
                                 return newSet;
                               });
                             }
@@ -1216,42 +1377,35 @@ export default function HostelManagementModal({
                       <div className="grid grid-cols-2 gap-2 sm:gap-3.5 bg-slate-50 p-2 sm:p-4 rounded-xl border border-slate-200/60">
                         {/* Credentials Details (Left Column) */}
                         <div className="space-y-2 sm:space-y-4">
-                          <div>
-                            <label className="text-[8px] sm:text-[10px] font-black text-slate-500 uppercase tracking-widest mb-1 block px-0.5">Warden Username</label>
-                            <div className="flex items-center gap-1.5 sm:gap-3 bg-white p-1.5 sm:p-2.5 rounded-lg border border-slate-200 shadow-sm">
-                              <div className="h-1.5 w-1.5 rounded-full bg-emerald-500 shrink-0" />
-                              <input
-                                type="text"
-                                defaultValue={hostel.wardenUsername || (hostel.name.toLowerCase().replace(/ /g, "_") + "_warden")}
-                                onBlur={(e) => handleUpdateHostelConfig({ ...hostel, id: hostel._id, wardenUsername: e.target.value.trim() })}
-                                className="font-bold sm:font-black text-slate-700 text-[10px] sm:text-sm bg-transparent border-none outline-none focus:ring-0 p-0 w-full"
-                              />
-                            </div>
-                          </div>
+                          <WardenCredentialsInput
+                            hostel={hostel}
+                            onSave={(combined) => handleUpdateHostelConfig({ ...hostel, id: hostel._id, wardenUsername: combined })}
+                          />
                           <div>
                             <label className="text-[8px] sm:text-[10px] font-black text-slate-500 uppercase tracking-widest mb-1 block px-0.5">Warden Password</label>
                             <div className="flex items-center gap-1.5 sm:gap-3 bg-white p-1.5 sm:p-2.5 rounded-lg border border-slate-200 justify-between shadow-sm">
                               <div className="flex items-center gap-1.5 sm:gap-3 overflow-hidden">
                                 <div className="h-1.5 w-1.5 rounded-full bg-indigo-500 shrink-0" />
                                 <span className="font-bold sm:font-black text-slate-700 text-[10px] sm:text-sm tracking-wide sm:tracking-widest truncate">
-                                  {visiblePasswords.has(hostel._id)
-                                    ? (hostel.wardenPassword || globalWardenPassword || "Not Set")
-                                    : ((hostel.wardenPassword || globalWardenPassword) ? "••••••••" : "Not Set")
+                                  {visiblePasswords.has(matchedHostel._id || hostel._id)
+                                    ? (matchedHostel.wardenPassword || hostel.wardenPassword || globalWardenPassword || "Not Set")
+                                    : ((matchedHostel.wardenPassword || hostel.wardenPassword || globalWardenPassword) ? "••••••••" : "Not Set")
                                   }
                                 </span>
                               </div>
                               <button
                                 onClick={() => {
+                                  const hId = matchedHostel._id || hostel._id;
                                   setVisiblePasswords(prev => {
                                     const newSet = new Set(prev);
-                                    if (newSet.has(hostel._id)) newSet.delete(hostel._id);
-                                    else newSet.add(hostel._id);
+                                    if (newSet.has(hId)) newSet.delete(hId);
+                                    else newSet.add(hId);
                                     return newSet;
                                   });
                                 }}
                                 className="p-0.5 text-slate-400 hover:text-indigo-600 transition-colors shrink-0"
                               >
-                                {visiblePasswords.has(hostel._id) ? (
+                                {visiblePasswords.has(matchedHostel._id || hostel._id) ? (
                                   <svg className="w-3.5 h-3.5 sm:w-4 sm:h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.88 9.88l-3.29-3.29m7.532 7.532l3.29 3.29M3 3l3.59 3.59m0 0A9.953 9.953 0 0112 5c4.478 0 8.268 2.943 9.543 7a10.025 10.025 0 01-4.132 5.411m0 0L21 21" /></svg>
                                 ) : (
                                   <svg className="w-3.5 h-3.5 sm:w-4 sm:h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" /></svg>
@@ -1259,22 +1413,45 @@ export default function HostelManagementModal({
                               </button>
                             </div>
                           </div>
+
+                          {/* Dual Filler: Total Rooms & Total Students */}
                           <div>
-                            <label className="text-[8px] sm:text-[10px] font-black text-slate-500 uppercase tracking-widest mb-1 block px-0.5">Total Rooms (Capacity)</label>
-                            <div className="flex items-center gap-1.5 sm:gap-3 bg-white p-1.5 sm:p-2.5 rounded-lg border border-slate-200 shadow-sm">
+                            {/* Dual Header Label */}
+                            <div className="grid grid-cols-2 gap-1 text-[8px] sm:text-[10px] font-black uppercase tracking-widest mb-1 px-0.5">
+                              <span className="text-slate-500">Total Rooms</span>
+                              <span className="text-slate-500 pl-1 whitespace-nowrap">Total Students</span>
+                            </div>
+
+                            {/* Same compact single box divided by vertical blue separator */}
+                            <div className="flex items-center gap-1 sm:gap-2 bg-white p-1.5 sm:p-2.5 rounded-lg border border-slate-200 shadow-sm focus-within:border-blue-400 focus-within:ring-1 focus-within:ring-blue-100 transition-all">
                               <div className="h-1.5 w-1.5 rounded-full bg-amber-500 shrink-0" />
+                              
+                              {/* Left Sub-input: Total Rooms */}
                               <input
                                 type="number"
-                                defaultValue={hostel.totalRooms || 0}
-                                placeholder="0"
+                                defaultValue={matchedHostel.totalRooms || detectedRoomsCount || 0}
+                                placeholder={String(detectedRoomsCount || 0)}
                                 onBlur={(e) => {
                                   const newVal = parseInt(e.target.value);
                                   if (!isNaN(newVal)) {
-                                    handleUpdateHostelConfig({ ...hostel, id: hostel._id, totalRooms: newVal });
+                                    handleUpdateHostelConfig({ ...matchedHostel, id: matchedHostel._id, totalRooms: newVal });
                                   }
                                 }}
-                                className="font-bold sm:font-black text-slate-700 text-[10px] sm:text-sm bg-transparent border-none outline-none focus:ring-0 p-0 w-full [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                                className="font-bold sm:font-black text-slate-700 text-[10px] sm:text-xs bg-transparent border-none outline-none focus:ring-0 p-0 w-1/2 min-w-0 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                               />
+
+                              {/* Vertical divider line marked with blue pen */}
+                              <div className="w-[1.5px] h-4 sm:h-5 bg-blue-500 shrink-0" />
+
+                              {/* Right Sub-input: Total Students (Live count mapped with Screenshot 3 visual room grid) */}
+                              <div className="w-1/2 min-w-0 flex items-center justify-between pl-1">
+                                <span className="font-bold sm:font-black text-slate-700 text-[10px] sm:text-xs truncate">
+                                  {totalStudentsCount}
+                                </span>
+                                <span className="text-[7.5px] sm:text-[8px] bg-blue-50 text-blue-700 px-1 py-0.5 rounded font-black border border-blue-200 shrink-0">
+                                  LIVE
+                                </span>
+                              </div>
                             </div>
                           </div>
 

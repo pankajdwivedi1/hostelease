@@ -112,23 +112,29 @@ const filterGatePassForPrisma = (data: any) => {
     const filtered: any = {};
     for (const key of gatePassFields) {
         if (key === 'firebaseUid') {
-            filtered.firebaseUid = String(data.firebaseUid || data.firebaseUID || data.firebase_uid || "");
+            if (data.firebaseUid !== undefined || data.firebaseUID !== undefined || data.firebase_uid !== undefined) {
+                filtered.firebaseUid = String(data.firebaseUid || data.firebaseUID || data.firebase_uid || "");
+            }
             continue;
         }
         if (key === 'checkOutIstTime') {
-            filtered.checkOutIstTime = data.checkOutIstTime || data.checkOutISTTime;
+            const val = data.checkOutIstTime || data.checkOutISTTime;
+            if (val !== undefined) filtered.checkOutIstTime = val;
             continue;
         }
         if (key === 'checkOutIstDate') {
-            filtered.checkOutIstDate = data.checkOutIstDate || data.checkOutISTDate;
+            const val = data.checkOutIstDate || data.checkOutISTDate;
+            if (val !== undefined) filtered.checkOutIstDate = val;
             continue;
         }
         if (key === 'checkInIstTime') {
-            filtered.checkInIstTime = data.checkInIstTime || data.checkInISTTime;
+            const val = data.checkInIstTime || data.checkInISTTime;
+            if (val !== undefined) filtered.checkInIstTime = val;
             continue;
         }
         if (key === 'checkInIstDate') {
-            filtered.checkInIstDate = data.checkInIstDate || data.checkInISTDate;
+            const val = data.checkInIstDate || data.checkInISTDate;
+            if (val !== undefined) filtered.checkInIstDate = val;
             continue;
         }
         if (data[key] !== undefined) {
@@ -140,16 +146,18 @@ const filterGatePassForPrisma = (data: any) => {
             }
         }
     }
-    // ⚡ GLOBAL INTEGRITY: Always guarantee clean type
-    if (filtered.type) {
-        const rawT = String(filtered.type).toLowerCase().trim();
-        if (rawT.includes('leave') || rawT === 'hleave' || rawT === 'home') {
-            filtered.type = 'HOME-LEAVE';
-        } else if (rawT.includes('outing') || rawT.includes('gate-pass') || rawT.includes('gatepass')) {
+    // ⚡ GLOBAL INTEGRITY: Always guarantee clean type when provided
+    if (filtered.type !== undefined) {
+        if (filtered.type) {
+            const rawT = String(filtered.type).toLowerCase().trim();
+            if (rawT.includes('leave') || rawT === 'hleave' || rawT === 'home') {
+                filtered.type = 'HOME-LEAVE';
+            } else if (rawT.includes('outing') || rawT.includes('gate-pass') || rawT.includes('gatepass')) {
+                filtered.type = 'outing';
+            }
+        } else {
             filtered.type = 'outing';
         }
-    } else if (filtered.type === null || filtered.type === undefined) {
-        filtered.type = 'outing';
     }
     return filtered;
 };
@@ -436,6 +444,8 @@ export const mapSettingsToCamelCase = (s: any) => {
         registrationFieldsConfig: s.registration_fields_config || s.registrationFieldsConfig || {},
         formBuilderConfig: s.form_builder_config || s.formBuilderConfig || [],
         universityBankDetails: s.university_bank_details || s.universityBankDetails || {},
+        deanPhone: (s.university_bank_details || s.universityBankDetails)?.deanPhone || s.dean_phone || s.deanPhone || '',
+        superAdminPhone: (s.university_bank_details || s.universityBankDetails)?.superAdminPhone || s.super_admin_phone || s.superAdminPhone || '',
         wifiWhitelist: s.wifi_whitelist || s.wifiWhitelist || [],
         hostelPrefixMap: s.hostel_prefix_map || s.hostelPrefixMap || [],
         enableManualAttendance: s.enable_manual_attendance !== undefined ? s.enable_manual_attendance : (s.enableManualAttendance || false),
@@ -727,9 +737,24 @@ export const db = {
             if (query.userId) whereClause.userId = query.userId;
             if (query.userType) whereClause.userType = query.userType;
             if (query.id) whereClause.id = query.id;
-            await prisma.pushSubscription.deleteMany({
-                where: whereClause
-            });
+
+            if (query.endpoint) {
+                try {
+                    const allSubs = await prisma.pushSubscription.findMany();
+                    const matched = allSubs.filter((s: any) => s.subscription && (s.subscription as any).endpoint === query.endpoint).map((s: any) => s.id);
+                    if (matched.length > 0) {
+                        await prisma.pushSubscription.deleteMany({
+                            where: { id: { in: matched } }
+                        });
+                    }
+                } catch (e) {}
+            }
+
+            if (Object.keys(whereClause).length > 0) {
+                await prisma.pushSubscription.deleteMany({
+                    where: whereClause
+                });
+            }
             return { success: true };
         }
     },
@@ -2220,8 +2245,10 @@ export const db = {
                 tenantId = "26739d24-0214-409b-aa81-42e628e88c2b";
             }
 
+            const filteredPrisma = filterGatePassForPrisma(gatePassData);
+            if (!filteredPrisma.type) filteredPrisma.type = 'outing';
             const data = {
-                ...filterGatePassForPrisma(gatePassData),
+                ...filteredPrisma,
                 id: crypto.randomUUID(),
                 tenantId: tenantId
             };

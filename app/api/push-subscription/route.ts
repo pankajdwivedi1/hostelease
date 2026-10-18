@@ -15,8 +15,13 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Clear existing subscription for this user to avoid duplicates
+    // Clear existing subscription for this user and this endpoint to prevent cross-role device confusion
     try {
+      if (subscription.endpoint) {
+        await db.pushSubscription.deleteMany({
+          endpoint: subscription.endpoint
+        });
+      }
       await db.pushSubscription.deleteMany({
         userId,
         userType

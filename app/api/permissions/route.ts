@@ -470,6 +470,68 @@ export async function PATCH(request: NextRequest) {
 
     await db.permissions.update(permissionId, update);
 
+    // ⚡ RETROACTIVE GATE PASS RECONCILIATION:
+    // If authorities approve an official leave and the student is ALREADY OUT (or has an open gate pass),
+    // immediately link that open pass to this approved leave, convert its type to HOME-LEAVE,
+    // and broadcast the event so all live dashboards update to HOME-LEAVE instantaneously!
+    if (update.status === "allowed") {
+      const rawType = String(currentPermission.requestType || "").toLowerCase().trim();
+      const isLeave = rawType.includes("leave") || rawType === "home" || rawType === "hleave";
+      const sId = (typeof currentPermission.studentId === "object" 
+        ? (currentPermission.studentId?._id || currentPermission.studentId?.id) 
+        : currentPermission.studentId)?.toString();
+
+      if (isLeave && sId) {
+        try {
+          const openPassesRes = await db.gatePasses.list({ studentId: sId, status: "out" });
+          const openPass = openPassesRes?.records?.[0];
+          if (openPass) {
+            const passId = (openPass._id || openPass.id)?.toString();
+            if (passId) {
+              console.log(`🔗 [RETRO_LEAVE_SYNC] Linking open gatepass ${passId} to approved leave ${permissionId} for student ${sId}`);
+              await db.gatePasses.update(passId, {
+                type: "HOME-LEAVE",
+                permissionId: permissionId,
+                reason: currentPermission.reason || "Home Leave"
+              });
+
+              // Update student status dynamic fields
+              await db.students.update(sId, {
+                studentStatus: "out",
+                dynamicFields: {
+                  ...((currentPermission.student as any)?.dynamicFields || {}),
+                  outingType: "leave",
+                  leaveFrom: currentPermission.fromDateTime ? new Date(currentPermission.fromDateTime).toISOString() : null,
+                  leaveTo: currentPermission.toDateTime ? new Date(currentPermission.toDateTime).toISOString() : null,
+                  leaveReason: currentPermission.reason || null
+                }
+              });
+
+              // Real-time broadcast to all connected GatepassView & Admin screens
+              try {
+                const { broadcastGateEvent } = await import("@/lib/eventEmitter");
+                broadcastGateEvent({
+                  studentId: sId,
+                  studentStatus: "out",
+                  outingType: "leave",
+                  action: "reconcile",
+                  studentName: currentPermission.name || openPass.studentName,
+                  hostelName: currentPermission.hostelName || openPass.hostelName,
+                  roomNumber: currentPermission.roomNumber || openPass.roomNumber,
+                  registrationId: currentPermission.registrationId || openPass.registrationId || "",
+                  phoneNumber: openPass.phoneNumber || ""
+                });
+              } catch (broadcastErr) {
+                console.warn("⚠️ Reconcile broadcast failed (non-critical):", broadcastErr);
+              }
+            }
+          }
+        } catch (reconcileErr) {
+          console.error("⚠️ Failed to retroactively link open pass on leave approval:", reconcileErr);
+        }
+      }
+    }
+
     const populatedPermission = await db.permissions.getById(permissionId, { populate: true });
 
     if (!populatedPermission) {

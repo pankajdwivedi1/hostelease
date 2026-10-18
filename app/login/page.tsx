@@ -1,158 +1,303 @@
 "use client";
 
 import { useState, useEffect } from "react";
+
 import { useRouter } from "next/navigation";
-import { signInWithPopup, signInWithRedirect, getRedirectResult, signInWithCredential, GoogleAuthProvider, User } from "firebase/auth";
+
+import {
+  signInWithPopup,
+  signInWithRedirect,
+  getRedirectResult,
+  signInWithCredential,
+  GoogleAuthProvider,
+  User,
+} from "firebase/auth";
+
 import { auth, googleProvider } from "@/lib/firebase";
+
 // Supabase removed — using Firebase Auth for all logins
+
 import { useSearchParams } from "next/navigation";
+
 import { Suspense } from "react";
+
 import { Loader2 } from "lucide-react";
+
 import { Capacitor } from "@capacitor/core";
+
 import { showToast, showPrompt } from "@/lib/toast";
+
 import { ALL_COUNTRIES, getCountryLabel } from "@/lib/countries";
-
-
 
 function LoginForm() {
   const router = useRouter();
+
   const searchParams = useSearchParams();
+
   const [loading, setLoading] = useState(false);
+
   const [error, setError] = useState("");
+
   const [showAdminPassword, setShowAdminPassword] = useState(false);
+
   const [adminPassword, setAdminPassword] = useState("");
+
+  const [adminPhone, setAdminPhone] = useState("");
+
+  const [adminOtp, setAdminOtp] = useState("");
+
+  const [adminOtpSent, setAdminOtpSent] = useState(false);
+
   const [adminLoading, setAdminLoading] = useState(false);
+
   const [showWardenPassword, setShowWardenPassword] = useState(false);
+
   const [wardenPassword, setWardenPassword] = useState("");
+
+  const [wardenPhone, setWardenPhone] = useState("");
+
+  const [wardenOtp, setWardenOtp] = useState("");
+
+  const [wardenOtpSent, setWardenOtpSent] = useState(false);
+
   const [wardenLoading, setWardenLoading] = useState(false);
+
   const [showDeveloperPassword, setShowDeveloperPassword] = useState(false);
+
   const [developerPassword, setDeveloperPassword] = useState("");
+
   const [developerLoading, setDeveloperLoading] = useState(false);
+
   const [showLogoutToast, setShowLogoutToast] = useState(false);
-  const [hostels, setHostels] = useState<Array<{ _id: string; name: string }>>([]);
+
+  const [hostels, setHostels] = useState<Array<{ _id: string; name: string }>>(
+    [],
+  );
+
   const [selectedHostelId, setSelectedHostelId] = useState("");
+
   const [isDeveloperSetup, setIsDeveloperSetup] = useState(true);
+
   const [mounted, setMounted] = useState(false);
+
   const [showParentLogin, setShowParentLogin] = useState(false);
+
   const [parentPhone, setParentPhone] = useState("");
+
   const [parentCountryCode, setParentCountryCode] = useState("+91");
+
   const [otp, setOtp] = useState("");
+
   const [otpSent, setOtpSent] = useState(false);
+
   const [parentLoading, setParentLoading] = useState(false);
+
   const [parentReqId, setParentReqId] = useState("");
+
   const [isRoleDropdownOpen, setIsRoleDropdownOpen] = useState(false);
-  const [superAdminResetStep, setSuperAdminResetStep] = useState<"none" | "phone" | "otp" | "reset">("none");
+
+  const [superAdminResetStep, setSuperAdminResetStep] = useState<
+    "none" | "phone" | "otp" | "reset"
+  >("none");
+
   const [superAdminResetPhone, setSuperAdminResetPhone] = useState("");
+
   const [superAdminResetOtp, setSuperAdminResetOtp] = useState("");
+
   const [superAdminNewPassword, setSuperAdminNewPassword] = useState("");
-  const [superAdminConfirmPassword, setSuperAdminConfirmPassword] = useState("");
+
+  const [superAdminConfirmPassword, setSuperAdminConfirmPassword] =
+    useState("");
+
   const [superAdminResetLoading, setSuperAdminResetLoading] = useState(false);
+
+  // 🔐 Staff (Warden & Dean) Password Reset
+
+  const [staffResetRole, setStaffResetRole] = useState<
+    "none" | "warden" | "dean"
+  >("none");
+
+  const [staffResetStep, setStaffResetStep] = useState<
+    "none" | "phone" | "otp"
+  >("none");
+
+  const [staffResetHostelId, setStaffResetHostelId] = useState("");
+
+  const [staffResetPhone, setStaffResetPhone] = useState("");
+
+  const [staffResetOtp, setStaffResetOtp] = useState("");
+
+  const [staffResetNewPassword, setStaffResetNewPassword] = useState("");
+
+  const [staffResetConfirmPassword, setStaffResetConfirmPassword] =
+    useState("");
+
+  const [staffResetLoading, setStaffResetLoading] = useState(false);
+
   const [loadingText, setLoadingText] = useState("");
+
   const [showIosGuideModal, setShowIosGuideModal] = useState(false);
+
   const [showWindowsGuideModal, setShowWindowsGuideModal] = useState(false);
+
   const [windowsInstallPrompt, setWindowsInstallPrompt] = useState<any>(null);
 
   // ⚡ INSTANT BRANDING SYNC: Initialize from URL or Local Storage to prevent flickering
+
   const [tenantName, setTenantName] = useState("Hosteleaze");
+
   const [tenantLogo, setTenantLogo] = useState("");
 
   useEffect(() => {
     // ⚡ FIRST PASS: Check URL and Storage instantly (Zero Flicker)
-    if (typeof window !== 'undefined') {
-      const tenantParam = searchParams.get('tenant') || localStorage.getItem("lastTenantSlug");
+
+    if (typeof window !== "undefined") {
+      const tenantParam =
+        searchParams.get("tenant") || localStorage.getItem("lastTenantSlug");
+
       if (tenantParam) {
         const cleanSlug = tenantParam.toLowerCase();
-        if (cleanSlug === 'ogi' || cleanSlug === 'oist') {
+
+        if (cleanSlug === "ogi" || cleanSlug === "oist") {
           setTenantName("Oriental Group of Institutes (OGI)");
+
           setTenantLogo(localStorage.getItem("lastTenantLogo") || "");
-        } else if (localStorage.getItem("lastTenantSlug") === cleanSlug && localStorage.getItem("lastTenantName")) {
+        } else if (
+          localStorage.getItem("lastTenantSlug") === cleanSlug &&
+          localStorage.getItem("lastTenantName")
+        ) {
           setTenantLogo(localStorage.getItem("lastTenantLogo") || "");
-          setTenantName(localStorage.getItem("lastTenantName") || tenantParam.toUpperCase());
+
+          setTenantName(
+            localStorage.getItem("lastTenantName") || tenantParam.toUpperCase(),
+          );
         } else {
           setTenantName(tenantParam.toUpperCase());
         }
       } else {
         setTenantName(localStorage.getItem("lastTenantName") || "Hosteleaze");
+
         setTenantLogo(localStorage.getItem("lastTenantLogo") || "");
       }
     }
 
     setMounted(true);
+
     fetchHostels();
+
     fetchTenantConfig();
+
     checkDeveloperSetup();
-    
+
     if (searchParams.get("logout") === "success") {
       document.cookie = "userType=; path=/; max-age=0; SameSite=Lax";
+
       setShowLogoutToast(true);
+
       showToast("You have successfully logged out.", "success");
+
       setTimeout(() => setShowLogoutToast(false), 5000);
+
       try {
-        if (typeof window !== 'undefined' && (Capacitor.isNativePlatform() || (window as any).Capacitor?.isNativePlatform?.())) {
-          import('@codetrix-studio/capacitor-google-auth').then(async ({ GoogleAuth }) => {
-            try {
-              await GoogleAuth.initialize({
-                clientId: '729813273338-btdk8vrja4u1eqmba6hdi3cicp0d4n4h.apps.googleusercontent.com',
-                scopes: ['profile', 'email'],
-                grantOfflineAccess: true,
-              });
-            } catch (e) {}
-            await GoogleAuth.signOut().catch(() => {});
-          }).catch(() => {});
+        if (
+          typeof window !== "undefined" &&
+          (Capacitor.isNativePlatform() ||
+            (window as any).Capacitor?.isNativePlatform?.())
+        ) {
+          import("@codetrix-studio/capacitor-google-auth")
+            .then(async ({ GoogleAuth }) => {
+              try {
+                await GoogleAuth.initialize({
+                  clientId:
+                    "729813273338-btdk8vrja4u1eqmba6hdi3cicp0d4n4h.apps.googleusercontent.com",
+
+                  scopes: ["profile", "email"],
+
+                  grantOfflineAccess: true,
+                });
+              } catch (e) {}
+
+              await GoogleAuth.signOut().catch(() => {});
+            })
+            .catch(() => {});
         }
       } catch (e) {}
+
       // Clean up the URL
-      window.history.replaceState({}, '', '/login');
+
+      window.history.replaceState({}, "", "/login");
     }
 
     // 🍏 Process Firebase Google redirect login result (for iOS PWA / redirect logins)
+
     const checkRedirectLogin = async () => {
       try {
         const result = await getRedirectResult(auth);
+
         if (result && result.user) {
           setLoading(true);
+
           setLoadingText("Verifying Account...");
+
           await handleStudentUserAuth(result.user);
         }
       } catch (err: any) {
         console.warn("Redirect auth check note:", err);
-        if (err.code && err.code !== 'auth/null-user') {
-          const errMsg = err.message || "Google sign-in failed. Please try again.";
+
+        if (err.code && err.code !== "auth/null-user") {
+          const errMsg =
+            err.message || "Google sign-in failed. Please try again.";
+
           setError(errMsg);
+
           showToast(errMsg, "error");
         }
+
         setLoading(false);
       }
     };
+
     checkRedirectLogin();
   }, [searchParams]);
 
   // 📱 Handle Android Hardware / System Navigation Back Button (marked by blue pen)
+
   useEffect(() => {
     let backListener: any = null;
+
     const setupBackButton = async () => {
       try {
-        const { Capacitor } = await import('@capacitor/core');
+        const { Capacitor } = await import("@capacitor/core");
+
         if (Capacitor.isNativePlatform()) {
-          const { App } = await import('@capacitor/app');
-          backListener = await App.addListener('backButton', ({ canGoBack }) => {
-            if (loading) {
-              setLoading(false);
-              setLoadingText("");
-              return;
-            }
-            if (canGoBack) {
-              window.history.back();
-            } else {
-              App.exitApp();
-            }
-          });
+          const { App } = await import("@capacitor/app");
+
+          backListener = await App.addListener(
+            "backButton",
+            ({ canGoBack }) => {
+              if (loading) {
+                setLoading(false);
+
+                setLoadingText("");
+
+                return;
+              }
+
+              if (canGoBack) {
+                window.history.back();
+              } else {
+                App.exitApp();
+              }
+            },
+          );
         }
       } catch (e) {
         console.warn("Back button registration note:", e);
       }
     };
+
     setupBackButton();
+
     return () => {
       if (backListener?.remove) {
         backListener.remove();
@@ -161,14 +306,18 @@ function LoginForm() {
   }, [loading]);
 
   // 💻 Capture Windows / Desktop PWA native installation prompt (0 warnings)
+
   useEffect(() => {
     const handleBeforeInstall = (e: any) => {
       e.preventDefault();
+
       setWindowsInstallPrompt(e);
     };
-    window.addEventListener('beforeinstallprompt', handleBeforeInstall);
+
+    window.addEventListener("beforeinstallprompt", handleBeforeInstall);
+
     return () => {
-      window.removeEventListener('beforeinstallprompt', handleBeforeInstall);
+      window.removeEventListener("beforeinstallprompt", handleBeforeInstall);
     };
   }, []);
 
@@ -176,41 +325,58 @@ function LoginForm() {
     if (windowsInstallPrompt) {
       try {
         windowsInstallPrompt.prompt();
+
         const { outcome } = await windowsInstallPrompt.userChoice;
-        if (outcome === 'accepted') {
+
+        if (outcome === "accepted") {
           showToast("HostelEaze installed successfully on Windows!", "success");
         }
+
         setWindowsInstallPrompt(null);
       } catch (e) {
         setShowWindowsGuideModal(true);
       }
     } else {
       try {
-        window.dispatchEvent(new CustomEvent('open-pwa-install'));
+        window.dispatchEvent(new CustomEvent("open-pwa-install"));
       } catch (e) {}
+
       setShowWindowsGuideModal(true);
     }
   };
 
   const fetchTenantConfig = async () => {
     try {
-      let tenant = searchParams.get('tenant');
-      if (!tenant && typeof window !== 'undefined') {
+      let tenant = searchParams.get("tenant");
+
+      if (!tenant && typeof window !== "undefined") {
         tenant = localStorage.getItem("lastTenantSlug");
       }
-      const res = await fetch(`/api/tenant/config${tenant ? `?tenant=${encodeURIComponent(tenant)}` : ''}`);
+
+      const res = await fetch(
+        `/api/tenant/config${tenant ? `?tenant=${encodeURIComponent(tenant)}` : ""}`,
+      );
+
       if (res.ok) {
         const data = await res.json();
+
         if (data.success && data.name) {
           setTenantName(data.name);
+
           setTenantLogo(data.logo || "");
+
           if (data.defaultCountryCode) {
             setParentCountryCode(data.defaultCountryCode);
           }
+
           // ⚡ Persist for instant load next time
+
           localStorage.setItem("lastTenantName", data.name);
+
           localStorage.setItem("lastTenantLogo", data.logo || "");
+
           localStorage.setItem("lastTenantSlug", data.slug || tenant || "");
+
           if (data.slug || tenant) {
             document.cookie = `tenant-slug=${data.slug || tenant}; path=/; max-age=15552000; SameSite=Lax`; // 6 months
           }
@@ -223,16 +389,22 @@ function LoginForm() {
 
   const fetchHostels = async () => {
     try {
-      let tenant = searchParams.get('tenant');
-      if (!tenant && typeof window !== 'undefined') {
+      let tenant = searchParams.get("tenant");
+
+      if (!tenant && typeof window !== "undefined") {
         tenant = localStorage.getItem("lastTenantSlug");
       }
-      const response = await fetch(`/api/hostels${tenant ? `?tenant=${encodeURIComponent(tenant)}` : ''}`);
+
+      const response = await fetch(
+        `/api/hostels${tenant ? `?tenant=${encodeURIComponent(tenant)}` : ""}`,
+      );
 
       if (response.ok) {
         const contentType = response.headers.get("content-type");
+
         if (contentType?.includes("application/json")) {
           const data = await response.json();
+
           if (data.hostels && Array.isArray(data.hostels)) {
             setHostels(data.hostels);
           }
@@ -245,13 +417,19 @@ function LoginForm() {
 
   const checkDeveloperSetup = async () => {
     try {
-      let tenant = searchParams.get('tenant');
-      if (!tenant && typeof window !== 'undefined') {
+      let tenant = searchParams.get("tenant");
+
+      if (!tenant && typeof window !== "undefined") {
         tenant = localStorage.getItem("lastTenantSlug");
       }
-      const res = await fetch(`/api/developer/setup-status${tenant ? `?tenant=${encodeURIComponent(tenant)}` : ''}`);
+
+      const res = await fetch(
+        `/api/developer/setup-status${tenant ? `?tenant=${encodeURIComponent(tenant)}` : ""}`,
+      );
+
       if (res.ok) {
         const data = await res.json();
+
         if (data.success) {
           setIsDeveloperSetup(data.isSetup);
         }
@@ -260,24 +438,31 @@ function LoginForm() {
       console.warn("Developer setup check notice:", e);
     }
   };
-  
+
   // ⚡ Web OTP API: Automatically read SMS on Android Chrome
+
   useEffect(() => {
     if (!otpSent) return;
 
-    if ('OTPCredential' in window) {
+    if ("OTPCredential" in window) {
       const ac = new AbortController();
-      (navigator.credentials as any).get({
-        otp: { transport: ['sms'] },
-        signal: ac.signal
-      }).then((otp: any) => {
-        if (otp && otp.code) {
-          setOtp(otp.code);
-          handleVerifyOtp(otp.code); // Instantly verify when received!
-        }
-      }).catch((err: any) => {
-        console.warn('Web OTP API Error (or aborted):', err);
-      });
+
+      (navigator.credentials as any)
+        .get({
+          otp: { transport: ["sms"] },
+
+          signal: ac.signal,
+        })
+        .then((otp: any) => {
+          if (otp && otp.code) {
+            setOtp(otp.code);
+
+            handleVerifyOtp(otp.code); // Instantly verify when received!
+          }
+        })
+        .catch((err: any) => {
+          console.warn("Web OTP API Error (or aborted):", err);
+        });
 
       return () => {
         ac.abort(); // Cancel listener if user types manually or leaves page
@@ -285,25 +470,31 @@ function LoginForm() {
     }
   }, [otpSent]);
 
-
   const handleSendOtp = async () => {
     const cleanNumber = parentPhone.replace(/\D/g, "");
+
     if (!cleanNumber || cleanNumber.length < 7 || cleanNumber.length > 15) {
       const errMsg = "Please enter a valid mobile number";
+
       setError(errMsg);
+
       showToast(errMsg, "warning");
+
       return;
     }
 
     try {
       setParentLoading(true);
+
       setError("");
 
       const fullPhoneNumber = `${parentCountryCode}${cleanNumber}`;
 
       const response = await fetch("/api/parent/send-otp", {
         method: "POST",
+
         headers: { "Content-Type": "application/json" },
+
         body: JSON.stringify({ phoneNumber: fullPhoneNumber }),
       });
 
@@ -316,15 +507,19 @@ function LoginForm() {
       if (data.reqId) {
         setParentReqId(data.reqId);
       }
+
       setOtpSent(true);
-      
+
       if (data.developmentOtp) {
         console.log(`[Dev Auto-Fill] OTP received: ${data.developmentOtp}`);
       }
     } catch (err: any) {
       console.error("Send OTP error:", err);
+
       const errMsg = err.message || "Something went wrong. Please try again.";
+
       setError(errMsg);
+
       showToast(errMsg, "error");
     } finally {
       setParentLoading(false);
@@ -334,60 +529,91 @@ function LoginForm() {
   const handlePasteClipboard = async () => {
     try {
       const text = await navigator.clipboard.readText();
+
       const numbers = text.replace(/\D/g, "");
+
       if (numbers.length === 6) {
         setOtp(numbers);
+
         setError("");
+
         handleVerifyOtp(numbers);
       } else if (numbers.length > 0) {
         setOtp(numbers.slice(0, 6));
       }
     } catch (err) {
       console.warn("Clipboard access denied", err);
+
       setError("Please allow clipboard permission to paste.");
     }
   };
 
   const handleVerifyOtp = async (codeOverride?: any) => {
-    const activeOtp = (typeof codeOverride === 'string') ? codeOverride : otp;
+    const activeOtp = typeof codeOverride === "string" ? codeOverride : otp;
+
     if (!activeOtp || activeOtp.length !== 6) {
       const errMsg = "Please enter the 6-digit OTP code";
+
       setError(errMsg);
+
       showToast(errMsg, "warning");
+
       return;
     }
 
     try {
       setParentLoading(true);
+
       setError("");
 
       const cleanNumber = parentPhone.replace(/\D/g, "");
+
       const fullPhoneNumber = `${parentCountryCode}${cleanNumber}`;
 
       const response = await fetch("/api/parent/verify-otp", {
         method: "POST",
+
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ phoneNumber: fullPhoneNumber, otp: activeOtp, reqId: parentReqId }),
+
+        body: JSON.stringify({
+          phoneNumber: fullPhoneNumber,
+          otp: activeOtp,
+          reqId: parentReqId,
+        }),
       });
 
       const data = await response.json();
 
       if (!response.ok) {
         let errorMessage = data.error || "Verification failed";
-        if (errorMessage.toLowerCase() === "invalid otp" || errorMessage.toLowerCase().includes("invalid otp")) {
-          const maskedPhone = parentPhone.length === 10 ? `${parentPhone.substring(0, 4)}XXXX${parentPhone.substring(8, 10)}` : parentPhone;
+
+        if (
+          errorMessage.toLowerCase() === "invalid otp" ||
+          errorMessage.toLowerCase().includes("invalid otp")
+        ) {
+          const maskedPhone =
+            parentPhone.length === 10
+              ? `${parentPhone.substring(0, 4)}XXXX${parentPhone.substring(8, 10)}`
+              : parentPhone;
+
           errorMessage = `Invalid OTP, please enter correct OTP received on your linked mobile number '${maskedPhone}'`;
         }
+
         throw new Error(errorMessage);
       }
 
       localStorage.setItem("userType", "parent");
+
       localStorage.setItem("parentPhone", parentPhone);
+
       router.push("/");
     } catch (err: any) {
       console.error("Verify OTP error:", err);
+
       const errMsg = err.message || "Invalid OTP code. Please try again.";
+
       setError(errMsg);
+
       showToast(errMsg, "error");
     } finally {
       setParentLoading(false);
@@ -396,29 +622,40 @@ function LoginForm() {
 
   const handleStudentUserAuth = async (user: User) => {
     if (!user?.email) throw new Error("No email returned from Google login");
+
     const cleanEmail = user.email.toLowerCase().trim();
 
     // Mark as student in localStorage & cookie & preserve email for onboarding pre-fill
+
     localStorage.setItem("userType", "student");
-    document.cookie = "userType=student; path=/; max-age=2592000; SameSite=Lax";
+
+    document.cookie =
+      "userType=student; path=/; max-age=315360000; SameSite=Lax";
+
     if (cleanEmail) {
       localStorage.setItem("userEmail", cleanEmail);
+
       localStorage.setItem("studentEmail", cleanEmail);
     }
 
     setLoadingText("Verifying Account...");
 
     // ⚡ FAST DB CHECK: Look up student by firebaseUID or email
+
     let studentDataObj: any = null;
+
     let tenantSlugRes: string | null = null;
 
     try {
       const response = await fetch(
-        `/api/students?firebaseUID=${encodeURIComponent(user.uid)}&email=${encodeURIComponent(cleanEmail)}&minimal=true`
+        `/api/students?firebaseUID=${encodeURIComponent(user.uid)}&email=${encodeURIComponent(cleanEmail)}&minimal=true`,
       );
+
       if (response.ok) {
         const resJson = await response.json();
+
         studentDataObj = resJson.student;
+
         tenantSlugRes = resJson.tenantSlug;
       }
     } catch (err) {
@@ -426,12 +663,18 @@ function LoginForm() {
     }
 
     // Fallback query by email alone if primary check returned nothing
+
     if (!studentDataObj && cleanEmail) {
       try {
-        const fallbackRes = await fetch(`/api/students?email=${encodeURIComponent(cleanEmail)}`);
+        const fallbackRes = await fetch(
+          `/api/students?email=${encodeURIComponent(cleanEmail)}`,
+        );
+
         if (fallbackRes.ok) {
           const fallbackJson = await fallbackRes.json();
+
           studentDataObj = fallbackJson.student;
+
           tenantSlugRes = fallbackJson.tenantSlug;
         }
       } catch (fallbackErr) {
@@ -441,74 +684,108 @@ function LoginForm() {
 
     if (studentDataObj) {
       // Existing student found — cache and open dashboard directly
+
       const cached = localStorage.getItem("cachedStudentData");
+
       const existing = cached ? JSON.parse(cached) : {};
+
       const merged = { ...existing, ...studentDataObj };
+
       localStorage.setItem("userType", "student");
+
       localStorage.setItem("cachedStudentData", JSON.stringify(merged));
-      document.cookie = "userType=student; path=/; max-age=2592000; SameSite=Lax";
+
+      document.cookie =
+        "userType=student; path=/; max-age=315360000; SameSite=Lax";
 
       if (tenantSlugRes) {
         document.cookie = `tenant-slug=${tenantSlugRes}; path=/; max-age=${60 * 60 * 24 * 180}; SameSite=Lax`; // 6 months
       }
 
       setLoadingText("Opening your dashboard...");
+
       window.location.href = "/";
+
       return;
     } else {
       // ⚡ Truly new student — purge stale caches & route directly to onboarding
+
       localStorage.removeItem("cachedStudentData");
+
       localStorage.removeItem("cachedParentStudentData");
+
       localStorage.removeItem("studentStatus");
+
       localStorage.setItem("userType", "student");
+
       if (cleanEmail) {
         localStorage.setItem("userEmail", cleanEmail);
+
         localStorage.setItem("studentEmail", cleanEmail);
       }
+
       window.location.href = "/onboarding";
+
       return;
     }
   };
 
   const handleGoogleLogin = async () => {
     let safetyTimer: any = null;
+
     try {
       setLoading(true);
+
       setLoadingText("Connecting to Google...");
+
       setError("");
 
       safetyTimer = setTimeout(() => {
         setLoading(false);
+
         setLoadingText("");
       }, 25000);
 
-      const isNative = typeof window !== 'undefined' && (
-        Capacitor.isNativePlatform() ||
-        (window as any).Capacitor?.isNativePlatform?.() ||
-        (window as any).Capacitor?.getPlatform?.() === 'android' ||
-        (window as any).Capacitor?.getPlatform?.() === 'ios'
-      );
+      const isNative =
+        typeof window !== "undefined" &&
+        (Capacitor.isNativePlatform() ||
+          (window as any).Capacitor?.isNativePlatform?.() ||
+          (window as any).Capacitor?.getPlatform?.() === "android" ||
+          (window as any).Capacitor?.getPlatform?.() === "ios");
 
-      const isStandalone = typeof window !== 'undefined' && (
-        (window.navigator as any).standalone === true ||
-        window.matchMedia('(display-mode: standalone)').matches
-      );
-      const isIOSDevice = typeof window !== 'undefined' && /iPad|iPhone|iPod/.test(navigator.userAgent);
+      const isStandalone =
+        typeof window !== "undefined" &&
+        ((window.navigator as any).standalone === true ||
+          window.matchMedia("(display-mode: standalone)").matches);
+
+      const isIOSDevice =
+        typeof window !== "undefined" &&
+        /iPad|iPhone|iPod/.test(navigator.userAgent);
 
       // ✅ FIX: Only use redirect for iOS home-screen PWA — iOS WKWebView blocks popups.
+
       // Android Chrome and all other mobile browsers work fine with popups.
+
       // redirect silently fails on Android when the browser clears session storage during navigation.
+
       const needsRedirect = isIOSDevice && isStandalone;
 
       // 1. 🤖 NATIVE ANDROID / IOS APK (CAPACITOR): Use native Google Play Services bottom-sheet
+
       if (isNative) {
         console.log("🤖 Initiating Native Google Auth (Capacitor APK)...");
+
         try {
-          const { GoogleAuth } = await import('@codetrix-studio/capacitor-google-auth');
+          const { GoogleAuth } =
+            await import("@codetrix-studio/capacitor-google-auth");
+
           try {
             await GoogleAuth.initialize({
-              clientId: '729813273338-btdk8vrja4u1eqmba6hdi3cicp0d4n4h.apps.googleusercontent.com',
-              scopes: ['profile', 'email'],
+              clientId:
+                "729813273338-btdk8vrja4u1eqmba6hdi3cicp0d4n4h.apps.googleusercontent.com",
+
+              scopes: ["profile", "email"],
+
               grantOfflineAccess: true,
             });
           } catch (initErr) {
@@ -516,119 +793,234 @@ function LoginForm() {
           }
 
           // Fast non-blocking session reset (max 800ms)
+
           try {
             await Promise.race([
               GoogleAuth.signOut(),
-              new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 800))
+
+              new Promise((_, reject) =>
+                setTimeout(() => reject(new Error("timeout")), 800),
+              ),
             ]);
           } catch (signOutErr) {
             // Safe to proceed even if no session was active
           }
 
           const googleUser = await GoogleAuth.signIn();
-          if (googleUser && (googleUser.authentication?.idToken || (googleUser as any).idToken)) {
+
+          if (
+            googleUser &&
+            (googleUser.authentication?.idToken || (googleUser as any).idToken)
+          ) {
             setLoadingText("Verifying Account...");
-            const token = googleUser.authentication?.idToken || (googleUser as any).idToken;
+
+            const token =
+              googleUser.authentication?.idToken || (googleUser as any).idToken;
+
             const credential = GoogleAuthProvider.credential(token);
+
             const result = await signInWithCredential(auth, credential);
+
             await handleStudentUserAuth(result.user);
+
             return;
           } else {
             throw new Error("No Google user received from native auth");
           }
         } catch (nativeErr: any) {
           console.warn("Native GoogleAuth notice:", nativeErr);
-          const errStr = String(nativeErr?.message || nativeErr || '').toLowerCase();
+
+          const errStr = String(
+            nativeErr?.message || nativeErr || "",
+          ).toLowerCase();
+
           const isCancelled =
-            errStr.includes('cancel') ||
-            errStr.includes('12501') ||
-            nativeErr === 'USER_CANCELLED';
+            errStr.includes("cancel") ||
+            errStr.includes("12501") ||
+            nativeErr === "USER_CANCELLED";
 
           if (!isCancelled) {
-            const msg = nativeErr?.message || "Google sign-in could not be completed. Please try again.";
+            const msg =
+              nativeErr?.message ||
+              "Google sign-in could not be completed. Please try again.";
+
             setError(msg);
+
             showToast(msg, "error");
           }
+
           setLoading(false);
+
           setLoadingText("");
         }
+
         // ⛔ CRITICAL: On native Capacitor, NEVER fall through to signInWithPopup!
+
         return;
       }
 
       // 2. 📱 iOS HOME-SCREEN PWA ONLY: Use redirect (popup is blocked by iOS WKWebView in standalone)
+
       if (needsRedirect) {
-        console.log("📱 Initiating Firebase Redirect Login for iOS PWA Standalone...");
+        console.log(
+          "📱 Initiating Firebase Redirect Login for iOS PWA Standalone...",
+        );
+
         setLoadingText("Redirecting to Google...");
+
         await signInWithRedirect(auth, googleProvider);
+
         return;
       }
 
       // 3. 💻 DESKTOP, ANDROID MOBILE BROWSER, ANDROID PWA, iOS Safari (non-standalone):
-      //    Use popup — reliable, no session storage issues, instant result
-      console.log("🌐 Initiating Firebase Google Login (Popup)...");
-      const result = await signInWithPopup(auth, googleProvider);
-      await handleStudentUserAuth(result.user);
 
+      //    Use popup — reliable, no session storage issues, instant result
+
+      console.log("🌐 Initiating Firebase Google Login (Popup)...");
+
+      const result = await signInWithPopup(auth, googleProvider);
+
+      await handleStudentUserAuth(result.user);
     } catch (error: any) {
       console.error("Google Login error:", error);
-      const errMsg = error.code === 'auth/popup-closed-by-user'
-        ? "Login cancelled. Please try again."
-        : (error.message || "Failed to sign in with Google");
+
+      const errMsg =
+        error.code === "auth/popup-closed-by-user"
+          ? "Login cancelled. Please try again."
+          : error.message || "Failed to sign in with Google";
+
       setError(errMsg);
+
       showToast(errMsg, "error");
+
       setLoading(false);
     } finally {
       if (safetyTimer) clearTimeout(safetyTimer);
     }
   };
 
-
   const handleAdminLogin = async () => {
     if (!showAdminPassword) {
       setShowAdminPassword(true);
+
       setShowWardenPassword(false);
+
       setShowDeveloperPassword(false);
+
+      setStaffResetRole("none");
+
+      setStaffResetStep("none");
+
+      setAdminOtpSent(false);
+
+      setAdminOtp("");
+
       setError("");
+
+      return;
+    }
+
+    const cleanPhone = adminPhone.replace(/\D/g, "");
+
+    if (!cleanPhone || cleanPhone.length < 10) {
+      const errMsg = "Please enter your 10-digit registered Dean mobile number";
+
+      setError(errMsg);
+
+      showToast(errMsg, "warning");
+
       return;
     }
 
     if (!adminPassword.trim()) {
-      const errMsg = "Please enter the admin password";
+      const errMsg = "Please enter the Dean authentication key";
+
       setError(errMsg);
+
       showToast(errMsg, "warning");
+
+      return;
+    }
+
+    if (adminOtpSent && (!adminOtp || adminOtp.trim().length !== 6)) {
+      const errMsg = "Please enter the 6-digit OTP sent to your phone";
+
+      setError(errMsg);
+
+      showToast(errMsg, "warning");
+
       return;
     }
 
     try {
       setAdminLoading(true);
+
       setError("");
 
       const response = await fetch("/api/admin/auth", {
         method: "POST",
+
         headers: {
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({ password: adminPassword }),
+
+        body: JSON.stringify({
+          password: adminPassword.trim(),
+
+          phoneNumber: cleanPhone,
+
+          otp: adminOtpSent ? adminOtp.trim() : undefined,
+        }),
       });
 
       const data = await response.json();
 
       if (!response.ok) {
-        throw new Error(data.error || "Invalid password");
+        throw new Error(data.error || "Authentication failed");
+      }
+
+      if (data.requireOtp) {
+        setAdminOtpSent(true);
+
+        showToast(
+          data.message || "OTP sent to registered Dean mobile number",
+          "success",
+        );
+
+        return;
       }
 
       if (data.success) {
-        document.cookie = "userType=admin; path=/; max-age=86400; SameSite=Lax";
+        // Permanent cookie (10 years) - persists for all time until manual logout
+
+        document.cookie =
+          "userType=admin; path=/; max-age=315360000; SameSite=Lax";
+
         localStorage.setItem("userType", "admin");
+
+        localStorage.setItem("deanPhone", cleanPhone);
+
+        try {
+          const { registerPushNotifications } =
+            await import("@/lib/pushRegister");
+
+          await registerPushNotifications("admin", "dean");
+        } catch (pushErr) {}
+
+        showToast("Welcome Dean! Portal unlocked successfully.", "success");
+
         router.push("/");
       }
     } catch (error: any) {
       console.error("Admin login error:", error);
-      const errMsg = error.message || "Invalid password. Please try again.";
+
+      const errMsg =
+        error.message || "Authentication failed. Please try again.";
+
       setError(errMsg);
+
       showToast(errMsg, "error");
-      setAdminPassword("");
     } finally {
       setAdminLoading(false);
     }
@@ -637,66 +1029,205 @@ function LoginForm() {
   const handleWardenLogin = async () => {
     if (!showWardenPassword) {
       setShowWardenPassword(true);
+
       setShowAdminPassword(false);
+
       setShowDeveloperPassword(false);
+
+      setStaffResetRole("none");
+
+      setStaffResetStep("none");
+
+      setWardenOtpSent(false);
+
+      setWardenOtp("");
+
       setError("");
+
       return;
     }
 
     if (!selectedHostelId) {
       const errMsg = "Please select a hostel first";
+
       setError(errMsg);
+
       showToast(errMsg, "warning");
+
+      return;
+    }
+
+    // Special case for Gatepass Monitor
+
+    if (selectedHostelId === "getpass") {
+      if (!wardenPassword.trim()) {
+        const errMsg = "Please enter the gatepass authentication key";
+
+        setError(errMsg);
+
+        showToast(errMsg, "warning");
+
+        return;
+      }
+
+      try {
+        setWardenLoading(true);
+
+        setError("");
+
+        const response = await fetch("/api/warden/auth", {
+          method: "POST",
+
+          headers: { "Content-Type": "application/json" },
+
+          body: JSON.stringify({
+            password: wardenPassword.trim(),
+
+            hostelId: selectedHostelId,
+          }),
+        });
+
+        const data = await response.json();
+
+        if (!response.ok) throw new Error(data.error || "Invalid password");
+
+        if (data.success) {
+          document.cookie =
+            "userType=getpass; path=/; max-age=315360000; SameSite=Lax";
+
+          localStorage.setItem("userType", "getpass");
+
+          router.push("/getpass");
+
+          return;
+        }
+      } catch (err: any) {
+        setError(err.message || "Failed to login");
+
+        showToast(err.message || "Failed to login", "error");
+      } finally {
+        setWardenLoading(false);
+      }
+
+      return;
+    }
+
+    // Normal Hostel: Require mobile number matching registered warden
+
+    const cleanPhone = wardenPhone.replace(/\D/g, "");
+
+    if (!cleanPhone || cleanPhone.length < 10) {
+      const errMsg =
+        "Please enter your 10-digit registered warden mobile number";
+
+      setError(errMsg);
+
+      showToast(errMsg, "warning");
+
       return;
     }
 
     if (!wardenPassword.trim()) {
       const errMsg = "Please enter the warden authentication key";
+
       setError(errMsg);
+
       showToast(errMsg, "warning");
+
+      return;
+    }
+
+    if (wardenOtpSent && (!wardenOtp || wardenOtp.trim().length !== 6)) {
+      const errMsg = "Please enter the 6-digit OTP sent to your mobile";
+
+      setError(errMsg);
+
+      showToast(errMsg, "warning");
+
       return;
     }
 
     try {
       setWardenLoading(true);
+
       setError("");
 
       const response = await fetch("/api/warden/auth", {
         method: "POST",
+
         headers: {
           "Content-Type": "application/json",
         },
+
         body: JSON.stringify({
           password: wardenPassword.trim(),
-          hostelId: selectedHostelId
+
+          hostelId: selectedHostelId,
+
+          phoneNumber: cleanPhone,
+
+          otp: wardenOtpSent ? wardenOtp.trim() : undefined,
         }),
       });
 
       const data = await response.json();
 
       if (!response.ok) {
-        throw new Error(data.error || "Invalid password");
+        throw new Error(data.error || "Authentication failed");
+      }
+
+      if (data.requireOtp) {
+        setWardenOtpSent(true);
+
+        showToast(
+          data.message || "OTP sent to registered warden mobile number",
+          "success",
+        );
+
+        return;
       }
 
       if (data.success) {
-        if (data.type === 'getpass') {
-          document.cookie = "userType=getpass; path=/; max-age=86400; SameSite=Lax";
-          localStorage.setItem("userType", "getpass");
-          router.push("/getpass");
-          return;
-        }
-        document.cookie = "userType=warden; path=/; max-age=86400; SameSite=Lax";
+        // Permanent cookie (10 years) - persists for all time until manual logout
+
+        document.cookie =
+          "userType=warden; path=/; max-age=315360000; SameSite=Lax";
+
         localStorage.setItem("userType", "warden");
+
         localStorage.setItem("wardenHostelName", data.hostelName);
-        localStorage.setItem("authorizedHostels", JSON.stringify(data.authorizedHostels));
+
+        localStorage.setItem(
+          "wardenUsername",
+          data.wardenUsername || `warden_${cleanPhone}`,
+        );
+
+        localStorage.setItem("wardenPhone", cleanPhone);
+
+        localStorage.setItem(
+          "authorizedHostels",
+          JSON.stringify(data.authorizedHostels || [data.hostelName]),
+        );
+
+        try {
+          const { registerPushNotifications } =
+            await import("@/lib/pushRegister");
+
+          await registerPushNotifications(cleanPhone, "warden");
+        } catch (pushErr) {}
+
+        showToast(`Welcome! Logged into ${data.hostelName}`, "success");
+
         router.push("/");
       }
     } catch (error: any) {
       console.error("Warden login error:", error);
-      const errMsg = error.message || "Invalid password. Please try again.";
+
+      const errMsg = error.message || "Invalid credentials. Please try again.";
+
       setError(errMsg);
+
       showToast(errMsg, "error");
-      setWardenPassword("");
     } finally {
       setWardenLoading(false);
     }
@@ -705,38 +1236,59 @@ function LoginForm() {
   const handleDeveloperLogin = async () => {
     if (!showDeveloperPassword) {
       setShowDeveloperPassword(true);
+
       setShowAdminPassword(false);
+
       setShowWardenPassword(false);
+
+      setStaffResetRole("none");
+
+      setStaffResetStep("none");
+
       setError("");
+
       return;
     }
 
     try {
       setDeveloperLoading(true);
+
       setError("");
 
       if (!isDeveloperSetup) {
         // Initial setup flow
+
         const response = await fetch("/api/developer/initialize", {
           method: "POST",
+
           headers: { "Content-Type": "application/json" },
+
           body: JSON.stringify({ password: developerPassword }),
         });
+
         const data = await response.json();
+
         if (!response.ok) throw new Error(data.error);
-        
+
         // After successful init, login automatically
-        document.cookie = "userType=superadmin; path=/; max-age=86400; SameSite=Lax";
+
+        document.cookie =
+          "userType=superadmin; path=/; max-age=315360000; SameSite=Lax";
+
         localStorage.setItem("userType", "superadmin");
+
         router.push("/");
+
         return;
       }
 
       const response = await fetch("/api/developer/auth", {
         method: "POST",
+
         headers: {
           "Content-Type": "application/json",
         },
+
         body: JSON.stringify({ password: developerPassword }),
       });
 
@@ -747,16 +1299,25 @@ function LoginForm() {
       }
 
       if (data.success) {
-        document.cookie = "userType=superadmin; path=/; max-age=86400; SameSite=Lax";
-        document.cookie = "tenant-expired=false; path=/; max-age=86400; SameSite=Lax";
+        document.cookie =
+          "userType=superadmin; path=/; max-age=315360000; SameSite=Lax";
+
+        document.cookie =
+          "tenant-expired=false; path=/; max-age=315360000; SameSite=Lax";
+
         localStorage.setItem("userType", "superadmin");
+
         router.push("/");
       }
     } catch (error: any) {
       console.error("Developer login error:", error);
+
       const errMsg = error.message || "Invalid password. Please try again.";
+
       setError(errMsg);
+
       showToast(errMsg, "error");
+
       setDeveloperPassword("");
     } finally {
       setDeveloperLoading(false);
@@ -766,20 +1327,29 @@ function LoginForm() {
   const handleSuperAdminRequestOtp = async () => {
     if (!superAdminResetPhone || superAdminResetPhone.length !== 10) {
       const errMsg = "Please enter a valid 10-digit mobile number";
+
       setError(errMsg);
+
       showToast(errMsg, "warning");
+
       return;
     }
 
     try {
       setSuperAdminResetLoading(true);
+
       setError("");
 
-      const response = await fetch("/api/developer/reset-password/request-otp", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ phoneNumber: superAdminResetPhone }),
-      });
+      const response = await fetch(
+        "/api/developer/reset-password/request-otp",
+        {
+          method: "POST",
+
+          headers: { "Content-Type": "application/json" },
+
+          body: JSON.stringify({ phoneNumber: superAdminResetPhone }),
+        },
+      );
 
       const data = await response.json();
 
@@ -790,8 +1360,11 @@ function LoginForm() {
       setSuperAdminResetStep("otp");
     } catch (err: any) {
       console.error("Super Admin Reset OTP Request error:", err);
+
       const errMsg = err.message || "Something went wrong. Please try again.";
+
       setError(errMsg);
+
       showToast(errMsg, "error");
     } finally {
       setSuperAdminResetLoading(false);
@@ -801,35 +1374,48 @@ function LoginForm() {
   const handleSuperAdminVerifyOtp = async () => {
     if (!superAdminResetOtp || superAdminResetOtp.length !== 6) {
       const errMsg = "Please enter a 6-digit OTP code";
+
       setError(errMsg);
+
       showToast(errMsg, "warning");
+
       return;
     }
 
     if (!superAdminNewPassword || superAdminNewPassword.length < 6) {
       const errMsg = "Password must be at least 6 characters long";
+
       setError(errMsg);
+
       showToast(errMsg, "warning");
+
       return;
     }
 
     if (superAdminNewPassword !== superAdminConfirmPassword) {
       const errMsg = "New password and confirm password do not match";
+
       setError(errMsg);
+
       showToast(errMsg, "warning");
+
       return;
     }
 
     try {
       setSuperAdminResetLoading(true);
+
       setError("");
 
       const response = await fetch("/api/developer/reset-password/verify-otp", {
         method: "POST",
+
         headers: { "Content-Type": "application/json" },
+
         body: JSON.stringify({
           otp: superAdminResetOtp,
-          newPassword: superAdminNewPassword
+
+          newPassword: superAdminNewPassword,
         }),
       });
 
@@ -840,20 +1426,210 @@ function LoginForm() {
       }
 
       // Reset successful!
-      showToast("Super Admin password has been reset successfully. You can now login with your new password.", "success");
+
+      showToast(
+        "Super Admin password has been reset successfully. You can now login with your new password.",
+        "success",
+      );
+
       setSuperAdminResetStep("none");
+
       setSuperAdminResetPhone("");
+
       setSuperAdminResetOtp("");
+
       setSuperAdminNewPassword("");
+
       setSuperAdminConfirmPassword("");
+
       setDeveloperPassword(""); // Clear entered password
     } catch (err: any) {
       console.error("Super Admin Reset Verify error:", err);
+
       const errMsg = err.message || "Invalid OTP code. Please try again.";
+
       setError(errMsg);
+
       showToast(errMsg, "error");
     } finally {
       setSuperAdminResetLoading(false);
+    }
+  };
+
+  // 🔐 Staff (Warden / Dean) Password Reset Handlers
+
+  const handleStaffRequestOtp = async () => {
+    let clean = (staffResetPhone || "").replace(/\D/g, "");
+
+    if (clean.length > 10) clean = clean.slice(-10);
+
+    if (!clean || clean.length !== 10) {
+      const errMsg = "Please enter a valid 10-digit registered mobile number";
+
+      setError(errMsg);
+
+      showToast(errMsg, "warning");
+
+      return;
+    }
+
+    if (staffResetRole === "warden" && !staffResetHostelId) {
+      const errMsg = "Please select your hostel / campus role first";
+
+      setError(errMsg);
+
+      showToast(errMsg, "warning");
+
+      return;
+    }
+
+    try {
+      setStaffResetLoading(true);
+
+      setError("");
+
+      const response = await fetch(
+        "/api/auth/staff-reset-password/request-otp",
+        {
+          method: "POST",
+
+          headers: { "Content-Type": "application/json" },
+
+          body: JSON.stringify({
+            role: staffResetRole,
+
+            hostelId: staffResetHostelId || undefined,
+
+            phoneNumber: clean,
+          }),
+        },
+      );
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error || "Failed to send OTP");
+      }
+
+      showToast(
+        data.message || "OTP sent successfully to registered mobile",
+        "success",
+      );
+
+      setStaffResetStep("otp");
+    } catch (err: any) {
+      console.error("Staff Reset OTP Request error:", err);
+
+      const errMsg = err.message || "Something went wrong. Please try again.";
+
+      setError(errMsg);
+
+      showToast(errMsg, "error");
+    } finally {
+      setStaffResetLoading(false);
+    }
+  };
+
+  const handleStaffVerifyOtpAndReset = async () => {
+    if (!staffResetOtp || staffResetOtp.trim().length !== 6) {
+      const errMsg = "Please enter the 6-digit OTP code";
+
+      setError(errMsg);
+
+      showToast(errMsg, "warning");
+
+      return;
+    }
+
+    if (!staffResetNewPassword || staffResetNewPassword.trim().length < 4) {
+      const errMsg = "Password must be at least 4 characters long";
+
+      setError(errMsg);
+
+      showToast(errMsg, "warning");
+
+      return;
+    }
+
+    if (staffResetNewPassword !== staffResetConfirmPassword) {
+      const errMsg = "New password and confirmation password do not match";
+
+      setError(errMsg);
+
+      showToast(errMsg, "warning");
+
+      return;
+    }
+
+    let clean = (staffResetPhone || "").replace(/\D/g, "");
+
+    if (clean.length > 10) clean = clean.slice(-10);
+
+    try {
+      setStaffResetLoading(true);
+
+      setError("");
+
+      const response = await fetch(
+        "/api/auth/staff-reset-password/verify-otp",
+        {
+          method: "POST",
+
+          headers: { "Content-Type": "application/json" },
+
+          body: JSON.stringify({
+            role: staffResetRole,
+
+            hostelId: staffResetHostelId || undefined,
+
+            phoneNumber: clean,
+
+            otp: staffResetOtp.trim(),
+
+            newPassword: staffResetNewPassword.trim(),
+          }),
+        },
+      );
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error || "Verification failed");
+      }
+
+      showToast(data.message || "Password updated successfully!", "success");
+
+      // Auto-populate new password in respective login input
+
+      if (staffResetRole === "warden") {
+        setWardenPassword(staffResetNewPassword.trim());
+      } else if (staffResetRole === "dean") {
+        setAdminPassword(staffResetNewPassword.trim());
+      }
+
+      // Exit reset flow back to login
+
+      setStaffResetRole("none");
+
+      setStaffResetStep("none");
+
+      setStaffResetPhone("");
+
+      setStaffResetOtp("");
+
+      setStaffResetNewPassword("");
+
+      setStaffResetConfirmPassword("");
+    } catch (err: any) {
+      console.error("Staff Reset OTP Verify error:", err);
+
+      const errMsg = err.message || "Invalid OTP code. Please try again.";
+
+      setError(errMsg);
+
+      showToast(errMsg, "error");
+    } finally {
+      setStaffResetLoading(false);
     }
   };
 
@@ -865,18 +1641,26 @@ function LoginForm() {
             <div className="w-16 h-16 bg-blue-500/10 border border-blue-500/20 rounded-2xl flex items-center justify-center shadow-lg shadow-blue-500/5">
               <Loader2 className="w-8 h-8 text-blue-500 animate-spin" />
             </div>
+
             <p className="text-gray-300 text-xs font-bold uppercase tracking-widest animate-pulse">
               {loadingText || "Connecting to Google..."}
             </p>
+
             <p className="text-gray-400 text-[11px] leading-relaxed">
-              {loadingText ? "Checking database for student records" : "Please select your account in the Google prompt"}
+              {loadingText
+                ? "Checking database for student records"
+                : "Please select your account in the Google prompt"}
             </p>
+
             <button
               type="button"
+
               onClick={() => {
                 setLoading(false);
+
                 setLoadingText("");
               }}
+
               className="mt-2 px-5 py-2 text-xs font-semibold text-gray-300 hover:text-white bg-white/10 hover:bg-white/20 active:scale-95 border border-white/15 rounded-xl transition-all cursor-pointer shadow-sm"
             >
               Cancel
@@ -884,65 +1668,97 @@ function LoginForm() {
           </div>
         </div>
       )}
+
       <style jsx global>{`
         @media (min-width: 1024px) {
-          html, body {
+          html,
+          body {
             height: 100%;
+
             overflow: hidden !important;
           }
         }
+
         body {
           margin: 0;
+
           padding: 0;
         }
+
         .no-scrollbar::-webkit-scrollbar {
           display: none;
         }
+
         .no-scrollbar {
           -ms-overflow-style: none;
+
           scrollbar-width: none;
         }
       `}</style>
+
       {/* Dynamic Background Elements */}
+
       <div className="absolute inset-0 z-0 overflow-hidden">
         <div className="absolute top-[-10%] left-[-10%] w-[40%] h-[40%] rounded-full bg-blue-100/50 blur-[120px] animate-pulse" />
-        <div className="absolute bottom-[-10%] right-[-10%] w-[40%] h-[40%] rounded-full bg-indigo-100/50 blur-[120px] animate-pulse" style={{ animationDelay: '2s' }} />
+
+        <div
+          className="absolute bottom-[-10%] right-[-10%] w-[40%] h-[40%] rounded-full bg-indigo-100/50 blur-[120px] animate-pulse"
+          style={{ animationDelay: "2s" }}
+        />
+
         <div
           className="absolute inset-0 opacity-[0.03]"
-          style={{ backgroundImage: 'radial-gradient(#000 0.5px, transparent 0.5px)', backgroundSize: '32px 32px' }}
+
+          style={{
+            backgroundImage: "radial-gradient(#000 0.5px, transparent 0.5px)",
+            backgroundSize: "32px 32px",
+          }}
         />
       </div>
 
       <main className="relative z-10 w-full max-w-lg lg:max-w-5xl flex flex-col justify-center max-h-full py-1 sm:py-2">
-        <div className={`transition-all duration-1000 transform ${mounted ? 'translate-y-0 opacity-100' : 'translate-y-8 opacity-0'} flex flex-col justify-center w-full`}>
+        <div
+          className={`transition-all duration-1000 transform ${mounted ? "translate-y-0 opacity-100" : "translate-y-8 opacity-0"} flex flex-col justify-center w-full`}
+        >
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-2 sm:gap-4 lg:gap-16 items-center lg:items-start w-full">
             {/* Left Column: Logo, Title, and Features (Desktop only showcase) */}
+
             <div className="flex flex-col items-center space-y-1 sm:space-y-3 text-center lg:col-span-5 w-full lg:pt-4">
-              
               {/* Logo and Title */}
+
               <div className="flex flex-col items-center space-y-1 sm:space-y-2">
                 <div
                   className="group relative cursor-pointer"
+
                   onClick={() => {
                     setShowDeveloperPassword(!showDeveloperPassword);
+
                     setShowAdminPassword(false);
+
                     setShowWardenPassword(false);
                   }}
                 >
                   <div className="absolute -inset-4 rounded-full bg-gradient-to-r from-blue-100 to-indigo-100 opacity-0 blur-xl transition duration-700 group-hover:opacity-100" />
+
                   <img
                     src={tenantLogo || "/uvw_logo.jpg"}
+
                     alt="University Logo"
+
                     className="relative rounded-full object-cover transition-all duration-500 group-hover:scale-105 group-hover:rotate-3 shadow-2xl border-4 border-white h-14 w-14 sm:h-16 sm:w-16"
+
                     title="Click for Super Admin login"
+
                     onError={(e) => {
                       (e.target as any).src = "/uvw_logo.jpg";
                     }}
                   />
+
                   {!isDeveloperSetup && !showDeveloperPassword && (
                     <div className="absolute -bottom-1 -right-1 animate-bounce pointer-events-none">
                       <div className="relative">
                         <div className="absolute -inset-1 rounded-full bg-blue-400 opacity-75 blur animate-ping" />
+
                         <div className="bg-blue-600 text-white text-[8px] font-black px-1.5 py-0.5 rounded-full shadow-lg whitespace-nowrap border border-white/50">
                           CLICK ME
                         </div>
@@ -950,21 +1766,40 @@ function LoginForm() {
                     </div>
                   )}
                 </div>
+
                 <div className="space-y-0.5 sm:space-y-1.5 text-center flex flex-col items-center w-full">
                   <h1 className="text-2xl sm:text-4xl font-black tracking-tight text-slate-900 transition-all duration-500 text-center w-full">
                     {tenantName}
-                    {tenantName !== "Hosteleaze" && <span className="block text-[8px] sm:text-[10px] text-slate-400 font-bold tracking-widest mt-0.5 text-center w-full">POWERED BY HOSTELEAZE</span>}
+
+                    {tenantName !== "Hosteleaze" && (
+                      <span className="block text-[8px] sm:text-[10px] text-slate-400 font-bold tracking-widest mt-0.5 text-center w-full">
+                        POWERED BY HOSTELEAZE
+                      </span>
+                    )}
                   </h1>
+
                   <div className="flex flex-col items-center space-y-1 sm:space-y-2 w-full">
                     {showLogoutToast && (
                       <div className="w-full max-w-[280px] sm:max-w-[320px] animate-in fade-in slide-in-from-top-2 duration-500 my-0.5 sm:my-1">
                         <div className="flex items-center gap-2 sm:gap-3 rounded-lg sm:rounded-xl border border-emerald-100 bg-[#e6fcf5] pr-3 sm:pr-4 shadow-sm overflow-hidden min-h-[40px] sm:min-h-[48px]">
                           <div className="w-1 self-stretch bg-[#059669]" />
+
                           <div className="flex h-5 w-5 sm:h-6 sm:w-6 items-center justify-center rounded-full bg-[#059669] text-white flex-shrink-0">
-                            <svg className="h-3 w-3 sm:h-3.5 sm:w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={4}>
-                              <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                            <svg
+                              className="h-3 w-3 sm:h-3.5 sm:w-3.5"
+                              fill="none"
+                              viewBox="0 0 24 24"
+                              stroke="currentColor"
+                              strokeWidth={4}
+                            >
+                              <path
+                                strokeLinecap="round"
+                                strokeLinejoin="round"
+                                d="M5 13l4 4L19 7"
+                              />
                             </svg>
                           </div>
+
                           <p className="text-[11px] sm:text-[13px] font-bold text-[#064e3b] tracking-tight text-left">
                             You have successfully logged out.
                           </p>
@@ -973,106 +1808,192 @@ function LoginForm() {
                     )}
 
                     <p className="max-h-20 opacity-100 max-w-[260px] sm:max-w-[280px] lg:max-w-md text-[10px] sm:text-xs font-medium text-slate-500 leading-tight sm:leading-relaxed transition-all duration-500 overflow-hidden text-center mx-auto">
-                      The smart, all-in-one ecosystem for modern hostel administration and student living.
+                      The smart, all-in-one ecosystem for modern hostel
+                      administration and student living.
                     </p>
 
                     {/* Premium Statistics Chips Row (Desktop only) */}
+
                     <div className="hidden lg:flex items-center gap-2.5 justify-center py-1 select-none">
                       <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-full border border-slate-200/80 bg-white/70 shadow-[0_2px_10px_rgba(0,0,0,0.02)] backdrop-blur-md hover:scale-105 hover:-translate-y-0.5 hover:border-emerald-250 hover:bg-emerald-50/20 hover:shadow-md transition-all duration-300 cursor-default">
                         <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />
-                        <span className="text-[9.5px] font-black uppercase tracking-wider text-slate-700">10k+ Scans/Day</span>
+
+                        <span className="text-[9.5px] font-black uppercase tracking-wider text-slate-700">
+                          10k+ Scans/Day
+                        </span>
                       </div>
+
                       <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-full border border-slate-200/80 bg-white/70 shadow-[0_2px_10px_rgba(0,0,0,0.02)] backdrop-blur-md hover:scale-105 hover:-translate-y-0.5 hover:border-blue-250 hover:bg-blue-50/20 hover:shadow-md transition-all duration-300 cursor-default">
                         <span className="h-2 w-2 rounded-full bg-blue-500" />
-                        <span className="text-[9.5px] font-black uppercase tracking-wider text-slate-700">99.9% Uptime</span>
+
+                        <span className="text-[9.5px] font-black uppercase tracking-wider text-slate-700">
+                          99.9% Uptime
+                        </span>
                       </div>
+
                       <div className="flex items-center gap-1 px-3 py-1.5 rounded-full border border-slate-200/80 bg-white/70 shadow-[0_2px_10px_rgba(0,0,0,0.02)] backdrop-blur-md hover:scale-105 hover:-translate-y-0.5 hover:border-amber-250 hover:bg-amber-50/20 hover:shadow-md transition-all duration-300 cursor-default">
-                        <span className="text-amber-500 text-[11px] leading-none">★</span>
-                        <span className="text-[9.5px] font-black uppercase tracking-wider text-slate-700">5.0 Rating</span>
+                        <span className="text-amber-500 text-[11px] leading-none">
+                          ★
+                        </span>
+
+                        <span className="text-[9.5px] font-black uppercase tracking-wider text-slate-700">
+                          5.0 Rating
+                        </span>
                       </div>
                     </div>
 
-                    {!showAdminPassword && !showWardenPassword && !showDeveloperPassword && (
-                      <div className="pt-0.5 sm:pt-1.5 flex items-center justify-center">
-                        <button 
-                          onClick={async () => {
-                            const slug = await showPrompt("Enter Campus Slug (e.g. ogi, oist) or type 'home' for Main Portal:");
-                            if (slug) {
-                              const clean = slug.trim().toLowerCase();
-                              if (clean === 'home' || clean === 'main' || clean === 'hosteleaze') {
-                                localStorage.removeItem("lastTenantSlug");
-                                localStorage.removeItem("lastTenantName");
-                                localStorage.removeItem("lastTenantLogo");
-                                document.cookie = "tenant-slug=; path=/; max-age=0; SameSite=Lax";
-                                window.location.href = "/";
-                              } else {
-                                window.location.href = `/login?tenant=${encodeURIComponent(clean)}`;
+                    {!showAdminPassword &&
+                      !showWardenPassword &&
+                      !showDeveloperPassword && (
+                        <div className="pt-0.5 sm:pt-1.5 flex items-center justify-center">
+                          <button
+                            onClick={async () => {
+                              const slug = await showPrompt(
+                                "Enter Campus Slug (e.g. ogi, oist) or type 'home' for Main Portal:",
+                              );
+
+                              if (slug) {
+                                const clean = slug.trim().toLowerCase();
+
+                                if (
+                                  clean === "home" ||
+                                  clean === "main" ||
+                                  clean === "hosteleaze"
+                                ) {
+                                  localStorage.removeItem("lastTenantSlug");
+
+                                  localStorage.removeItem("lastTenantName");
+
+                                  localStorage.removeItem("lastTenantLogo");
+
+                                  document.cookie =
+                                    "tenant-slug=; path=/; max-age=0; SameSite=Lax";
+
+                                  window.location.href = "/";
+                                } else {
+                                  window.location.href = `/login?tenant=${encodeURIComponent(clean)}`;
+                                }
                               }
-                            }
-                          }}
-                          className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-blue-50/80 border border-blue-100 text-[9.5px] font-bold text-blue-600 uppercase tracking-widest hover:bg-blue-100 hover:text-blue-800 transition-all active:scale-95 shadow-2xs"
-                        >
-                          <span>🏛️</span>
-                          <span>Switch Campus</span>
-                        </button>
-                      </div>
-                    )}
+                            }}
+
+                            className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-blue-50/80 border border-blue-100 text-[9.5px] font-bold text-blue-600 uppercase tracking-widest hover:bg-blue-100 hover:text-blue-800 transition-all active:scale-95 shadow-2xs"
+                          >
+                            <span>🏛️</span>
+
+                            <span>Switch Campus</span>
+                          </button>
+                        </div>
+                      )}
                   </div>
                 </div>
               </div>
 
               {/* Desktop Feature Showcase (Visible only on Desktop lg: screens) */}
+
               <div className="hidden lg:flex flex-col gap-2.5 w-full max-w-md mt-1.5 animate-in fade-in slide-in-from-left-4 duration-1000 relative">
-                
                 {/* Micro Card 1 */}
+
                 <div className="group flex items-center justify-between py-2 px-4 rounded-2xl border border-white/65 bg-white/50 shadow-[0_8px_22px_-6px_rgba(0,0,0,0.03)] backdrop-blur-md hover:bg-white/85 hover:shadow-md hover:border-blue-100 transition-all duration-500 hover:-translate-y-0.5">
                   <div className="flex items-center gap-3.5">
                     <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-blue-50 text-blue-600 border border-blue-100 shadow-sm transition-all duration-500 group-hover:scale-110 group-hover:rotate-6 group-hover:bg-blue-600 group-hover:text-white group-hover:border-blue-600">
-                      <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                      <svg
+                        className="h-3.5 w-3.5"
+                        fill="none"
+                        viewBox="0 0 24 24"
+                        stroke="currentColor"
+                      >
+                        <path
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          strokeWidth={2.5}
+                          d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"
+                        />
                       </svg>
                     </div>
+
                     <div className="text-left">
-                      <h4 className="text-[11px] font-black uppercase tracking-wider text-slate-800">Wifi & Geolocation Verification</h4>
-                      <p className="text-[10px] text-slate-500 font-semibold leading-none mt-0.5">Secure local network and coordinate geofencing.</p>
+                      <h4 className="text-[11px] font-black uppercase tracking-wider text-slate-800">
+                        Wifi & Geolocation Verification
+                      </h4>
+
+                      <p className="text-[10px] text-slate-500 font-semibold leading-none mt-0.5">
+                        Secure local network and coordinate geofencing.
+                      </p>
                     </div>
                   </div>
+
                   <span className="text-[7.5px] font-black uppercase tracking-wider text-blue-600 bg-blue-50/80 px-2 py-0.5 rounded-md border border-blue-100/50 select-none opacity-90">
                     REAL-TIME
                   </span>
                 </div>
 
                 {/* Micro Card 2 */}
+
                 <div className="group flex items-center justify-between py-2 px-4 rounded-2xl border border-white/65 bg-white/50 shadow-[0_8px_22px_-6px_rgba(0,0,0,0.03)] backdrop-blur-md hover:bg-white/85 hover:shadow-md hover:border-indigo-100 transition-all duration-500 hover:-translate-y-0.5">
                   <div className="flex items-center gap-3.5">
                     <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-indigo-50 text-indigo-600 border border-indigo-100 shadow-sm transition-all duration-500 group-hover:scale-110 group-hover:-rotate-6 group-hover:bg-indigo-600 group-hover:text-white group-hover:border-indigo-600">
-                      <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M15 5v2m0 4v2m0 4v2M5 5a2 2 0 00-2 2v3a2 2 0 110 4v3a2 2 0 002 2h14a2 2 0 002-2v-3a2 2 0 110-4V7a2 2 0 00-2-2H5z" />
+                      <svg
+                        className="h-3.5 w-3.5"
+                        fill="none"
+                        viewBox="0 0 24 24"
+                        stroke="currentColor"
+                      >
+                        <path
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          strokeWidth={2.5}
+                          d="M15 5v2m0 4v2m0 4v2M5 5a2 2 0 00-2 2v3a2 2 0 110 4v3a2 2 0 002 2h14a2 2 0 002-2v-3a2 2 0 110-4V7a2 2 0 00-2-2H5z"
+                        />
                       </svg>
                     </div>
+
                     <div className="text-left">
-                      <h4 className="text-[11px] font-black uppercase tracking-wider text-slate-800">Digital Gatepass System</h4>
-                      <p className="text-[10px] text-slate-500 font-semibold leading-none mt-0.5">Online outing requests with automated QR scans.</p>
+                      <h4 className="text-[11px] font-black uppercase tracking-wider text-slate-800">
+                        Digital Gatepass System
+                      </h4>
+
+                      <p className="text-[10px] text-slate-500 font-semibold leading-none mt-0.5">
+                        Online outing requests with automated QR scans.
+                      </p>
                     </div>
                   </div>
+
                   <span className="text-[7.5px] font-black uppercase tracking-wider text-indigo-600 bg-indigo-50/80 px-2 py-0.5 rounded-md border border-indigo-100/50 select-none opacity-90">
                     SECURE QR
                   </span>
                 </div>
 
                 {/* Micro Card 3 */}
+
                 <div className="group flex items-center justify-between py-2 px-4 rounded-2xl border border-white/65 bg-white/50 shadow-[0_8px_22px_-6px_rgba(0,0,0,0.03)] backdrop-blur-md hover:bg-white/85 hover:shadow-md hover:border-emerald-100 transition-all duration-500 hover:-translate-y-0.5">
                   <div className="flex items-center gap-3.5">
                     <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-emerald-50 text-emerald-600 border border-emerald-100 shadow-sm transition-all duration-500 group-hover:scale-110 group-hover:rotate-6 group-hover:bg-emerald-600 group-hover:text-white group-hover:border-emerald-600">
-                      <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 002 2h2a2 2 0 002-2z" />
+                      <svg
+                        className="h-3.5 w-3.5"
+                        fill="none"
+                        viewBox="0 0 24 24"
+                        stroke="currentColor"
+                      >
+                        <path
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          strokeWidth={2.5}
+                          d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 002 2h2a2 2 0 002-2z"
+                        />
                       </svg>
                     </div>
+
                     <div className="text-left">
-                      <h4 className="text-[11px] font-black uppercase tracking-wider text-slate-800">Advanced Analytics Dashboard</h4>
-                      <p className="text-[10px] text-slate-500 font-semibold leading-none mt-0.5">Live attendance insights and security reports.</p>
+                      <h4 className="text-[11px] font-black uppercase tracking-wider text-slate-800">
+                        Advanced Analytics Dashboard
+                      </h4>
+
+                      <p className="text-[10px] text-slate-500 font-semibold leading-none mt-0.5">
+                        Live attendance insights and security reports.
+                      </p>
                     </div>
                   </div>
+
                   <span className="text-[7.5px] font-black uppercase tracking-wider text-emerald-600 bg-emerald-50/80 px-2 py-0.5 rounded-md border border-emerald-100/50 select-none opacity-90">
                     ANALYTICS
                   </span>
@@ -1080,40 +2001,66 @@ function LoginForm() {
               </div>
 
               {/* Security & Trust Badges (Desktop only) */}
+
               <div className="hidden lg:flex items-center gap-3 justify-center w-full max-w-md pt-2 select-none opacity-85 animate-in fade-in slide-in-from-bottom-2 duration-1000 relative z-10">
                 <div className="flex items-center gap-1">
                   <span className="text-[10px]">🛡️</span>
-                  <span className="text-[8.5px] font-black uppercase tracking-wider text-slate-500">Role-Based Access</span>
+
+                  <span className="text-[8.5px] font-black uppercase tracking-wider text-slate-500">
+                    Role-Based Access
+                  </span>
                 </div>
+
                 <div className="h-1 w-1 rounded-full bg-slate-300" />
+
                 <div className="flex items-center gap-1">
                   <span className="text-[10px]">⚡</span>
-                  <span className="text-[8.5px] font-black uppercase tracking-wider text-slate-500">Instant OTP SMS</span>
+
+                  <span className="text-[8.5px] font-black uppercase tracking-wider text-slate-500">
+                    Instant OTP SMS
+                  </span>
                 </div>
+
                 <div className="h-1 w-1 rounded-full bg-slate-300" />
+
                 <div className="flex items-center gap-1">
                   <span className="text-[10px]">🔒</span>
-                  <span className="text-[8.5px] font-black uppercase tracking-wider text-slate-500">SSL Secured Data</span>
+
+                  <span className="text-[8.5px] font-black uppercase tracking-wider text-slate-500">
+                    SSL Secured Data
+                  </span>
                 </div>
               </div>
 
               {/* Bottom Gradient Aura for Left Column */}
+
               <div className="absolute bottom-[-40px] left-[-30px] w-[200px] h-[200px] rounded-full bg-gradient-to-br from-indigo-300/10 to-purple-300/10 blur-2xl pointer-events-none" />
             </div>
 
             {/* Right Column: Login Card & Footer */}
+
             <div className="flex flex-col items-center lg:col-span-7 w-full space-y-2 sm:space-y-4">
               <div className="w-full max-w-[420px] relative group">
                 <div className="absolute -inset-1 rounded-[24px] bg-gradient-to-b from-gray-200/50 to-transparent opacity-50 blur-sm transition duration-500 group-hover:opacity-100" />
 
                 <div className="relative overflow-hidden rounded-[20px] sm:rounded-[24px] border border-white bg-white/80 backdrop-blur-xl p-1 shadow-[0_16px_32px_-10px_rgba(0,0,0,0.06)] transition-all duration-500">
                   <div className="rounded-[16px] sm:rounded-[20px] bg-slate-50/40 p-2.5 sm:p-5">
-
                     {error && (
                       <div className="mb-4 sm:mb-6 flex animate-in fade-in slide-in-from-top-4 items-center gap-3 rounded-xl border border-red-100 bg-red-50/50 p-3 sm:p-4 text-sm text-red-600 backdrop-blur-md">
-                        <svg className="h-5 w-5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                        <svg
+                          className="h-5 w-5 shrink-0"
+                          fill="none"
+                          viewBox="0 0 24 24"
+                          stroke="currentColor"
+                        >
+                          <path
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                            strokeWidth={2}
+                            d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"
+                          />
                         </svg>
+
                         {error}
                       </div>
                     )}
@@ -1125,12 +2072,16 @@ function LoginForm() {
                             <h3 className="text-xs font-black text-slate-800 uppercase tracking-widest flex items-center gap-1.5">
                               👨‍👩‍👧 Parent Login Portal
                             </h3>
+
                             <button
                               type="button"
+
                               onClick={() => {
                                 setShowParentLogin(false);
+
                                 setError("");
                               }}
+
                               className="text-[10px] font-black text-blue-600 uppercase tracking-widest hover:text-blue-800 transition-colors"
                             >
                               &larr; Back to Student
@@ -1142,14 +2093,22 @@ function LoginForm() {
                               <label className="block text-[10px] font-black uppercase tracking-wider text-blue-600 text-center">
                                 Enter your Registered Mobile Number
                               </label>
+
                               <div className="flex items-center gap-2 w-full">
                                 <select
                                   value={parentCountryCode}
-                                  onChange={(e) => setParentCountryCode(e.target.value)}
+
+                                  onChange={(e) =>
+                                    setParentCountryCode(e.target.value)
+                                  }
+
                                   className="w-[110px] sm:w-[125px] shrink-0 rounded-xl border border-slate-200 bg-slate-50 px-2 py-3 text-xs font-bold text-slate-800 focus:border-blue-500 focus:bg-white focus:outline-none cursor-pointer truncate"
                                 >
                                   {ALL_COUNTRIES.map((c) => (
-                                    <option value={c.dialCode} key={`${c.code}-${c.dialCode}`}>
+                                    <option
+                                      value={c.dialCode}
+                                      key={`${c.code}-${c.dialCode}`}
+                                    >
                                       {getCountryLabel(c)}
                                     </option>
                                   ))}
@@ -1157,23 +2116,36 @@ function LoginForm() {
 
                                 <input
                                   type="tel"
+
                                   maxLength={15}
+
                                   value={parentPhone}
+
                                   onChange={(e) => {
-                                    setParentPhone(e.target.value.replace(/\D/g, ""));
+                                    setParentPhone(
+                                      e.target.value.replace(/\D/g, ""),
+                                    );
+
                                     setError("");
                                   }}
+
                                   onKeyDown={(e) => {
                                     if (e.key === "Enter") handleSendOtp();
                                   }}
+
                                   className="flex-1 w-full min-w-0 rounded-xl border border-slate-200 bg-white px-3.5 py-3 text-sm font-bold text-slate-900 focus:border-blue-500 focus:bg-white focus:outline-none focus:ring-4 focus:ring-blue-500/10 transition-all"
+
                                   placeholder="Enter mobile number"
                                 />
                               </div>
+
                               <button
                                 type="button"
+
                                 onClick={handleSendOtp}
+
                                 disabled={parentLoading}
+
                                 className="w-full py-3.5 sm:py-4 rounded-xl bg-blue-600 font-bold text-xs uppercase tracking-widest text-white shadow-lg shadow-blue-100 hover:bg-blue-700 active:scale-[0.98] transition-all disabled:opacity-50"
                               >
                                 {parentLoading ? "Sending OTP..." : "Get OTP"}
@@ -1182,58 +2154,87 @@ function LoginForm() {
                           ) : (
                             <div className="space-y-3">
                               <div className="flex justify-between items-center">
-                                 <label className="block text-[10px] font-bold uppercase tracking-wider text-green-600">
-                                   OTP Sent to your registered mobile number
-                                 </label>
+                                <label className="block text-[10px] font-bold uppercase tracking-wider text-green-600">
+                                  OTP Sent to your registered mobile number
+                                </label>
+
                                 <button
                                   type="button"
+
                                   onClick={() => {
                                     setOtpSent(false);
+
                                     setOtp("");
+
                                     setError("");
                                   }}
+
                                   className="text-[9px] font-bold text-slate-400 hover:text-slate-600 transition-colors uppercase tracking-wider"
                                 >
                                   Change Phone
                                 </button>
                               </div>
+
                               <div className="relative">
                                 <input
                                   type="text"
+
                                   id="otp"
+
                                   name="otp"
+
                                   autoFocus
+
                                   inputMode="numeric"
+
                                   pattern="[0-9]*"
+
                                   autoComplete="one-time-code"
+
                                   maxLength={6}
+
                                   value={otp}
+
                                   onChange={(e) => {
                                     setOtp(e.target.value.replace(/\D/g, ""));
+
                                     setError("");
                                   }}
+
                                   onKeyDown={(e) => {
                                     if (e.key === "Enter") handleVerifyOtp();
                                   }}
+
                                   className="w-full rounded-xl border border-slate-200 bg-white px-16 py-3 text-center text-lg font-black tracking-[0.5em] text-slate-900 focus:border-blue-500 focus:bg-white focus:outline-none focus:ring-4 focus:ring-blue-500/10 transition-all placeholder:text-slate-200 placeholder:tracking-normal placeholder:font-medium"
+
                                   placeholder="······"
                                 />
+
                                 <button
                                   type="button"
+
                                   onClick={handlePasteClipboard}
+
                                   className="absolute right-2.5 top-1/2 -translate-y-1/2 px-2.5 py-1.5 bg-blue-50 hover:bg-blue-100 text-blue-600 rounded-lg text-[10px] font-black uppercase tracking-wider transition-all active:scale-95 border border-blue-100"
+
                                   title="Paste code from clipboard"
                                 >
                                   Paste
                                 </button>
                               </div>
+
                               <button
                                 type="button"
+
                                 onClick={handleVerifyOtp}
+
                                 disabled={parentLoading}
+
                                 className="w-full py-3.5 sm:py-4 rounded-xl bg-slate-900 font-bold text-xs uppercase tracking-widest text-white shadow-lg hover:bg-slate-800 active:scale-[0.98] transition-all disabled:opacity-50"
                               >
-                                {parentLoading ? "Verifying..." : "Verify & Login"}
+                                {parentLoading
+                                  ? "Verifying..."
+                                  : "Verify & Login"}
                               </button>
                             </div>
                           )}
@@ -1243,22 +2244,58 @@ function LoginForm() {
                           <div className="relative">
                             <button
                               type="button"
-                              onClick={() => setIsRoleDropdownOpen(!isRoleDropdownOpen)}
+
+                              onClick={() =>
+                                setIsRoleDropdownOpen(!isRoleDropdownOpen)
+                              }
+
                               className="flex w-full items-center justify-between gap-3 sm:gap-4 rounded-xl sm:rounded-2xl border border-slate-200 bg-white px-4 py-2.5 sm:py-3 text-xs sm:text-sm font-bold text-slate-900 hover:border-blue-200 transition-all active:scale-[0.98]"
                             >
                               <span className="flex items-center gap-3">
-                                <svg className="h-5 w-5 flex-shrink-0" viewBox="0 0 24 24">
-                                  <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" />
-                                  <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" />
-                                  <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" />
-                                  <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" />
+                                <svg
+                                  className="h-5 w-5 flex-shrink-0"
+                                  viewBox="0 0 24 24"
+                                >
+                                  <path
+                                    fill="#4285F4"
+                                    d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"
+                                  />
+
+                                  <path
+                                    fill="#34A853"
+                                    d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"
+                                  />
+
+                                  <path
+                                    fill="#FBBC05"
+                                    d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"
+                                  />
+
+                                  <path
+                                    fill="#EA4335"
+                                    d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"
+                                  />
                                 </svg>
                                 Continue as Student
                               </span>
+
                               <div className="flex items-center gap-1">
-                                <span className="text-[10px] font-bold text-blue-600 uppercase tracking-widest bg-blue-50 px-2 py-0.5 rounded-md">Role select</span>
-                                <svg className={`h-4 w-4 text-slate-400 transition-transform duration-200 ${isRoleDropdownOpen ? "rotate-180" : ""}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
-                                  <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
+                                <span className="text-[10px] font-bold text-blue-600 uppercase tracking-widest bg-blue-50 px-2 py-0.5 rounded-md">
+                                  Role select
+                                </span>
+
+                                <svg
+                                  className={`h-4 w-4 text-slate-400 transition-transform duration-200 ${isRoleDropdownOpen ? "rotate-180" : ""}`}
+                                  fill="none"
+                                  viewBox="0 0 24 24"
+                                  stroke="currentColor"
+                                  strokeWidth={2.5}
+                                >
+                                  <path
+                                    strokeLinecap="round"
+                                    strokeLinejoin="round"
+                                    d="M19 9l-7 7-7-7"
+                                  />
                                 </svg>
                               </div>
                             </button>
@@ -1267,29 +2304,54 @@ function LoginForm() {
                               <div className="absolute right-0 left-0 mt-2 z-50 rounded-xl border border-slate-150 bg-white/95 backdrop-blur-md p-1.5 shadow-[0_12px_24px_-8px_rgba(0,0,0,0.15)] transition-all">
                                 <button
                                   type="button"
+
                                   onClick={() => {
                                     setIsRoleDropdownOpen(false);
+
                                     handleGoogleLogin();
                                   }}
+
                                   className="flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-xs sm:text-sm font-bold text-slate-800 hover:bg-slate-50 transition-colors text-left"
                                 >
                                   <svg className="h-4 w-4" viewBox="0 0 24 24">
-                                    <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" />
-                                    <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" />
-                                    <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" />
-                                    <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" />
+                                    <path
+                                      fill="#4285F4"
+                                      d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"
+                                    />
+
+                                    <path
+                                      fill="#34A853"
+                                      d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"
+                                    />
+
+                                    <path
+                                      fill="#FBBC05"
+                                      d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"
+                                    />
+
+                                    <path
+                                      fill="#EA4335"
+                                      d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"
+                                    />
                                   </svg>
                                   Continue as Student
                                 </button>
+
                                 <button
                                   type="button"
+
                                   onClick={() => {
                                     setIsRoleDropdownOpen(false);
+
                                     setShowParentLogin(true);
+
                                     setOtpSent(false);
+
                                     setOtp("");
+
                                     setParentPhone("");
                                   }}
+
                                   className="flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-xs sm:text-sm font-bold text-slate-800 hover:bg-slate-50 transition-colors text-left border-t border-slate-50"
                                 >
                                   <span className="text-base">👨‍👩‍👧</span>
@@ -1303,60 +2365,115 @@ function LoginForm() {
 
                       <div className="py-0.5 sm:py-1.5 relative flex items-center transition-all">
                         <div className="grow border-t border-slate-100"></div>
-                        <span className="mx-4 text-[10px] font-black uppercase tracking-[0.2em] text-slate-300">Staff Portal</span>
+
+                        <span className="mx-4 text-[10px] font-black uppercase tracking-[0.2em] text-slate-300">
+                          Staff Portal
+                        </span>
+
                         <div className="grow border-t border-slate-100"></div>
                       </div>
 
                       {/* Staff Selection */}
+
                       <div className="grid grid-cols-2 gap-2 sm:gap-3">
                         <button
                           onClick={handleAdminLogin}
-                          className={`group flex flex-col items-center justify-center gap-1.5 sm:gap-2.5 rounded-xl border-2 p-2 sm:p-3.5 transition-all duration-500 active:scale-95 ${showAdminPassword
-                            ? "border-blue-500 bg-blue-50/50 shadow-inner"
-                            : "border-transparent bg-white hover:bg-slate-50 hover:border-slate-100 shadow-[0_4px_12px_-4px_rgba(0,0,0,0.05)]"
-                            }`}
+
+                          className={`group flex flex-col items-center justify-center gap-1.5 sm:gap-2.5 rounded-xl border-2 p-2 sm:p-3.5 transition-all duration-500 active:scale-95 ${
+                            showAdminPassword
+                              ? "border-blue-500 bg-blue-50/50 shadow-inner"
+                              : "border-transparent bg-white hover:bg-slate-50 hover:border-slate-100 shadow-[0_4px_12px_-4px_rgba(0,0,0,0.05)]"
+                          }`}
                         >
-                          <div className={`flex h-8 w-8 sm:h-11 sm:w-11 items-center justify-center rounded-xl transition-all duration-500 ${showAdminPassword ? "bg-blue-600 text-white rotate-6 shadow-blue-200 shadow-xl" : "bg-blue-50 text-blue-600 group-hover:scale-110 group-hover:-rotate-3"
-                            }`}>
-                            <svg className="h-5 w-5 sm:h-6 sm:w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
+                          <div
+                            className={`flex h-8 w-8 sm:h-11 sm:w-11 items-center justify-center rounded-xl transition-all duration-500 ${
+                              showAdminPassword
+                                ? "bg-blue-600 text-white rotate-6 shadow-blue-200 shadow-xl"
+                                : "bg-blue-50 text-blue-600 group-hover:scale-110 group-hover:-rotate-3"
+                            }`}
+                          >
+                            <svg
+                              className="h-5 w-5 sm:h-6 sm:w-6"
+                              fill="none"
+                              viewBox="0 0 24 24"
+                              stroke="currentColor"
+                            >
+                              <path
+                                strokeLinecap="round"
+                                strokeLinejoin="round"
+                                strokeWidth={1.5}
+                                d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4"
+                              />
                             </svg>
                           </div>
+
                           <div className="text-center">
-                            <span className={`block text-xs sm:text-sm font-bold tracking-tight transition-colors ${showAdminPassword ? "text-blue-900" : "text-slate-800"}`}>
+                            <span
+                              className={`block text-xs sm:text-sm font-bold tracking-tight transition-colors ${showAdminPassword ? "text-blue-900" : "text-slate-800"}`}
+                            >
                               Dean
                             </span>
-                            <span className="text-[9px] font-medium text-slate-400">Institutional Access</span>
+
+                            <span className="text-[9px] font-medium text-slate-400">
+                              Institutional Access
+                            </span>
                           </div>
                         </button>
 
                         <button
                           onClick={handleWardenLogin}
-                          className={`group flex flex-col items-center justify-center gap-1.5 sm:gap-2.5 rounded-xl border-2 p-2 sm:p-3.5 transition-all duration-500 active:scale-95 ${showWardenPassword
-                            ? "border-indigo-500 bg-indigo-50/50 shadow-inner"
-                            : "border-transparent bg-white hover:bg-slate-50 hover:border-slate-100 shadow-[0_4px_12px_-4px_rgba(0,0,0,0.05)]"
-                            }`}
+
+                          className={`group flex flex-col items-center justify-center gap-1.5 sm:gap-2.5 rounded-xl border-2 p-2 sm:p-3.5 transition-all duration-500 active:scale-95 ${
+                            showWardenPassword
+                              ? "border-indigo-500 bg-indigo-50/50 shadow-inner"
+                              : "border-transparent bg-white hover:bg-slate-50 hover:border-slate-100 shadow-[0_4px_12px_-4px_rgba(0,0,0,0.05)]"
+                          }`}
                         >
-                          <div className={`flex h-8 w-8 sm:h-11 sm:w-11 items-center justify-center rounded-xl transition-all duration-500 ${showWardenPassword ? "bg-indigo-600 text-white -rotate-6 shadow-indigo-200 shadow-xl" : "bg-indigo-50 text-indigo-600 group-hover:scale-110 group-hover:rotate-3"
-                            }`}>
-                            <svg className="h-5 w-5 sm:h-6 sm:w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                          <div
+                            className={`flex h-8 w-8 sm:h-11 sm:w-11 items-center justify-center rounded-xl transition-all duration-500 ${
+                              showWardenPassword
+                                ? "bg-indigo-600 text-white -rotate-6 shadow-indigo-200 shadow-xl"
+                                : "bg-indigo-50 text-indigo-600 group-hover:scale-110 group-hover:rotate-3"
+                            }`}
+                          >
+                            <svg
+                              className="h-5 w-5 sm:h-6 sm:w-6"
+                              fill="none"
+                              viewBox="0 0 24 24"
+                              stroke="currentColor"
+                            >
+                              <path
+                                strokeLinecap="round"
+                                strokeLinejoin="round"
+                                strokeWidth={1.5}
+                                d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"
+                              />
                             </svg>
                           </div>
+
                           <div className="text-center">
-                            <span className={`block text-xs sm:text-sm font-bold tracking-tight transition-colors ${showWardenPassword ? "text-indigo-900" : "text-slate-800"}`}>
+                            <span
+                              className={`block text-xs sm:text-sm font-bold tracking-tight transition-colors ${showWardenPassword ? "text-indigo-900" : "text-slate-800"}`}
+                            >
                               Campus
                             </span>
-                            <span className="text-[9px] font-medium text-slate-400">Campus Management</span>
+
+                            <span className="text-[9px] font-medium text-slate-400">
+                              Campus Management
+                            </span>
                           </div>
                         </button>
                       </div>
 
                       {/* Password Verification Section */}
-                      {(showAdminPassword || showWardenPassword || showDeveloperPassword) && (
+
+                      {(showAdminPassword ||
+                        showWardenPassword ||
+                        showDeveloperPassword) && (
                         <div className="mt-3 sm:mt-4 animate-in fade-in zoom-in-95 slide-in-from-bottom-4 duration-500">
                           <div className="rounded-xl border border-slate-100 bg-white p-3 sm:p-4 shadow-[0_8px_16px_-6px_rgba(0,0,0,0.06)]">
-                            {showDeveloperPassword && superAdminResetStep !== "none" ? (
+                            {showDeveloperPassword &&
+                            superAdminResetStep !== "none" ? (
                               <div className="space-y-4 animate-in fade-in duration-300">
                                 <h3 className="text-xs font-black text-slate-800 uppercase tracking-widest text-center">
                                   🔑 Super Admin Password Recovery
@@ -1367,43 +2484,65 @@ function LoginForm() {
                                     <label className="block text-[10px] font-black uppercase tracking-wider text-blue-600 text-center">
                                       Enter Registered Mobile Number
                                     </label>
+
                                     <div className="relative">
                                       <span className="absolute inset-y-0 left-0 pl-3.5 flex items-center text-slate-400 text-sm font-semibold pointer-events-none">
                                         +91
                                       </span>
+
                                       <input
                                         type="tel"
+
                                         maxLength={10}
+
                                         value={superAdminResetPhone}
+
                                         onChange={(e) => {
-                                          setSuperAdminResetPhone(e.target.value.replace(/\D/g, ""));
+                                          setSuperAdminResetPhone(
+                                            e.target.value.replace(/\D/g, ""),
+                                          );
+
                                           setError("");
                                         }}
+
                                         onKeyDown={(e) => {
-                                          if (e.key === "Enter") handleSuperAdminRequestOtp();
+                                          if (e.key === "Enter")
+                                            handleSuperAdminRequestOtp();
                                         }}
+
                                         className="w-full rounded-xl border border-slate-200 bg-white pl-12 pr-4 py-3 text-sm font-bold text-slate-900 focus:border-blue-500 focus:bg-white focus:outline-none focus:ring-4 focus:ring-blue-500/10 transition-all"
+
                                         placeholder="9876543210"
                                       />
                                     </div>
+
                                     <div className="flex gap-2">
                                       <button
                                         type="button"
+
                                         onClick={() => {
                                           setSuperAdminResetStep("none");
+
                                           setError("");
                                         }}
+
                                         className="w-1/3 py-3 rounded-xl border border-slate-200 font-bold text-xs uppercase tracking-widest text-slate-500 hover:bg-slate-50 transition-all"
                                       >
                                         Cancel
                                       </button>
+
                                       <button
                                         type="button"
+
                                         onClick={handleSuperAdminRequestOtp}
+
                                         disabled={superAdminResetLoading}
+
                                         className="w-2/3 py-3 rounded-xl bg-blue-600 font-bold text-xs uppercase tracking-widest text-white shadow-lg hover:bg-blue-700 active:scale-[0.98] transition-all disabled:opacity-50"
                                       >
-                                        {superAdminResetLoading ? "Sending..." : "Get OTP"}
+                                        {superAdminResetLoading
+                                          ? "Sending..."
+                                          : "Get OTP"}
                                       </button>
                                     </div>
                                   </div>
@@ -1413,15 +2552,24 @@ function LoginForm() {
                                       <label className="block text-[10px] font-bold uppercase tracking-wider text-green-600 text-center">
                                         Enter 6-Digit OTP
                                       </label>
+
                                       <input
                                         type="text"
+
                                         maxLength={6}
+
                                         value={superAdminResetOtp}
+
                                         onChange={(e) => {
-                                          setSuperAdminResetOtp(e.target.value.replace(/\D/g, ""));
+                                          setSuperAdminResetOtp(
+                                            e.target.value.replace(/\D/g, ""),
+                                          );
+
                                           setError("");
                                         }}
+
                                         className="w-full rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-center text-lg font-black tracking-[0.5em] text-slate-900 focus:border-blue-500 focus:outline-none focus:ring-4 focus:ring-blue-500/10 transition-all placeholder:text-slate-200 placeholder:tracking-normal placeholder:font-medium"
+
                                         placeholder="······"
                                       />
                                     </div>
@@ -1430,14 +2578,22 @@ function LoginForm() {
                                       <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-500">
                                         New Master Password
                                       </label>
+
                                       <input
                                         type="password"
+
                                         value={superAdminNewPassword}
+
                                         onChange={(e) => {
-                                          setSuperAdminNewPassword(e.target.value);
+                                          setSuperAdminNewPassword(
+                                            e.target.value,
+                                          );
+
                                           setError("");
                                         }}
+
                                         className="w-full rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-bold text-slate-900 focus:border-blue-500 focus:outline-none focus:ring-4 focus:ring-blue-500/10 transition-all"
+
                                         placeholder="At least 6 characters"
                                       />
                                     </div>
@@ -1446,14 +2602,22 @@ function LoginForm() {
                                       <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-500">
                                         Confirm New Password
                                       </label>
+
                                       <input
                                         type="password"
+
                                         value={superAdminConfirmPassword}
+
                                         onChange={(e) => {
-                                          setSuperAdminConfirmPassword(e.target.value);
+                                          setSuperAdminConfirmPassword(
+                                            e.target.value,
+                                          );
+
                                           setError("");
                                         }}
+
                                         className="w-full rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-bold text-slate-900 focus:border-blue-500 focus:outline-none focus:ring-4 focus:ring-blue-500/10 transition-all"
+
                                         placeholder="Repeat new password"
                                       />
                                     </div>
@@ -1461,21 +2625,278 @@ function LoginForm() {
                                     <div className="flex gap-2">
                                       <button
                                         type="button"
+
                                         onClick={() => {
                                           setSuperAdminResetStep("none");
+
                                           setError("");
                                         }}
+
                                         className="w-1/3 py-3.5 rounded-xl border border-slate-200 font-bold text-xs uppercase tracking-widest text-slate-500 hover:bg-slate-50 transition-all"
                                       >
                                         Cancel
                                       </button>
+
                                       <button
                                         type="button"
+
                                         onClick={handleSuperAdminVerifyOtp}
+
                                         disabled={superAdminResetLoading}
+
                                         className="w-2/3 py-3.5 rounded-xl bg-slate-900 font-bold text-xs uppercase tracking-widest text-white shadow-lg hover:bg-slate-800 active:scale-[0.98] transition-all disabled:opacity-50"
                                       >
-                                        {superAdminResetLoading ? "Verifying..." : "Reset & Save"}
+                                        {superAdminResetLoading
+                                          ? "Verifying..."
+                                          : "Reset & Save"}
+                                      </button>
+                                    </div>
+                                  </div>
+                                )}
+                              </div>
+                            ) : staffResetRole !== "none" &&
+                              staffResetStep !== "none" ? (
+                              <div className="space-y-4 animate-in fade-in duration-300">
+                                <div className="text-center">
+                                  <h3 className="text-xs font-black text-slate-800 uppercase tracking-widest">
+                                    🔑{" "}
+                                    {staffResetRole === "warden"
+                                      ? "Warden Password Recovery"
+                                      : "Dean Password Recovery"}
+                                  </h3>
+
+                                  <p className="text-[10px] font-semibold text-slate-400 mt-1">
+                                    {staffResetStep === "phone"
+                                      ? "Verify your registered mobile number via SMS OTP"
+                                      : "Enter the OTP sent to your phone and create your new password"}
+                                  </p>
+                                </div>
+
+                                {staffResetStep === "phone" ? (
+                                  <div className="space-y-3">
+                                    {staffResetRole === "warden" && (
+                                      <div className="flex flex-col">
+                                        <label className="block text-[9px] sm:text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1">
+                                          Select Hostel
+                                        </label>
+
+                                        <select
+                                          value={staffResetHostelId}
+
+                                          onChange={(e) => {
+                                            setStaffResetHostelId(
+                                              e.target.value,
+                                            );
+
+                                            setError("");
+                                          }}
+
+                                          className="w-full rounded-xl border border-slate-100 bg-slate-50 pl-3 pr-8 py-2.5 sm:py-3 text-xs sm:text-sm text-slate-900 focus:border-indigo-500 focus:bg-white focus:outline-none focus:ring-4 focus:ring-indigo-500/10 transition-all font-semibold"
+                                        >
+                                          <option value="" disabled>
+                                            Select hostel
+                                          </option>
+
+                                          {hostels.map((h) => (
+                                            <option key={h._id} value={h._id}>
+                                              {h.name}
+                                            </option>
+                                          ))}
+                                        </select>
+                                      </div>
+                                    )}
+
+                                    <div className="space-y-1.5">
+                                      <label className="block text-[10px] font-black uppercase tracking-wider text-indigo-600 text-center">
+                                        Registered Mobile Number
+                                      </label>
+
+                                      <div className="relative">
+                                        <span className="absolute inset-y-0 left-0 pl-3.5 flex items-center text-slate-400 text-sm font-semibold pointer-events-none">
+                                          +91
+                                        </span>
+
+                                        <input
+                                          type="tel"
+
+                                          maxLength={10}
+
+                                          value={staffResetPhone}
+
+                                          onChange={(e) => {
+                                            setStaffResetPhone(
+                                              e.target.value.replace(/\D/g, ""),
+                                            );
+
+                                            setError("");
+                                          }}
+
+                                          onKeyDown={(e) => {
+                                            if (e.key === "Enter")
+                                              handleStaffRequestOtp();
+                                          }}
+
+                                          className="w-full rounded-xl border border-slate-200 bg-white pl-12 pr-4 py-3 text-sm font-bold text-slate-900 focus:border-indigo-500 focus:bg-white focus:outline-none focus:ring-4 focus:ring-indigo-500/10 transition-all"
+
+                                          placeholder="10-digit mobile"
+                                        />
+                                      </div>
+                                    </div>
+
+                                    <div className="flex gap-2 pt-1">
+                                      <button
+                                        type="button"
+
+                                        onClick={() => {
+                                          setStaffResetRole("none");
+
+                                          setStaffResetStep("none");
+
+                                          setError("");
+                                        }}
+
+                                        className="w-1/3 py-3 rounded-xl border border-slate-200 font-bold text-xs uppercase tracking-widest text-slate-500 hover:bg-slate-50 transition-all"
+                                      >
+                                        Cancel
+                                      </button>
+
+                                      <button
+                                        type="button"
+
+                                        onClick={handleStaffRequestOtp}
+
+                                        disabled={staffResetLoading}
+
+                                        className={`w-2/3 py-3 rounded-xl font-bold text-xs uppercase tracking-widest text-white shadow-lg active:scale-[0.98] transition-all disabled:opacity-50 ${staffResetRole === "warden" ? "bg-indigo-600 hover:bg-indigo-700 shadow-indigo-100" : "bg-blue-600 hover:bg-blue-700 shadow-blue-100"}`}
+                                      >
+                                        {staffResetLoading
+                                          ? "Sending OTP..."
+                                          : "Get OTP"}
+                                      </button>
+                                    </div>
+                                  </div>
+                                ) : (
+                                  <div className="space-y-3">
+                                    <div className="text-center bg-indigo-50/80 border border-indigo-100 p-2.5 rounded-xl">
+                                      <p className="text-[10px] font-black uppercase tracking-wider text-indigo-700">
+                                        📱 OTP Sent to Registered Mobile
+                                      </p>
+
+                                      <p className="text-xs font-bold text-slate-700 mt-0.5">
+                                        +91 ******{staffResetPhone.slice(-4)}
+                                      </p>
+                                    </div>
+
+                                    <div className="space-y-1.5">
+                                      <label className="block text-[10px] font-bold uppercase tracking-wider text-green-600 text-center">
+                                        Enter 6-Digit OTP
+                                      </label>
+
+                                      <input
+                                        type="text"
+
+                                        maxLength={6}
+
+                                        autoFocus
+
+                                        value={staffResetOtp}
+
+                                        onChange={(e) => {
+                                          setStaffResetOtp(
+                                            e.target.value.replace(/\D/g, ""),
+                                          );
+
+                                          setError("");
+                                        }}
+
+                                        className="w-full rounded-xl border border-slate-200 bg-white px-4 py-2 text-center text-lg font-black tracking-[0.5em] text-slate-900 focus:border-indigo-500 focus:outline-none focus:ring-4 focus:ring-indigo-500/10 transition-all placeholder:text-slate-200 placeholder:tracking-normal placeholder:font-medium"
+
+                                        placeholder="······"
+                                      />
+                                    </div>
+
+                                    <div className="space-y-1">
+                                      <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-500">
+                                        New Password
+                                      </label>
+
+                                      <input
+                                        type="password"
+
+                                        value={staffResetNewPassword}
+
+                                        onChange={(e) => {
+                                          setStaffResetNewPassword(
+                                            e.target.value,
+                                          );
+
+                                          setError("");
+                                        }}
+
+                                        className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-bold text-slate-900 focus:border-indigo-500 focus:outline-none focus:ring-4 focus:ring-indigo-500/10 transition-all"
+
+                                        placeholder="At least 4 characters"
+                                      />
+                                    </div>
+
+                                    <div className="space-y-1">
+                                      <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-500">
+                                        Confirm New Password
+                                      </label>
+
+                                      <input
+                                        type="password"
+
+                                        value={staffResetConfirmPassword}
+
+                                        onChange={(e) => {
+                                          setStaffResetConfirmPassword(
+                                            e.target.value,
+                                          );
+
+                                          setError("");
+                                        }}
+
+                                        onKeyDown={(e) => {
+                                          if (e.key === "Enter")
+                                            handleStaffVerifyOtpAndReset();
+                                        }}
+
+                                        className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-bold text-slate-900 focus:border-indigo-500 focus:outline-none focus:ring-4 focus:ring-indigo-500/10 transition-all"
+
+                                        placeholder="Repeat new password"
+                                      />
+                                    </div>
+
+                                    <div className="flex gap-2 pt-1">
+                                      <button
+                                        type="button"
+
+                                        onClick={() => {
+                                          setStaffResetRole("none");
+
+                                          setStaffResetStep("none");
+
+                                          setError("");
+                                        }}
+
+                                        className="w-1/3 py-3 rounded-xl border border-slate-200 font-bold text-xs uppercase tracking-widest text-slate-500 hover:bg-slate-50 transition-all"
+                                      >
+                                        Cancel
+                                      </button>
+
+                                      <button
+                                        type="button"
+
+                                        onClick={handleStaffVerifyOtpAndReset}
+
+                                        disabled={staffResetLoading}
+
+                                        className={`w-2/3 py-3 rounded-xl font-bold text-xs uppercase tracking-widest text-white shadow-lg active:scale-[0.98] transition-all disabled:opacity-50 ${staffResetRole === "warden" ? "bg-indigo-600 hover:bg-indigo-700 shadow-indigo-100" : "bg-blue-600 hover:bg-blue-700 shadow-blue-100"}`}
+                                      >
+                                        {staffResetLoading
+                                          ? "Saving..."
+                                          : "Reset & Save"}
                                       </button>
                                     </div>
                                   </div>
@@ -1486,111 +2907,428 @@ function LoginForm() {
                                 {!isDeveloperSetup && showDeveloperPassword && (
                                   <p className="mb-4 text-[10px] text-blue-600 font-bold bg-blue-50 p-2 rounded-lg border border-blue-100 flex items-center gap-2">
                                     <span className="text-sm">🔑</span>
-                                    Please create a secure developer password for your university.
+                                    Please create a secure developer password
+                                    for your university.
                                   </p>
                                 )}
 
                                 {showWardenPassword ? (
-                                  <div className="grid grid-cols-2 gap-3 mb-4 animate-in fade-in slide-in-from-top-2 duration-300">
-                                    {/* Left Column: Select Campus Role */}
-                                    <div className="flex flex-col">
-                                      <div className="flex items-center justify-between mb-2 sm:mb-3 min-h-[14px]">
-                                        <label className="block text-[9px] sm:text-[10px] font-black uppercase tracking-widest text-slate-400">
-                                          Campus Role
-                                        </label>
-                                      </div>
-                                      <select
-                                        value={selectedHostelId}
-                                        onChange={(e) => {
-                                          setSelectedHostelId(e.target.value);
-                                          setError("");
-                                        }}
-                                        className="w-full rounded-xl border border-slate-100 bg-slate-50 pl-3 pr-8 py-2.5 sm:py-3.5 text-xs sm:text-sm text-slate-900 focus:border-indigo-500 focus:bg-white focus:outline-none focus:ring-4 focus:ring-indigo-500/10 transition-all font-semibold"
-                                      >
-                                        <option value="" disabled>Select role</option>
-                                        <option value="getpass" className="font-bold text-blue-600">🎟️ GATEPASS MONITOR</option>
-                                        {hostels.map(hostel => (
-                                          <option key={hostel._id} value={hostel._id}>
-                                            {hostel.name}
-                                          </option>
-                                        ))}
-                                      </select>
-                                    </div>
+                                  wardenOtpSent ? (
+                                    <div className="space-y-3 mb-4 animate-in fade-in zoom-in-95 duration-300">
+                                      <div className="text-center bg-indigo-50/80 border border-indigo-100 p-2.5 rounded-xl">
+                                        <p className="text-[10px] font-black uppercase tracking-wider text-indigo-700">
+                                          📱 OTP Sent to Registered Number
+                                        </p>
 
-                                    {/* Right Column: Enter Password */}
-                                    <div className="flex flex-col">
-                                      <div className="flex items-center justify-between mb-2 sm:mb-3 min-h-[14px]">
-                                        <label className="block text-[9px] sm:text-[10px] font-black uppercase tracking-widest text-slate-400">
-                                          Enter Password
-                                        </label>
+                                        <p className="text-xs font-bold text-slate-700 mt-0.5">
+                                          +91 ******{wardenPhone.slice(-4)}
+                                        </p>
                                       </div>
-                                      <div className="relative group">
+
+                                      <div className="space-y-1.5">
+                                        <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-500 text-center">
+                                          Enter 6-Digit OTP
+                                        </label>
+
                                         <input
-                                          type="password"
+                                          type="text"
+
+                                          maxLength={6}
+
                                           autoFocus
-                                          value={wardenPassword}
+
+                                          value={wardenOtp}
+
                                           onChange={(e) => {
-                                            setWardenPassword(e.target.value);
+                                            setWardenOtp(
+                                              e.target.value.replace(/\D/g, ""),
+                                            );
+
                                             setError("");
                                           }}
+
                                           onKeyDown={(e) => {
-                                            if (e.key === "Enter") {
+                                            if (e.key === "Enter")
                                               handleWardenLogin();
-                                            }
                                           }}
-                                          className="w-full rounded-xl border border-slate-100 bg-slate-50 px-3 py-2.5 sm:py-3.5 text-center text-xs sm:text-sm font-black tracking-[0.2em] text-slate-900 focus:border-indigo-500 focus:bg-white focus:outline-none focus:ring-4 focus:ring-indigo-500/10 transition-all placeholder:text-slate-300 placeholder:font-medium placeholder:tracking-normal"
-                                          placeholder="••••••••••••"
+
+                                          className="w-full rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-center text-lg font-black tracking-[0.5em] text-slate-900 focus:border-indigo-500 focus:outline-none focus:ring-4 focus:ring-indigo-500/10 transition-all placeholder:text-slate-200 placeholder:tracking-normal placeholder:font-medium"
+
+                                          placeholder="······"
                                         />
                                       </div>
+
+                                      <div className="text-center">
+                                        <button
+                                          type="button"
+
+                                          onClick={() => {
+                                            setWardenOtpSent(false);
+
+                                            setWardenOtp("");
+
+                                            setError("");
+                                          }}
+
+                                          className="text-[10px] font-bold text-indigo-600 hover:text-indigo-800 uppercase tracking-widest hover:underline"
+                                        >
+                                          Change Number / Resend OTP
+                                        </button>
+                                      </div>
                                     </div>
-                                  </div>
+                                  ) : (
+                                    <div className="space-y-3 mb-4 animate-in fade-in slide-in-from-top-2 duration-300">
+                                      {/* Campus Role Dropdown */}
+
+                                      <div className="flex flex-col">
+                                        <label className="block text-[9px] sm:text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1">
+                                          Campus Role
+                                        </label>
+
+                                        <select
+                                          value={selectedHostelId}
+
+                                          onChange={(e) => {
+                                            setSelectedHostelId(e.target.value);
+
+                                            setError("");
+                                          }}
+
+                                          className="w-full rounded-xl border border-slate-100 bg-slate-50 pl-3 pr-8 py-2.5 sm:py-3 text-xs sm:text-sm text-slate-900 focus:border-indigo-500 focus:bg-white focus:outline-none focus:ring-4 focus:ring-indigo-500/10 transition-all font-semibold"
+                                        >
+                                          <option value="" disabled>
+                                            Select role
+                                          </option>
+
+                                          <option
+                                            value="getpass"
+                                            className="font-bold text-blue-600"
+                                          >
+                                            🎟️ GATEPASS MONITOR
+                                          </option>
+
+                                          {hostels.map((hostel) => (
+                                            <option
+                                              key={hostel._id}
+                                              value={hostel._id}
+                                            >
+                                              {hostel.name}
+                                            </option>
+                                          ))}
+                                        </select>
+                                      </div>
+
+                                      {/* Phone Number & Password (side-by-side when hostel selected, as drawn by blue arrow) */}
+                                      {selectedHostelId &&
+                                      selectedHostelId !== "getpass" ? (
+                                        <div className="grid grid-cols-2 gap-2 animate-in fade-in duration-200">
+                                          <div className="flex flex-col">
+                                            <label className="block text-[9px] sm:text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1 truncate">
+                                              Warden Mobile
+                                            </label>
+                                            <div className="relative">
+                                              <span className="absolute inset-y-0 left-0 pl-2.5 flex items-center text-slate-400 text-xs font-bold pointer-events-none">
+                                                +91
+                                              </span>
+                                              <input
+                                                type="tel"
+                                                maxLength={10}
+                                                value={wardenPhone}
+                                                onChange={(e) => {
+                                                  setWardenPhone(
+                                                    e.target.value.replace(
+                                                      /\D/g,
+                                                      "",
+                                                    ),
+                                                  );
+                                                  setError("");
+                                                }}
+                                                placeholder="10-digit no."
+                                                className="w-full rounded-xl border border-slate-100 bg-slate-50 pl-9 pr-2 py-2.5 sm:py-3 text-xs sm:text-sm font-bold text-slate-900 focus:border-indigo-500 focus:bg-white focus:outline-none focus:ring-4 focus:ring-indigo-500/10 transition-all placeholder:text-slate-300"
+                                              />
+                                            </div>
+                                          </div>
+
+                                          <div className="flex flex-col">
+                                            <label className="block text-[9px] sm:text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1 truncate">
+                                              Enter Password
+                                            </label>
+                                            <div className="relative group">
+                                              <input
+                                                type="password"
+                                                value={wardenPassword}
+                                                onChange={(e) => {
+                                                  setWardenPassword(
+                                                    e.target.value,
+                                                  );
+                                                  setError("");
+                                                }}
+                                                onKeyDown={(e) => {
+                                                  if (e.key === "Enter") {
+                                                    handleWardenLogin();
+                                                  }
+                                                }}
+                                                className="w-full rounded-xl border border-slate-100 bg-slate-50 px-2.5 py-2.5 sm:py-3 text-center text-xs sm:text-sm font-black tracking-[0.15em] text-slate-900 focus:border-indigo-500 focus:bg-white focus:outline-none focus:ring-4 focus:ring-indigo-500/10 transition-all placeholder:text-slate-300 placeholder:font-medium placeholder:tracking-normal"
+                                                placeholder="••••••••"
+                                              />
+                                            </div>
+                                          </div>
+                                        </div>
+                                      ) : (
+                                        <div className="flex flex-col">
+                                          <label className="block text-[9px] sm:text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1">
+                                            Enter Password
+                                          </label>
+                                          <div className="relative group">
+                                            <input
+                                              type="password"
+                                              autoFocus
+                                              value={wardenPassword}
+                                              onChange={(e) => {
+                                                setWardenPassword(
+                                                  e.target.value,
+                                                );
+                                                setError("");
+                                              }}
+                                              onKeyDown={(e) => {
+                                                if (e.key === "Enter") {
+                                                  handleWardenLogin();
+                                                }
+                                              }}
+                                              className="w-full rounded-xl border border-slate-100 bg-slate-50 px-3 py-2.5 sm:py-3 text-center text-xs sm:text-sm font-black tracking-[0.2em] text-slate-900 focus:border-indigo-500 focus:bg-white focus:outline-none focus:ring-4 focus:ring-indigo-500/10 transition-all placeholder:text-slate-300 placeholder:font-medium placeholder:tracking-normal"
+                                              placeholder="••••••••••••"
+                                            />
+                                          </div>
+                                        </div>
+                                      )}
+                                    </div>
+                                  )
+                                ) : showAdminPassword ? (
+                                  adminOtpSent ? (
+                                    <div className="space-y-3 mb-4 animate-in fade-in zoom-in-95 duration-300">
+                                      <div className="text-center bg-blue-50/80 border border-blue-100 p-2.5 rounded-xl">
+                                        <p className="text-[10px] font-black uppercase tracking-wider text-blue-700">
+                                          📱 OTP Sent to Dean Mobile
+                                        </p>
+
+                                        <p className="text-xs font-bold text-slate-700 mt-0.5">
+                                          +91 ******{adminPhone.slice(-4)}
+                                        </p>
+                                      </div>
+
+                                      <div className="space-y-1.5">
+                                        <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-500 text-center">
+                                          Enter 6-Digit OTP
+                                        </label>
+
+                                        <input
+                                          type="text"
+
+                                          maxLength={6}
+
+                                          autoFocus
+
+                                          value={adminOtp}
+
+                                          onChange={(e) => {
+                                            setAdminOtp(
+                                              e.target.value.replace(/\D/g, ""),
+                                            );
+
+                                            setError("");
+                                          }}
+
+                                          onKeyDown={(e) => {
+                                            if (e.key === "Enter")
+                                              handleAdminLogin();
+                                          }}
+
+                                          className="w-full rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-center text-lg font-black tracking-[0.5em] text-slate-900 focus:border-blue-500 focus:outline-none focus:ring-4 focus:ring-blue-500/10 transition-all placeholder:text-slate-200 placeholder:tracking-normal placeholder:font-medium"
+
+                                          placeholder="······"
+                                        />
+                                      </div>
+
+                                      <div className="text-center">
+                                        <button
+                                          type="button"
+
+                                          onClick={() => {
+                                            setAdminOtpSent(false);
+
+                                            setAdminOtp("");
+
+                                            setError("");
+                                          }}
+
+                                          className="text-[10px] font-bold text-blue-600 hover:text-blue-800 uppercase tracking-widest hover:underline"
+                                        >
+                                          Change Number / Resend OTP
+                                        </button>
+                                      </div>
+                                    </div>
+                                  ) : (
+                                    <div className="mb-4 animate-in fade-in duration-300">
+                                      <div className="grid grid-cols-2 gap-2">
+                                        {/* Left: Registered Mobile */}
+                                        <div className="flex flex-col">
+                                          <label className="block text-[9px] sm:text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1 truncate">
+                                            Registered Mobile
+                                          </label>
+                                          <div className="relative">
+                                            <span className="absolute inset-y-0 left-0 pl-2.5 flex items-center text-slate-400 text-xs font-bold pointer-events-none">
+                                              +91
+                                            </span>
+                                            <input
+                                              type="tel"
+                                              maxLength={10}
+                                              value={adminPhone}
+                                              onChange={(e) => {
+                                                setAdminPhone(
+                                                  e.target.value.replace(
+                                                    /\D/g,
+                                                    "",
+                                                  ),
+                                                );
+                                                setError("");
+                                              }}
+                                              placeholder="10-digit no."
+                                              className="w-full rounded-xl border border-slate-100 bg-slate-50 pl-9 pr-2 py-2.5 sm:py-3 text-xs sm:text-sm font-bold text-slate-900 focus:border-blue-500 focus:bg-white focus:outline-none focus:ring-4 focus:ring-blue-500/10 transition-all placeholder:text-slate-300"
+                                            />
+                                          </div>
+                                        </div>
+
+                                        {/* Right: Authentication Key */}
+                                        <div className="flex flex-col">
+                                          <label className="block text-[9px] sm:text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1 truncate">
+                                            Authentication Key
+                                          </label>
+                                          <div className="relative group">
+                                            <input
+                                              type="password"
+                                              autoFocus
+                                              value={adminPassword}
+                                              onChange={(e) => {
+                                                setAdminPassword(
+                                                  e.target.value,
+                                                );
+                                                setError("");
+                                              }}
+                                              onKeyDown={(e) => {
+                                                if (e.key === "Enter")
+                                                  handleAdminLogin();
+                                              }}
+                                              className="w-full rounded-xl border border-slate-100 bg-slate-50 px-2.5 py-2.5 sm:py-3 text-center text-xs sm:text-sm font-black tracking-[0.2em] text-slate-900 focus:border-blue-500 focus:bg-white focus:outline-none focus:ring-4 focus:ring-blue-500/10 transition-all placeholder:text-slate-300 placeholder:font-medium placeholder:tracking-normal"
+                                              placeholder={
+                                                "\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022"
+                                              }
+                                            />
+                                          </div>
+                                        </div>
+                                      </div>
+                                    </div>
+                                  )
                                 ) : (
                                   <div className="mb-4 animate-in fade-in duration-300">
                                     <label className="mb-2 sm:mb-3 block text-[9px] sm:text-[10px] font-black uppercase tracking-widest text-slate-400">
-                                      {showAdminPassword ? "Dean Authentication Key" : 
-                                       !isDeveloperSetup ? "CREATE YOUR PASSWORD" : "Super Admin Authentication"}
+                                      {!isDeveloperSetup
+                                        ? "CREATE YOUR PASSWORD"
+                                        : "Super Admin Authentication"}
                                     </label>
+
                                     <div className="relative group">
                                       <input
                                         type="password"
+
                                         autoFocus
-                                        value={showAdminPassword ? adminPassword : developerPassword}
+
+                                        value={developerPassword}
+
                                         onChange={(e) => {
-                                          if (showAdminPassword) setAdminPassword(e.target.value);
-                                          else setDeveloperPassword(e.target.value);
+                                          setDeveloperPassword(e.target.value);
+
                                           setError("");
                                         }}
+
                                         onKeyDown={(e) => {
-                                          if (e.key === "Enter") {
-                                            if (showAdminPassword) handleAdminLogin();
-                                            else handleDeveloperLogin();
-                                          }
+                                          if (e.key === "Enter")
+                                            handleDeveloperLogin();
                                         }}
+
                                         className="w-full rounded-xl border border-slate-100 bg-slate-50 px-4 py-2.5 sm:py-3 text-center text-sm sm:text-base font-black tracking-[0.4em] text-slate-900 focus:border-blue-500 focus:bg-white focus:outline-none focus:ring-4 focus:ring-blue-500/10 transition-all placeholder:text-slate-300 placeholder:font-medium placeholder:tracking-normal"
-                                        placeholder={showAdminPassword ? "············" : !isDeveloperSetup ? "Create password" : "Enter Super Admin key"}
+
+                                        placeholder={
+                                          !isDeveloperSetup
+                                            ? "Create password"
+                                            : "Enter Super Admin key"
+                                        }
                                       />
                                     </div>
                                   </div>
                                 )}
+
                                 <div className="flex justify-between items-center mt-2 px-1">
                                   <button
                                     type="button"
+
                                     onClick={() => {
-                                      if (showAdminPassword) setShowAdminPassword(false);
-                                      if (showWardenPassword) setShowWardenPassword(false);
-                                      if (showDeveloperPassword) setShowDeveloperPassword(false);
+                                      if (showAdminPassword) {
+                                        setShowAdminPassword(false);
+
+                                        setAdminOtpSent(false);
+
+                                        setAdminOtp("");
+                                      }
+
+                                      if (showWardenPassword) {
+                                        setShowWardenPassword(false);
+
+                                        setWardenOtpSent(false);
+
+                                        setWardenOtp("");
+                                      }
+
+                                      if (showDeveloperPassword)
+                                        setShowDeveloperPassword(false);
+                                      setStaffResetRole("none");
+                                      setStaffResetStep("none");
+
                                       setError("");
                                     }}
+
                                     className="text-[9px] font-black text-slate-400 uppercase tracking-widest hover:text-slate-600 transition-colors"
                                   >
                                     Cancel
                                   </button>
-                                  {showDeveloperPassword && isDeveloperSetup && (
+
+                                  {showDeveloperPassword &&
+                                    isDeveloperSetup && (
+                                      <button
+                                        type="button"
+
+                                        onClick={() => {
+                                          setSuperAdminResetStep("phone");
+
+                                          setSuperAdminResetPhone("");
+
+                                          setError("");
+                                        }}
+
+                                        className="text-[9px] font-black text-blue-600 uppercase tracking-widest hover:text-blue-800 hover:underline transition-colors"
+                                      >
+                                        Forgot Password?
+                                      </button>
+                                    )}
+                                  {showAdminPassword && !adminOtpSent && (
                                     <button
                                       type="button"
                                       onClick={() => {
-                                        setSuperAdminResetStep("phone");
-                                        setSuperAdminResetPhone("");
+                                        setStaffResetRole("dean");
+                                        setStaffResetStep("phone");
+                                        setStaffResetPhone(adminPhone || "");
+                                        setStaffResetOtp("");
+                                        setStaffResetNewPassword("");
+                                        setStaffResetConfirmPassword("");
                                         setError("");
                                       }}
                                       className="text-[9px] font-black text-blue-600 uppercase tracking-widest hover:text-blue-800 hover:underline transition-colors"
@@ -1598,16 +3336,63 @@ function LoginForm() {
                                       Forgot Password?
                                     </button>
                                   )}
+                                  {showWardenPassword &&
+                                    !wardenOtpSent &&
+                                    selectedHostelId !== "getpass" && (
+                                      <button
+                                        type="button"
+                                        onClick={() => {
+                                          setStaffResetRole("warden");
+                                          setStaffResetStep("phone");
+                                          setStaffResetHostelId(
+                                            selectedHostelId || "",
+                                          );
+                                          setStaffResetPhone(wardenPhone || "");
+                                          setStaffResetOtp("");
+                                          setStaffResetNewPassword("");
+                                          setStaffResetConfirmPassword("");
+                                          setError("");
+                                        }}
+                                        className="text-[9px] font-black text-indigo-600 uppercase tracking-widest hover:text-indigo-800 hover:underline transition-colors"
+                                      >
+                                        Forgot Password?
+                                      </button>
+                                    )}
                                 </div>
+
                                 <div className="mt-4 flex gap-3">
                                   <button
-                                    onClick={showAdminPassword ? handleAdminLogin : showWardenPassword ? handleWardenLogin : handleDeveloperLogin}
-                                    disabled={adminLoading || wardenLoading || developerLoading}
-                                    className={`w-full py-2.5 sm:py-3.5 rounded-xl font-black text-xs sm:text-sm uppercase tracking-widest text-white shadow-lg transition-all active:scale-[0.98] disabled:opacity-50 ${showAdminPassword ? 'bg-blue-600 shadow-blue-200' : showWardenPassword ? 'bg-indigo-600 shadow-indigo-200' : 'bg-slate-900 shadow-slate-200'}`}
+                                    onClick={
+                                      showAdminPassword
+                                        ? handleAdminLogin
+                                        : showWardenPassword
+                                          ? handleWardenLogin
+                                          : handleDeveloperLogin
+                                    }
+
+                                    disabled={
+                                      adminLoading ||
+                                      wardenLoading ||
+                                      developerLoading
+                                    }
+
+                                    className={`w-full py-2.5 sm:py-3.5 rounded-xl font-black text-xs sm:text-sm uppercase tracking-widest text-white shadow-lg transition-all active:scale-[0.98] disabled:opacity-50 ${showAdminPassword ? "bg-blue-600 shadow-blue-200" : showWardenPassword ? "bg-indigo-600 shadow-indigo-200" : "bg-slate-900 shadow-slate-200"}`}
                                   >
-                                    {adminLoading || wardenLoading || developerLoading ? "Processing..." : 
-                                     showAdminPassword || showWardenPassword ? "Confirm Identity" : 
-                                     !isDeveloperSetup ? "REGISTER PASSWORD" : "Unlock Portal"}
+                                    {adminLoading ||
+                                    wardenLoading ||
+                                    developerLoading
+                                      ? "Processing..."
+                                      : showAdminPassword
+                                        ? adminOtpSent
+                                          ? "VERIFY & ENTER DASHBOARD"
+                                          : "Confirm Identity"
+                                        : showWardenPassword
+                                          ? wardenOtpSent
+                                            ? "UNLOCK CAMPUS DASHBOARD"
+                                            : "Confirm Identity"
+                                          : !isDeveloperSetup
+                                            ? "REGISTER PASSWORD"
+                                            : "Unlock Portal"}
                                   </button>
                                 </div>
                               </>
@@ -1621,62 +3406,127 @@ function LoginForm() {
               </div>
 
               {/* 📱💻 Cross-Platform App Icons (Android • iOS • Windows) */}
+
               <div className="w-full max-w-sm mt-3 mb-1 flex items-center justify-center gap-3">
                 {/* Android APK Direct Download */}
+
                 <a
                   href="/api/download/android"
+
                   className="w-10 h-10 rounded-2xl bg-white/90 hover:bg-white border border-slate-200/90 hover:border-emerald-400 shadow-2xs hover:shadow-xs hover:-translate-y-0.5 flex items-center justify-center transition-all group cursor-pointer"
+
                   title="Download Android APK"
+
                   aria-label="Download Android App"
                 >
-                  <svg className="w-5 h-5 text-[#78C257] group-hover:scale-110 transition-transform" viewBox="0 0 24 24" fill="currentColor">
+                  <svg
+                    className="w-5 h-5 text-[#78C257] group-hover:scale-110 transition-transform"
+                    viewBox="0 0 24 24"
+                    fill="currentColor"
+                  >
                     {/* Antennae */}
-                    <line x1="8.6" y1="4.2" x2="7.1" y2="1.8" stroke="currentColor" strokeWidth="0.85" strokeLinecap="round" />
-                    <line x1="15.4" y1="4.2" x2="16.9" y2="1.8" stroke="currentColor" strokeWidth="0.85" strokeLinecap="round" />
+
+                    <line
+                      x1="8.6"
+                      y1="4.2"
+                      x2="7.1"
+                      y2="1.8"
+                      stroke="currentColor"
+                      strokeWidth="0.85"
+                      strokeLinecap="round"
+                    />
+
+                    <line
+                      x1="15.4"
+                      y1="4.2"
+                      x2="16.9"
+                      y2="1.8"
+                      stroke="currentColor"
+                      strokeWidth="0.85"
+                      strokeLinecap="round"
+                    />
+
                     {/* Head */}
+
                     <path d="M6.5 8.3 A5.5 5.5 0 0 1 17.5 8.3 Z" />
+
                     {/* Eyes */}
+
                     <circle cx="9.3" cy="5.7" r="0.65" fill="#FFFFFF" />
+
                     <circle cx="14.7" cy="5.7" r="0.65" fill="#FFFFFF" />
+
                     {/* Torso */}
+
                     <path d="M6.5 8.9 H17.5 V15.2 A1.6 1.6 0 0 1 15.9 16.8 H8.1 A1.6 1.6 0 0 1 6.5 15.2 Z" />
+
                     {/* Arms */}
+
                     <rect x="3.5" y="8.7" width="2.3" height="7.8" rx="1.15" />
+
                     <rect x="18.2" y="8.7" width="2.3" height="7.8" rx="1.15" />
+
                     {/* Legs */}
+
                     <rect x="8.5" y="15.2" width="2.3" height="4.8" rx="1.15" />
-                    <rect x="13.2" y="15.2" width="2.3" height="4.8" rx="1.15" />
+
+                    <rect
+                      x="13.2"
+                      y="15.2"
+                      width="2.3"
+                      height="4.8"
+                      rx="1.15"
+                    />
                   </svg>
                 </a>
 
                 {/* iOS PWA Guide Modal */}
+
                 <button
                   type="button"
+
                   onClick={() => setShowIosGuideModal(true)}
+
                   className="w-10 h-10 rounded-2xl bg-white/90 hover:bg-white border border-slate-200/90 hover:border-slate-500 shadow-2xs hover:shadow-xs hover:-translate-y-0.5 flex items-center justify-center transition-all group cursor-pointer"
+
                   title="Install on iPhone / iPad"
+
                   aria-label="Install on iPhone and iPad"
                 >
-                  <svg className="w-5 h-5 text-slate-800 group-hover:scale-110 transition-transform" viewBox="0 0 24 24" fill="currentColor">
-                    <path d="M18.71 19.5c-.83 1.24-1.71 2.45-3.05 2.47-1.34.03-1.77-.79-3.29-.79-1.53 0-2 .77-3.27.82-1.31.05-2.3-1.32-3.14-2.53C4.25 17 2.94 12.45 4.7 9.39c.87-1.52 2.43-2.48 4.12-2.51 1.28-.02 2.5.87 3.29.87.78 0 2.26-1.07 3.81-.91.65.03 2.47.26 3.64 1.98-.09.06-2.17 1.28-2.15 3.81.03 3.02 2.65 4.03 2.68 4.04-.03.07-.42 1.44-1.38 2.83M15.97 6.37c.61-.75 1.04-1.8 0.92-2.85-.9.04-2.02.61-2.66 1.36-.56.65-.98 1.71-.85 2.72.99.08 2-.51 2.59-1.23"/>
+                  <svg
+                    className="w-5 h-5 text-slate-800 group-hover:scale-110 transition-transform"
+                    viewBox="0 0 24 24"
+                    fill="currentColor"
+                  >
+                    <path d="M18.71 19.5c-.83 1.24-1.71 2.45-3.05 2.47-1.34.03-1.77-.79-3.29-.79-1.53 0-2 .77-3.27.82-1.31.05-2.3-1.32-3.14-2.53C4.25 17 2.94 12.45 4.7 9.39c.87-1.52 2.43-2.48 4.12-2.51 1.28-.02 2.5.87 3.29.87.78 0 2.26-1.07 3.81-.91.65.03 2.47.26 3.64 1.98-.09.06-2.17 1.28-2.15 3.81.03 3.02 2.65 4.03 2.68 4.04-.03.07-.42 1.44-1.38 2.83M15.97 6.37c.61-.75 1.04-1.8 0.92-2.85-.9.04-2.02.61-2.66 1.36-.56.65-.98 1.71-.85 2.72.99.08 2-.51 2.59-1.23" />
                   </svg>
                 </button>
 
                 {/* Windows 1-Click Native App Install (0 Warnings) */}
+
                 <button
                   type="button"
+
                   onClick={handleWindowsInstall}
+
                   className="w-10 h-10 rounded-2xl bg-white/90 hover:bg-white border border-slate-200/90 hover:border-blue-500 shadow-2xs hover:shadow-xs hover:-translate-y-0.5 flex items-center justify-center transition-all group cursor-pointer"
+
                   title="Install HostelEaze on Windows PC"
+
                   aria-label="Install HostelEaze on Windows PC"
                 >
-                  <svg className="w-4 h-4 text-blue-600 group-hover:scale-110 transition-transform" viewBox="0 0 24 24" fill="currentColor">
-                    <path d="M0 3.449L9.75 2.1v9.451H0m10.949-9.602L24 0v11.551H10.949M0 12.6h9.75v9.451L0 20.699M10.949 12.6H24V24l-13.051-1.8"/>
+                  <svg
+                    className="w-4 h-4 text-blue-600 group-hover:scale-110 transition-transform"
+                    viewBox="0 0 24 24"
+                    fill="currentColor"
+                  >
+                    <path d="M0 3.449L9.75 2.1v9.451H0m10.949-9.602L24 0v11.551H10.949M0 12.6h9.75v9.451L0 20.699M10.949 12.6H24V24l-13.051-1.8" />
                   </svg>
                 </button>
               </div>
 
               {/* Premium Refined Footer */}
+
               <footer className="w-full max-w-sm mt-1 sm:mt-2 pb-1 sm:pb-2">
                 <div className="flex flex-col items-center space-y-1.5 sm:space-y-2 text-center">
                   <div className="space-y-1 sm:space-y-1.5">
@@ -1684,82 +3534,150 @@ function LoginForm() {
                       <p className="text-[7px] sm:text-[9px] font-bold tracking-[0.1em] text-slate-400 uppercase">
                         &copy; 2026 HOSTELEAZE. All Rights Reserved.
                       </p>
+
                       <p className="text-[6px] sm:text-[8px] font-medium text-slate-300 uppercase tracking-wider">
-                        Unauthorized copying, modification, or distribution is strictly prohibited
+                        Unauthorized copying, modification, or distribution is
+                        strictly prohibited
                       </p>
                     </div>
 
                     <div className="group cursor-default">
-                      <p className="text-[7px] sm:text-[9px] font-medium text-slate-400 tracking-wider" style={{ fontFamily: 'var(--font-lora), Cambria' }}>
+                      <p
+                        className="text-[7px] sm:text-[9px] font-medium text-slate-400 tracking-wider"
+                        style={{ fontFamily: "var(--font-lora), Cambria" }}
+                      >
                         Developed meticulously by
                       </p>
-                      <p className="text-xs font-bold text-slate-700 mt-0.5 transition-colors group-hover:text-blue-600" style={{ fontFamily: 'var(--font-lora), Cambria' }}>
+
+                      <p
+                        className="text-xs font-bold text-slate-700 mt-0.5 transition-colors group-hover:text-blue-600"
+                        style={{ fontFamily: "var(--font-lora), Cambria" }}
+                      >
                         Dr. Pankaj Dwivedi
                       </p>
                     </div>
                   </div>
 
                   <nav className="flex items-center gap-3 sm:gap-4 text-[7px] sm:text-[9px] font-black uppercase tracking-[0.2em] text-slate-300">
-                    <a href="#" className="hover:text-blue-600 transition-colors">Security</a>
+                    <a
+                      href="#"
+                      className="hover:text-blue-600 transition-colors"
+                    >
+                      Security
+                    </a>
+
                     <div className="h-1 w-1 rounded-full bg-slate-200" />
-                    <a href="#" className="hover:text-blue-600 transition-colors">Privacy</a>
+
+                    <a
+                      href="#"
+                      className="hover:text-blue-600 transition-colors"
+                    >
+                      Privacy
+                    </a>
+
                     <div className="h-1 w-1 rounded-full bg-slate-200" />
-                    <a href="#" className="hover:text-blue-600 transition-colors">API</a>
+
+                    <a
+                      href="#"
+                      className="hover:text-blue-600 transition-colors"
+                    >
+                      API
+                    </a>
                   </nav>
                 </div>
               </footer>
             </div>
-
           </div>
         </div>
       </main>
+
       {/* 🍏 iOS Installation Guide Modal */}
+
       {showIosGuideModal && (
         <div className="fixed inset-0 z-[9999] bg-[#050510]/80 backdrop-blur-md flex items-center justify-center p-4 text-slate-900 animate-in fade-in duration-200">
           <div className="bg-white rounded-3xl p-6 max-w-sm w-full shadow-2xl border border-slate-100 flex flex-col items-center text-center relative animate-in zoom-in-95 duration-200">
             <button
               onClick={() => setShowIosGuideModal(false)}
+
               className="absolute top-4 right-4 w-8 h-8 rounded-full bg-slate-100 hover:bg-slate-200 flex items-center justify-center text-slate-500 font-bold transition-colors cursor-pointer"
             >
               ✕
             </button>
+
             <div className="w-14 h-14 rounded-2xl bg-slate-100 flex items-center justify-center mb-3">
-              <svg className="w-7 h-7 text-slate-900" viewBox="0 0 24 24" fill="currentColor">
-                <path d="M18.71 19.5c-.83 1.24-1.71 2.45-3.05 2.47-1.34.03-1.77-.79-3.29-.79-1.53 0-2 .77-3.27.82-1.31.05-2.3-1.32-3.14-2.53C4.25 17 2.94 12.45 4.7 9.39c.87-1.52 2.43-2.48 4.12-2.51 1.28-.02 2.5.87 3.29.87.78 0 2.26-1.07 3.81-.91.65.03 2.47.26 3.64 1.98-.09.06-2.17 1.28-2.15 3.81.03 3.02 2.65 4.03 2.68 4.04-.03.07-.42 1.44-1.38 2.83M15.97 6.37c.61-.75 1.04-1.8 0.92-2.85-.9.04-2.02.61-2.66 1.36-.56.65-.98 1.71-.85 2.72.99.08 2-.51 2.59-1.23"/>
+              <svg
+                className="w-7 h-7 text-slate-900"
+                viewBox="0 0 24 24"
+                fill="currentColor"
+              >
+                <path d="M18.71 19.5c-.83 1.24-1.71 2.45-3.05 2.47-1.34.03-1.77-.79-3.29-.79-1.53 0-2 .77-3.27.82-1.31.05-2.3-1.32-3.14-2.53C4.25 17 2.94 12.45 4.7 9.39c.87-1.52 2.43-2.48 4.12-2.51 1.28-.02 2.5.87 3.29.87.78 0 2.26-1.07 3.81-.91.65.03 2.47.26 3.64 1.98-.09.06-2.17 1.28-2.15 3.81.03 3.02 2.65 4.03 2.68 4.04-.03.07-.42 1.44-1.38 2.83M15.97 6.37c.61-.75 1.04-1.8 0.92-2.85-.9.04-2.02.61-2.66 1.36-.56.65-.98 1.71-.85 2.72.99.08 2-.51 2.59-1.23" />
               </svg>
             </div>
-            <h3 className="text-base font-black text-slate-900 tracking-tight">Install on iPhone & iPad</h3>
+
+            <h3 className="text-base font-black text-slate-900 tracking-tight">
+              Install on iPhone & iPad
+            </h3>
+
             <p className="text-xs text-slate-500 mt-1 mb-4 leading-relaxed">
-              Install HostelEaze permanently on your Apple device without App Store in 3 quick steps:
+              Install HostelEaze permanently on your Apple device without App
+              Store in 3 quick steps:
             </p>
+
             <div className="w-full space-y-2.5 text-left mb-5">
               <div className="flex items-start gap-3 p-2.5 rounded-xl bg-slate-50 border border-slate-100">
-                <span className="w-6 h-6 rounded-full bg-blue-600 text-white font-bold text-xs flex items-center justify-center shrink-0 mt-0.5">1</span>
-                <p className="text-xs text-slate-700 leading-snug">Open <b>Safari</b> on your iPhone and visit <b>hosteleaze.com</b></p>
+                <span className="w-6 h-6 rounded-full bg-blue-600 text-white font-bold text-xs flex items-center justify-center shrink-0 mt-0.5">
+                  1
+                </span>
+
+                <p className="text-xs text-slate-700 leading-snug">
+                  Open <b>Safari</b> on your iPhone and visit{" "}
+                  <b>hosteleaze.com</b>
+                </p>
               </div>
+
               <div className="flex items-start gap-3 p-2.5 rounded-xl bg-slate-50 border border-slate-100">
-                <span className="w-6 h-6 rounded-full bg-blue-600 text-white font-bold text-xs flex items-center justify-center shrink-0 mt-0.5">2</span>
-                <p className="text-xs text-slate-700 leading-snug">Tap the <b>Share button</b> (square with arrow up 📤) at bottom</p>
+                <span className="w-6 h-6 rounded-full bg-blue-600 text-white font-bold text-xs flex items-center justify-center shrink-0 mt-0.5">
+                  2
+                </span>
+
+                <p className="text-xs text-slate-700 leading-snug">
+                  Tap the <b>Share button</b> (square with arrow up 📤) at
+                  bottom
+                </p>
               </div>
+
               <div className="flex items-start gap-3 p-2.5 rounded-xl bg-slate-50 border border-slate-100">
-                <span className="w-6 h-6 rounded-full bg-blue-600 text-white font-bold text-xs flex items-center justify-center shrink-0 mt-0.5">3</span>
-                <p className="text-xs text-slate-700 leading-snug">Scroll down, tap <b>Add to Home Screen</b> ➕ &rarr; tap <b>Add</b></p>
+                <span className="w-6 h-6 rounded-full bg-blue-600 text-white font-bold text-xs flex items-center justify-center shrink-0 mt-0.5">
+                  3
+                </span>
+
+                <p className="text-xs text-slate-700 leading-snug">
+                  Scroll down, tap <b>Add to Home Screen</b> ➕ &rarr; tap{" "}
+                  <b>Add</b>
+                </p>
               </div>
             </div>
+
             <div className="w-full flex gap-2">
               <button
                 type="button"
+
                 onClick={() => {
                   navigator.clipboard.writeText("https://www.hosteleaze.com");
+
                   showToast("Website link copied to clipboard!", "success");
                 }}
+
                 className="flex-1 py-2.5 rounded-xl border border-slate-200 font-bold text-xs text-slate-600 hover:bg-slate-50 transition-all cursor-pointer"
               >
                 Copy Link
               </button>
+
               <button
                 type="button"
+
                 onClick={() => setShowIosGuideModal(false)}
+
                 className="flex-1 py-2.5 rounded-xl bg-slate-900 font-bold text-xs text-white hover:bg-slate-800 transition-all cursor-pointer shadow-md"
               >
                 Got It
@@ -1770,63 +3688,105 @@ function LoginForm() {
       )}
 
       {/* 🪟 Windows PC 1-Click Native App Guide Modal */}
+
       {showWindowsGuideModal && (
         <div className="fixed inset-0 z-[9999] bg-[#050510]/80 backdrop-blur-md flex items-center justify-center p-4 text-slate-900 animate-in fade-in duration-200">
           <div className="bg-white rounded-3xl p-6 max-w-sm w-full shadow-2xl border border-slate-100 flex flex-col items-center text-center relative animate-in zoom-in-95 duration-200">
             <button
               onClick={() => setShowWindowsGuideModal(false)}
+
               className="absolute top-4 right-4 w-8 h-8 rounded-full bg-slate-100 hover:bg-slate-200 flex items-center justify-center text-slate-500 font-bold transition-colors cursor-pointer"
             >
               ✕
             </button>
+
             <div className="w-14 h-14 rounded-2xl bg-blue-50 flex items-center justify-center mb-3">
-              <svg className="w-7 h-7 text-blue-600" viewBox="0 0 24 24" fill="currentColor">
-                <path d="M0 3.449L9.75 2.1v9.451H0m10.949-9.602L24 0v11.551H10.949M0 12.6h9.75v9.451L0 20.699M10.949 12.6H24V24l-13.051-1.8"/>
+              <svg
+                className="w-7 h-7 text-blue-600"
+                viewBox="0 0 24 24"
+                fill="currentColor"
+              >
+                <path d="M0 3.449L9.75 2.1v9.451H0m10.949-9.602L24 0v11.551H10.949M0 12.6h9.75v9.451L0 20.699M10.949 12.6H24V24l-13.051-1.8" />
               </svg>
             </div>
-            <h3 className="text-base font-black text-slate-900 tracking-tight">HostelEaze for Windows</h3>
+
+            <h3 className="text-base font-black text-slate-900 tracking-tight">
+              HostelEaze for Windows
+            </h3>
+
             <p className="text-xs text-slate-500 mt-1 mb-4 leading-relaxed">
-              Install as a native application with <b>Zero Warnings</b> and permanent desktop access:
+              Install as a native application with <b>Zero Warnings</b> and
+              permanent desktop access:
             </p>
+
             <div className="w-full space-y-2.5 text-left mb-5">
               <div className="flex items-start gap-3 p-2.5 rounded-xl bg-slate-50 border border-slate-100">
-                <span className="w-6 h-6 rounded-full bg-blue-600 text-white font-bold text-xs flex items-center justify-center shrink-0 mt-0.5">1</span>
-                <p className="text-xs text-slate-700 leading-snug">In <b>Edge</b> or <b>Chrome</b>, look at the top address bar</p>
+                <span className="w-6 h-6 rounded-full bg-blue-600 text-white font-bold text-xs flex items-center justify-center shrink-0 mt-0.5">
+                  1
+                </span>
+
+                <p className="text-xs text-slate-700 leading-snug">
+                  In <b>Edge</b> or <b>Chrome</b>, look at the top address bar
+                </p>
               </div>
+
               <div className="flex items-start gap-3 p-2.5 rounded-xl bg-slate-50 border border-slate-100">
-                <span className="w-6 h-6 rounded-full bg-blue-600 text-white font-bold text-xs flex items-center justify-center shrink-0 mt-0.5">2</span>
-                <p className="text-xs text-slate-700 leading-snug">Click the <b>Install App icon (⊕ or 💻)</b> on the right</p>
+                <span className="w-6 h-6 rounded-full bg-blue-600 text-white font-bold text-xs flex items-center justify-center shrink-0 mt-0.5">
+                  2
+                </span>
+
+                <p className="text-xs text-slate-700 leading-snug">
+                  Click the <b>Install App icon (⊕ or 💻)</b> on the right
+                </p>
               </div>
+
               <div className="flex items-start gap-3 p-2.5 rounded-xl bg-slate-50 border border-slate-100">
-                <span className="w-6 h-6 rounded-full bg-blue-600 text-white font-bold text-xs flex items-center justify-center shrink-0 mt-0.5">3</span>
-                <p className="text-xs text-slate-700 leading-snug">Click <b>Install</b> &mdash; desktop shortcut is created with 0 warnings!</p>
+                <span className="w-6 h-6 rounded-full bg-blue-600 text-white font-bold text-xs flex items-center justify-center shrink-0 mt-0.5">
+                  3
+                </span>
+
+                <p className="text-xs text-slate-700 leading-snug">
+                  Click <b>Install</b> &mdash; desktop shortcut is created with
+                  0 warnings!
+                </p>
               </div>
             </div>
+
             <div className="w-full flex flex-col gap-2">
               <button
                 type="button"
+
                 onClick={() => {
                   try {
-                    window.dispatchEvent(new CustomEvent('open-pwa-install'));
+                    window.dispatchEvent(new CustomEvent("open-pwa-install"));
                   } catch (e) {}
+
                   setShowWindowsGuideModal(false);
                 }}
+
                 className="w-full py-2.5 rounded-xl bg-blue-600 font-bold text-xs text-white hover:bg-blue-700 transition-all cursor-pointer shadow-md"
               >
                 Install Native App Now
               </button>
+
               <div className="flex items-center justify-between pt-1">
                 <a
                   href="/api/download/windows"
+
                   download="HostelEaze-Setup.exe"
+
                   className="text-[10px] font-bold text-slate-400 hover:text-slate-600 underline"
+
                   title="Download standalone installer file"
                 >
                   Download .exe setup file instead
                 </a>
+
                 <button
                   type="button"
+
                   onClick={() => setShowWindowsGuideModal(false)}
+
                   className="text-[10px] font-bold text-slate-400 hover:text-slate-600"
                 >
                   Dismiss
@@ -1847,4 +3807,3 @@ export default function LoginPage() {
     </Suspense>
   );
 }
-

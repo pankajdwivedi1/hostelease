@@ -251,7 +251,7 @@ export default function Dashboard() {
                     const merged = { ...existing, ...data.student };
                     localStorage.setItem("userType", "student");
                     localStorage.setItem("cachedStudentData", JSON.stringify(merged));
-                    document.cookie = "userType=student; path=/; max-age=2592000; SameSite=Lax";
+                    document.cookie = "userType=student; path=/; max-age=315360000; SameSite=Lax";
                     setStudentData(merged);
                     setUserType("student");
                     setLoading(false);

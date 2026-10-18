@@ -1510,8 +1510,27 @@ const normalizeFloorName = (floorVal: string | number | undefined, roomNum?: str
   return val;
 };
 
-export default function AdminDashboard({ title = "Admin Dashboard", showRemoveButton = false }: { title?: string; showRemoveButton?: boolean }) {
+export interface ImpersonateTarget {
+  role: "warden" | "dean";
+  hostelName?: string;
+  authorizedHostels?: string[];
+  title?: string;
+}
+
+export default function AdminDashboard({
+  title = "Admin Dashboard",
+  showRemoveButton = false,
+  impersonateConfig = null,
+  onCloseImpersonate = null,
+}: {
+  title?: string;
+  showRemoveButton?: boolean;
+  impersonateConfig?: ImpersonateTarget | null;
+  onCloseImpersonate?: (() => void) | null;
+}) {
   const router = useRouter();
+  const [showViewAsDropdown, setShowViewAsDropdown] = useState(false);
+  const [activeViewAsTarget, setActiveViewAsTarget] = useState<ImpersonateTarget | null>(null);
   const [filter, setFilter] = useState<"all" | "allowed" | "rejected" | "pending" | "hidden">("all");
   const [statusFilter, setStatusFilter] = useState<"all" | "in" | "out">("all");
 
@@ -1549,7 +1568,12 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
   const [unmarkTarget, setUnmarkTarget] = useState<{ studentIds: string[]; attendanceId?: string; studentId?: string } | null>(null);
   const [deletingStudentId, setDeletingStudentId] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
-  const [hostelFilter, setHostelFilter] = useState<string>("all");
+  const [hostelFilter, setHostelFilter] = useState<string>(() => {
+    if (impersonateConfig && impersonateConfig.role === "warden" && impersonateConfig.hostelName) {
+      return impersonateConfig.hostelName;
+    }
+    return "all";
+  });
   const [updatingAttendanceMode, setUpdatingAttendanceMode] = useState(false);
   const [showAttendanceModeSelector, setShowAttendanceModeSelector] = useState(false);
   const [collegeFilter, setCollegeFilter] = useState<string>("all");
@@ -1588,16 +1612,21 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
   const [showEditStudentModal, setShowEditStudentModal] = useState(false);
   const [isUpdatingStudent, setIsUpdatingStudent] = useState(false);
 
-  // ⚡ Student Profile History State (Permissions, Home-Leave & Gate-Pass)
-  const [studentHistoryTab, setStudentHistoryTab] = useState<"permissions" | "home_leave" | "gate_pass">("permissions");
+  // ⚡ Student Profile History State (Permissions, Home-Leave, Gate-Pass & Night Attendance)
+  const [studentHistoryTab, setStudentHistoryTab] = useState<"permissions" | "home_leave" | "gate_pass" | "attendance">("permissions");
   const [studentPermissionsList, setStudentPermissionsList] = useState<any[]>([]);
   const [studentHomeLeaves, setStudentHomeLeaves] = useState<any[]>([]);
   const [studentGatePasses, setStudentGatePasses] = useState<any[]>([]);
+  const [studentAttendances, setStudentAttendances] = useState<any[]>([]);
   const [isLoadingStudentHistory, setIsLoadingStudentHistory] = useState<boolean>(false);
   const [gatePassCalendarMonth, setGatePassCalendarMonth] = useState<Date>(new Date());
   const [selectedGatePassDate, setSelectedGatePassDate] = useState<string>("");
   const [gatePassViewMode, setGatePassViewMode] = useState<"calendar" | "list">("calendar");
   const [showMonthOutings, setShowMonthOutings] = useState<boolean>(false);
+  const [attendanceCalendarMonth, setAttendanceCalendarMonth] = useState<Date>(new Date());
+  const [selectedAttendanceDate, setSelectedAttendanceDate] = useState<string>("");
+  const [studentAttendanceViewMode, setStudentAttendanceViewMode] = useState<"calendar" | "list">("calendar");
+  const [showMonthAttendance, setShowMonthAttendance] = useState<boolean>(false);
 
   // ⚡ Preload Map Chunk & Tile CDN Connections in Background for Instant Opening
   useEffect(() => {
@@ -1651,9 +1680,10 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
       if (studentEmail) permQuery.set("email", studentEmail);
       permQuery.set("limit", "500");
 
-      const [gpRes, permRes] = await Promise.allSettled([
+      const [gpRes, permRes, attRes] = await Promise.allSettled([
         fetch(`/api/getpass/history?${gpQuery.toString()}`).then(r => (r.ok ? r.json() : null)),
         fetch(`/api/permissions?${permQuery.toString()}`).then(r => (r.ok ? r.json() : null)),
+        studentId ? fetch(`/api/admin/attendance?studentId=${studentId}&limit=500`).then(r => (r.ok ? r.json() : null)) : Promise.resolve(null),
       ]);
 
       const gpRecords: any[] = (gpRes.status === "fulfilled" && Array.isArray(gpRes.value?.records)) 
@@ -1663,6 +1693,10 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
         ? (permRes.value?.permissions || permRes.value?.records || []) 
         : [];
       const permRecords: any[] = Array.isArray(permData) ? permData : [];
+      const attData = attRes.status === "fulfilled" 
+        ? (attRes.value?.attendance || attRes.value?.records || []) 
+        : [];
+      const attRecords: any[] = Array.isArray(attData) ? attData : [];
 
       // Also harvest live matching permissions from the main dashboard permissions state
       const dashboardMatchingPerms = permissions.filter((p: any) => {
@@ -1719,7 +1753,23 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
 
       const leavePasses = gpRecords.filter((gp: any) => {
         const pType = String(gp.type || '').toLowerCase();
-        return pType === 'leave' || pType === 'home-leave' || pType === 'home' || pType === 'hleave' || pType === 'home_leave';
+        const isExplicitLeave = pType === 'leave' || pType === 'home-leave' || pType === 'home' || pType === 'hleave' || pType === 'home_leave';
+        if (isExplicitLeave) return true;
+        // If linked to an approved leave permission, treat as leave pass
+        const gpPermId = String(gp.permissionId || gp.permission_id || '');
+        if (gpPermId && leavePerms.some((p: any) => String(p.id || p._id) === gpPermId)) return true;
+        // If student is currently OUT and checkout falls within leave window of an approved leave
+        if (gp.status === 'out') {
+          const outMs = new Date(gp.checkOutTime || gp.createdAt).getTime();
+          return leavePerms.some((p: any) => {
+            const isApproved = p.status === 'allowed' || p.status === 'approved' || p.deanStatus === 'allowed' || p.deanStatus === 'approved';
+            if (!isApproved) return false;
+            const pStart = new Date(p.fromDateTime).getTime();
+            const pEnd = new Date(p.toDateTime).getTime();
+            return (outMs >= (pStart - 18 * 60 * 60 * 1000)) && (outMs <= (pEnd + 24 * 60 * 60 * 1000));
+          });
+        }
+        return false;
       });
 
       const matchedGpIdSet = new Set<string>();
@@ -1740,9 +1790,10 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
           const gpPermId = gp.permissionId || gp.permission_id;
           if (gpPermId) return false;
           const pStart = new Date(p.fromDateTime).getTime();
+          const pEnd = new Date(p.toDateTime).getTime();
           const gpOut = new Date(gp.checkOutTime || gp.createdAt).getTime();
           if (pStart > 0 && gpOut > 0) {
-            return Math.abs(gpOut - pStart) <= 24 * 60 * 60 * 1000;
+            return (gpOut >= pStart - 18 * 60 * 60 * 1000) && (gpOut <= (pEnd || pStart) + 24 * 60 * 60 * 1000);
           }
           return false;
         });
@@ -1855,8 +1906,11 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
         return dateB - dateA;
       });
 
-      // 3. GATE-PASS RECORDS (Tab 3) - All Campus Outings & Gate Movements
+      // 3. GATE-PASS RECORDS (Tab 3) - All Campus Outings & Gate Movements (excluding leave passes)
+      const leavePassIdSet = new Set(leavePasses.map((gp: any) => String(gp.id || gp._id)));
       const outingPasses = gpRecords.filter((gp: any) => {
+        const gpId = String(gp.id || gp._id);
+        if (leavePassIdSet.has(gpId)) return false;
         const pType = String(gp.type || '').toLowerCase();
         return !(pType === 'leave' || pType === 'home-leave' || pType === 'home' || pType === 'hleave' || pType === 'home_leave');
       }).map((gp: any) => ({
@@ -1912,9 +1966,17 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
       const uniqueHomeLeaves = Array.from(new Map(combinedHomeLeaves.map(item => [item.id, item])).values());
       const uniqueGatePasses = Array.from(new Map(combinedGatePasses.map(item => [item.id, item])).values());
 
+      // Sort attendances descending by date/timestamp
+      attRecords.sort((a, b) => {
+        const dateA = new Date(a.timestamp || a.date || a.createdAt || 0).getTime();
+        const dateB = new Date(b.timestamp || b.date || b.createdAt || 0).getTime();
+        return dateB - dateA;
+      });
+
       setStudentPermissionsList(sortedPermsList);
       setStudentHomeLeaves(uniqueHomeLeaves);
       setStudentGatePasses(uniqueGatePasses);
+      setStudentAttendances(attRecords);
 
       // ⚡ Auto-initialize Calendar to Latest Outing Date & Month
       if (uniqueGatePasses.length > 0) {
@@ -1944,6 +2006,43 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
         setSelectedGatePassDate("");
         setGatePassCalendarMonth(new Date());
       }
+
+      // ⚡ Auto-initialize Attendance Calendar to Latest Attendance Date & Month
+      if (attRecords.length > 0) {
+        const latestAtt: any = attRecords[0];
+        let latestAttDateKey = "";
+        if (latestAtt.istDate && typeof latestAtt.istDate === "string") {
+          const match = latestAtt.istDate.trim().match(/^(\d{1,2})[-/](\d{1,2})[-/](\d{4})$/);
+          if (match) {
+            latestAttDateKey = `${match[1].padStart(2, '0')}-${match[2].padStart(2, '0')}-${match[3]}`;
+          }
+        }
+        if (!latestAttDateKey && latestAtt.date && typeof latestAtt.date === "string") {
+          const dMatch = latestAtt.date.trim().match(/^(\d{4})[-/](\d{1,2})[-/](\d{1,2})$/);
+          if (dMatch) {
+            latestAttDateKey = `${dMatch[3].padStart(2, '0')}-${dMatch[2].padStart(2, '0')}-${dMatch[1]}`;
+          }
+        }
+        if (!latestAttDateKey) {
+          const rawD = latestAtt.timestamp || latestAtt.date || latestAtt.createdAt;
+          const d = parseFlexibleDate(rawD);
+          if (d && !isNaN(d.getTime())) {
+            latestAttDateKey = formatToDDMMYYYY(d, false);
+          }
+        }
+        if (latestAttDateKey) {
+          setSelectedAttendanceDate(latestAttDateKey);
+          const parts = latestAttDateKey.split("-");
+          if (parts.length === 3) {
+            setAttendanceCalendarMonth(new Date(parseInt(parts[2], 10), parseInt(parts[1], 10) - 1, 1));
+          }
+        } else {
+          setAttendanceCalendarMonth(new Date());
+        }
+      } else {
+        setSelectedAttendanceDate("");
+        setAttendanceCalendarMonth(new Date());
+      }
     } catch (err) {
       console.error("Error loading student profile history:", err);
     } finally {
@@ -1958,11 +2057,16 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
       setStudentPermissionsList([]);
       setStudentHomeLeaves([]);
       setStudentGatePasses([]);
+      setStudentAttendances([]);
       setStudentHistoryTab("permissions");
       setSelectedGatePassDate("");
       setGatePassCalendarMonth(new Date());
       setGatePassViewMode("calendar");
       setShowMonthOutings(false);
+      setSelectedAttendanceDate("");
+      setAttendanceCalendarMonth(new Date());
+      setStudentAttendanceViewMode("calendar");
+      setShowMonthAttendance(false);
     }
   }, [selectedStudent?.id, (selectedStudent as any)?._id, selectedStudent?.email, fetchStudentProfileHistory]);
   
@@ -2015,6 +2119,9 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
   const [selectedRoom, setSelectedRoom] = useState<string | null>(null);
   const [selectedRoomStudents, setSelectedRoomStudents] = useState<StudentDetails[]>([]);
   const [activeVisualHostel, setActiveVisualHostel] = useState<string>(() => {
+    if (impersonateConfig && impersonateConfig.role === "warden" && impersonateConfig.hostelName) {
+      return impersonateConfig.hostelName.toUpperCase();
+    }
     if (typeof window !== "undefined") {
       const saved = localStorage.getItem("hosteleaze_active_visual_hostel");
       if (saved) return saved.toUpperCase();
@@ -2068,7 +2175,12 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
     return ist.toISOString().split('T')[0];
   });
   const [isGeneratingMatrix, setIsGeneratingMatrix] = useState(false);
-  const [attendanceHostelFilter, setAttendanceHostelFilter] = useState("all");
+  const [attendanceHostelFilter, setAttendanceHostelFilter] = useState<string>(() => {
+    if (impersonateConfig && impersonateConfig.role === "warden" && impersonateConfig.hostelName) {
+      return impersonateConfig.hostelName;
+    }
+    return "all";
+  });
   const [showExportPreview, setShowExportPreview] = useState(false);
   const [exportPreviewData, setExportPreviewData] = useState<any[]>([]);
   const [exportType, setExportType] = useState<'students' | 'attendance' | 'attendance_matrix'>('students');
@@ -2178,6 +2290,9 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
   const [showPassword, setShowPassword] = useState(false);
   const [showDeveloperPassword, setShowDeveloperPassword] = useState(true); // ⚡ NEW: Visible by default
   const [newPassword, setNewPassword] = useState("");
+  const [deanPhone, setDeanPhone] = useState("");
+  const [superAdminPhone, setSuperAdminPhone] = useState("");
+  const [isUpdatingSuperAdmin, setIsUpdatingSuperAdmin] = useState(false);
 
   // System Settings - New Features
   const [showSystemSettingsModal, setShowSystemSettingsModal] = useState(false);
@@ -2497,6 +2612,14 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
   }, [showMapSwitcher]);
   // Initialize warden status directly from localStorage to prevent "Flash of 772"
   const getInitialWardenData = () => {
+    if (impersonateConfig) {
+      if (impersonateConfig.role === "warden") {
+        const hostelName = impersonateConfig.hostelName || null;
+        const authorized = impersonateConfig.authorizedHostels || (hostelName ? [hostelName] : []);
+        return { isWarden: true, hostelName, authorized };
+      }
+      return { isWarden: false, hostelName: null, authorized: [] };
+    }
     if (typeof window === "undefined") return { isWarden: false, hostelName: null, authorized: [] };
     const type = localStorage.getItem("userType");
     const hostelName = localStorage.getItem("wardenHostelName");
@@ -2514,7 +2637,11 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
   const [wardenHostelName, setWardenHostelName] = useState<string | null>(initialWarden.hostelName);
   const [authorizedHostels, setAuthorizedHostels] = useState<string[]>(initialWarden.authorized);
   const [isWarden, setIsWarden] = useState(initialWarden.isWarden);
-  const [dashboardTitle, setDashboardTitle] = useState(title);
+  const [dashboardTitle, setDashboardTitle] = useState(
+    impersonateConfig
+      ? (impersonateConfig.title || (impersonateConfig.role === "dean" ? "Dean Dashboard" : `${impersonateConfig.hostelName} Dashboard`))
+      : title
+  );
 
   const currentWardenHostelConfig = hostelsConfig.find(h => {
     const nameA = String(h.name || "").toLowerCase().trim();
@@ -3256,6 +3383,31 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
 
   // Warden Filter Initialization
   useEffect(() => {
+    if (impersonateConfig) {
+      if (impersonateConfig.role === "warden" && impersonateConfig.hostelName) {
+        setIsWarden(true);
+        setWardenHostelName(impersonateConfig.hostelName);
+        const authHostels = impersonateConfig.authorizedHostels || [impersonateConfig.hostelName];
+        setAuthorizedHostels(authHostels);
+        const initialHostel = (getHostelCategory(impersonateConfig.hostelName) || impersonateConfig.hostelName).trim();
+        setHostelFilter(initialHostel);
+        setAttendanceHostelFilter(initialHostel);
+        if (authHostels.length > 1) {
+          setDashboardTitle(`Multi-Hostel Dashboard`);
+        } else {
+          setDashboardTitle(`${impersonateConfig.hostelName} Dashboard`);
+        }
+      } else if (impersonateConfig.role === "dean") {
+        setIsWarden(false);
+        setWardenHostelName(null);
+        setAuthorizedHostels([]);
+        setHostelFilter("all");
+        setAttendanceHostelFilter("all");
+        setDashboardTitle("Dean Dashboard");
+      }
+      return;
+    }
+
     const type = localStorage.getItem("userType");
     const hostelName = localStorage.getItem("wardenHostelName");
     const authHostelsStr = localStorage.getItem("authorizedHostels");
@@ -3286,7 +3438,7 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
     } else {
       setDashboardTitle(title);
     }
-  }, [title]);
+  }, [title, impersonateConfig]);
 
   // Subscription Check
   useEffect(() => {
@@ -3341,6 +3493,7 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
 
   // Register Web Push notifications on mount
   useEffect(() => {
+    if (impersonateConfig) return; // Do not register push tokens when impersonating/previewing
     const initPush = async () => {
       try {
         const type = localStorage.getItem("userType");
@@ -3456,25 +3609,90 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
 
   const handleChangePassword = async () => {
     try {
+      if (newPassword && newPassword.length < 4) {
+        alert("Password must be at least 4 characters.");
+        return;
+      }
+
+      let clean = (deanPhone || "").replace(/\D/g, "");
+      if (clean && clean.length !== 10) {
+        alert("Please enter a valid 10-digit mobile number.");
+        return;
+      }
+
+      if (!newPassword && !clean) {
+        alert("Please enter a password or mobile number to update.");
+        return;
+      }
+
       setIsUpdatingPassword(true);
       const res = await fetch("/api/admin/passwords", {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ newPassword, type: "dean" })
+        body: JSON.stringify({
+          newPassword: newPassword || undefined,
+          deanPhone: clean || undefined,
+          type: "dean"
+        })
       });
 
       const data = await res.json();
       if (data.success) {
-        setNewPassword("");
-        alert("Administrator password updated successfully!");
+        alert("Dean credentials updated successfully!");
       } else {
-        alert(data.error || "Failed to update password");
+        alert(data.error || "Failed to update credentials");
       }
     } catch (e) {
       console.error(e);
-      alert("Error updating password");
+      alert("Error updating credentials");
     } finally {
       setIsUpdatingPassword(false);
+    }
+  };
+
+  const handleUpdateSuperAdminCredentials = async () => {
+    try {
+      if (newDeveloperPassword && newDeveloperPassword.length < 6) {
+        alert("Password must be at least 6 characters.");
+        return;
+      }
+
+      let clean = (superAdminPhone || "").replace(/\D/g, "");
+      if (clean && clean.length !== 10) {
+        alert("Please enter a valid 10-digit mobile number.");
+        return;
+      }
+
+      if (!newDeveloperPassword && !clean) {
+        alert("Please enter a password or mobile number to update.");
+        return;
+      }
+
+      setIsUpdatingSuperAdmin(true);
+      const res = await fetch("/api/admin/passwords", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          newPassword: newDeveloperPassword || undefined,
+          superAdminPhone: clean || undefined,
+          type: "superadmin"
+        })
+      });
+
+      const data = await res.json();
+      if (data.success) {
+        if (newDeveloperPassword) {
+          setDeveloperPassword(newDeveloperPassword);
+        }
+        alert("Super Admin credentials updated successfully!");
+      } else {
+        alert(data.error || "Failed to update Super Admin credentials");
+      }
+    } catch (e: any) {
+      console.error(e);
+      alert("Error updating Super Admin credentials");
+    } finally {
+      setIsUpdatingSuperAdmin(false);
     }
   };
 
@@ -3554,7 +3772,11 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
       await fetchTenantConfig();
 
       // Fetch Registration Fields Config
-      const settingsRes = await fetch("/api/admin/settings", { cache: "no-store" });
+      const userTypeHeader = (typeof window !== "undefined" ? localStorage.getItem("userType") : null) || "admin";
+      const settingsRes = await fetch("/api/admin/settings", {
+        cache: "no-store",
+        headers: { "x-user-type": userTypeHeader }
+      });
       if (settingsRes.ok) {
         const settingsData = await settingsRes.json();
         if (settingsData.success) {
@@ -3582,12 +3804,20 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
           if (settingsData.wardenPassword) {
             setGlobalWardenPassword(settingsData.wardenPassword);
           }
-          if (settingsData.adminPassword) {
+          if (settingsData.adminPassword && settingsData.adminPassword !== "••••••••") {
             setNewPassword(settingsData.adminPassword);
+          }
+          const phone = settingsData.deanPhone || settingsData.universityBankDetails?.deanPhone || "";
+          if (phone) {
+            setDeanPhone(phone);
           }
           if (settingsData.developerPassword && settingsData.developerPassword !== "••••••••") {
             setDeveloperPassword(settingsData.developerPassword);
             setNewDeveloperPassword(settingsData.developerPassword);
+          }
+          const sAdminPhone = settingsData.superAdminPhone || settingsData.universityBankDetails?.superAdminPhone || "";
+          if (sAdminPhone) {
+            setSuperAdminPhone(sAdminPhone);
           }
           if (settingsData.bankDetails) {
             setBankFormData(prev => ({ ...prev, ...settingsData.bankDetails }));
@@ -3648,9 +3878,24 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
   };
 
   useEffect(() => {
+    let interval: any;
     if (showSystemSettingsModal || showHostelSettingsModal) {
       fetchSystemSettings();
+      fetchHostels(true);
+      interval = setInterval(() => {
+        fetchSystemSettings();
+        fetchHostels(true);
+      }, 8000);
     }
+    const handleFocus = () => {
+      fetchSystemSettings();
+      fetchHostels(true);
+    };
+    window.addEventListener("focus", handleFocus);
+    return () => {
+      if (interval) clearInterval(interval);
+      window.removeEventListener("focus", handleFocus);
+    };
   }, [showSystemSettingsModal, showHostelSettingsModal]);
 
   const handleToggleDeveloperSetting = async (key: string, value: boolean) => {
@@ -6651,6 +6896,10 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
 
 
   const handleLogout = async () => {
+    if (impersonateConfig && onCloseImpersonate) {
+      onCloseImpersonate();
+      return;
+    }
     try {
       await signOut(auth);
       // ⚡ CLEAR ALL CACHES ON LOGOUT
@@ -8216,7 +8465,9 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
     }
   };
 
-  const userType = typeof window !== "undefined" ? localStorage.getItem("userType") : null;
+  const userType = impersonateConfig
+    ? impersonateConfig.role
+    : (typeof window !== "undefined" ? localStorage.getItem("userType") : null);
 
   return (
     <div className="min-h-screen bg-white">
@@ -8796,6 +9047,7 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                     { id: 'rooms', label: 'Visual Rooms' },
                     ...(canAddStudent ? [{ id: 'add_student', label: 'Add Student' }] : []),
                     { id: 'messaging', label: 'Broadcast' },
+                    ...((title === "Super Admin Dashboard" && !impersonateConfig) ? [{ id: 'view_as', label: 'View As' }] : []),
                     { id: 'wifi_sync', label: 'WiFi Network' },
                     ...((title === "Super Admin Dashboard" || title === "Dean Dashboard") ? [{ id: 'alerts', label: 'Security Alerts' }] : []),
                     ...((title === "Super Admin Dashboard" || title === "Dean Dashboard") ? [{ id: 'gatepass', label: 'GATEPASS' }] : []),
@@ -8810,7 +9062,7 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
 
                   // Mobile Explicit 3-row layout as marked:
                   // Row 1 (Red): Leave Permissions, Attendance, Visual Rooms (3 buttons)
-                  // Row 2 (Blue): Add Student, Broadcast, WiFi Network (3 buttons)
+                  // Row 2 (Blue): Add Student, Broadcast, View As, WiFi Network (4 buttons)
                   // Row 3 (Black): Security Alerts, GATEPASS, Payments, Settings (4 buttons)
                   const mRow1 = [
                     { id: 'permissions', label: 'Leave Permissions' },
@@ -8820,6 +9072,7 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                   const mRow2 = [
                     ...(canAddStudent ? [{ id: 'add_student', label: 'Add Student' }] : []),
                     { id: 'messaging', label: 'Broadcast' },
+                    ...((title === "Super Admin Dashboard" && !impersonateConfig) ? [{ id: 'view_as', label: 'View As' }] : []),
                     { id: 'wifi_sync', label: 'WiFi Network' }
                   ];
                   const mRow3 = [
@@ -8831,6 +9084,7 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
 
                   const renderTabButton = (tab: { id: string; label: string }, isMobile: boolean) => {
                     const isGatepass = tab.id === 'gatepass';
+                    const isViewAs = tab.id === 'view_as';
                     const isActive = currentTab === tab.id;
                     return (
                       <button
@@ -8838,6 +9092,8 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                         onClick={() => {
                           if (isGatepass) {
                             setShowGatepassOverlay(true);
+                          } else if (isViewAs) {
+                            setShowViewAsDropdown(prev => !prev);
                           } else {
                             startTransition(() => setCurrentTab(tab.id as any));
                           }
@@ -8847,9 +9103,13 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                         } font-bold transition-all duration-150 rounded-lg whitespace-nowrap text-center touch-manipulation active:scale-95 flex items-center justify-center gap-1 ${
                           isGatepass
                             ? 'text-blue-600 hover:bg-blue-50 group'
-                            : isActive
-                              ? 'bg-white text-blue-600 shadow-sm border border-gray-100'
-                              : 'text-gray-400 hover:text-gray-700'
+                            : isViewAs
+                              ? showViewAsDropdown
+                                ? 'bg-indigo-600 text-white shadow-sm'
+                                : 'text-indigo-600 hover:bg-indigo-50 hover:text-indigo-700'
+                              : isActive
+                                ? 'bg-white text-blue-600 shadow-sm border border-gray-100'
+                                : 'text-gray-400 hover:text-gray-700'
                         }`}
                       >
                         {isGatepass && (
@@ -8859,6 +9119,11 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                           </div>
                         )}
                         <span className="truncate">{tab.label}</span>
+                        {isViewAs && (
+                          <svg className={`w-2.5 h-2.5 transition-transform shrink-0 ${showViewAsDropdown ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M19 9l-7 7-7-7" />
+                          </svg>
+                        )}
                       </button>
                     );
                   };
@@ -10025,7 +10290,7 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                       )}
 
                       {/* Absentee List */}
-                      <div ref={absenteesRef} className="bg-red-50/30 rounded-xl border border-red-100 p-4">
+                      <div ref={absenteesRef} className="bg-transparent md:bg-red-50/30 rounded-none md:rounded-xl border-0 md:border md:border-red-100 p-0 md:p-4">
                         <h3 className="text-xs md:text-sm font-bold text-red-900 mb-3 flex items-center justify-between gap-1.5 md:gap-2">
                           <span className="flex items-center gap-1.5 md:gap-2 min-w-0">
                             <svg className="w-3.5 h-3.5 md:w-4 md:h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" /></svg>
@@ -10047,8 +10312,8 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                         </h3>
                         <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
                           {(showAllAbsentees ? displayedAbsentees : displayedAbsentees.slice(0, 9)).map(s => (
-                            <div key={s.id} className="bg-white p-3 rounded-lg border border-red-100 flex flex-col gap-2 shadow-sm hover:shadow-md transition-shadow">
-                              <div className="flex items-start gap-2">
+                            <div key={s.id} className="bg-white p-2 sm:p-2.5 md:p-3 rounded-lg border border-red-100 flex flex-col gap-1 sm:gap-1.5 md:gap-2 shadow-sm hover:shadow-md transition-shadow">
+                              <div className="flex items-start gap-1.5 sm:gap-2">
                                 <div className="w-6 h-6 rounded-md bg-red-100 text-red-600 border-[0.5px] border-blue-600 flex items-center justify-center text-[9px] font-black flex-shrink-0 self-start mt-0.5 overflow-hidden">
                                   {s.profilePicture ? (
                                     <img src={s.profilePicture} alt={s.name} className="w-full h-full object-cover" />
@@ -10069,7 +10334,7 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                               {s.studentStatus === 'out' && (
                                 <button
                                   onClick={() => handleManualToggle(s.id, "out")}
-                                  className="w-full py-1.5 rounded-lg bg-amber-500 text-white text-[8px] font-black uppercase tracking-widest hover:bg-amber-600 shadow-sm transition-all active:scale-95"
+                                  className="w-fit self-center py-0.5 px-2.5 rounded-md bg-amber-500 hover:bg-amber-600 text-white text-[7.5px] md:text-[8px] font-black uppercase tracking-wider transition-all flex items-center justify-center shadow-xs active:scale-95 whitespace-nowrap"
                                 >
                                   Mark IN (Campus)
                                 </button>
@@ -13662,20 +13927,20 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
               </div>
 
               <div className="pt-2 border-t border-slate-200/60">
-                {/* 3-Tab Navigation Bar: Single line on mobile */}
-                <div className="flex bg-slate-100/90 p-1 rounded-xl gap-1 mb-3.5 border border-slate-200/70">
+                {/* 4-Tab Navigation Bar: Strictly within marked container with optimized font size */}
+                <div className="flex bg-slate-100/90 p-1 rounded-xl gap-0.5 sm:gap-1 mb-3.5 border border-slate-200/70">
                   <button
                     type="button"
                     onClick={() => setStudentHistoryTab("permissions")}
-                    className={`flex-1 py-1.5 sm:py-2 px-1.5 sm:px-2 rounded-lg text-[10px] sm:text-xs font-black transition-all flex items-center justify-center gap-1 cursor-pointer whitespace-nowrap overflow-hidden ${
+                    className={`flex-1 py-1.5 sm:py-2 px-0.5 xs:px-1 sm:px-1.5 rounded-lg text-[8px] xs:text-[9px] sm:text-[11px] font-black transition-all flex items-center justify-center gap-0.5 xs:gap-1 cursor-pointer whitespace-nowrap overflow-hidden ${
                       studentHistoryTab === "permissions"
                         ? "bg-white text-blue-700 shadow-xs border border-blue-100"
                         : "text-slate-500 hover:text-slate-800 hover:bg-white/60"
                     }`}
                   >
-                    <span className="shrink-0 text-xs sm:text-sm">📋</span>
-                    <span className="whitespace-nowrap tracking-normal">PERMISSION</span>
-                    <span className={`text-[9px] sm:text-[10px] px-1.5 py-0.2 rounded-full font-black shrink-0 ${
+                    <span className="shrink-0 text-[10px] sm:text-xs">📋</span>
+                    <span className="whitespace-nowrap tracking-tight">PERMISSION</span>
+                    <span className={`text-[7.5px] xs:text-[8px] sm:text-[9px] px-1 py-0.2 rounded-full font-black shrink-0 ${
                       studentHistoryTab === "permissions" ? "bg-blue-100 text-blue-800" : "bg-slate-200 text-slate-600"
                     }`}>
                       {studentPermissionsList.length}
@@ -13685,15 +13950,15 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                   <button
                     type="button"
                     onClick={() => setStudentHistoryTab("home_leave")}
-                    className={`flex-1 py-1.5 sm:py-2 px-1 xs:px-1.5 sm:px-2 rounded-lg text-[9.5px] xs:text-[10px] sm:text-xs font-black transition-all flex items-center justify-center gap-0.5 xs:gap-1 cursor-pointer whitespace-nowrap overflow-hidden ${
+                    className={`flex-1 py-1.5 sm:py-2 px-0.5 xs:px-1 sm:px-1.5 rounded-lg text-[8px] xs:text-[9px] sm:text-[11px] font-black transition-all flex items-center justify-center gap-0.5 xs:gap-1 cursor-pointer whitespace-nowrap overflow-hidden ${
                       studentHistoryTab === "home_leave"
                         ? "bg-white text-amber-700 shadow-xs border border-amber-100"
                         : "text-slate-500 hover:text-slate-800 hover:bg-white/60"
                     }`}
                   >
-                    <span className="shrink-0 text-[11px] sm:text-sm">🏠</span>
+                    <span className="shrink-0 text-[10px] sm:text-xs">🏠</span>
                     <span className="whitespace-nowrap tracking-tight">HOME-LEAVE</span>
-                    <span className={`text-[8.5px] sm:text-[9px] px-1 py-0.2 rounded-full font-black shrink-0 ${
+                    <span className={`text-[7.5px] xs:text-[8px] sm:text-[9px] px-1 py-0.2 rounded-full font-black shrink-0 ${
                       studentHistoryTab === "home_leave" ? "bg-amber-100 text-amber-800" : "bg-slate-200 text-slate-600"
                     }`}>
                       {studentHomeLeaves.length}
@@ -13703,18 +13968,36 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                   <button
                     type="button"
                     onClick={() => setStudentHistoryTab("gate_pass")}
-                    className={`flex-1 py-1.5 sm:py-2 px-1 xs:px-1.5 sm:px-2 rounded-lg text-[9.5px] xs:text-[10px] sm:text-xs font-black transition-all flex items-center justify-center gap-0.5 xs:gap-1 cursor-pointer whitespace-nowrap overflow-hidden ${
+                    className={`flex-1 py-1.5 sm:py-2 px-0.5 xs:px-1 sm:px-1.5 rounded-lg text-[8px] xs:text-[9px] sm:text-[11px] font-black transition-all flex items-center justify-center gap-0.5 xs:gap-1 cursor-pointer whitespace-nowrap overflow-hidden ${
                       studentHistoryTab === "gate_pass"
                         ? "bg-white text-indigo-700 shadow-xs border border-indigo-100"
                         : "text-slate-500 hover:text-slate-800 hover:bg-white/60"
                     }`}
                   >
-                    <span className="shrink-0 text-[11px] sm:text-sm">🎫</span>
+                    <span className="shrink-0 text-[10px] sm:text-xs">🎫</span>
                     <span className="whitespace-nowrap tracking-tight">GATE-PASS</span>
-                    <span className={`text-[8.5px] sm:text-[9px] px-1 py-0.2 rounded-full font-black shrink-0 ${
+                    <span className={`text-[7.5px] xs:text-[8px] sm:text-[9px] px-1 py-0.2 rounded-full font-black shrink-0 ${
                       studentHistoryTab === "gate_pass" ? "bg-indigo-100 text-indigo-800" : "bg-slate-200 text-slate-600"
                     }`}>
                       {studentGatePasses.length}
+                    </span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setStudentHistoryTab("attendance")}
+                    className={`flex-1 py-1.5 sm:py-2 px-0.5 xs:px-1 sm:px-1.5 rounded-lg text-[8px] xs:text-[9px] sm:text-[11px] font-black transition-all flex items-center justify-center gap-0.5 xs:gap-1 cursor-pointer whitespace-nowrap overflow-hidden ${
+                      studentHistoryTab === "attendance"
+                        ? "bg-white text-emerald-700 shadow-xs border border-emerald-100"
+                        : "text-slate-500 hover:text-slate-800 hover:bg-white/60"
+                    }`}
+                  >
+                    <span className="shrink-0 text-[10px] sm:text-xs">🌙</span>
+                    <span className="whitespace-nowrap tracking-tight">ATTENDANCE</span>
+                    <span className={`text-[7.5px] xs:text-[8px] sm:text-[9px] px-1 py-0.2 rounded-full font-black shrink-0 ${
+                      studentHistoryTab === "attendance" ? "bg-emerald-100 text-emerald-800" : "bg-slate-200 text-slate-600"
+                    }`}>
+                      {studentAttendances.length}
                     </span>
                   </button>
                 </div>
@@ -14596,6 +14879,565 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                                 </button>
                               </div>
                               {studentGatePasses.map((pass: any, idx: number) => renderPassCard(pass, idx))}
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })()}
+
+                    {/* TAB 4: NIGHT ATTENDANCE HISTORY WITH MONTH CALENDAR VIEW */}
+                    {studentHistoryTab === "attendance" && (() => {
+                      // Normalize attendance date key to DD-MM-YYYY
+                      const normalizeAttDateKey = (att: any): string => {
+                        if (att.istDate && typeof att.istDate === 'string') {
+                          const trimmed = att.istDate.trim();
+                          const match = trimmed.match(/^(\d{1,2})[-/](\d{1,2})[-/](\d{4})$/);
+                          if (match) {
+                            return `${match[1].padStart(2, '0')}-${match[2].padStart(2, '0')}-${match[3]}`;
+                          }
+                        }
+                        if (att.date && typeof att.date === 'string') {
+                          const dMatch = att.date.trim().match(/^(\d{4})[-/](\d{1,2})[-/](\d{1,2})$/);
+                          if (dMatch) {
+                            return `${dMatch[3].padStart(2, '0')}-${dMatch[2].padStart(2, '0')}-${dMatch[1]}`;
+                          }
+                          const altMatch = att.date.trim().match(/^(\d{1,2})[-/](\d{1,2})[-/](\d{4})$/);
+                          if (altMatch) {
+                            return `${altMatch[1].padStart(2, '0')}-${altMatch[2].padStart(2, '0')}-${altMatch[3]}`;
+                          }
+                        }
+                        const rawDate = att.timestamp || att.date || att.createdAt;
+                        if (rawDate) {
+                          const d = parseFlexibleDate(rawDate);
+                          if (d && !isNaN(d.getTime())) {
+                            return formatToDDMMYYYY(d, false);
+                          }
+                        }
+                        return "";
+                      };
+
+                      // 1. Map of Attendances by "DD-MM-YYYY"
+                      const attendancesByDateMap = new Map<string, any[]>();
+                      studentAttendances.forEach((att: any) => {
+                        const key = normalizeAttDateKey(att);
+                        if (key) {
+                          if (!attendancesByDateMap.has(key)) attendancesByDateMap.set(key, []);
+                          attendancesByDateMap.get(key)!.push(att);
+                        }
+                      });
+
+                      // 2. Identify Latest Attendance Date
+                      const latestAttDateKey = studentAttendances.length > 0 ? normalizeAttDateKey(studentAttendances[0]) : "";
+                      const activeSelectedDate = selectedAttendanceDate || latestAttDateKey;
+
+                      // 3. Calendar Month Grid Calculation
+                      const calYear = attendanceCalendarMonth.getFullYear();
+                      const calMonth = attendanceCalendarMonth.getMonth(); // 0 to 11
+                      const daysInCalMonth = new Date(calYear, calMonth + 1, 0).getDate();
+                      const firstDayWeekday = new Date(calYear, calMonth, 1).getDay(); // 0 = Sun
+                      const daysInPrevCalMonth = new Date(calYear, calMonth, 0).getDate();
+
+                      const prevMonthDays: number[] = [];
+                      for (let i = firstDayWeekday - 1; i >= 0; i--) {
+                        prevMonthDays.push(daysInPrevCalMonth - i);
+                      }
+
+                      let calMonthPresentCount = 0;
+                      let calMonthAbsentCount = 0;
+                      let calMonthLeaveCount = 0;
+
+                      // Helper: Check if date falls in approved home leave
+                      const isDateInApprovedLeave = (dKey: string) => {
+                        const parts = dKey.split("-");
+                        if (parts.length !== 3) return null;
+                        const dayMs = new Date(parseInt(parts[2], 10), parseInt(parts[1], 10) - 1, parseInt(parts[0], 10), 21, 0, 0).getTime();
+                        return studentHomeLeaves.find((leave: any) => {
+                          const start = new Date(leave.fromDateTime || leave.checkOutTime || leave.createdAt).getTime();
+                          const end = new Date(leave.toDateTime || leave.checkInTime || leave.expectedReturnDate || leave.approvedToDateTime).getTime();
+                          if (start > 0 && end > 0) {
+                            return dayMs >= (start - 12 * 3600 * 1000) && dayMs <= (end + 12 * 3600 * 1000);
+                          }
+                          return false;
+                        });
+                      };
+
+                      const currentMonthDays: { 
+                        day: number; 
+                        dateKey: string; 
+                        status: 'present' | 'absent' | 'leave' | 'unmarked'; 
+                        records: any[];
+                        leaveInfo?: any;
+                      }[] = [];
+
+                      for (let d = 1; d <= daysInCalMonth; d++) {
+                        const dKey = `${String(d).padStart(2, '0')}-${String(calMonth + 1).padStart(2, '0')}-${calYear}`;
+                        const dayRecords = attendancesByDateMap.get(dKey) || [];
+                        const matchedLeave = isDateInApprovedLeave(dKey);
+
+                        let status: 'present' | 'absent' | 'leave' | 'unmarked' = 'unmarked';
+                        if (dayRecords.length > 0) {
+                          const hasPresent = dayRecords.some((r: any) => String(r.status || '').toLowerCase() === 'present');
+                          if (hasPresent) {
+                            status = 'present';
+                            calMonthPresentCount++;
+                          } else {
+                            status = 'absent';
+                            calMonthAbsentCount++;
+                          }
+                        } else if (matchedLeave) {
+                          status = 'leave';
+                          calMonthLeaveCount++;
+                        }
+
+                        currentMonthDays.push({
+                          day: d,
+                          dateKey: dKey,
+                          status,
+                          records: dayRecords,
+                          leaveInfo: matchedLeave
+                        });
+                      }
+
+                      const totalSlots = prevMonthDays.length + currentMonthDays.length;
+                      const trailingSlots = (7 - (totalSlots % 7)) % 7;
+                      const nextMonthDays: number[] = [];
+                      for (let d = 1; d <= trailingSlots; d++) {
+                        nextMonthDays.push(d);
+                      }
+
+                      const calMonthTitle = attendanceCalendarMonth.toLocaleDateString("en-US", { month: "long", year: "numeric" });
+                      const todayIST = formatDateDDMMYYYY(new Date());
+
+                      const handleJumpToLatest = () => {
+                        if (latestAttDateKey) {
+                          setSelectedAttendanceDate(latestAttDateKey);
+                          setShowMonthAttendance(false);
+                          const parts = latestAttDateKey.split("-");
+                          if (parts.length === 3) {
+                            setAttendanceCalendarMonth(new Date(parseInt(parts[2], 10), parseInt(parts[1], 10) - 1, 1));
+                          }
+                        }
+                      };
+
+                      // Filter Records for View
+                      let displayAttendances: any[] = [];
+                      if (studentAttendanceViewMode === "list") {
+                        displayAttendances = studentAttendances;
+                      } else if (showMonthAttendance) {
+                        displayAttendances = studentAttendances.filter((att: any) => {
+                          const k = normalizeAttDateKey(att);
+                          if (!k) return false;
+                          const parts = k.split("-");
+                          return parseInt(parts[1], 10) === calMonth + 1 && parseInt(parts[2], 10) === calYear;
+                        });
+                      } else {
+                        displayAttendances = activeSelectedDate ? (attendancesByDateMap.get(activeSelectedDate) || []) : [];
+                      }
+
+                      const selectedDayInfo = currentMonthDays.find(cd => cd.dateKey === activeSelectedDate);
+
+                      // Card item renderer for night attendance
+                      const renderAttendanceCard = (att: any, idx: number) => {
+                        const isPresent = String(att.status || '').toLowerCase() === 'present';
+                        const rawDate = att.timestamp || att.date || att.createdAt;
+                        const formattedDate = att.istDate || (rawDate ? formatDateDDMMYYYY(rawDate) : "N/A");
+
+                        let formattedTime = att.istTime || (rawDate ? new Date(rawDate).toLocaleTimeString("en-IN", { timeZone: "Asia/Kolkata", hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: true }) : "N/A");
+                        if (formattedTime && !formattedTime.toUpperCase().includes("AM") && !formattedTime.toUpperCase().includes("PM") && formattedTime.includes(":")) {
+                          const parts = formattedTime.split(":");
+                          let h = parseInt(parts[0], 10);
+                          const m = parts[1];
+                          const s = parts[2] ? parts[2].slice(0, 2) : "00";
+                          const ampm = h >= 12 ? "PM" : "AM";
+                          if (h === 0) h = 12;
+                          else if (h > 12) h -= 12;
+                          formattedTime = `${String(h).padStart(2, "0")}:${m}:${s} ${ampm}`;
+                        }
+
+                        const faceScore = att.faceMatchPercentage || (att.faceScore ? Math.round(att.faceScore * 100) : null);
+                        const isWifi = att.isWifiVerified || att.verificationMethod === "wifi" || att.verifiedBy === "wifi";
+
+                        return (
+                          <div
+                            key={att.id || idx}
+                            className={`rounded-xl p-3 sm:p-3.5 border transition-all shadow-2xs ${
+                              isPresent ? 'bg-white border-slate-200/80 hover:border-slate-300' : 'bg-rose-50/50 border-rose-200/90'
+                            }`}
+                          >
+                            {/* Header: Date, Method, Status */}
+                            <div className="flex flex-wrap items-center justify-between gap-1.5 mb-2">
+                              <div className="flex items-center flex-wrap gap-1.5">
+                                <span className="text-[10px] font-bold text-slate-700 bg-slate-100 px-2 py-0.5 rounded-md border border-slate-200 flex items-center gap-1">
+                                  📅 {formattedDate}
+                                </span>
+                                <span className="text-[9px] font-bold px-2 py-0.5 rounded-md bg-indigo-50 text-indigo-700 border border-indigo-200 flex items-center gap-1">
+                                  {isWifi ? "📶 Wi-Fi Verified" : "📸 Face Bio Scan"}
+                                </span>
+                                {att.markedBy && (
+                                  <span className="text-[9px] font-bold px-2 py-0.5 rounded-md bg-purple-50 text-purple-700 border border-purple-200">
+                                    👤 By: {att.markedBy}
+                                  </span>
+                                )}
+                              </div>
+
+                              <div className="flex items-center gap-1.5 shrink-0">
+                                {isPresent ? (
+                                  <div className="px-2 py-0.5 rounded-md text-[9px] font-black bg-emerald-100 text-emerald-800 border border-emerald-300 flex items-center gap-1">
+                                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-600"></span>
+                                    ✓ Present
+                                  </div>
+                                ) : (
+                                  <div className="px-2 py-0.5 rounded-md text-[9px] font-black bg-rose-100 text-rose-700 border border-rose-200 flex items-center gap-1">
+                                    <span className="w-1.5 h-1.5 rounded-full bg-rose-600"></span>
+                                    ✗ Absent
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+
+                            {/* 3-Column Info Grid */}
+                            <div className="grid grid-cols-3 gap-1.5 sm:gap-2 bg-slate-50/80 p-2 sm:p-2.5 rounded-lg border border-slate-100 text-[11px] mb-2">
+                              <div>
+                                <p className="text-[9px] font-bold text-slate-400">Night Scan Time</p>
+                                <p className="font-extrabold text-slate-800 mt-0.5 text-xs sm:text-[13px] leading-tight">
+                                  {formattedTime}
+                                </p>
+                                <p className="text-[9px] text-slate-400 font-medium">Night Roll-call</p>
+                              </div>
+
+                              <div>
+                                <p className="text-[9px] font-bold text-slate-400">Face Match Score</p>
+                                <p className={`font-extrabold mt-0.5 text-xs sm:text-[13px] leading-tight ${faceScore && faceScore >= 75 ? 'text-emerald-700' : 'text-slate-800'}`}>
+                                  {faceScore ? `${faceScore}% Match` : (isPresent ? 'Verified' : 'N/A')}
+                                </p>
+                                <p className="text-[9px] text-emerald-600 font-bold">
+                                  {faceScore && faceScore >= 75 ? '✓ Live Match Passed' : (isPresent ? 'Auto-Approved' : '—')}
+                                </p>
+                              </div>
+
+                              <div>
+                                <p className="text-[9px] font-bold text-slate-400">Hostel & Room</p>
+                                <p className="font-black text-slate-800 mt-0.5 text-[11px] sm:text-xs truncate">
+                                  {att.hostelName || selectedStudent?.hostelName || "Hostel"}
+                                </p>
+                                <p className="text-[9px] text-slate-500 font-bold">
+                                  Room: {att.roomNumber || selectedStudent?.roomNumber || "—"}
+                                </p>
+                              </div>
+                            </div>
+
+                            {/* Device & Location Footer */}
+                            <div className="flex flex-wrap items-center justify-between text-[10px] text-slate-500 gap-1 pt-1 border-t border-slate-100">
+                              <span className="font-mono text-[9px] text-slate-400 truncate max-w-[280px]" title={att.deviceId}>
+                                📱 Device: {att.deviceId || "Registered Device"}
+                              </span>
+                              {att.location && (att.location.lat || att.location.latitude) && (
+                                <span className="text-emerald-700 font-bold text-[9px]">
+                                  📍 Campus Geofence Verified
+                                </span>
+                              )}
+                            </div>
+                          </div>
+                        );
+                      };
+
+                      return (
+                        <div className="space-y-3">
+                          {/* View Toggle Bar (Month Calendar vs List All) */}
+                          <div className="flex items-center justify-between pb-1 border-b border-slate-100">
+                            <div className="inline-flex items-center bg-slate-100 p-0.5 rounded-lg border border-slate-200">
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setStudentAttendanceViewMode("calendar");
+                                  setShowMonthAttendance(false);
+                                }}
+                                className={`px-2.5 py-1 rounded-md text-[10.5px] font-black transition-all flex items-center gap-1.5 cursor-pointer ${
+                                  studentAttendanceViewMode === "calendar"
+                                    ? "bg-white text-emerald-700 shadow-2xs border border-emerald-100"
+                                    : "text-slate-500 hover:text-slate-800"
+                                }`}
+                              >
+                                <span>📅</span>
+                                <span>Month Calendar</span>
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => setStudentAttendanceViewMode("list")}
+                                className={`px-2.5 py-1 rounded-md text-[10.5px] font-black transition-all flex items-center gap-1.5 cursor-pointer ${
+                                  studentAttendanceViewMode === "list"
+                                    ? "bg-white text-emerald-700 shadow-2xs border border-emerald-100"
+                                    : "text-slate-500 hover:text-slate-800"
+                                }`}
+                              >
+                                <span>📋</span>
+                                <span>All Logs ({studentAttendances.length})</span>
+                              </button>
+                            </div>
+
+                            {latestAttDateKey && studentAttendanceViewMode === "calendar" && (
+                              <button
+                                type="button"
+                                onClick={handleJumpToLatest}
+                                className="text-[10px] font-bold text-emerald-900 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 px-2 py-1 rounded-md transition-all cursor-pointer flex items-center gap-1"
+                                title="Jump to Latest Attendance Date"
+                              >
+                                <span>⚡ Latest:</span>
+                                <span className="font-extrabold">{latestAttDateKey}</span>
+                              </button>
+                            )}
+                          </div>
+
+                          {/* 1. MONTH CALENDAR VIEW */}
+                          {studentAttendanceViewMode === "calendar" && (
+                            <>
+                              <div className="bg-gradient-to-b from-slate-50/90 to-white border border-slate-200/90 rounded-xl sm:rounded-2xl p-2 sm:p-3.5 shadow-2xs">
+                                {/* Month Navigation & Attendance Summary */}
+                                <div className="flex items-center justify-between gap-1 sm:gap-2 mb-2 sm:mb-2.5 flex-nowrap">
+                                  <div className="flex items-center gap-0.5 sm:gap-1 shrink-0">
+                                    <button
+                                      type="button"
+                                      onClick={() => setAttendanceCalendarMonth(prev => new Date(prev.getFullYear(), prev.getMonth() - 1, 1))}
+                                      className="w-6 h-6 sm:w-7 sm:h-7 flex items-center justify-center rounded-md bg-white border border-slate-200 text-slate-700 hover:bg-slate-100 font-bold transition-all cursor-pointer shadow-2xs text-[10px] sm:text-xs"
+                                      title="Previous Month"
+                                    >
+                                      ◀
+                                    </button>
+                                    <span className="text-[11px] sm:text-sm font-black text-slate-800 px-1 sm:px-2 min-w-[85px] sm:min-w-[125px] text-center select-none">
+                                      {calMonthTitle}
+                                    </span>
+                                    <button
+                                      type="button"
+                                      onClick={() => setAttendanceCalendarMonth(prev => new Date(prev.getFullYear(), prev.getMonth() + 1, 1))}
+                                      className="w-6 h-6 sm:w-7 sm:h-7 flex items-center justify-center rounded-md bg-white border border-slate-200 text-slate-700 hover:bg-slate-100 font-bold transition-all cursor-pointer shadow-2xs text-[10px] sm:text-xs"
+                                      title="Next Month"
+                                    >
+                                      ▶
+                                    </button>
+                                  </div>
+
+                                  {/* Attendance Summary Badges: Rectangular (rounded-md) & Side-by-side */}
+                                  <div className="flex items-center gap-1 sm:gap-1.5 shrink-0 flex-nowrap">
+                                    <span className="text-[8.5px] xs:text-[9px] sm:text-[10.5px] font-black px-1.5 sm:px-2 py-0.5 rounded-md bg-emerald-100 text-emerald-800 border border-emerald-300 flex items-center gap-1 shadow-2xs whitespace-nowrap">
+                                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-600"></span>
+                                      {calMonthPresentCount} Present
+                                    </span>
+                                    {calMonthLeaveCount > 0 && (
+                                      <span className="text-[8.5px] xs:text-[9px] sm:text-[10.5px] font-black px-1.5 sm:px-2 py-0.5 rounded-md bg-amber-100 text-amber-900 border border-amber-300 flex items-center gap-1 shadow-2xs whitespace-nowrap">
+                                        <span className="w-1.5 h-1.5 rounded-full bg-amber-500"></span>
+                                        {calMonthLeaveCount} On Leave
+                                      </span>
+                                    )}
+                                    {calMonthAbsentCount > 0 && (
+                                      <span className="text-[8.5px] xs:text-[9px] sm:text-[10.5px] font-black px-1.5 sm:px-2 py-0.5 rounded-md bg-rose-100 text-rose-800 border border-rose-300 flex items-center gap-1 shadow-2xs whitespace-nowrap">
+                                        <span className="w-1.5 h-1.5 rounded-full bg-rose-600"></span>
+                                        {calMonthAbsentCount} Absent
+                                      </span>
+                                    )}
+                                  </div>
+                                </div>
+
+                                {/* Weekday Row (Sun to Sat) */}
+                                <div className="grid grid-cols-7 gap-1 sm:gap-1.5 text-center text-[8.5px] sm:text-[10px] font-black text-slate-400 mb-1">
+                                  {["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].map(day => (
+                                    <div key={day} className="py-0.5 tracking-wider uppercase">{day}</div>
+                                  ))}
+                                </div>
+
+                                {/* Month Days Grid: Color-coded for Attendance Status */}
+                                <div className="grid grid-cols-7 gap-1 sm:gap-1.5">
+                                  {prevMonthDays.map(d => (
+                                    <div key={`prev-att-${d}`} className="h-7.5 sm:h-9.5 rounded-md sm:rounded-lg flex items-center justify-center text-[9.5px] sm:text-xs text-slate-300/80 font-medium select-none">
+                                      {d}
+                                    </div>
+                                  ))}
+                                  {currentMonthDays.map(({ day, dateKey, status, records }) => {
+                                    const isSelected = activeSelectedDate === dateKey && !showMonthAttendance;
+                                    const isToday = todayIST === dateKey;
+                                    const isPresent = status === 'present';
+                                    const isAbsent = status === 'absent';
+                                    const isLeave = status === 'leave';
+
+                                    return (
+                                      <button
+                                        key={dateKey}
+                                        type="button"
+                                        onClick={() => {
+                                          setSelectedAttendanceDate(dateKey);
+                                          setShowMonthAttendance(false);
+                                        }}
+                                        className={`relative h-7.5 sm:h-9.5 rounded-md sm:rounded-lg flex flex-col items-center justify-center transition-all cursor-pointer select-none text-[9.5px] sm:text-xs ${
+                                          isSelected
+                                            ? isPresent
+                                              ? "bg-emerald-500 text-white font-black ring-2 ring-emerald-600 ring-offset-1 shadow-md scale-[1.05]"
+                                              : isAbsent
+                                              ? "bg-rose-500 text-white font-black ring-2 ring-rose-600 ring-offset-1 shadow-md scale-[1.05]"
+                                              : isLeave
+                                              ? "bg-amber-400 text-amber-950 font-black ring-2 ring-amber-600 ring-offset-1 shadow-md scale-[1.05]"
+                                              : "bg-indigo-600 text-white font-black ring-2 ring-indigo-400 ring-offset-1 shadow-md scale-[1.05]"
+                                            : isPresent
+                                            ? "bg-emerald-50 hover:bg-emerald-100 text-emerald-950 font-bold border border-emerald-300 shadow-2xs"
+                                            : isAbsent
+                                            ? "bg-rose-50 hover:bg-rose-100 text-rose-950 font-bold border border-rose-300 shadow-2xs"
+                                            : isLeave
+                                            ? "bg-amber-100 hover:bg-amber-200 text-amber-950 font-bold border border-amber-300 shadow-2xs"
+                                            : "bg-slate-50/70 text-slate-600 hover:bg-slate-100 hover:text-slate-900 border border-transparent"
+                                        }`}
+                                        title={
+                                          isPresent ? `Present on ${dateKey}` : 
+                                          isAbsent ? `Absent on ${dateKey}` : 
+                                          isLeave ? `On Approved Home Leave on ${dateKey}` : 
+                                          `No roll-call log on ${dateKey}`
+                                        }
+                                      >
+                                        <span className="leading-none text-[9.5px] xs:text-[10px] sm:text-xs">{day}</span>
+                                        {isPresent && (
+                                          <span className="flex items-center gap-0.5 mt-0.5">
+                                            <span className={`w-1 h-1 sm:w-1.5 sm:h-1.5 rounded-full ${isSelected ? "bg-white" : "bg-emerald-600"}`}></span>
+                                          </span>
+                                        )}
+                                        {isAbsent && (
+                                          <span className="flex items-center gap-0.5 mt-0.5">
+                                            <span className={`w-1 h-1 sm:w-1.5 sm:h-1.5 rounded-full ${isSelected ? "bg-white" : "bg-rose-600"}`}></span>
+                                          </span>
+                                        )}
+                                        {isLeave && (
+                                          <span className="flex items-center gap-0.5 mt-0.5">
+                                            <span className={`w-1 h-1 sm:w-1.5 sm:h-1.5 rounded-full ${isSelected ? "bg-amber-950" : "bg-amber-600"}`}></span>
+                                          </span>
+                                        )}
+                                        {isToday && !isPresent && !isAbsent && !isLeave && (
+                                          <span className="absolute bottom-0.5 w-1 h-1 rounded-full bg-indigo-500"></span>
+                                        )}
+                                      </button>
+                                    );
+                                  })}
+                                  {nextMonthDays.map(d => (
+                                    <div key={`next-att-${d}`} className="h-7.5 sm:h-9.5 rounded-md sm:rounded-lg flex items-center justify-center text-[9.5px] sm:text-xs text-slate-300/80 font-medium select-none">
+                                      {d}
+                                    </div>
+                                  ))}
+                                </div>
+
+                                {/* Calendar Legend & Footer */}
+                                <div className="flex items-center justify-between pt-2 mt-2 border-t border-slate-200/70 text-[8.5px] sm:text-[10px] text-slate-500 font-medium flex-wrap gap-1.5 sm:gap-2">
+                                  <div className="flex items-center gap-2 sm:gap-2.5 flex-wrap">
+                                    <span className="flex items-center gap-1">
+                                      <span className="w-2 h-2 sm:w-2.5 sm:h-2.5 rounded-xs sm:rounded bg-emerald-100 border border-emerald-300"></span>
+                                      <span className="font-bold text-slate-700">Present</span>
+                                    </span>
+                                    <span className="flex items-center gap-1">
+                                      <span className="w-2 h-2 sm:w-2.5 sm:h-2.5 rounded-xs sm:rounded bg-rose-100 border border-rose-300"></span>
+                                      <span className="font-bold text-slate-700">Absent</span>
+                                    </span>
+                                    <span className="flex items-center gap-1">
+                                      <span className="w-2 h-2 sm:w-2.5 sm:h-2.5 rounded-xs sm:rounded bg-amber-100 border border-amber-300"></span>
+                                      <span className="font-bold text-slate-700">On Leave</span>
+                                    </span>
+                                    <span className="flex items-center gap-1">
+                                      <span className="w-2 h-2 sm:w-2.5 sm:h-2.5 rounded-xs sm:rounded bg-emerald-500 ring-1 sm:ring-2 ring-emerald-600"></span>
+                                      <span className="font-bold text-slate-700">Selected</span>
+                                    </span>
+                                  </div>
+                                  <span className="text-[8px] sm:text-[9.5px] text-slate-400">
+                                    Click any date above to view details below
+                                  </span>
+                                </div>
+                              </div>
+
+                              {/* 2. ATTENDANCE CARDS BELOW CALENDAR */}
+                              <div className="space-y-2.5 pt-1">
+                                <div className="flex items-center justify-between px-0.5 flex-wrap gap-1.5">
+                                  <div className="flex items-center gap-2">
+                                    <span className="text-xs font-black text-slate-800 flex items-center gap-1.5">
+                                      <span>📍 Night Attendance for</span>
+                                      <span className="px-2 py-0.5 rounded-md bg-emerald-100 text-emerald-950 border border-emerald-300 font-extrabold">
+                                        📅 {showMonthAttendance ? `${calMonthTitle} (All Month)` : (activeSelectedDate || "Selected Date")}
+                                      </span>
+                                    </span>
+                                    <span className="text-[11px] font-bold text-slate-500">
+                                      ({displayAttendances.length} {displayAttendances.length === 1 ? 'record' : 'records'})
+                                    </span>
+                                  </div>
+
+                                  {(calMonthPresentCount + calMonthAbsentCount) > 0 && (
+                                    <button
+                                      type="button"
+                                      onClick={() => setShowMonthAttendance(prev => !prev)}
+                                      className="text-[10.5px] font-bold text-emerald-700 hover:text-emerald-900 hover:underline cursor-pointer flex items-center gap-1"
+                                    >
+                                      {showMonthAttendance ? "← Show Only Selected Date" : `View all records in ${calMonthTitle} →`}
+                                    </button>
+                                  )}
+                                </div>
+
+                                {displayAttendances.length > 0 ? (
+                                  displayAttendances.map((att: any, idx: number) => renderAttendanceCard(att, idx))
+                                ) : selectedDayInfo?.status === 'leave' && selectedDayInfo.leaveInfo ? (
+                                  <div className="p-3.5 bg-amber-50/70 border border-amber-200 rounded-xl shadow-2xs">
+                                    <div className="flex items-center justify-between mb-1.5">
+                                      <span className="text-[10px] font-black uppercase tracking-wider px-2 py-0.5 rounded-md bg-amber-100 text-amber-900 border border-amber-300 flex items-center gap-1">
+                                        🏠 Approved Home Leave
+                                      </span>
+                                      <span className="text-[10px] font-bold text-amber-800">
+                                        Excused Absence (Away on Leave)
+                                      </span>
+                                    </div>
+                                    <p className="text-[11px] text-slate-700 font-medium">
+                                      <strong className="text-slate-900">Reason: </strong>{selectedDayInfo.leaveInfo.reason || "Home Leave"}
+                                    </p>
+                                    <p className="text-[10px] text-slate-500 mt-1">
+                                      Student was outside campus under official leave from {selectedDayInfo.leaveInfo.checkOutIstDate || (selectedDayInfo.leaveInfo.fromDateTime ? formatDateDDMMYYYY(selectedDayInfo.leaveInfo.fromDateTime) : 'N/A')} to {selectedDayInfo.leaveInfo.checkInIstDate || (selectedDayInfo.leaveInfo.toDateTime ? formatDateDDMMYYYY(selectedDayInfo.leaveInfo.toDateTime) : 'N/A')}.
+                                    </p>
+                                  </div>
+                                ) : (
+                                  <div className="p-6 text-center bg-slate-50/70 border border-dashed border-slate-200 rounded-2xl">
+                                    <span className="text-2xl block mb-1.5">🌙</span>
+                                    <p className="text-xs font-bold text-slate-700">
+                                      No night attendance log for {activeSelectedDate || "this date"}
+                                    </p>
+                                    <p className="text-[11px] text-slate-400 mt-0.5">
+                                      Click any date on the calendar above to view attendance verification details.
+                                    </p>
+                                    {latestAttDateKey && latestAttDateKey !== activeSelectedDate && (
+                                      <button
+                                        type="button"
+                                        onClick={handleJumpToLatest}
+                                        className="mt-3 px-3.5 py-1.5 bg-emerald-500 hover:bg-emerald-600 text-white font-black rounded-lg text-xs transition-all cursor-pointer inline-flex items-center gap-1.5 shadow-xs"
+                                      >
+                                        <span>⚡ Jump to Latest Attendance ({latestAttDateKey})</span>
+                                      </button>
+                                    )}
+                                  </div>
+                                )}
+                              </div>
+                            </>
+                          )}
+
+                          {/* 3. LIST ALL VIEW */}
+                          {studentAttendanceViewMode === "list" && (
+                            <div className="space-y-3">
+                              <div className="flex items-center justify-between px-1">
+                                <p className="text-xs font-bold text-slate-600">
+                                  Showing all {studentAttendances.length} night attendance logs recorded for this student.
+                                </p>
+                                <button
+                                  type="button"
+                                  onClick={() => setStudentAttendanceViewMode("calendar")}
+                                  className="text-xs font-bold text-emerald-700 hover:text-emerald-900 hover:underline cursor-pointer"
+                                >
+                                  ← Switch back to Month Calendar
+                                </button>
+                              </div>
+                              {studentAttendances.length === 0 ? (
+                                <div className="p-6 text-center bg-slate-50/70 border border-dashed border-slate-200 rounded-2xl">
+                                  <span className="text-2xl block mb-1.5">🌙</span>
+                                  <p className="text-xs font-bold text-slate-700">No Attendance records found</p>
+                                  <p className="text-[11px] text-slate-400 mt-0.5">This student has not marked any night roll-call attendance yet.</p>
+                                </div>
+                              ) : (
+                                studentAttendances.map((att: any, idx: number) => renderAttendanceCard(att, idx))
+                              )}
                             </div>
                           )}
                         </div>
@@ -18878,40 +19720,66 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                       <div className="p-3 sm:p-5 rounded-2xl sm:rounded-3xl border-2 border-gray-100 bg-gray-50/30 flex flex-col space-y-2 sm:space-y-3">
                         <div className="flex items-baseline flex-wrap gap-1">
                           <h4 className="font-black text-gray-900 uppercase tracking-tight text-[10px] sm:text-xs whitespace-nowrap">Dean Credentials :</h4>
-                          <span className="text-[9px] sm:text-[10.5px] text-gray-500 font-medium font-sans">Change the dean password</span>
+                          <span className="text-[9px] sm:text-[10.5px] text-gray-500 font-medium font-sans">Change the dean password & mobile</span>
                         </div>
-                        <div className="space-y-1">
-                          <label className="block text-[8.5px] sm:text-[9.5px] font-black text-gray-400 uppercase tracking-wider">New Password</label>
-                          <div className="flex flex-row sm:flex-col items-center sm:items-stretch gap-2">
-                            <div className="relative flex-1 sm:w-full min-w-0">
-                              <input
-                                type={showPassword ? "text" : "password"}
-                                value={newPassword}
-                                onChange={(e) => setNewPassword(e.target.value)}
-                                autoComplete="new-password"
-                                className="w-full px-3 py-1.5 sm:px-3.5 sm:py-2.5 rounded-xl bg-white border-2 border-gray-100 font-bold text-gray-800 outline-none focus:border-purple-500 focus:shadow-md focus:shadow-purple-100 transition-all pr-8 text-xs sm:text-sm"
-                                placeholder="••••••••"
-                              />
-                              <button
-                                type="button"
-                                onClick={() => setShowPassword(!showPassword)}
-                                className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-purple-600 transition-colors"
-                              >
-                                {showPassword ? (
-                                  <svg className="w-3.5 h-3.5 sm:w-4 sm:h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.88 9.88l-3.29-3.29m7.532 7.532l3.29 3.29M3 3l3.59 3.59m0 0A9.953 9.953 0 0112 5c4.478 0 8.268 2.943 9.543 7a10.025 10.025 0 01-4.132 5.411m0 0L21 21" /></svg>
-                                ) : (
-                                  <svg className="w-3.5 h-3.5 sm:w-4 sm:h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" /></svg>
-                                )}
-                              </button>
+
+                        <div className="flex flex-row sm:flex-col items-end sm:items-stretch gap-1.5 sm:gap-2">
+                          {/* Left Column: Dual Header Labels & Dual Input Box */}
+                          <div className="flex-1 sm:w-full min-w-0 space-y-1">
+                            <div className="grid grid-cols-2 text-[8.5px] sm:text-[9.5px] font-black uppercase tracking-wider px-1">
+                              <span className="text-gray-400">New Password</span>
+                              <span className="text-gray-400 text-center">Mo. Number</span>
                             </div>
-                            <button
-                              onClick={handleChangePassword}
-                              disabled={!newPassword || newPassword.length < 6}
-                              className="shrink-0 sm:w-full px-3 py-1.5 sm:px-4 sm:py-2.5 bg-purple-600 text-white font-black text-[9.5px] sm:text-xs uppercase tracking-wider rounded-xl hover:bg-purple-700 transition-all shadow-md shadow-purple-200 disabled:opacity-50 disabled:shadow-none whitespace-nowrap text-center"
-                            >
-                              Update Password
-                            </button>
+
+                            {/* Same compact single box divided by vertical blue separator */}
+                            <div className="flex items-center bg-white px-2.5 py-1.5 sm:px-3 sm:py-2.5 rounded-xl border-2 border-gray-100 focus-within:border-purple-500 focus-within:shadow-md focus-within:shadow-purple-100 transition-all">
+                              {/* Left Sub-input: New Password */}
+                              <div className="relative flex-1 min-w-0 pr-1">
+                                <input
+                                  type={showPassword ? "text" : "password"}
+                                  value={newPassword}
+                                  onChange={(e) => setNewPassword(e.target.value)}
+                                  autoComplete="new-password"
+                                  className="w-full font-bold text-gray-800 text-xs sm:text-sm bg-transparent border-none outline-none focus:ring-0 p-0 pr-6"
+                                  placeholder="••••••••"
+                                />
+                                <button
+                                  type="button"
+                                  onClick={() => setShowPassword(!showPassword)}
+                                  className="absolute right-0 top-1/2 -translate-y-1/2 text-gray-400 hover:text-purple-600 transition-colors"
+                                >
+                                  {showPassword ? (
+                                    <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.88 9.88l-3.29-3.29m7.532 7.532l3.29 3.29M3 3l3.59 3.59m0 0A9.953 9.953 0 0112 5c4.478 0 8.268 2.943 9.543 7a10.025 10.025 0 01-4.132 5.411m0 0L21 21" /></svg>
+                                  ) : (
+                                    <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" /></svg>
+                                  )}
+                                </button>
+                              </div>
+
+                              {/* Vertical divider line marked with blue pen */}
+                              <div className="w-[1.5px] h-4 sm:h-5 bg-blue-500 shrink-0 mx-1.5" />
+
+                              {/* Right Sub-input: Mo. Number */}
+                              <div className="flex-1 min-w-0 pl-1">
+                                <input
+                                  type="tel"
+                                  maxLength={10}
+                                  value={deanPhone}
+                                  onChange={(e) => setDeanPhone(e.target.value.replace(/\D/g, ""))}
+                                  placeholder="10-digit mobile"
+                                  className="w-full font-bold text-gray-800 text-xs sm:text-sm bg-transparent border-none outline-none focus:ring-0 p-0 placeholder:text-gray-300"
+                                />
+                              </div>
+                            </div>
                           </div>
+
+                          <button
+                            onClick={handleChangePassword}
+                            disabled={isUpdatingPassword || (!newPassword && !deanPhone)}
+                            className="shrink-0 sm:w-full px-2.5 py-2 sm:px-3.5 sm:py-2.5 bg-purple-600 text-white font-black text-[8px] sm:text-[10px] uppercase tracking-wider rounded-md hover:bg-purple-700 transition-all shadow-sm disabled:opacity-50 disabled:shadow-none whitespace-nowrap text-center"
+                          >
+                            {isUpdatingPassword ? "Saving..." : "Update Password"}
+                          </button>
                         </div>
                       </div>
 
@@ -18920,45 +19788,66 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                         <div className="p-3 sm:p-5 rounded-2xl sm:rounded-3xl border-2 border-gray-100 bg-gray-50/30 flex flex-col space-y-2 sm:space-y-3">
                           <div className="flex items-baseline flex-wrap gap-1">
                             <h4 className="font-black text-gray-900 uppercase tracking-tight text-[10px] sm:text-xs whitespace-nowrap">Super Admin Credentials :</h4>
-                            <span className="text-[9px] sm:text-[10.5px] text-gray-500 font-medium font-sans">Change the master password</span>
+                            <span className="text-[9px] sm:text-[10.5px] text-gray-500 font-medium font-sans">Change the master password & mobile</span>
                           </div>
-                          <div className="space-y-1">
-                            <label className="block text-[8.5px] sm:text-[9.5px] font-black text-gray-400 uppercase tracking-wider">New Master Password</label>
-                            <div className="flex flex-row sm:flex-col items-center sm:items-stretch gap-2">
-                              <div className="relative flex-1 sm:w-full min-w-0">
-                                <input
-                                  type={showDeveloperPassword ? "text" : "password"}
-                                  value={newDeveloperPassword}
-                                  onChange={(e) => setNewDeveloperPassword(e.target.value)}
-                                  className="w-full px-3 py-1.5 sm:px-3.5 sm:py-2.5 rounded-xl bg-white border-2 border-gray-100 font-bold text-gray-800 outline-none focus:border-red-500 focus:shadow-md focus:shadow-red-100 transition-all pr-8 text-xs sm:text-sm"
-                                  placeholder="••••••••"
-                                />
-                                <button
-                                  type="button"
-                                  onClick={() => setShowDeveloperPassword(!showDeveloperPassword)}
-                                  className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-red-600 transition-colors"
-                                >
-                                  {showDeveloperPassword ? (
-                                    <svg className="w-3.5 h-3.5 sm:w-4 sm:h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.88 9.88l-3.29-3.29m7.532 7.532l3.29 3.29M3 3l3.59 3.59m0 0A9.953 9.953 0 0112 5c4.478 0 8.268 2.943 9.543 7a10.025 10.025 0 01-4.132 5.411m0 0L21 21" /></svg>
-                                  ) : (
-                                    <svg className="w-3.5 h-3.5 sm:w-4 sm:h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" /></svg>
-                                  )}
-                                </button>
+
+                          <div className="flex flex-row sm:flex-col items-end sm:items-stretch gap-1.5 sm:gap-2">
+                            {/* Left Column: Dual Header Labels & Dual Input Box */}
+                            <div className="flex-1 sm:w-full min-w-0 space-y-1">
+                              <div className="grid grid-cols-2 text-[8.5px] sm:text-[9.5px] font-black uppercase tracking-wider px-1">
+                                <span className="text-gray-400">New Password</span>
+                                <span className="text-gray-400 text-center">Mo. Number</span>
                               </div>
-                              <button
-                                onClick={async () => {
-                                  if (!newDeveloperPassword || newDeveloperPassword.length < 6) return alert("Password must be at least 6 characters");
-                                  await handleUpdateSettings({ developerPassword: newDeveloperPassword });
-                                  setDeveloperPassword(newDeveloperPassword);
-                                  setNewDeveloperPassword("");
-                                  alert("Developer master password updated!");
-                                }}
-                                disabled={isUpdatingSettings || !newDeveloperPassword}
-                                className="shrink-0 sm:w-full px-3 py-1.5 sm:px-4 sm:py-2.5 bg-red-600 text-white font-black text-[9.5px] sm:text-xs uppercase tracking-wider rounded-xl hover:bg-red-700 transition-all shadow-md shadow-red-200 disabled:opacity-50 whitespace-nowrap text-center"
-                              >
-                                Update Password
-                              </button>
+
+                              {/* Same compact single box divided by vertical blue separator */}
+                              <div className="flex items-center bg-white px-2.5 py-1.5 sm:px-3 sm:py-2.5 rounded-xl border-2 border-gray-100 focus-within:border-red-500 focus-within:shadow-md focus-within:shadow-red-100 transition-all">
+                                {/* Left Sub-input: New Password */}
+                                <div className="relative flex-1 min-w-0 pr-1">
+                                  <input
+                                    type={showDeveloperPassword ? "text" : "password"}
+                                    value={newDeveloperPassword}
+                                    onChange={(e) => setNewDeveloperPassword(e.target.value)}
+                                    autoComplete="new-password"
+                                    className="w-full font-bold text-gray-800 text-xs sm:text-sm bg-transparent border-none outline-none focus:ring-0 p-0 pr-6"
+                                    placeholder="••••••••"
+                                  />
+                                  <button
+                                    type="button"
+                                    onClick={() => setShowDeveloperPassword(!showDeveloperPassword)}
+                                    className="absolute right-0 top-1/2 -translate-y-1/2 text-gray-400 hover:text-red-600 transition-colors"
+                                  >
+                                    {showDeveloperPassword ? (
+                                      <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.88 9.88l-3.29-3.29m7.532 7.532l3.29 3.29M3 3l3.59 3.59m0 0A9.953 9.953 0 0112 5c4.478 0 8.268 2.943 9.543 7a10.025 10.025 0 01-4.132 5.411m0 0L21 21" /></svg>
+                                    ) : (
+                                      <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" /></svg>
+                                    )}
+                                  </button>
+                                </div>
+
+                                {/* Vertical divider line marked with blue pen */}
+                                <div className="w-[1.5px] h-4 sm:h-5 bg-blue-500 shrink-0 mx-1.5" />
+
+                                {/* Right Sub-input: Mo. Number */}
+                                <div className="flex-1 min-w-0 pl-1">
+                                  <input
+                                    type="tel"
+                                    maxLength={10}
+                                    value={superAdminPhone}
+                                    onChange={(e) => setSuperAdminPhone(e.target.value.replace(/\D/g, ""))}
+                                    placeholder="10-digit mobile"
+                                    className="w-full font-bold text-gray-800 text-xs sm:text-sm bg-transparent border-none outline-none focus:ring-0 p-0 placeholder:text-gray-300"
+                                  />
+                                </div>
+                              </div>
                             </div>
+
+                            <button
+                              onClick={handleUpdateSuperAdminCredentials}
+                              disabled={isUpdatingSuperAdmin || (!newDeveloperPassword && !superAdminPhone)}
+                              className="shrink-0 sm:w-full px-2.5 py-2 sm:px-3.5 sm:py-2.5 bg-red-600 text-white font-black text-[8px] sm:text-[10px] uppercase tracking-wider rounded-md hover:bg-red-700 transition-all shadow-sm disabled:opacity-50 disabled:shadow-none whitespace-nowrap text-center"
+                            >
+                              {isUpdatingSuperAdmin ? "Saving..." : "Update Password"}
+                            </button>
                           </div>
                         </div>
                       )}
@@ -18969,36 +19858,38 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                           <h4 className="font-black text-gray-900 uppercase tracking-tight text-[10px] sm:text-xs whitespace-nowrap">Gatepass Credentials :</h4>
                           <span className="text-[9px] sm:text-[10.5px] text-gray-500 font-medium font-sans">Set an independent access password</span>
                         </div>
-                        <div className="space-y-1">
-                          <label className="block text-[8.5px] sm:text-[9.5px] font-black text-emerald-600/70 uppercase tracking-wider">Independent Password</label>
-                          <div className="flex flex-row sm:flex-col items-center sm:items-stretch gap-2">
+
+                        <div className="flex flex-row sm:flex-col items-end sm:items-stretch gap-1.5 sm:gap-2">
+                          <div className="flex-1 sm:w-full min-w-0 space-y-1">
+                            <label className="block text-[8.5px] sm:text-[9.5px] font-black text-emerald-600/70 uppercase tracking-wider px-1">Independent Password</label>
                             <input
                               type="text"
                               value={getpassPassword}
                               onChange={(e) => setGetpassPassword(e.target.value)}
-                              className="w-full px-3 py-1.5 sm:px-3.5 sm:py-2.5 rounded-xl bg-white border-2 border-gray-100 font-bold text-gray-800 outline-none focus:border-emerald-500 transition-all text-xs sm:text-sm flex-1 sm:w-full min-w-0"
+                              className="w-full px-2.5 py-1.5 sm:px-3 sm:py-2.5 rounded-xl bg-white border-2 border-gray-100 font-bold text-gray-800 outline-none focus:border-emerald-500 transition-all text-xs sm:text-sm"
                               placeholder="GET456"
                             />
-                            <button
-                              onClick={async () => {
-                                try {
-                                  const res = await fetch("/api/admin/passwords", {
-                                    method: "PATCH",
-                                    headers: { "Content-Type": "application/json" },
-                                    body: JSON.stringify({ newPassword: getpassPassword, type: "getpass" })
-                                  });
-                                  const data = await res.json();
-                                  if (data.success) alert("✅ GATEPASS password updated successfully!");
-                                  else alert("Error: " + data.error);
-                                } catch (e) {
-                                  alert("Failed to update password");
-                                }
-                              }}
-                              className="shrink-0 sm:w-full px-3 py-1.5 sm:px-4 sm:py-2.5 bg-emerald-600 text-white font-black text-[9.5px] sm:text-xs uppercase tracking-wider rounded-xl hover:bg-emerald-700 transition-all shadow-md shadow-emerald-100 active:scale-95 whitespace-nowrap text-center"
-                            >
-                              Update Password
-                            </button>
                           </div>
+
+                          <button
+                            onClick={async () => {
+                              try {
+                                const res = await fetch("/api/admin/passwords", {
+                                  method: "PATCH",
+                                  headers: { "Content-Type": "application/json" },
+                                  body: JSON.stringify({ newPassword: getpassPassword, type: "getpass" })
+                                });
+                                const data = await res.json();
+                                if (data.success) alert("✅ GATEPASS password updated successfully!");
+                                else alert("Error: " + data.error);
+                              } catch (e) {
+                                alert("Failed to update password");
+                              }
+                            }}
+                            className="shrink-0 sm:w-full px-2.5 py-2 sm:px-3.5 sm:py-2.5 bg-emerald-600 text-white font-black text-[8px] sm:text-[10px] uppercase tracking-wider rounded-md hover:bg-emerald-700 transition-all shadow-sm active:scale-95 disabled:opacity-50 whitespace-nowrap text-center"
+                          >
+                            Update Password
+                          </button>
                         </div>
                       </div>
                     </div>
@@ -19269,6 +20160,7 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
           handleUpdateHostelMode={handleUpdateHostelMode}
           handleSyncAllStudents={handleSyncAllStudents}
           wifiWhitelist={wifiWhitelist}
+          students={students}
         />
       )}
       {/* Database Export Modal */}
@@ -19847,6 +20739,231 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
           </p>
         </div>
       </footer>
+
+      {/* ⚡ SUPER ADMIN "VIEW AS" SELECTION POPUP / DROPDOWN */}
+      {showViewAsDropdown && (
+        <div 
+          className="fixed inset-0 z-[99998] bg-black/50 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4 animate-in fade-in duration-150"
+          onClick={() => setShowViewAsDropdown(false)}
+        >
+          <div 
+            className="bg-white rounded-2xl sm:rounded-3xl shadow-2xl border border-gray-200 w-full max-w-sm overflow-hidden animate-in zoom-in-95 duration-150"
+            onClick={e => e.stopPropagation()}
+          >
+            <div className="bg-gradient-to-r from-indigo-600 to-blue-600 p-4 text-white flex items-center justify-between">
+              <div className="flex items-center gap-2.5">
+                <div className="w-8 h-8 rounded-xl bg-white/20 flex items-center justify-center text-lg backdrop-blur-sm">
+                  👁️
+                </div>
+                <div>
+                  <h3 className="font-extrabold text-sm tracking-tight">View Dashboard As</h3>
+                  <p className="text-[10px] text-white/80">Select role to preview dashboard in 1 click</p>
+                </div>
+              </div>
+              <button
+                onClick={() => setShowViewAsDropdown(false)}
+                className="w-7 h-7 rounded-lg bg-white/10 hover:bg-white/20 text-white flex items-center justify-center text-sm font-bold transition-colors cursor-pointer"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="p-3 space-y-2 max-h-[70vh] overflow-y-auto">
+              {/* Gaytri Warden */}
+              <button
+                onClick={() => {
+                  setShowViewAsDropdown(false);
+                  setActiveViewAsTarget({ role: 'warden', hostelName: 'GAYTRI HOSTEL', title: 'Gaytri Hostel Dashboard' });
+                }}
+                className="w-full flex items-center justify-between p-3 rounded-xl bg-gray-50 hover:bg-pink-50/60 border border-gray-100 hover:border-pink-200 transition-all text-left group cursor-pointer"
+              >
+                <div className="flex items-center gap-3">
+                  <div className="w-9 h-9 rounded-xl bg-pink-100 text-pink-700 font-black text-xs flex items-center justify-center shadow-xs">
+                    🏢
+                  </div>
+                  <div>
+                    <p className="font-bold text-xs text-slate-800 group-hover:text-pink-700">View as Gaytri Warden</p>
+                    <p className="text-[10px] text-gray-500">Anita • Girls Hostel</p>
+                  </div>
+                </div>
+                <span className="text-xs font-bold text-pink-600 bg-pink-50 group-hover:bg-pink-600 group-hover:text-white px-2.5 py-1 rounded-lg transition-all">
+                  Open →
+                </span>
+              </button>
+
+              {/* Gangotri Warden */}
+              <button
+                onClick={() => {
+                  setShowViewAsDropdown(false);
+                  setActiveViewAsTarget({ role: 'warden', hostelName: 'GANGOTRI HOSTEL', title: 'Gangotri Hostel Dashboard' });
+                }}
+                className="w-full flex items-center justify-between p-3 rounded-xl bg-gray-50 hover:bg-purple-50/60 border border-gray-100 hover:border-purple-200 transition-all text-left group cursor-pointer"
+              >
+                <div className="flex items-center gap-3">
+                  <div className="w-9 h-9 rounded-xl bg-purple-100 text-purple-700 font-black text-xs flex items-center justify-center shadow-xs">
+                    🏢
+                  </div>
+                  <div>
+                    <p className="font-bold text-xs text-slate-800 group-hover:text-purple-700">View as Gangotri Warden</p>
+                    <p className="text-[10px] text-gray-500">Anjali Mishra • Girls Hostel</p>
+                  </div>
+                </div>
+                <span className="text-xs font-bold text-purple-600 bg-purple-50 group-hover:bg-purple-600 group-hover:text-white px-2.5 py-1 rounded-lg transition-all">
+                  Open →
+                </span>
+              </button>
+
+              {/* GHB Warden */}
+              <button
+                onClick={() => {
+                  setShowViewAsDropdown(false);
+                  setActiveViewAsTarget({ role: 'warden', hostelName: 'GHB HOSTEL', title: 'GHB Hostel Dashboard' });
+                }}
+                className="w-full flex items-center justify-between p-3 rounded-xl bg-gray-50 hover:bg-blue-50/60 border border-gray-100 hover:border-blue-200 transition-all text-left group cursor-pointer"
+              >
+                <div className="flex items-center gap-3">
+                  <div className="w-9 h-9 rounded-xl bg-blue-100 text-blue-700 font-black text-xs flex items-center justify-center shadow-xs">
+                    🏢
+                  </div>
+                  <div>
+                    <p className="font-bold text-xs text-slate-800 group-hover:text-blue-700">View as GHB Warden</p>
+                    <p className="text-[10px] text-gray-500">Rahul Yadav • Boys Hostel</p>
+                  </div>
+                </div>
+                <span className="text-xs font-bold text-blue-600 bg-blue-50 group-hover:bg-blue-600 group-hover:text-white px-2.5 py-1 rounded-lg transition-all">
+                  Open →
+                </span>
+              </button>
+
+              {/* Boys Hostel Warden */}
+              <button
+                onClick={() => {
+                  setShowViewAsDropdown(false);
+                  setActiveViewAsTarget({ role: 'warden', hostelName: 'BOYS HOSTEL', title: 'Boys Hostel Dashboard' });
+                }}
+                className="w-full flex items-center justify-between p-3 rounded-xl bg-gray-50 hover:bg-emerald-50/60 border border-gray-100 hover:border-emerald-200 transition-all text-left group cursor-pointer"
+              >
+                <div className="flex items-center gap-3">
+                  <div className="w-9 h-9 rounded-xl bg-emerald-100 text-emerald-700 font-black text-xs flex items-center justify-center shadow-xs">
+                    🏢
+                  </div>
+                  <div>
+                    <p className="font-bold text-xs text-slate-800 group-hover:text-emerald-700">View as Boys Hostel Warden</p>
+                    <p className="text-[10px] text-gray-500">Rahul Yadav • Boys Hostel</p>
+                  </div>
+                </div>
+                <span className="text-xs font-bold text-emerald-600 bg-emerald-50 group-hover:bg-emerald-600 group-hover:text-white px-2.5 py-1 rounded-lg transition-all">
+                  Open →
+                </span>
+              </button>
+
+              {/* Dynamic Hostels if configured in database */}
+              {hostelsConfig
+                .filter(h => h.name && !['GAYTRI HOSTEL', 'GANGOTRI HOSTEL', 'GHB HOSTEL', 'BOYS HOSTEL'].includes(h.name.toUpperCase().trim()))
+                .map(h => (
+                  <button
+                    key={h.name}
+                    onClick={() => {
+                      setShowViewAsDropdown(false);
+                      setActiveViewAsTarget({ role: 'warden', hostelName: h.name, title: `${h.name} Dashboard` });
+                    }}
+                    className="w-full flex items-center justify-between p-3 rounded-xl bg-gray-50 hover:bg-teal-50/60 border border-gray-100 hover:border-teal-200 transition-all text-left group cursor-pointer"
+                  >
+                    <div className="flex items-center gap-3">
+                      <div className="w-9 h-9 rounded-xl bg-teal-100 text-teal-700 font-black text-xs flex items-center justify-center shadow-xs">
+                        🏢
+                      </div>
+                      <div>
+                        <p className="font-bold text-xs text-slate-800 group-hover:text-teal-700">View as {h.name} Warden</p>
+                        <p className="text-[10px] text-gray-500">{h.wardenName || 'Warden'}</p>
+                      </div>
+                    </div>
+                    <span className="text-xs font-bold text-teal-600 bg-teal-50 group-hover:bg-teal-600 group-hover:text-white px-2.5 py-1 rounded-lg transition-all">
+                      Open →
+                    </span>
+                  </button>
+                ))}
+
+              {/* Dean */}
+              <button
+                onClick={() => {
+                  setShowViewAsDropdown(false);
+                  setActiveViewAsTarget({ role: 'dean', title: 'Dean Dashboard' });
+                }}
+                className="w-full flex items-center justify-between p-3 rounded-xl bg-amber-50/80 hover:bg-amber-100/80 border border-amber-200 transition-all text-left group cursor-pointer"
+              >
+                <div className="flex items-center gap-3">
+                  <div className="w-9 h-9 rounded-xl bg-amber-200 text-amber-900 font-black text-xs flex items-center justify-center shadow-xs">
+                    🎓
+                  </div>
+                  <div>
+                    <p className="font-bold text-xs text-amber-950 group-hover:text-amber-800">View as Dean</p>
+                    <p className="text-[10px] text-amber-700">Dean of Student Affairs</p>
+                  </div>
+                </div>
+                <span className="text-xs font-bold text-amber-800 bg-amber-100 group-hover:bg-amber-600 group-hover:text-white px-2.5 py-1 rounded-lg transition-all">
+                  Open →
+                </span>
+              </button>
+            </div>
+
+            <div className="bg-gray-50 px-4 py-2.5 border-t border-gray-100 text-center">
+              <p className="text-[10px] text-gray-400 font-semibold">
+                ⚡ 1-Click Instant Preview • No OTP or phone SIM required
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ⚡ SUPER ADMIN "VIEW AS" FULL DIALOG BOX */}
+      {activeViewAsTarget && (
+        <div className="fixed inset-0 z-[99999] bg-[#0b0f19] flex flex-col overflow-hidden animate-in fade-in duration-200">
+          {/* Header Bar with ONE CLOSE BUTTON */}
+          <div className="bg-slate-900/95 backdrop-blur-md border-b border-slate-700/80 px-3 sm:px-6 py-2.5 sm:py-3.5 flex items-center justify-between text-white shadow-2xl shrink-0 z-50">
+            <div className="flex items-center gap-2.5 sm:gap-4 min-w-0">
+              <span className="flex h-3 w-3 relative shrink-0">
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                <span className="relative inline-flex rounded-full h-3 w-3 bg-emerald-500"></span>
+              </span>
+              <div className="min-w-0">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <span className="text-[10px] sm:text-xs font-black px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 uppercase tracking-wider whitespace-nowrap">
+                    LIVE PREVIEW
+                  </span>
+                  <h2 className="text-xs sm:text-sm md:text-base font-extrabold text-white truncate">
+                    Viewing as: {activeViewAsTarget.role === 'warden' ? `${activeViewAsTarget.hostelName} Warden` : 'Dean'}
+                  </h2>
+                </div>
+                <p className="text-[10px] sm:text-[11px] text-slate-400 hidden sm:block truncate mt-0.5">
+                  Super Admin View-As • Full access to permissions, attendance & rooms without phone SIM or OTP
+                </p>
+              </div>
+            </div>
+
+            {/* ONE CLOSE BUTTON */}
+            <button
+              onClick={() => setActiveViewAsTarget(null)}
+              className="px-3.5 sm:px-5 py-2 sm:py-2.5 bg-rose-600 hover:bg-rose-500 active:scale-95 text-white font-extrabold text-xs sm:text-sm rounded-xl flex items-center gap-1.5 sm:gap-2 shadow-lg shadow-rose-600/30 transition-all border border-rose-400/30 shrink-0 cursor-pointer"
+            >
+              <svg className="w-4 h-4 sm:w-5 sm:h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M6 18L18 6M6 6l12 12" />
+              </svg>
+              <span className="whitespace-nowrap">Close Dashboard</span>
+            </button>
+          </div>
+
+          {/* Full Dialog Content */}
+          <div className="flex-1 overflow-y-auto bg-white">
+            <AdminDashboard
+              key={`${activeViewAsTarget.role}-${activeViewAsTarget.hostelName || 'main'}`}
+              title={activeViewAsTarget.role === 'warden' ? 'Campus Dashboard' : 'Dean Dashboard'}
+              impersonateConfig={activeViewAsTarget}
+              onCloseImpersonate={() => setActiveViewAsTarget(null)}
+            />
+          </div>
+        </div>
+      )}
 
       {/* ⚡ LIVE GATEPASS OVERLAY */}
       {showGatepassOverlay && (

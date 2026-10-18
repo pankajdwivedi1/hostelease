@@ -145,7 +145,18 @@ export async function sendPushNotification(
     }
 
     // 2. Fetch all registered subscriptions for the recipient
-    const subscriptions = await db.pushSubscription.findMany({ userId, userType });
+    let subscriptions = await db.pushSubscription.findMany({ userId, userType });
+
+    // Fallback: If recipient is a warden and not found by username, lookup by extracted 10-digit mobile numbers
+    if ((!subscriptions || subscriptions.length === 0) && userType === "warden") {
+      const extractedPhones = (userId || "").match(/\d{10}/g) || [];
+      for (const phone of extractedPhones) {
+        const byPhone = await db.pushSubscription.findMany({ userId: phone, userType });
+        if (byPhone && byPhone.length > 0) {
+          subscriptions = [...(subscriptions || []), ...byPhone];
+        }
+      }
+    }
 
     if (!subscriptions || subscriptions.length === 0) {
       console.log(`No active push subscription registered for ${userType} ID: ${userId}`);

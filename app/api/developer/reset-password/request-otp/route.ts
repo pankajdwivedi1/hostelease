@@ -30,22 +30,25 @@ export async function POST(request: Request) {
             return NextResponse.json({ success: false, error: "University settings not found." }, { status: 404 });
         }
 
-        const bankDetails = settings.universityBankDetails || {};
-        const registeredPhone = bankDetails.superAdminPhone || bankDetails.contactPhone;
+        const bankDetails = (settings.universityBankDetails as any) || {};
+        let registeredPhone = (settings.superAdminPhone || bankDetails.superAdminPhone || "").replace(/\D/g, "");
+        if (registeredPhone.length > 10) registeredPhone = registeredPhone.slice(-10);
+
+        if (!registeredPhone) {
+            // Fallback to contactPhone if not configured
+            let fallback = (bankDetails.contactPhone || "").replace(/\D/g, "");
+            if (fallback.length > 10) fallback = fallback.slice(-10);
+            registeredPhone = fallback;
+        }
 
         if (!registeredPhone) {
             return NextResponse.json({
                 success: false,
-                error: "No recovery phone number has been configured for this portal. Please contact developer support."
+                error: "No recovery phone number has been configured for Super Admin. Please set it in System Settings."
             }, { status: 400 });
         }
 
-        let cleanRegistered = registeredPhone.replace(/\D/g, "");
-        if (cleanRegistered.length === 12 && cleanRegistered.startsWith("91")) {
-            cleanRegistered = cleanRegistered.substring(2);
-        }
-
-        if (inputPhone !== cleanRegistered) {
+        if (inputPhone !== registeredPhone) {
             return NextResponse.json({
                 success: false,
                 error: "The entered phone number does not match our records for Super Admin recovery."
