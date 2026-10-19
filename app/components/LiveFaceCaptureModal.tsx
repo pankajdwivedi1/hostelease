@@ -8,6 +8,8 @@ import { saveBiometricDescriptor } from "@/lib/biometricVault";
 interface LiveFaceCaptureModalProps {
     isOpen: boolean;
     studentId: string;
+    registrationId?: string;
+    email?: string;
     firebaseUID?: string;
     studentName: string;
     onSuccess: (updatedStudent: any) => void;
@@ -39,6 +41,8 @@ const loadAIModels = async () => {
 export default function LiveFaceCaptureModal({
     isOpen,
     studentId,
+    registrationId,
+    email,
     firebaseUID,
     studentName,
     onSuccess
@@ -342,6 +346,8 @@ export default function LiveFaceCaptureModal({
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({
                     studentId,
+                    registrationId,
+                    email,
                     firebaseUID,
                     profilePicture: dataUrl,
                     faceDescriptor: descriptorArray

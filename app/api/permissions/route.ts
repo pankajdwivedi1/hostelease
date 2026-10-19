@@ -44,6 +44,20 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Student not found" }, { status: 404 });
     }
 
+    // 🔒 0.5 Prevent new leave if student is flagged for mandatory photo retake
+    const pDyn = (student as any).dynamicFields || {};
+    const isRetakeFlagged = Boolean(
+      pDyn.requiresFaceRecapture ||
+      pDyn.dynamicFields?.requiresFaceRecapture ||
+      (student as any).requiresFaceRecapture
+    );
+    if (isRetakeFlagged) {
+      return NextResponse.json(
+        { error: "Action Blocked: You must complete your live profile photo retake on your Hosteleaze dashboard before applying for a pass or leave." },
+        { status: 403 }
+      );
+    }
+
     // 🔒 1. Prevent new leave if student is already marked OUT
     if (student.studentStatus === "out") {
       return NextResponse.json(
@@ -514,7 +528,7 @@ export async function PATCH(request: NextRequest) {
                   studentId: sId,
                   studentStatus: "out",
                   outingType: "leave",
-                  action: "reconcile",
+                  action: "reconcile" as any,
                   studentName: currentPermission.name || openPass.studentName,
                   hostelName: currentPermission.hostelName || openPass.hostelName,
                   roomNumber: currentPermission.roomNumber || openPass.roomNumber,

@@ -173,6 +173,30 @@ export async function POST(request: NextRequest) {
         }
 
         // ============================================================
+        // 🔒 BIOMETRIC FACE RETAKE ENFORCEMENT
+        // ============================================================
+        const scanDyn = (student as any).dynamicFields || {};
+        const isRetakeFlagged = Boolean(
+            scanDyn.requiresFaceRecapture ||
+            scanDyn.dynamicFields?.requiresFaceRecapture ||
+            (student as any).requiresFaceRecapture
+        );
+
+        if (isRetakeFlagged) {
+            console.warn(`🚫 [FACE_RETAKE_BLOCKED] GatePass scan blocked for ${student.name} (${student.registrationId || student.email}). Face retake is required.`);
+            return NextResponse.json(
+                {
+                    success: false,
+                    error: "⛔ GatePass Blocked: You must complete your live profile photo retake on your Hosteleaze dashboard before leaving campus.",
+                    code: "FACE_RETAKE_REQUIRED",
+                    requiresFaceRecapture: true,
+                    studentName: student.name
+                },
+                { status: 403 }
+            );
+        }
+
+        // ============================================================
         // 🔒 DEVICE BINDING ENFORCEMENT (Google Pay-style)
         // ============================================================
         const storedDeviceId = (student.deviceId && student.deviceId.trim() !== "no-binding") ? student.deviceId.trim() : null;
@@ -477,7 +501,7 @@ export async function POST(request: NextRequest) {
                 roomNumber: student.roomNumber,
                 registrationId: student.registrationId || (student as any).erpId || "",
                 phoneNumber: student.phoneNumber || "",
-                profilePicture: student.profilePicture || student.photo || "",
+                profilePicture: student.profilePicture || (student as any).photo || "",
                 year: student.year,
                 semester: student.semester
             });
@@ -553,7 +577,7 @@ export async function POST(request: NextRequest) {
                     roomNumber: student.roomNumber,
                     registrationId: student.registrationId || (student as any).erpId || "",
                     phoneNumber: student.phoneNumber || "",
-                    profilePicture: student.profilePicture || student.photo || "",
+                    profilePicture: student.profilePicture || (student as any).photo || "",
                     year: student.year,
                     semester: student.semester
                 });
@@ -647,7 +671,7 @@ export async function POST(request: NextRequest) {
                 roomNumber: student.roomNumber,
                 registrationId: student.registrationId || (student as any).erpId || "",
                 phoneNumber: student.phoneNumber || "",
-                profilePicture: student.profilePicture || student.photo || "",
+                profilePicture: student.profilePicture || (student as any).photo || "",
                 year: student.year,
                 semester: student.semester
             });

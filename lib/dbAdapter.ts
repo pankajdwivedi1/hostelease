@@ -909,8 +909,8 @@ export const db = {
                     s = await prisma.student.findUnique({ where: { email: cleanEmail } });
                 }
                 if (s && (!tenantId || s.tenantId === tenantId)) {
-                    const mapped = mapStudentToCamelCase(s);
-                    if (options.minimal) {
+                    const mapped: any = mapStudentToCamelCase(s);
+                    if (mapped && options.minimal) {
                         delete mapped.faceDescriptor;
                         delete mapped.webAuthnCredentials;
                         delete mapped.deviceHistory;
@@ -980,8 +980,8 @@ export const db = {
             }
 
             if (!student) return null;
-            const mapped = mapStudentToCamelCase(student);
-            if (options.minimal) {
+            const mapped: any = mapStudentToCamelCase(student);
+            if (mapped && options.minimal) {
                 delete mapped.faceDescriptor;
                 delete mapped.webAuthnCredentials;
                 delete mapped.deviceHistory;
@@ -1045,8 +1045,8 @@ export const db = {
             }
 
             if (!student) return null;
-            const mappedFast = mapStudentToCamelCase(student);
-            if (options.minimal) {
+            const mappedFast: any = mapStudentToCamelCase(student);
+            if (mappedFast && options.minimal) {
                 delete mappedFast.faceDescriptor;
                 delete mappedFast.webAuthnCredentials;
                 delete mappedFast.deviceHistory;
@@ -1438,7 +1438,7 @@ export const db = {
 
                 return students.map((s: any) => {
                     const dyn = typeof s.dynamicFields === 'object' && s.dynamicFields !== null ? s.dynamicFields : {};
-                    const isRetakeFlagged = Boolean(dyn.requiresFaceRecapture || s.requiresFaceRecapture);
+                    const isRetakeFlagged = Boolean(dyn.requiresFaceRecapture || dyn.dynamicFields?.requiresFaceRecapture || s.requiresFaceRecapture);
                     const pic = (s.profilePicture || "").trim();
                     const hasPhoto = Boolean(pic && pic !== "null" && pic !== "undefined" && pic !== "data:," && pic.length > 20);
                     const hasVector = Array.isArray(s.faceDescriptor) && s.faceDescriptor.length > 0;

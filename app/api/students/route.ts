@@ -424,8 +424,20 @@ export async function GET(request: NextRequest) {
     const cachedUpdatedAt = searchParams.get("updatedAt");
     const cachedFlagParam = searchParams.get("cachedRequiresFaceRecapture");
 
+    const NO_CACHE_HEADERS = {
+      "Cache-Control": "no-store, no-cache, must-revalidate, proxy-revalidate",
+      "Pragma": "no-cache",
+      "Expires": "0"
+    };
+
     const isNotModified = (student: any) => {
-      const serverFlag = !!(student?.dynamicFields && typeof student.dynamicFields === 'object' && student.dynamicFields.requiresFaceRecapture);
+      const sDyn = student?.dynamicFields;
+      const serverFlag = Boolean(
+        sDyn && typeof sDyn === 'object' && (
+          sDyn.requiresFaceRecapture ||
+          sDyn.dynamicFields?.requiresFaceRecapture
+        ) || (student as any)?.requiresFaceRecapture
+      );
       // ⚡ If the student is flagged for face recapture on server, never send notModified (force fresh profile sync)
       if (serverFlag) {
         return false;
@@ -540,7 +552,7 @@ export async function GET(request: NextRequest) {
           studentStatus: student.studentStatus || "in", 
           outingType: student.outingType,
           isProfileLocked: student.isProfileLocked !== undefined ? student.isProfileLocked : true
-        }, { status: 200 });
+        }, { status: 200, headers: NO_CACHE_HEADERS });
       }
       const tenant = student.tenantId ? await getTenantById(student.tenantId) : null;
       return NextResponse.json({ 
@@ -551,7 +563,7 @@ export async function GET(request: NextRequest) {
           endDate: tenant.subscriptionEndDate,
           createdAt: tenant.createdAt
         } : null
-      }, { status: 200 });
+      }, { status: 200, headers: NO_CACHE_HEADERS });
     }
 
     if (supabaseId) {
@@ -578,7 +590,7 @@ export async function GET(request: NextRequest) {
       }
 
       if (!student) {
-        return NextResponse.json({ error: "Student not found" }, { status: 404 });
+        return NextResponse.json({ error: "Student not found" }, { status: 404, headers: NO_CACHE_HEADERS });
       }
       await enrichStudentOuting(student);
 
@@ -589,7 +601,7 @@ export async function GET(request: NextRequest) {
           studentStatus: student.studentStatus || "in", 
           outingType: (student as any).outingType,
           isProfileLocked: student.isProfileLocked !== undefined ? student.isProfileLocked : true
-        }, { status: 200 });
+        }, { status: 200, headers: NO_CACHE_HEADERS });
       }
       const tenant = student.tenantId ? await getTenantById(student.tenantId) : null;
       return NextResponse.json({ 
@@ -600,13 +612,13 @@ export async function GET(request: NextRequest) {
           endDate: tenant.subscriptionEndDate,
           createdAt: tenant.createdAt
         } : null
-      }, { status: 200 });
+      }, { status: 200, headers: NO_CACHE_HEADERS });
     }
 
     if (email) {
       const student = await db.students.findOne({ email }, { minimal });
       if (!student) {
-        return NextResponse.json({ error: "Student not found" }, { status: 404 });
+        return NextResponse.json({ error: "Student not found" }, { status: 404, headers: NO_CACHE_HEADERS });
       }
 
       // Auto-link: if found by email, but supabaseId is missing from DB and provided in query params
@@ -636,7 +648,7 @@ export async function GET(request: NextRequest) {
           endDate: tenant.subscriptionEndDate,
           createdAt: tenant.createdAt
         } : null
-      }, { status: 200 });
+      }, { status: 200, headers: NO_CACHE_HEADERS });
     }
 
     const search = searchParams.get("search");

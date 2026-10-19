@@ -26,6 +26,7 @@ interface ScanResult {
     durationText?: string;
     durationMinutes?: number;
     error?: string;
+    requiresFaceRecapture?: boolean;
 }
 
 interface OutingRecord {
@@ -347,10 +348,24 @@ export default function StudentScannerPage() {
                 hasUserSelectedDateRef.current = true;
                 fetchOutingHistory(firebaseUID);
             } else {
+                if (data.requiresFaceRecapture) {
+                    try {
+                        const cachedStr = localStorage.getItem("cachedStudentData");
+                        if (cachedStr) {
+                            const parsed = JSON.parse(cachedStr);
+                            parsed.dynamicFields = {
+                                ...(parsed.dynamicFields || {}),
+                                requiresFaceRecapture: true
+                            };
+                            localStorage.setItem("cachedStudentData", JSON.stringify(parsed));
+                        }
+                    } catch (e) {}
+                }
                 setScanResult({
                     success: false,
                     error: data.error || "Scan failed",
                     studentName: data.studentName,
+                    requiresFaceRecapture: data.requiresFaceRecapture
                 });
             }
         } catch (err: any) {
@@ -802,15 +817,33 @@ export default function StudentScannerPage() {
                                 ⏱️ Duration: {scanResult.durationText}
                             </div>
                         )}
-                        <button
-                            onClick={() => {
-                                processingRef.current = false;
-                                setScanResult(null);
-                            }}
-                            style={styles.doneButton}
-                        >
-                            Done
-                        </button>
+                        {scanResult.requiresFaceRecapture ? (
+                            <button
+                                onClick={() => {
+                                    router.push("/");
+                                }}
+                                style={{
+                                    ...styles.doneButton,
+                                    background: "linear-gradient(135deg, #ec4899 0%, #db2777 100%)",
+                                    color: "#fff",
+                                    fontWeight: 900,
+                                    marginTop: "12px",
+                                    boxShadow: "0 4px 14px rgba(219, 39, 119, 0.35)"
+                                }}
+                            >
+                                📸 Retake Profile Photo Now
+                            </button>
+                        ) : (
+                            <button
+                                onClick={() => {
+                                    processingRef.current = false;
+                                    setScanResult(null);
+                                }}
+                                style={styles.doneButton}
+                            >
+                                Done
+                            </button>
+                        )}
                     </div>
                 </div>
             )}

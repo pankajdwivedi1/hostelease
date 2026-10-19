@@ -297,7 +297,7 @@ export async function POST(request: NextRequest) {
                     roomNumber: student.roomNumber,
                     registrationId: student.registrationId || (student as any).erpId || "",
                     phoneNumber: student.phoneNumber || "",
-                    profilePicture: student.profilePicture || student.photo || "",
+                    profilePicture: student.profilePicture || (student as any).photo || "",
                     year: student.year,
                     semester: student.semester
                 });
@@ -397,7 +397,7 @@ export async function POST(request: NextRequest) {
                     roomNumber: student.roomNumber,
                     registrationId: student.registrationId || (student as any).erpId || "",
                     phoneNumber: student.phoneNumber || "",
-                    profilePicture: student.profilePicture || student.photo || "",
+                    profilePicture: student.profilePicture || (student as any).photo || "",
                     year: student.year,
                     semester: student.semester
                 });

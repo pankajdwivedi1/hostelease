@@ -130,7 +130,17 @@ export default function Dashboard() {
                       const cached = localStorage.getItem("cachedStudentData");
                       const currentCache = cached ? JSON.parse(cached) : {};
                       const cachedTime = currentCache.updatedAt || currentCache.updated_at || "";
-                      const response = await fetch(`/api/students?firebaseUID=${encodeURIComponent(user.uid)}&email=${encodeURIComponent(user.email || "")}&minimal=true&versionCheck=true&updatedAt=${encodeURIComponent(cachedTime)}`);
+                      const cDyn = currentCache.dynamicFields;
+                      const cachedFlag = Boolean(
+                        cDyn && typeof cDyn === 'object' && (
+                          cDyn.requiresFaceRecapture ||
+                          cDyn.dynamicFields?.requiresFaceRecapture
+                        ) || currentCache.requiresFaceRecapture
+                      );
+                      const response = await fetch(`/api/students?firebaseUID=${encodeURIComponent(user.uid)}&email=${encodeURIComponent(user.email || "")}&minimal=true&versionCheck=true&updatedAt=${encodeURIComponent(cachedTime)}&cachedRequiresFaceRecapture=${cachedFlag}&_t=${Date.now()}`, {
+                        cache: 'no-store',
+                        headers: { 'Cache-Control': 'no-cache, no-store', 'Pragma': 'no-cache' }
+                      });
                       if (response.status === 404) {
                         localStorage.removeItem("cachedStudentData");
                         localStorage.removeItem("userType");
@@ -162,6 +172,7 @@ export default function Dashboard() {
                           const updatedStudent = { 
                             ...currentCache, 
                             ...data.student, 
+                            dynamicFields: data.student.dynamicFields !== undefined ? data.student.dynamicFields : currentCache.dynamicFields,
                             studentStatus: data.student.studentStatus || "in", 
                             outingType: data.student.outingType,
                             isProfileLocked: data.student.isProfileLocked !== undefined ? data.student.isProfileLocked : false

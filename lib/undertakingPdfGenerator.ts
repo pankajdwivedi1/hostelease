@@ -11,6 +11,7 @@
  * - Both sides text justification (flush right margin)
  * - Clean deduplication of hostel title for warden
  * - Crisp vector typography, native print & Save-as-PDF dialog
+ * - Rock-solid mobile & Android app (Capacitor) support with foolproof Close handler & hardware back button support
  */
 
 import { formatDateDDMMYYYY } from "./dateFormat";
@@ -24,21 +25,34 @@ export interface UndertakingPDFData {
   customWindow?: Window | null;
 }
 
-export function generateUndertakingPDF({
-  studentProfile,
-  wardenContactInfo,
-  deanContactInfo,
-  hosteleazeId,
-  tenantLogo,
-  customWindow
-}: UndertakingPDFData): void {
-  const printWindow = customWindow !== undefined ? customWindow : window.open("", "_blank");
-  if (!printWindow) {
-    alert("Popup blocker prevented opening the undertaking document. Please allow popups for Hosteleaze.");
-    return;
-  }
+interface ResolvedUndertakingInfo {
+  resolvedName: string;
+  parentRelation: string;
+  resolvedParent: string;
+  resolvedCollege: string;
+  resolvedBranch: string;
+  resolvedHostel: string;
+  resolvedRoom: string;
+  resolvedEmail: string;
+  resolvedPhone: string;
+  resolvedDate: string;
+  resolvedPlace: string;
+  displayId: string;
+  cleanReg: string;
+  deanName: string;
+  deanDesig: string;
+  deanPhone: string;
+  deanEmail: string;
+  wardenName: string;
+  wardenDisplayDesig: string;
+  wardenPhone: string;
+  resolvedLogo: string;
+  uvwFallbackLogo: string;
+  docFilename: string;
+}
 
-  const p = (studentProfile as any) || {};
+function resolveUndertakingData(data: UndertakingPDFData): ResolvedUndertakingInfo {
+  const p = (data.studentProfile as any) || {};
 
   // Resolve Gender & Parent Relationship
   const rawGender = String(p.gender || p.sex || p.dynamicFields?.gender || p.dynamicFields?.sex || "").trim().toLowerCase();
@@ -85,17 +99,17 @@ export function generateUndertakingPDF({
   const cleanReg = !isGuest 
     ? rawReg.replace(/^hostel[e|a]z?e[\s-_]*id[\s-_]*/i, "").trim() 
     : (isFemale ? "GIRLS-0001" : "BOYS-0001");
-  const displayId = hosteleazeId || `Hosteleaze ID-${cleanReg}`;
+  const displayId = data.hosteleazeId || `Hosteleaze ID-${cleanReg}`;
 
   // Authority Contacts
-  const deanName = deanContactInfo?.name || "Dr. Vijendra Singh";
-  const deanDesig = deanContactInfo?.designation || "Dean Hostel";
-  const deanPhone = deanContactInfo?.phone || "9981414729";
-  const deanEmail = deanContactInfo?.email || "vijendrasinghthakur@oriental.ac.in";
+  const deanName = data.deanContactInfo?.name || "Dr. Vijendra Singh";
+  const deanDesig = data.deanContactInfo?.designation || "Dean Hostel";
+  const deanPhone = data.deanContactInfo?.phone || "9981414729";
+  const deanEmail = data.deanContactInfo?.email || "vijendrasinghthakur@oriental.ac.in";
 
-  const wardenName = wardenContactInfo?.name || "Rahul Yadav";
-  const rawWardenDesig = wardenContactInfo?.designation || "Hostel Warden";
-  const wardenPhone = wardenContactInfo?.phone || "9039761287";
+  const wardenName = data.wardenContactInfo?.name || "Rahul Yadav";
+  const rawWardenDesig = data.wardenContactInfo?.designation || "Hostel Warden";
+  const wardenPhone = data.wardenContactInfo?.phone || "9039761287";
 
   // Clean deduplication for warden designation (avoids "GHB HOSTEL (GHB HOSTEL)")
   let wardenDisplayDesig = rawWardenDesig;
@@ -107,7 +121,7 @@ export function generateUndertakingPDF({
   const origin = typeof window !== "undefined" ? window.location.origin : "";
   const uvwFallbackLogo = `${origin}/uvw_logo.jpg`;
   let tenantLogoCandidate = (
-    tenantLogo ||
+    data.tenantLogo ||
     p.tenantLogo ||
     p.collegeLogo ||
     p.tenant?.logo ||
@@ -155,22 +169,65 @@ export function generateUndertakingPDF({
 
   const docFilename = `Hosteleaze_Undertaking_${resolvedName.replace(/[^a-zA-Z0-9]/g, "_")}_${cleanReg}.pdf`;
 
-  printWindow.document.write(`<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>${docFilename}</title>
-  <style>
+  return {
+    resolvedName,
+    parentRelation,
+    resolvedParent,
+    resolvedCollege,
+    resolvedBranch,
+    resolvedHostel,
+    resolvedRoom,
+    resolvedEmail,
+    resolvedPhone,
+    resolvedDate,
+    resolvedPlace,
+    displayId,
+    cleanReg,
+    deanName,
+    deanDesig,
+    deanPhone,
+    deanEmail,
+    wardenName,
+    wardenDisplayDesig,
+    wardenPhone,
+    resolvedLogo,
+    uvwFallbackLogo,
+    docFilename
+  };
+}
+
+function getUndertakingCssStyles(isScopedOverlay = false): string {
+  const scopePrefix = isScopedOverlay ? "#hosteleaze-undertaking-modal-overlay " : "";
+  const rootSelector = isScopedOverlay ? "#hosteleaze-undertaking-modal-overlay" : "html, body";
+
+  return `
     @page {
       size: A4 portrait;
       margin: 7mm 10mm 7mm 10mm;
     }
-    * {
+    ${isScopedOverlay ? `
+    #hosteleaze-undertaking-modal-overlay {
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      width: 100vw;
+      height: 100vh;
+      z-index: 999999;
+      background: #f1f5f9;
+      overflow-y: auto;
+      -webkit-overflow-scrolling: touch;
+      margin: 0;
+      padding: 0 10px 40px;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+      font-size: 8.2pt;
+      line-height: 1.38;
+      color: #0f172a;
+      -webkit-font-smoothing: antialiased;
       box-sizing: border-box;
-      -webkit-print-color-adjust: exact !important;
-      print-color-adjust: exact !important;
     }
+    ` : `
     html, body {
       margin: 0;
       padding: 0;
@@ -181,17 +238,38 @@ export function generateUndertakingPDF({
       line-height: 1.38;
       -webkit-font-smoothing: antialiased;
     }
+    `}
+    ${scopePrefix}* {
+      box-sizing: border-box;
+      -webkit-print-color-adjust: exact !important;
+      print-color-adjust: exact !important;
+    }
     @media print {
+      ${isScopedOverlay ? `
+      body > *:not(#hosteleaze-undertaking-modal-overlay) {
+        display: none !important;
+      }
+      #hosteleaze-undertaking-modal-overlay {
+        position: static !important;
+        width: 100% !important;
+        height: auto !important;
+        background: #fff !important;
+        padding: 0 !important;
+        margin: 0 !important;
+        overflow: visible !important;
+      }
+      ` : `
       html, body {
         background: #fff !important;
         padding: 0 !important;
         margin: 0 !important;
         height: 100% !important;
       }
-      .no-print {
+      `}
+      ${scopePrefix}.no-print {
         display: none !important;
       }
-      .sheet {
+      ${scopePrefix}.sheet {
         box-shadow: none !important;
         border: none !important;
         padding: 0 !important;
@@ -202,7 +280,7 @@ export function generateUndertakingPDF({
         break-inside: avoid !important;
       }
     }
-    .sheet {
+    ${scopePrefix}.sheet {
       max-width: 790px;
       margin: 16px auto;
       background: #fff;
@@ -213,7 +291,7 @@ export function generateUndertakingPDF({
       page-break-inside: avoid;
       break-inside: avoid;
     }
-    .action-bar {
+    ${scopePrefix}.action-bar {
       max-width: 790px;
       margin: 12px auto 0;
       background: #0f172a;
@@ -226,7 +304,7 @@ export function generateUndertakingPDF({
       gap: 12px;
       box-shadow: 0 4px 12px rgba(15, 23, 42, 0.15);
     }
-    .btn-print {
+    ${scopePrefix}.btn-print {
       background: #2563eb;
       color: #fff;
       border: none;
@@ -242,10 +320,10 @@ export function generateUndertakingPDF({
       gap: 6px;
       transition: background 0.15s;
     }
-    .btn-print:hover {
+    ${scopePrefix}.btn-print:hover {
       background: #1d4ed8;
     }
-    .btn-close {
+    ${scopePrefix}.btn-close {
       background: #334155;
       color: #fff;
       border: none;
@@ -254,11 +332,12 @@ export function generateUndertakingPDF({
       font-weight: 700;
       font-size: 11px;
       cursor: pointer;
+      transition: background 0.15s;
     }
-    .btn-close:hover {
+    ${scopePrefix}.btn-close:hover {
       background: #475569;
     }
-    .header-box {
+    ${scopePrefix}.header-box {
       border-bottom: 2px solid #0f172a;
       padding-bottom: 9px;
       margin-bottom: 10px;
@@ -267,12 +346,12 @@ export function generateUndertakingPDF({
       justify-content: space-between;
       gap: 14px;
     }
-    .header-left {
+    ${scopePrefix}.header-left {
       display: flex;
       align-items: center;
       gap: 12px;
     }
-    .header-logo {
+    ${scopePrefix}.header-logo {
       width: 50px;
       height: 50px;
       object-fit: contain;
@@ -280,7 +359,7 @@ export function generateUndertakingPDF({
       background: #fff;
       box-shadow: 0 1px 4px rgba(0,0,0,0.06);
     }
-    .inst-title {
+    ${scopePrefix}.inst-title {
       font-size: 14pt;
       font-weight: 900;
       color: #0f172a;
@@ -288,7 +367,7 @@ export function generateUndertakingPDF({
       text-transform: uppercase;
       line-height: 1.15;
     }
-    .undertaking-title {
+    ${scopePrefix}.undertaking-title {
       font-size: 10.5pt;
       font-weight: 800;
       color: #1e40af;
@@ -296,13 +375,13 @@ export function generateUndertakingPDF({
       text-transform: uppercase;
       margin-top: 3px;
     }
-    .inst-sub {
+    ${scopePrefix}.inst-sub {
       font-size: 8pt;
       font-weight: 600;
       color: #64748b;
       margin-top: 2px;
     }
-    .badge-verified {
+    ${scopePrefix}.badge-verified {
       background: #ecfdf5;
       border: 1px solid #10b981;
       color: #065f46;
@@ -314,38 +393,38 @@ export function generateUndertakingPDF({
       letter-spacing: 0.5px;
       display: inline-block;
     }
-    .badge-id {
+    ${scopePrefix}.badge-id {
       font-size: 9.5pt;
       font-weight: 900;
       color: #92400e;
       margin-top: 4px;
       letter-spacing: 0.5px;
     }
-    .info-table {
+    ${scopePrefix}.info-table {
       width: 100%;
       border-collapse: collapse;
       margin-bottom: 10px;
       font-size: 8.4pt;
       border: 1px solid #cbd5e1;
     }
-    .info-table td {
+    ${scopePrefix}.info-table td {
       padding: 5px 8px;
       border: 1px solid #e2e8f0;
       vertical-align: middle;
       line-height: 1.35;
     }
-    .info-label {
+    ${scopePrefix}.info-label {
       font-weight: 700;
       color: #475569;
       background: #f8fafc;
       width: 15%;
     }
-    .info-val {
+    ${scopePrefix}.info-val {
       font-weight: 800;
       color: #0f172a;
       width: 35%;
     }
-    .preamble {
+    ${scopePrefix}.preamble {
       font-size: 8.8pt;
       font-weight: 600;
       line-height: 1.45;
@@ -358,26 +437,26 @@ export function generateUndertakingPDF({
       padding: 6px 10px;
       border-radius: 0 4px 4px 0;
     }
-    .rules-list {
+    ${scopePrefix}.rules-list {
       margin: 0 0 10px 0;
       padding-left: 18px;
       font-size: 8.2pt;
       line-height: 1.42;
       color: #334155;
     }
-    .rules-list li {
+    ${scopePrefix}.rules-list li {
       margin-bottom: 5.5px;
       text-align: justify;
       text-justify: inter-word;
     }
-    .decl-box {
+    ${scopePrefix}.decl-box {
       background: #f8fafc;
       border: 1px solid #e2e8f0;
       border-radius: 6px;
       padding: 8px 12px;
       margin-bottom: 10px;
     }
-    .decl-text {
+    ${scopePrefix}.decl-text {
       margin: 0 0 7px 0;
       font-size: 8.2pt;
       line-height: 1.4;
@@ -386,37 +465,37 @@ export function generateUndertakingPDF({
       text-align: justify;
       text-justify: inter-word;
     }
-    .sig-row {
+    ${scopePrefix}.sig-row {
       display: flex;
       justify-content: space-between;
       gap: 14px;
     }
-    .sig-col {
+    ${scopePrefix}.sig-col {
       flex: 1;
       border: 1px dashed #cbd5e1;
       border-radius: 4px;
       padding: 6px 10px;
       background: #fff;
     }
-    .sig-label {
+    ${scopePrefix}.sig-label {
       font-size: 7.2pt;
       font-weight: 700;
       color: #64748b;
       text-transform: uppercase;
       letter-spacing: 0.3px;
     }
-    .sig-name {
+    ${scopePrefix}.sig-name {
       font-size: 10.5pt;
       font-weight: 900;
       color: #1e3a8a;
       font-family: 'Courier New', monospace;
       margin: 3px 0;
     }
-    .sig-sub {
+    ${scopePrefix}.sig-sub {
       font-size: 7.2pt;
       color: #475569;
     }
-    .contacts-box {
+    ${scopePrefix}.contacts-box {
       border: 1.5px solid #2563eb;
       border-radius: 6px;
       padding: 8px 12px;
@@ -427,27 +506,27 @@ export function generateUndertakingPDF({
       gap: 14px;
       margin-bottom: 8px;
     }
-    .contact-col {
+    ${scopePrefix}.contact-col {
       flex: 1;
     }
-    .contact-head {
+    ${scopePrefix}.contact-head {
       font-size: 7.5pt;
       font-weight: 800;
       color: #1e40af;
       text-transform: uppercase;
       letter-spacing: 0.4px;
     }
-    .contact-title {
+    ${scopePrefix}.contact-title {
       font-size: 8.8pt;
       font-weight: 800;
       color: #0f172a;
       margin: 2px 0;
     }
-    .contact-detail {
+    ${scopePrefix}.contact-detail {
       font-size: 8pt;
       color: #1e40af;
     }
-    .footer-bar {
+    ${scopePrefix}.footer-bar {
       border-top: 1px solid #cbd5e1;
       padding-top: 6px;
       display: flex;
@@ -456,17 +535,19 @@ export function generateUndertakingPDF({
       font-size: 7.5pt;
       color: #64748b;
     }
-  </style>
-</head>
-<body>
+  `;
+}
+
+function getUndertakingBodyHtml(info: ResolvedUndertakingInfo): string {
+  return `
   <div class="action-bar no-print">
     <div>
       <strong style="font-size: 13px;">Hosteleaze • Official Hostel Admission Undertaking</strong>
       <div style="font-size: 10.5px; color: #94a3b8;">Formatted for 1-Page A4 PDF • Crisp Vector Text (Print or Save As PDF)</div>
     </div>
     <div style="display: flex; gap: 8px;">
-      <button class="btn-print" onclick="window.print()">🖨️ Print / Save as PDF</button>
-      <button class="btn-close" onclick="window.close()">✕ Close</button>
+      <button class="btn-print" onclick="window.triggerUndertakingPrint ? window.triggerUndertakingPrint() : window.print()">🖨️ Print / Save as PDF</button>
+      <button class="btn-close" onclick="window.closeUndertakingWindow ? window.closeUndertakingWindow() : window.close()">✕ Close</button>
     </div>
   </div>
 
@@ -474,7 +555,7 @@ export function generateUndertakingPDF({
     <!-- Header -->
     <div class="header-box">
       <div class="header-left">
-        <img class="header-logo" src="${resolvedLogo}" alt="College / Hosteleaze Logo" onerror="if (this.src !== '${uvwFallbackLogo}') { this.src = '${uvwFallbackLogo}'; }" />
+        <img class="header-logo" src="${info.resolvedLogo}" alt="College / Hosteleaze Logo" onerror="if (this.src !== '${info.uvwFallbackLogo}') { this.src = '${info.uvwFallbackLogo}'; }" />
         <div>
           <div class="inst-title">ORIENTAL GROUP OF INSTITUTES, BHOPAL</div>
           <div class="undertaking-title">HOSTEL ADMISSION & DISCIPLINARY UNDERTAKING</div>
@@ -483,7 +564,7 @@ export function generateUndertakingPDF({
       </div>
       <div style="text-align: right; flex-shrink: 0;">
         <div class="badge-verified">✓ Digitally Accepted</div>
-        <div class="badge-id">${displayId}</div>
+        <div class="badge-id">${info.displayId}</div>
       </div>
     </div>
 
@@ -492,28 +573,28 @@ export function generateUndertakingPDF({
       <tbody>
         <tr>
           <td class="info-label">Student Name:</td>
-          <td class="info-val">${resolvedName}</td>
-          <td class="info-label">${parentRelation} Parent:</td>
-          <td class="info-val">${resolvedParent}</td>
+          <td class="info-val">${info.resolvedName}</td>
+          <td class="info-label">${info.parentRelation} Parent:</td>
+          <td class="info-val">${info.resolvedParent}</td>
         </tr>
         <tr>
           <td class="info-label">Hostel & Room:</td>
-          <td class="info-val">${resolvedHostel} (Room #${resolvedRoom})</td>
+          <td class="info-val">${info.resolvedHostel} (Room #${info.resolvedRoom})</td>
           <td class="info-label">College / Branch:</td>
-          <td class="info-val">${resolvedCollege} ${resolvedBranch ? '• ' + resolvedBranch : ''}</td>
+          <td class="info-val">${info.resolvedCollege} ${info.resolvedBranch ? '• ' + info.resolvedBranch : ''}</td>
         </tr>
         <tr>
           <td class="info-label">Contact:</td>
-          <td class="info-val">Mob: <strong>${resolvedPhone}</strong> • ${resolvedEmail}</td>
+          <td class="info-val">Mob: <strong>${info.resolvedPhone}</strong> • ${info.resolvedEmail}</td>
           <td class="info-label">Date & Place:</td>
-          <td class="info-val"><strong>${resolvedDate}</strong> • Place: ${resolvedPlace}</td>
+          <td class="info-val"><strong>${info.resolvedDate}</strong> • Place: ${info.resolvedPlace}</td>
         </tr>
       </tbody>
     </table>
 
     <!-- Preamble -->
     <div class="preamble">
-      I, <strong>${resolvedName}</strong>, ${parentRelation} <strong>${resolvedParent}</strong>, student of <strong>${resolvedCollege}</strong> (Email: ${resolvedEmail}, Mobile: ${resolvedPhone}), hereby undertake that I shall abide by the following terms and conditions governing my stay in the hostel:
+      I, <strong>${info.resolvedName}</strong>, ${info.parentRelation} <strong>${info.resolvedParent}</strong>, student of <strong>${info.resolvedCollege}</strong> (Email: ${info.resolvedEmail}, Mobile: ${info.resolvedPhone}), hereby undertake that I shall abide by the following terms and conditions governing my stay in the hostel:
     </div>
 
     <!-- The 16 Clauses (Numbered, Spacious & Justified) -->
@@ -544,13 +625,13 @@ export function generateUndertakingPDF({
       <div class="sig-row">
         <div class="sig-col">
           <div class="sig-label">Student Digital Signature</div>
-          <div class="sig-name">✓ ${resolvedName}</div>
-          <div class="sig-sub">Date: <strong>${resolvedDate}</strong> • Place: ${resolvedPlace}</div>
+          <div class="sig-name">✓ ${info.resolvedName}</div>
+          <div class="sig-sub">Date: <strong>${info.resolvedDate}</strong> • Place: ${info.resolvedPlace}</div>
         </div>
         <div class="sig-col">
           <div class="sig-label">Parent / Guardian Certification</div>
-          <div class="sig-name">✓ ${resolvedParent}</div>
-          <div class="sig-sub">Certified: Ward will abide by hostel terms • Date: <strong>${resolvedDate}</strong></div>
+          <div class="sig-name">✓ ${info.resolvedParent}</div>
+          <div class="sig-sub">Certified: Ward will abide by hostel terms • Date: <strong>${info.resolvedDate}</strong></div>
         </div>
       </div>
     </div>
@@ -559,42 +640,251 @@ export function generateUndertakingPDF({
     <div class="contacts-box">
       <div class="contact-col">
         <div class="contact-head">Hostel Administration & Grievances</div>
-        <div class="contact-title">${deanName} (${deanDesig})</div>
-        <div class="contact-detail">Mob: <strong>${deanPhone}</strong> • Email: ${deanEmail}</div>
+        <div class="contact-title">${info.deanName} (${info.deanDesig})</div>
+        <div class="contact-detail">Mob: <strong>${info.deanPhone}</strong> • Email: ${info.deanEmail}</div>
       </div>
       <div class="contact-col" style="border-left: 1px solid #bfdbfe; padding-left: 14px;">
         <div class="contact-head">Respective Hostel Warden</div>
-        <div class="contact-title">${wardenName} - ${wardenDisplayDesig}</div>
-        <div class="contact-detail">Mob: <strong>${wardenPhone}</strong></div>
+        <div class="contact-title">${info.wardenName} - ${info.wardenDisplayDesig}</div>
+        <div class="contact-detail">Mob: <strong>${info.wardenPhone}</strong></div>
       </div>
     </div>
 
     <!-- Footer -->
     <div class="footer-bar">
       <div>Certified Computer-Generated Record • <strong>Hosteleaze Smart Campus Platform</strong></div>
-      <div>Document ID: <strong>${displayId}</strong> • Legally Binding Onboarding Archive</div>
+      <div>Document ID: <strong>${info.displayId}</strong> • Legally Binding Onboarding Archive</div>
     </div>
   </div>
+  `;
+}
+
+/**
+ * Builds standalone HTML document for new tabs or iframes
+ */
+export function buildUndertakingHtml(data: UndertakingPDFData): { html: string; filename: string } {
+  const info = resolveUndertakingData(data);
+  const css = getUndertakingCssStyles(false);
+  const bodyHtml = getUndertakingBodyHtml(info);
+
+  const html = `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>${info.docFilename}</title>
+  <style>
+    ${css}
+  </style>
+</head>
+<body>
+  ${bodyHtml}
 
   <script>
-    function triggerPrint() {
-      setTimeout(() => {
-        try {
-          window.focus();
-          window.print();
-        } catch (e) {
-          console.error(e);
+    function closeUndertakingWindow() {
+      // 1. Post message to parent if opened in iframe/web context
+      try {
+        if (window.parent && window.parent !== window) {
+          window.parent.postMessage({ type: 'HOSTEL_EAZE_CLOSE_UNDERTAKING' }, '*');
         }
-      }, 400);
+      } catch (e) {}
+
+      // 2. Try window.close() (works in tabs opened via script)
+      try {
+        window.close();
+      } catch (e) {}
+
+      // 3. Fallback for Android WebView / mobile when window.close() is blocked
+      setTimeout(function() {
+        if (!window.closed) {
+          if (window.history && window.history.length > 1) {
+            window.history.back();
+          } else {
+            window.location.href = '/student';
+          }
+        }
+      }, 120);
     }
-    if (document.readyState === 'complete' || document.readyState === 'interactive') {
-      triggerPrint();
-    } else {
-      window.addEventListener('load', triggerPrint);
+    window.closeUndertakingWindow = closeUndertakingWindow;
+
+    function triggerUndertakingPrint() {
+      try {
+        window.print();
+      } catch (e) {
+        console.error(e);
+      }
     }
+    window.triggerUndertakingPrint = triggerUndertakingPrint;
+
+    // Auto-trigger print on standalone new tabs after rendering
+    setTimeout(() => {
+      try {
+        window.focus();
+        window.print();
+      } catch (e) {
+        console.error(e);
+      }
+    }, 450);
   </script>
 </body>
-</html>`);
+</html>`;
 
+  return { html, filename: info.docFilename };
+}
+
+/**
+ * Renders an in-app full-screen preview overlay directly in the DOM.
+ * This completely avoids document.write wiping out the React app on Android APK / Capacitor WebViews,
+ * guarantees that clicking "Close" immediately dismisses the view without reload,
+ * and seamlessly intercepts the Android hardware / swipe Back button.
+ */
+function renderInAppUndertakingOverlay(info: ResolvedUndertakingInfo): void {
+  if (typeof document === "undefined") return;
+
+  // Clean up any existing overlay
+  const existingOverlay = document.getElementById("hosteleaze-undertaking-modal-overlay");
+  if (existingOverlay) existingOverlay.remove();
+  const existingStyle = document.getElementById("hosteleaze-undertaking-modal-styles");
+  if (existingStyle) existingStyle.remove();
+
+  // Create style element for scoped styles & print media rules
+  const styleEl = document.createElement("style");
+  styleEl.id = "hosteleaze-undertaking-modal-styles";
+  styleEl.innerHTML = getUndertakingCssStyles(true);
+  document.head.appendChild(styleEl);
+
+  // Create overlay container
+  const overlay = document.createElement("div");
+  overlay.id = "hosteleaze-undertaking-modal-overlay";
+  overlay.setAttribute("role", "dialog");
+  overlay.setAttribute("aria-modal", "true");
+  overlay.innerHTML = getUndertakingBodyHtml(info);
+
+  // Cleanup helper
+  let isClosed = false;
+  const closeOverlay = () => {
+    if (isClosed) return;
+    isClosed = true;
+
+    window.removeEventListener("popstate", handlePopState);
+    window.removeEventListener("message", handleMessage);
+
+    if (overlay.parentNode) {
+      overlay.parentNode.removeChild(overlay);
+    }
+    if (styleEl.parentNode) {
+      styleEl.parentNode.removeChild(styleEl);
+    }
+
+    document.body.style.overflow = "";
+
+    // Clear history entry if was pushed
+    try {
+      if (window.history.state?.hosteleazeUndertakingModal) {
+        window.history.back();
+      }
+    } catch (e) {}
+  };
+
+  const handlePopState = () => {
+    closeOverlay();
+  };
+
+  const handleMessage = (event: MessageEvent) => {
+    if (
+      event.data &&
+      (event.data.type === "HOSTEL_EAZE_CLOSE_UNDERTAKING" || event.data === "HOSTEL_EAZE_CLOSE_UNDERTAKING")
+    ) {
+      closeOverlay();
+    }
+  };
+
+  // Push history state so Android hardware back button cleanly closes this overlay instead of exiting the app
+  try {
+    window.history.pushState({ hosteleazeUndertakingModal: true }, "");
+    window.addEventListener("popstate", handlePopState, { once: true });
+  } catch (e) {}
+
+  window.addEventListener("message", handleMessage);
+
+  // Attach direct DOM event handlers
+  const closeBtn = overlay.querySelector(".btn-close");
+  if (closeBtn) {
+    (closeBtn as HTMLElement).onclick = (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      closeOverlay();
+    };
+  }
+
+  const printBtn = overlay.querySelector(".btn-print");
+  if (printBtn) {
+    (printBtn as HTMLElement).onclick = (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      try {
+        window.print();
+      } catch (err) {
+        console.error("Print error:", err);
+      }
+    };
+  }
+
+  // Prevent background scrolling while overlay is open
+  document.body.style.overflow = "hidden";
+  document.body.appendChild(overlay);
+}
+
+/**
+ * Main Undertaking PDF Generator entry point
+ */
+export function generateUndertakingPDF(data: UndertakingPDFData): void {
+  if (typeof window === "undefined") return;
+
+  const info = resolveUndertakingData(data);
+
+  // Detect native Android / Capacitor / mobile WebView environment
+  const isNativeApp = Boolean(
+    (window as any).Capacitor?.isNativePlatform?.() ||
+    (window as any).Capacitor?.getPlatform?.() === "android" ||
+    (window as any).Capacitor?.getPlatform?.() === "ios" ||
+    /Android|iPhone|iPad|iPod/i.test(navigator.userAgent)
+  );
+
+  // 1. If caller provided an explicit customWindow, write to it
+  if (data.customWindow !== undefined && data.customWindow !== null) {
+    const { html } = buildUndertakingHtml(data);
+    data.customWindow.document.write(html);
+    data.customWindow.document.close();
+    return;
+  }
+
+  // 2. On Native Mobile (Capacitor APK) & mobile devices:
+  // Render the in-app full-screen overlay directly.
+  // This prevents window.open returning the current window and destroying the React DOM with document.write.
+  if (isNativeApp) {
+    renderInAppUndertakingOverlay(info);
+    return;
+  }
+
+  // 3. On Desktop Web / PWA:
+  // Attempt to open in a new standalone tab
+  let printWindow: Window | null = null;
+  try {
+    printWindow = window.open("", "_blank");
+  } catch (e) {
+    printWindow = null;
+  }
+
+  // If window.open was blocked by popup blocker OR returned current window
+  if (!printWindow || printWindow === window) {
+    // Seamlessly fall back to the in-app overlay instead of blocking or destroying the app
+    renderInAppUndertakingOverlay(info);
+    return;
+  }
+
+  // Otherwise, write into the newly spawned tab
+  const { html } = buildUndertakingHtml(data);
+  printWindow.document.write(html);
   printWindow.document.close();
 }

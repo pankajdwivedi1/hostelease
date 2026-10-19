@@ -67,6 +67,12 @@ export async function POST(req: NextRequest) {
 
         // Explicitly clear the enforcement retake flag upon successful capture
         dynamicFields.requiresFaceRecapture = false;
+        if (dynamicFields.dynamicFields && typeof dynamicFields.dynamicFields === 'object') {
+            dynamicFields.dynamicFields = {
+                ...dynamicFields.dynamicFields,
+                requiresFaceRecapture: false
+            };
+        }
 
         let finalProfilePicture = profilePicture;
         if (profilePicture && (profilePicture.startsWith("data:image/") || profilePicture.startsWith("data:"))) {
@@ -88,6 +94,7 @@ export async function POST(req: NextRequest) {
             profilePicture: finalProfilePicture,
             faceDescriptor,
             dynamicFields,
+            updatedAt: new Date().toISOString(),
             firebaseUid: (student as any).firebaseUid || student.firebaseUID || firebaseUID,
             email: student.email,
             phoneNumber: student.phoneNumber
