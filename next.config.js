@@ -93,6 +93,14 @@ const nextConfig = {
     },
 
     reactStrictMode: true,
+    async rewrites() {
+        return [
+            {
+                source: '/__/auth/:path*',
+                destination: 'https://hostelease-81056.firebaseapp.com/__/auth/:path*',
+            },
+        ];
+    },
     async headers() {
         return [
             {
