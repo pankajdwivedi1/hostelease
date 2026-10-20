@@ -2945,7 +2945,7 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
                         await GoogleAuth.initialize({
                             clientId: '729813273338-btdk8vrja4u1eqmba6hdi3cicp0d4n4h.apps.googleusercontent.com',
                             scopes: ['profile', 'email'],
-                            grantOfflineAccess: true,
+                            grantOfflineAccess: false,
                         });
                     } catch (initErr) {
                         console.warn("GoogleAuth init before signOut:", initErr);

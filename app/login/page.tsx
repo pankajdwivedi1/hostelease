@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { useState, useEffect } from "react";
 
@@ -213,7 +213,7 @@ function LoginForm() {
 
                   scopes: ["profile", "email"],
 
-                  grantOfflineAccess: true,
+                  grantOfflineAccess: false,
                 });
               } catch (e) {}
 
@@ -786,7 +786,7 @@ function LoginForm() {
 
               scopes: ["profile", "email"],
 
-              grantOfflineAccess: true,
+              grantOfflineAccess: false,
             });
           } catch (initErr) {
             console.warn("GoogleAuth init notice:", initErr);
