@@ -10098,57 +10098,29 @@ export default function AdminDashboard({
                                 ) : (
                                   (showAllEntryLogs ? filteredAttendanceLogs : filteredAttendanceLogs.slice(0, 10)).map((log, idx) => (
                                     <tr key={log._id || log.id || `log-${idx}-${typeof log.studentId === 'object' ? (log.studentId?._id || log.studentId?.id) : log.studentId}`} className="hover:bg-filler/50 transition-colors">
-                                      <td className="px-2 md:px-4 py-3">
+                                      <td className="px-2 md:px-4 py-1.5 md:py-2.5">
                                         <div className="flex flex-col min-w-0">
                                           <span className="font-bold text-gray-900 text-[9px] md:text-[13px] uppercase truncate tracking-tight">{log.name || log.studentId?.name || "Unknown"}</span>
                                           <div className="md:hidden flex flex-col mt-0.5">
                                             <span className="text-[8px] font-bold uppercase truncate text-gray-400">
                                               {(() => { const student = students.find(s => s.id === (typeof log.studentId === 'string' ? log.studentId : (log.studentId?._id || log.studentId?.id))); const erp = student?.erpInformation || student?.erpId || (typeof log.studentId === 'object' ? (log.studentId?.erpInformation || log.studentId?.erpId) : null) || log.erpId || log.erpInformation; return erp ? `${erp} • ` : ''; })()}{log.hostelName || log.studentId?.hostelName || "N/A"} - {log.roomNumber || log.studentId?.roomNumber || "N/A"}
                                             </span>
-                                            <div className="flex items-center gap-1.5 mt-0.5">
-                                              {((typeof log.faceMatchPercentage === 'number' && log.faceMatchPercentage !== null) || log.markedBy || log.deviceId) ? (
-                                                <span
-                                                  onClick={(e) => {
-                                                    e.stopPropagation();
-                                                    if (log.faceMatchStatus === 'flagged') setReviewingLog(log);
-                                                  }}
-                                                  className={`text-[8px] font-bold uppercase truncate rounded-sm w-fit ${log.faceMatchStatus === 'flagged' ? 'bg-red-50 text-red-600 animate-pulse cursor-pointer px-1' :
-                                                    log.faceMatchStatus === 'manual-override' ? 'bg-amber-50 text-amber-600 px-1' : 'text-blue-500'
-                                                    }`}
-                                                >
-                                                  {typeof log.faceMatchPercentage === 'number' && log.faceMatchPercentage !== null ? `${log.faceMatchPercentage}% Match ${log.faceMatchStatus === 'flagged' ? '🚩' : ''}` : ''}
-                                                  {log.markedBy ? `${(typeof log.faceMatchPercentage === 'number' && log.faceMatchPercentage !== null) ? ' • ' : ''}Marked by ${log.markedBy}` : (typeof log.faceMatchPercentage !== 'number' || log.faceMatchPercentage === null) && (log.deviceId === 'marked-by-dean' || (log.deviceId === 'admin-override' && !isWarden)) ? `Marked by DEAN` : (typeof log.faceMatchPercentage !== 'number' || log.faceMatchPercentage === null) && (log.deviceId === 'marked-by-warden' || (log.deviceId === 'admin-override' && isWarden)) ? `Marked by WARDEN` : ''}
-                                                </span>
-                                              ) : null}
-                                              <button
-                                                onClick={(e) => {
-                                                  e.stopPropagation();
-                                                  handleUnmarkAttendance(log._id, typeof log.studentId === 'string' ? log.studentId : (log.studentId?._id || log.student_id || ""));
-                                                }}
-                                                className="w-4 h-4 flex items-center justify-center bg-red-50 text-red-500 rounded-full hover:bg-red-100 active:bg-red-200 transition-colors flex-shrink-0"
-                                                title="Unmark / Mark Absent"
-                                              >
-                                                <svg className="w-2.5 h-2.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M6 18L18 6M6 6l12 12" />
-                                                </svg>
-                                              </button>
-                                            </div>
                                           </div>
                                         </div>
                                       </td>
-                                      <td className="px-2 md:px-4 py-3 text-secondary text-[9px] md:text-xs truncate font-mono font-bold hidden md:table-cell">
+                                      <td className="px-2 md:px-4 py-1.5 md:py-2.5 text-secondary text-[9px] md:text-xs truncate font-mono font-bold hidden md:table-cell">
                                         {(() => {
                                             const student = students.find(s => s.id === (typeof log.studentId === 'string' ? log.studentId : (log.studentId?._id || log.studentId?.id)));
                                             return student?.erpInformation || student?.erpId || (typeof log.studentId === 'object' ? (log.studentId?.erpInformation || log.studentId?.erpId) : null) || log.erpId || log.erpInformation || "N/A";
                                         })()}
                                       </td>
-                                      <td className="px-2 md:px-4 py-3 text-secondary text-[9px] md:text-xs truncate hidden md:table-cell">
+                                      <td className="px-2 md:px-4 py-1.5 md:py-2.5 text-secondary text-[9px] md:text-xs truncate hidden md:table-cell">
                                         {log.hostelName || log.studentId?.hostelName || "N/A"} - {log.roomNumber || log.studentId?.roomNumber || "N/A"}
                                       </td>
-                                      <td className="px-1 md:px-4 py-2 md:py-3 text-center">
+                                      <td className="px-1 md:px-4 py-1.5 md:py-2.5 text-center">
                                         <span className="inline-block px-1.5 py-0.5 bg-blue-50 text-blue-700 rounded-md font-black text-[9px] md:text-xs whitespace-nowrap">{log.istTime}</span>
                                       </td>
-                                      <td className="px-1 md:px-4 py-2 md:py-3 text-center hidden md:table-cell">
+                                      <td className="px-1 md:px-4 py-1.5 md:py-2.5 text-center hidden md:table-cell">
                                         <div className="flex items-center justify-center gap-2">
                                           {typeof log.faceMatchPercentage === 'number' && log.faceMatchPercentage !== null ? (
                                             <button
@@ -10177,8 +10149,38 @@ export default function AdminDashboard({
                                           </button>
                                         </div>
                                       </td>
-                                      <td className="px-2 md:px-4 py-3 text-right">
+                                      <td className="px-2 md:px-4 py-1.5 md:py-2.5 text-right">
                                         <div className="flex flex-col items-end gap-0.5">
+                                          {/* Mobile View: Face Match % and Unmark button right above GPS / WiFi */}
+                                          <div className="md:hidden flex items-center justify-end gap-1 mb-0.5">
+                                            {((typeof log.faceMatchPercentage === 'number' && log.faceMatchPercentage !== null) || log.markedBy || log.deviceId) ? (
+                                              <span
+                                                onClick={(e) => {
+                                                  e.stopPropagation();
+                                                  if (log.faceMatchStatus === 'flagged') setReviewingLog(log);
+                                                }}
+                                                className={`text-[8px] font-bold uppercase truncate rounded-sm w-fit ${log.faceMatchStatus === 'flagged' ? 'bg-red-50 text-red-600 animate-pulse cursor-pointer px-1' :
+                                                  log.faceMatchStatus === 'manual-override' ? 'bg-amber-50 text-amber-600 px-1' : 'text-blue-500'
+                                                  }`}
+                                              >
+                                                {typeof log.faceMatchPercentage === 'number' && log.faceMatchPercentage !== null ? `${log.faceMatchPercentage}% Match ${log.faceMatchStatus === 'flagged' ? '🚩' : ''}` : ''}
+                                                {log.markedBy ? `${(typeof log.faceMatchPercentage === 'number' && log.faceMatchPercentage !== null) ? ' • ' : ''}Marked by ${log.markedBy}` : (typeof log.faceMatchPercentage !== 'number' || log.faceMatchPercentage === null) && (log.deviceId === 'marked-by-dean' || (log.deviceId === 'admin-override' && !isWarden)) ? `DEAN` : (typeof log.faceMatchPercentage !== 'number' || log.faceMatchPercentage === null) && (log.deviceId === 'marked-by-warden' || (log.deviceId === 'admin-override' && isWarden)) ? `WARDEN` : ''}
+                                              </span>
+                                            ) : null}
+                                            <button
+                                              onClick={(e) => {
+                                                e.stopPropagation();
+                                                handleUnmarkAttendance(log._id, typeof log.studentId === 'string' ? log.studentId : (log.studentId?._id || log.student_id || ""));
+                                              }}
+                                              className="w-3.5 h-3.5 flex items-center justify-center bg-red-50 text-red-500 rounded-full hover:bg-red-100 active:bg-red-200 transition-colors flex-shrink-0"
+                                              title="Unmark / Mark Absent"
+                                            >
+                                              <svg className="w-2 h-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M6 18L18 6M6 6l12 12" />
+                                              </svg>
+                                            </button>
+                                          </div>
+
                                           {(() => {
                                             const isAuthorityMarked = Boolean(
                                               log.markedBy || 
