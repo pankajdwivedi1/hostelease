@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { useState, useEffect, useMemo, useRef, useCallback } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
@@ -22,6 +22,11 @@ import { getInstallationId } from "@/lib/installationId";
 import LiveFaceCaptureModal from "./LiveFaceCaptureModal";
 import { formatToDDMMYYYY, formatDateDDMMYYYY, formatDateTimeDDMMYYYY } from "@/lib/dateFormat";
 import { generateUndertakingPDF } from "@/lib/undertakingPdfGenerator";
+import {
+    getHardwareGpsLocation,
+    getHardwareWifiInfo,
+    isAndroidNativeApp,
+} from "@/lib/hardwarePlugin";
 
 interface Permission {
     _id: string;
@@ -1859,6 +1864,27 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
                 // 3. History Sync
                 if (fetchStudentHistoryData) {
                     syncPromises.push(fetchStudentHistoryData());
+                }
+
+                // 4. ⚡ Attendance Delta Sync (manual pull only — only fetches if status changed)
+                if (isManualPull) {
+                    syncPromises.push(
+                        fetch(`/api/students/attendance?studentId=${encodeURIComponent(currentStudentId)}${getTenantParam(false)}&_t=${Date.now()}`, {
+                            cache: 'no-store',
+                            headers: { 'Cache-Control': 'no-cache, no-store', 'Pragma': 'no-cache' }
+                        })
+                            .then(r => (r.ok ? r.json() : null))
+                            .then(attData => {
+                                if (!attData) return;
+                                // Update attendance marked state (handles both marked→unmarked and unmarked→marked)
+                                setIsAttendanceMarked(!!attData.marked);
+                                // Update window times if changed
+                                if (attData.startTime && attData.endTime) {
+                                    setAttendanceWindow({ start: attData.startTime, end: attData.endTime });
+                                }
+                            })
+                            .catch(err => console.warn("Attendance delta sync error:", err))
+                    );
                 }
             }
 
@@ -3887,6 +3913,38 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
             );
         };
 
+        // ⚡ NATIVE HARDWARE FAST-LANE (Android APK):
+        // Directly calls physical GPS satellite hardware + Anti-Mock verification (<100ms)
+        if (isAndroidNativeApp()) {
+            getHardwareGpsLocation().then((nativeGps) => {
+                if (isCompleted) return;
+                if (nativeGps.isMock) {
+                    isCompleted = true;
+                    if (watchId !== null) navigator.geolocation.clearWatch(watchId);
+                    if (optimizationTimer !== null) clearTimeout(optimizationTimer);
+                    setIsLocationChecking(false);
+                    setGpsLockStatus('error');
+                    showToast("🚫 Fake GPS / Mock Location detected! Attendance is blocked.", "error");
+                    return;
+                }
+                if (nativeGps.success && nativeGps.latitude && nativeGps.longitude) {
+                    console.log("⚡ [Native Hardware GPS] Acquired in <100ms:", nativeGps);
+                    finish({
+                        coords: {
+                            latitude: nativeGps.latitude,
+                            longitude: nativeGps.longitude,
+                            accuracy: nativeGps.accuracy || 10,
+                            altitude: nativeGps.altitude || null,
+                            altitudeAccuracy: null,
+                            heading: null,
+                            speed: nativeGps.speed || null
+                        },
+                        timestamp: nativeGps.time || Date.now()
+                    } as GeolocationPosition);
+                }
+            }).catch(() => {});
+        }
+
         // 1. Primary: High Accuracy GPS
         console.log("🚀 Starting GPS Lock (High Accuracy)...");
 
@@ -4487,6 +4545,14 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
             const accuracy = verifiedCoordsRef.current?.accuracy || 10;
 
             // Step: Saving to Database (Instant 0ms persistence)
+            // ⚡ Native Hardware BSSID check:
+            let nativeHardwareBssid = "";
+            if (isAndroidNativeApp()) {
+                try {
+                    const hwWifi = await getHardwareWifiInfo();
+                    if (hwWifi?.bssid) nativeHardwareBssid = hwWifi.bssid;
+                } catch (e) {}
+            }
             setAttendanceStep('saving');
 
                 const response = await fetch("/api/students/attendance", {
@@ -4502,7 +4568,7 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
                         lng: longitude,
                         accuracy: accuracy,
                         deviceId: deviceId,
-                        wifiBSSID: isOnCampusWifi === true ? "CAMPUS_WIFI_CONNECTED" : "",
+                        wifiBSSID: nativeHardwareBssid || (isOnCampusWifi === true ? "CAMPUS_WIFI_CONNECTED" : ""),
                         verificationMethod: isOnCampusWifi === true ? "wifi" : "gps",
                         verifiedBy: isOnCampusWifi === true ? "wifi" : "gps",
                         isWifiVerified: isOnCampusWifi === true,
