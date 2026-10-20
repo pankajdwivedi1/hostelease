@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import { useState, useEffect, useMemo, useRef, useCallback } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
@@ -3909,7 +3909,7 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
                         }
                     }
                 },
-                { enableHighAccuracy: false, timeout: 5000, maximumAge: 0 }
+                { enableHighAccuracy: false, timeout: 4000, maximumAge: 10000 }
             );
         };
 
@@ -3918,7 +3918,7 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
         // 1. Primary: High Accuracy GPS
         console.log("🚀 Starting GPS Lock (High Accuracy)...");
 
-        // SAFETY TIMEOUT: Force a decision after 6 seconds (User wants < 8s)
+        // SAFETY TIMEOUT: Force a decision after 10 seconds (User requested maximum 10s limit)
         const masterTimeout = setTimeout(() => {
             if (!isCompleted) {
                 if (bestPosition) {
@@ -3928,7 +3928,7 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
                     tryWifiFallback();
                 }
             }
-        }, 6000);
+        }, 10000);
 
         watchId = navigator.geolocation.watchPosition(
             (position) => {
@@ -3969,7 +3969,7 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
                     alert("Location permission denied. Please enable location permissions.");
                 }
             },
-            { enableHighAccuracy: true, timeout: 5000, maximumAge: 0 }
+            { enableHighAccuracy: true, timeout: 10000, maximumAge: 10000 }
         );
     };
 
