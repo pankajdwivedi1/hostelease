@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import React, { useState, useEffect, useMemo, useRef, useCallback, startTransition } from "react";
 import { useRouter } from "next/navigation";
@@ -14733,16 +14733,16 @@ export default function AdminDashboard({
                                 </div>
 
                                 {/* Weekday Row (Sun to Sat) */}
-                                <div className="grid grid-cols-7 gap-1 sm:gap-1.5 text-center text-[10px] font-black text-slate-400 mb-1">
+                                <div className="grid grid-cols-7 gap-x-1 gap-y-0.5 sm:gap-1.5 text-center text-[9px] sm:text-[10px] font-black text-slate-400 mb-0.5 sm:mb-1">
                                   {["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].map(day => (
                                     <div key={day} className="py-0.5 tracking-wider uppercase">{day}</div>
                                   ))}
                                 </div>
 
                                 {/* Month Days Grid: Yellow Highlighted Days for Outings */}
-                                <div className="grid grid-cols-7 gap-1 sm:gap-1.5">
+                                <div className="grid grid-cols-7 gap-x-1 gap-y-0.5 sm:gap-1.5">
                                   {prevMonthDays.map(d => (
-                                    <div key={`prev-${d}`} className="h-9 sm:h-10 rounded-lg flex items-center justify-center text-xs text-slate-300/80 font-medium select-none">
+                                    <div key={`prev-${d}`} className="h-6 sm:h-8.5 rounded-md sm:rounded-lg flex items-center justify-center text-[9.5px] sm:text-xs text-slate-300/80 font-medium select-none">
                                       {d}
                                     </div>
                                   ))}
@@ -14758,7 +14758,7 @@ export default function AdminDashboard({
                                           setSelectedGatePassDate(dateKey);
                                           setShowMonthOutings(false);
                                         }}
-                                        className={`relative h-9 sm:h-10 rounded-lg flex flex-col items-center justify-center transition-all cursor-pointer select-none text-xs ${
+                                        className={`relative h-6 sm:h-8.5 rounded-md sm:rounded-lg flex flex-col items-center justify-center transition-all cursor-pointer select-none text-[9.5px] sm:text-xs ${
                                           isSelected
                                             ? hasOutings
                                               ? "bg-amber-400 text-amber-950 font-black ring-2 ring-indigo-600 ring-offset-1 shadow-md scale-[1.05]"
@@ -14787,7 +14787,7 @@ export default function AdminDashboard({
                                     );
                                   })}
                                   {nextMonthDays.map(d => (
-                                    <div key={`next-${d}`} className="h-9 sm:h-10 rounded-lg flex items-center justify-center text-xs text-slate-300/80 font-medium select-none">
+                                    <div key={`next-${d}`} className="h-6 sm:h-8.5 rounded-md sm:rounded-lg flex items-center justify-center text-[9.5px] sm:text-xs text-slate-300/80 font-medium select-none">
                                       {d}
                                     </div>
                                   ))}
@@ -15238,16 +15238,16 @@ export default function AdminDashboard({
                                 </div>
 
                                 {/* Weekday Row (Sun to Sat) */}
-                                <div className="grid grid-cols-7 gap-1 sm:gap-1.5 text-center text-[8.5px] sm:text-[10px] font-black text-slate-400 mb-1">
+                                <div className="grid grid-cols-7 gap-x-1 gap-y-0.5 sm:gap-1.5 text-center text-[8.5px] sm:text-[10px] font-black text-slate-400 mb-0.5 sm:mb-1">
                                   {["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].map(day => (
                                     <div key={day} className="py-0.5 tracking-wider uppercase">{day}</div>
                                   ))}
                                 </div>
 
                                 {/* Month Days Grid: Color-coded for Attendance Status */}
-                                <div className="grid grid-cols-7 gap-1 sm:gap-1.5">
+                                <div className="grid grid-cols-7 gap-x-1 gap-y-0.5 sm:gap-1.5">
                                   {prevMonthDays.map(d => (
-                                    <div key={`prev-att-${d}`} className="h-7.5 sm:h-9.5 rounded-md sm:rounded-lg flex items-center justify-center text-[9.5px] sm:text-xs text-slate-300/80 font-medium select-none">
+                                    <div key={`prev-att-${d}`} className="h-6 sm:h-8.5 rounded-md sm:rounded-lg flex items-center justify-center text-[9px] sm:text-xs text-slate-300/80 font-medium select-none">
                                       {d}
                                     </div>
                                   ))}
@@ -15266,7 +15266,7 @@ export default function AdminDashboard({
                                           setSelectedAttendanceDate(dateKey);
                                           setShowMonthAttendance(false);
                                         }}
-                                        className={`relative h-7.5 sm:h-9.5 rounded-md sm:rounded-lg flex flex-col items-center justify-center transition-all cursor-pointer select-none text-[9.5px] sm:text-xs ${
+                                        className={`relative h-6 sm:h-8.5 rounded-md sm:rounded-lg flex flex-col items-center justify-center transition-all cursor-pointer select-none text-[9px] sm:text-xs ${
                                           isSelected
                                             ? isPresent
                                               ? "bg-emerald-500 text-white font-black ring-2 ring-emerald-600 ring-offset-1 shadow-md scale-[1.05]"
@@ -15313,7 +15313,7 @@ export default function AdminDashboard({
                                     );
                                   })}
                                   {nextMonthDays.map(d => (
-                                    <div key={`next-att-${d}`} className="h-7.5 sm:h-9.5 rounded-md sm:rounded-lg flex items-center justify-center text-[9.5px] sm:text-xs text-slate-300/80 font-medium select-none">
+                                    <div key={`next-att-${d}`} className="h-6 sm:h-8.5 rounded-md sm:rounded-lg flex items-center justify-center text-[9px] sm:text-xs text-slate-300/80 font-medium select-none">
                                       {d}
                                     </div>
                                   ))}
