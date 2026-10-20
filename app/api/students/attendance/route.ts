@@ -270,13 +270,13 @@ export async function POST(request: NextRequest) {
 
         // ⚡ NEW: WiFi BSSID Verification (Primary Method - FAST!)
         let isLocationVerified = body.isLocationVerified === true;
-        let verifiedBy = isLocationVerified ? 'wifi' : '';
+        let verifiedBy = (body.verificationMethod === 'gps' || body.verifiedBy === 'gps' || (lat && lng && lat !== 0 && body.isWifiVerified !== true)) ? 'gps' : (isLocationVerified ? 'wifi' : '');
 
         if (isTester) {
             isLocationVerified = true;
             verifiedBy = 'wifi';
             console.log(`✅ Tester Account Location Bypassed for ${student.name}`);
-        } else if (wifiBSSID || body.verificationMethod === 'wifi' || body.verifiedBy === 'wifi' || body.isWifiVerified) {
+        } else if (verifiedBy !== 'gps' && (wifiBSSID || body.verificationMethod === 'wifi' || body.verifiedBy === 'wifi' || body.isWifiVerified)) {
             const incomingWifiSignal = wifiBSSID || body.verificationMethod || body.verifiedBy || "CAMPUS_WIFI_CONNECTED";
             const normalizedBSSID = String(incomingWifiSignal).toUpperCase().trim();
 

@@ -10180,77 +10180,42 @@ export default function AdminDashboard({
                                       <td className="px-2 md:px-4 py-3 text-right">
                                         <div className="flex flex-col items-end gap-0.5">
                                           {(() => {
-                                            const rawName = log.hostelName || log.studentId?.hostelName || "";
-                                            const hostel = hostelLocations.find(l => l.name.toLowerCase() === (getHostelCategory(rawName) || rawName).toLowerCase());
-                                            const isWifiVerified = Boolean(
-                                              log.verificationMethod === 'wifi' || 
-                                              log.verificationMethod === 'ip' || 
-                                              log.verificationMethod === 'bssid' || 
-                                              log.verifiedBy === 'wifi' || 
-                                              log.verifiedBy === 'ip' || 
-                                              log.verifiedBy === 'bssid' || 
-                                              log.isWifiVerified || 
-                                              log.attendanceMode === 'wifi' ||
-                                              log.verification_method === 'wifi' || 
-                                              log.verification_method === 'ip' || 
-                                              log.verification_method === 'bssid' || 
-                                              log.verified_by === 'wifi' || 
-                                              log.verified_by === 'ip' || 
-                                              log.verified_by === 'bssid' || 
-                                              log.is_wifi_verified ||
-                                              (log.wifiBSSID && String(log.wifiBSSID).toUpperCase().includes('WIFI')) ||
-                                              (log.wifi_bssid && String(log.wifi_bssid).toUpperCase().includes('WIFI'))
+                                            const isAuthorityMarked = Boolean(
+                                              log.markedBy || 
+                                              log.deviceId === 'marked-by-warden' || 
+                                              log.deviceId === 'marked-by-dean' || 
+                                              log.deviceId === 'marked-by-admin' || 
+                                              log.deviceId === 'admin-override'
                                             );
-                                            if (!isWifiVerified && hostel && log.location?.lat) {
-                                              const dist = calculateDistance(log.location.lat, log.location.lng, hostel.lat, hostel.lng);
-                                              return (
-                                                <span className={`text-[9px] md:text-[10px] font-black ${dist < hostel.radius ? "text-blue-600" : "text-amber-600"}`}>
-                                                  {Math.round(dist)}m away
-                                                </span>
-                                              );
-                                            }
-                                            return null;
-                                          })()}
-                                          {(() => {
-                                            const isAuthorityMarked = Boolean(log.markedBy || log.deviceId === 'marked-by-warden' || log.deviceId === 'marked-by-dean' || log.deviceId === 'marked-by-admin' || log.deviceId === 'admin-override');
-                                            const isWifiVerified = Boolean(
-                                              log.verificationMethod === 'wifi' || 
-                                              log.verificationMethod === 'ip' || 
-                                              log.verificationMethod === 'bssid' || 
-                                              log.verifiedBy === 'wifi' || 
-                                              log.verifiedBy === 'ip' || 
-                                              log.verifiedBy === 'bssid' || 
-                                              log.isWifiVerified || 
-                                              log.attendanceMode === 'wifi' ||
-                                              log.verification_method === 'wifi' || 
-                                              log.verification_method === 'ip' || 
-                                              log.verification_method === 'bssid' || 
-                                              log.verified_by === 'wifi' || 
-                                              log.verified_by === 'ip' || 
-                                              log.verified_by === 'bssid' || 
-                                              log.is_wifi_verified ||
-                                              (log.wifiBSSID && String(log.wifiBSSID).toUpperCase().includes('WIFI')) ||
-                                              (log.wifi_bssid && String(log.wifi_bssid).toUpperCase().includes('WIFI'))
-                                            );
-
                                             if (isAuthorityMarked) {
                                               return (
-                                                <span className="text-[8px] md:text-[9px] font-bold text-emerald-600 font-extrabold">
-                                                  Acc: N/A
+                                                <span className="text-[8px] md:text-[9px] font-bold text-purple-600 font-extrabold whitespace-nowrap">
+                                                  Manual Entry
                                                 </span>
                                               );
                                             }
-                                            if (isWifiVerified) {
+
+                                            const hasGpsCoords = Boolean(log.location?.lat && log.location.lat !== 0);
+                                            const isExplicitGps = log.verificationMethod === 'gps' || log.verifiedBy === 'gps';
+
+                                            if (hasGpsCoords || isExplicitGps) {
+                                              const rawName = log.hostelName || log.studentId?.hostelName || "";
+                                              const hostel = hostelLocations.find(l => l.name.toLowerCase() === (getHostelCategory(rawName) || rawName).toLowerCase());
+                                              let distText = "";
+                                              if (hostel && log.location?.lat) {
+                                                const dist = calculateDistance(log.location.lat, log.location.lng, hostel.lat, hostel.lng);
+                                                distText = ` • ${Math.round(dist)}m away`;
+                                              }
                                               return (
-                                                <span className="text-[8px] md:text-[9px] font-bold text-emerald-600 font-extrabold">
-                                                  Campus WiFi
+                                                <span className="text-[8px] md:text-[9px] font-bold text-emerald-600 font-extrabold whitespace-nowrap">
+                                                  GPS{distText}
                                                 </span>
                                               );
                                             }
-                                            const accuracyVal = Math.round(log.location?.accuracy || log.accuracy || 0);
+
                                             return (
-                                              <span className="text-[8px] md:text-[9px] font-bold text-emerald-600 font-extrabold">
-                                                {accuracyVal > 0 ? `GPS, Acc: ${accuracyVal}m` : "GPS"}
+                                              <span className="text-[8px] md:text-[9px] font-bold text-emerald-600 font-extrabold whitespace-nowrap">
+                                                Campus WiFi
                                               </span>
                                             );
                                           })()}
@@ -10518,29 +10483,23 @@ export default function AdminDashboard({
                                         )}
                                         {(() => {
                                           const isAuthorityMarked = Boolean(log.markedBy || log.deviceId === 'marked-by-warden' || log.deviceId === 'marked-by-dean' || log.deviceId === 'marked-by-admin' || log.deviceId === 'admin-override');
-                                          const isWifiVerified = Boolean(
-                                            log.verificationMethod === 'wifi' || 
-                                            log.verificationMethod === 'ip' || 
-                                            log.verificationMethod === 'bssid' || 
-                                            log.verifiedBy === 'wifi' || 
-                                            log.verifiedBy === 'ip' || 
-                                            log.verifiedBy === 'bssid' || 
-                                            log.isWifiVerified || 
-                                            log.attendanceMode === 'wifi'
-                                          );
-
                                           if (isAuthorityMarked) {
                                             return (
                                               <span className="text-[9px] text-purple-600 font-bold">Manual Entry</span>
                                             );
                                           }
-                                          if (isWifiVerified) {
+
+                                          const hasGpsCoords = Boolean(log.location?.lat && log.location.lat !== 0);
+                                          const isExplicitGps = log.verificationMethod === 'gps' || log.verifiedBy === 'gps';
+
+                                          if (hasGpsCoords || isExplicitGps) {
                                             return (
-                                              <span className="text-[9px] text-emerald-600 font-bold">Campus WiFi</span>
+                                              <span className="text-[9px] text-emerald-600 font-bold">GPS</span>
                                             );
                                           }
+
                                           return (
-                                            <span className="text-[9px] text-green-600 font-bold">GPS</span>
+                                            <span className="text-[9px] text-emerald-600 font-bold">Campus WiFi</span>
                                           );
                                         })()}
                                         {(log.markedBy || log.deviceId === 'marked-by-warden' || log.deviceId === 'marked-by-dean' || log.deviceId === 'admin-override') && (
