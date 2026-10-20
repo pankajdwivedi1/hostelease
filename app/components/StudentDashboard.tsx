@@ -3913,37 +3913,7 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
             );
         };
 
-        // ⚡ NATIVE HARDWARE FAST-LANE (Android APK):
-        // Directly calls physical GPS satellite hardware + Anti-Mock verification (<100ms)
-        if (isAndroidNativeApp()) {
-            getHardwareGpsLocation().then((nativeGps) => {
-                if (isCompleted) return;
-                if (nativeGps.isMock) {
-                    isCompleted = true;
-                    if (watchId !== null) navigator.geolocation.clearWatch(watchId);
-                    if (optimizationTimer !== null) clearTimeout(optimizationTimer);
-                    setIsLocationChecking(false);
-                    setGpsLockStatus('error');
-                    showToast("🚫 Fake GPS / Mock Location detected! Attendance is blocked.", "error");
-                    return;
-                }
-                if (nativeGps.success && nativeGps.latitude && nativeGps.longitude) {
-                    console.log("⚡ [Native Hardware GPS] Acquired in <100ms:", nativeGps);
-                    finish({
-                        coords: {
-                            latitude: nativeGps.latitude,
-                            longitude: nativeGps.longitude,
-                            accuracy: nativeGps.accuracy || 10,
-                            altitude: nativeGps.altitude || null,
-                            altitudeAccuracy: null,
-                            heading: null,
-                            speed: nativeGps.speed || null
-                        },
-                        timestamp: nativeGps.time || Date.now()
-                    } as GeolocationPosition);
-                }
-            }).catch(() => {});
-        }
+
 
         // 1. Primary: High Accuracy GPS
         console.log("🚀 Starting GPS Lock (High Accuracy)...");
