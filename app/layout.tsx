@@ -1,10 +1,11 @@
-import type { Metadata } from "next";
+﻿import type { Metadata } from "next";
 import { Lora } from "next/font/google";
 import "./globals.css";
 import InstallPWA from "./components/InstallPWA";
 import TenantGuard from "./components/TenantGuard";
 import { AuthProvider } from "./components/AuthProvider";
 import AppBootstrap from "./components/AppBootstrap";
+import AppUpdateChecker from "./components/AppUpdateChecker";
 
 const lora = Lora({
   subsets: ["latin"],
@@ -112,6 +113,7 @@ export default function RootLayout({
       <body className={`${lora.variable} antialiased`} suppressHydrationWarning>
         <InstallPWA />
         <AppBootstrap />
+        <AppUpdateChecker />
         <AuthProvider>
           <TenantGuard>
             {children}
