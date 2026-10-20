@@ -2608,7 +2608,7 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
                     const res = await fetch(`/api/students/attendance?studentId=${studentProfile._id}${getTenantParam(false)}`);
                     if (!res.ok) throw new Error(`Failed to check attendance: ${res.status}`);
                     const data = await res.json();
-                    if (data.marked) setIsAttendanceMarked(true);
+                    setIsAttendanceMarked(Boolean(data.marked));
                     if (data.startTime && data.endTime) {
                         setAttendanceWindow({ start: data.startTime, end: data.endTime });
                     }
