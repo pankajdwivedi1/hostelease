@@ -15016,7 +15016,34 @@ export default function AdminDashboard({
                         }
 
                         const faceScore = att.faceMatchPercentage || (att.faceScore ? Math.round(att.faceScore * 100) : null);
-                        const isWifi = att.isWifiVerified || att.verificationMethod === "wifi" || att.verifiedBy === "wifi";
+                        
+                        const isAuthorityMarked = Boolean(
+                          att.markedBy || 
+                          att.deviceId === 'marked-by-warden' || 
+                          att.deviceId === 'marked-by-dean' || 
+                          att.deviceId === 'marked-by-admin' || 
+                          att.deviceId === 'admin-override'
+                        );
+
+                        const hasGpsCoords = Boolean(
+                          (att.location?.lat && att.location.lat !== 0) || 
+                          (att.location?.latitude && att.location.latitude !== 0) || 
+                          (att.gps?.lat && att.gps.lat !== 0)
+                        );
+                        const isExplicitGps = att.verificationMethod === 'gps' || att.verifiedBy === 'gps';
+                        const isGpsVerified = hasGpsCoords || isExplicitGps;
+
+                        const isWifiVerified = !isGpsVerified && Boolean(
+                          att.isWifiVerified || 
+                          att.verificationMethod === 'wifi' || 
+                          att.verificationMethod === 'ip' || 
+                          att.verificationMethod === 'bssid' || 
+                          att.verifiedBy === 'wifi' || 
+                          att.verifiedBy === 'ip' || 
+                          att.verifiedBy === 'bssid' || 
+                          att.attendanceMode === 'wifi' ||
+                          (att.wifiBSSID && String(att.wifiBSSID).toUpperCase().includes('WIFI'))
+                        );
 
                         return (
                           <div
@@ -15031,12 +15058,21 @@ export default function AdminDashboard({
                                 <span className="text-[10px] font-bold text-slate-700 bg-slate-100 px-2 py-0.5 rounded-md border border-slate-200 flex items-center gap-1">
                                   📅 {formattedDate}
                                 </span>
-                                <span className="text-[9px] font-bold px-2 py-0.5 rounded-md bg-indigo-50 text-indigo-700 border border-indigo-200 flex items-center gap-1">
-                                  {isWifi ? "📶 Wi-Fi Verified" : "📸 Face Bio Scan"}
-                                </span>
-                                {att.markedBy && (
-                                  <span className="text-[9px] font-bold px-2 py-0.5 rounded-md bg-purple-50 text-purple-700 border border-purple-200">
-                                    👤 By: {att.markedBy}
+                                {isAuthorityMarked ? (
+                                  <span className="text-[9px] font-bold px-2 py-0.5 rounded-md bg-purple-50 text-purple-700 border border-purple-200 flex items-center gap-1">
+                                    👤 {att.markedBy ? `By: ${att.markedBy}` : "Manual Entry"}
+                                  </span>
+                                ) : isGpsVerified ? (
+                                  <span className="text-[9px] font-bold px-2 py-0.5 rounded-md bg-emerald-50 text-emerald-700 border border-emerald-200 flex items-center gap-1">
+                                    📍 GPS Verified
+                                  </span>
+                                ) : isWifiVerified ? (
+                                  <span className="text-[9px] font-bold px-2 py-0.5 rounded-md bg-indigo-50 text-indigo-700 border border-indigo-200 flex items-center gap-1">
+                                    📶 Wi-Fi Verified
+                                  </span>
+                                ) : (
+                                  <span className="text-[9px] font-bold px-2 py-0.5 rounded-md bg-slate-100 text-slate-700 border border-slate-200 flex items-center gap-1">
+                                    ✓ Verified
                                   </span>
                                 )}
                               </div>
@@ -15092,11 +15128,32 @@ export default function AdminDashboard({
                               <span className="font-mono text-[9px] text-slate-400 truncate max-w-[280px]" title={att.deviceId}>
                                 📱 Device: {att.deviceId || "Registered Device"}
                               </span>
-                              {att.location && (att.location.lat || att.location.latitude) && (
-                                <span className="text-emerald-700 font-bold text-[9px]">
-                                  📍 Campus Geofence Verified
-                                </span>
-                              )}
+                              {(() => {
+                                if (isGpsVerified) {
+                                  const lat = att.location?.lat || att.location?.latitude || att.gps?.lat;
+                                  const lng = att.location?.lng || att.location?.longitude || att.gps?.lng;
+                                  const rawName = att.hostelName || selectedStudent?.hostelName || "";
+                                  const hostel = hostelLocations.find(l => l.name.toLowerCase() === (getHostelCategory(rawName) || rawName).toLowerCase());
+                                  let distText = "";
+                                  if (hostel && lat && lng) {
+                                    const dist = calculateDistance(lat, lng, hostel.lat, hostel.lng);
+                                    distText = ` (${Math.round(dist)}m away)`;
+                                  }
+                                  return (
+                                    <span className="text-emerald-700 font-bold text-[9px]">
+                                      📍 GPS Geofence Verified{distText}
+                                    </span>
+                                  );
+                                }
+                                if (isWifiVerified) {
+                                  return (
+                                    <span className="text-indigo-700 font-bold text-[9px]">
+                                      📶 Campus Wi-Fi Network
+                                    </span>
+                                  );
+                                }
+                                return null;
+                              })()}
                             </div>
                           </div>
                         );
