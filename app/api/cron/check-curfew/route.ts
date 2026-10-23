@@ -209,6 +209,51 @@ export async function GET(request: NextRequest) {
       }
     }
 
+    // ----------------------------------------------------
+    // PHASE C: Student Curfew Attendance Reminders
+    // ----------------------------------------------------
+    let reminderNotifiedCount = 0;
+    const reminderDetails: any[] = [];
+    const isReminderParam = request.nextUrl.searchParams.get("phase") === "reminder";
+
+    // 45 minutes before curfewEnd
+    const reminderMinutes = Math.max(0, (endH * 60 + endM) - 45);
+    const isReminderTriggerTime = currentMinutes >= reminderMinutes && currentMinutes < (endH * 60 + endM);
+
+    if ((isReminderTriggerTime || (isForced && isReminderParam))) {
+      const tenants = await prisma.tenant.findMany({ where: { isActive: true } });
+      for (const tenant of tenants || []) {
+        const rawStudents = await db.students.list({ tenantId: tenant.id });
+        const students = Array.isArray(rawStudents) ? rawStudents : ((rawStudents as any)?.records || []);
+        if (!students || students.length === 0) continue;
+
+        const rawAttendance = await db.attendance.list({
+          tenantId: tenant.id,
+          date: todayStr
+        });
+        const attendanceData = Array.isArray(rawAttendance) ? rawAttendance : ((rawAttendance as any)?.records || []);
+        const presentIds = new Set((attendanceData || []).map((a: any) => String(a.studentId || a.student_id)));
+
+        const pendingStudents = students.filter((s: any) => !presentIds.has(String(s._id || s.id)));
+        
+        const notifyPromises = pendingStudents.map(async (student: any) => {
+          const sId = String(student._id || student.id);
+          const res = await sendPushNotification(sId, "student", "studentAttendanceReminder", {
+            title: "⏰ Curfew Attendance Reminder",
+            body: `Night attendance closes at ${curfewEnd}. Please mark your attendance before cutoff!`,
+            url: "/attendance"
+          }).catch(() => ({ success: false }));
+
+          if (res && (res as any).success) {
+            reminderNotifiedCount++;
+          }
+        });
+
+        await Promise.all(notifyPromises);
+        reminderDetails.push({ tenant: tenant.name, pendingCount: pendingStudents.length });
+      }
+    }
+
     return NextResponse.json({
       success: true,
       today: todayStr,
@@ -223,6 +268,11 @@ export async function GET(request: NextRequest) {
         enabled: settings.parentCurfewAbsentEnabled !== false,
         notifiedCount: curfewNotifiedCount,
         details: curfewDetails
+      },
+      reminders: {
+        run: isReminderTriggerTime || (isForced && isReminderParam),
+        notifiedCount: reminderNotifiedCount,
+        details: reminderDetails
       }
     });
 

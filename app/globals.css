@@ -517,4 +517,45 @@ video {
 .no-scrollbar {
   -ms-overflow-style: none !important;
   scrollbar-width: none !important;
-}
+}
+
+/* ==========================================================================
+   ULTRA-PERFORMANCE GPU COMPOSITING & SMOOTH SCROLLING ENGINE
+   Eliminates screen lag on mobile & desktop viewports forever
+   ========================================================================== */
+
+/* 1. Prevent heavy multi-pass Gaussian backdrop-blur lag on mobile GPUs */
+@media (max-width: 640px) {
+  .backdrop-blur-md,
+  .backdrop-blur-lg,
+  .backdrop-blur-xl,
+  .backdrop-blur-2xl,
+  .backdrop-blur {
+    backdrop-filter: blur(4px) !important;
+    -webkit-backdrop-filter: blur(4px) !important;
+  }
+}
+
+/* 2. Hardware GPU Acceleration: Put modals, dialogs, & overlays in isolated GPU layers */
+.fixed,
+[role="dialog"] {
+  transform: translateZ(0);
+  -webkit-transform: translateZ(0);
+  backface-visibility: hidden;
+  -webkit-backface-visibility: hidden;
+}
+
+/* 3. Native Momentum Touch Scrolling on iOS & Android WebViews / PWAs */
+.custom-scrollbar,
+.overflow-y-auto,
+.overflow-x-auto {
+  -webkit-overflow-scrolling: touch !important;
+  overscroll-behavior: contain;
+}
+
+/* 4. Optimize toggle switches on composite thread */
+@media (prefers-reduced-motion: no-preference) {
+  .peer:checked ~ div {
+    will-change: transform, background-color;
+  }
+}

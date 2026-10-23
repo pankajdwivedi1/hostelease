@@ -93,6 +93,38 @@ export async function GET(request: NextRequest) {
         const ruleUpdatedAt = enforcement.updatedAt ? new Date(enforcement.updatedAt).getTime() : 0;
 
         for (const field of enabledFields) {
+            // ⚡ 1. CHECK SEMESTER-LEVEL TARGETING
+            const fieldTargetSemesters = field.targetSemesters || (enforcement as any).targetSemesters;
+            if (Array.isArray(fieldTargetSemesters) && fieldTargetSemesters.length > 0) {
+                const sSem = (student.semester || "").toString().trim().toUpperCase();
+                const semMatches = fieldTargetSemesters.some((ts: string) => {
+                    const cleanTs = ts.toString().trim().toUpperCase();
+                    if (!cleanTs || cleanTs === "ALL") return true;
+                    const sDigit = sSem.match(/\d+/)?.[0];
+                    const tDigit = cleanTs.match(/\d+/)?.[0];
+                    if (sDigit && tDigit) return sDigit === tDigit;
+                    return sSem === cleanTs || sSem.includes(cleanTs) || cleanTs.includes(sSem);
+                });
+                if (!semMatches) {
+                    continue; // Student's semester is not targeted
+                }
+            }
+
+            // ⚡ 2. CHECK STUDENT-WISE TARGETING
+            const fieldTargetStudentIds = field.targetStudentIds || (enforcement as any).targetStudentIds;
+            if (Array.isArray(fieldTargetStudentIds) && fieldTargetStudentIds.length > 0) {
+                const sId = (student._id || student.id || "").toString().trim();
+                const regId = (student.registrationId || "").toString().trim().toUpperCase();
+                const email = (student.email || "").toString().trim().toLowerCase();
+                const phone = (student.phoneNumber || "").toString().trim();
+                const studentMatches = fieldTargetStudentIds.some((targetId: string) => {
+                    const clean = (targetId || "").toString().trim();
+                    return clean === sId || clean.toUpperCase() === regId || clean.toLowerCase() === email || clean === phone;
+                });
+                if (!studentMatches) {
+                    continue; // Student is not specifically targeted
+                }
+            }
             const progressRecord = progress.find(
                 (p: any) => p.fieldId === field.fieldId
             );

@@ -97,7 +97,6 @@ export const getTenantFromRequest = cache(async () => {
                     { slug: normalizedSlug },
                     ...(isUuid ? [{ id: normalizedSlug }] : [])
                 ],
-                isActive: true,
                 isDeleted: false
             }
         });
@@ -128,6 +127,7 @@ export const getTenantFromRequest = cache(async () => {
         name: tenant.name,
         slug: tenant.slug,
         logo: tenant.logoUrl || tenant.logo,
+        logoUrl: tenant.logoUrl || tenant.logo,
         primaryColor: tenant.primaryColor,
         secondaryColor: tenant.secondaryColor,
         subscriptionStatus: tenant.subscriptionStatus,
@@ -201,7 +201,7 @@ export async function getSubscriptionStatus() {
     try {
         freshTenant = await prisma.tenant.findUnique({
             where: { id: tenantId },
-            select: { subscriptionStatus: true, subscriptionEndDate: true, isActive: true }
+            select: { subscriptionStatus: true, subscriptionEndDate: true, isActive: true, logoUrl: true, name: true }
         });
     } catch (e) {}
 
@@ -209,6 +209,11 @@ export async function getSubscriptionStatus() {
         tenant.subscriptionStatus = freshTenant.subscriptionStatus || tenant.subscriptionStatus;
         tenant.subscriptionEndDate = freshTenant.subscriptionEndDate || tenant.subscriptionEndDate;
         tenant.isActive = freshTenant.isActive !== undefined ? freshTenant.isActive : tenant.isActive;
+        tenant.name = freshTenant.name || tenant.name;
+        if (freshTenant.logoUrl) {
+            tenant.logo = freshTenant.logoUrl;
+            tenant.logoUrl = freshTenant.logoUrl;
+        }
     }
 
     const now = new Date();
@@ -255,13 +260,17 @@ export async function getSubscriptionStatus() {
     const isExpired = (endOfDayDate && now > endOfDayDate) || tenant.subscriptionStatus === 'expired' || tenant.isActive === false;
     const isWarning = !isExpired && daysRemaining !== null && daysRemaining <= 7 && daysRemaining >= 0;
 
+    const logo = freshTenant?.logoUrl || tenant.logo || tenant.logoUrl || null;
+
     return {
         status: tenant.subscriptionStatus || "active",
         isActive: tenant.isActive !== false,
         endDate: endOfDayDate || rawEndDate,
         rawEndDate: rawEndDate,
         startDate: tenant.createdAt,
-        name: tenant.name,
+        name: freshTenant?.name || tenant.name,
+        logo: logo,
+        logoUrl: logo,
         tenantId: tenantId,
         daysRemaining: daysRemaining,
         studentCount: studentCount > 0 ? studentCount : (fallbackStudentCount > 0 ? fallbackStudentCount : 524),

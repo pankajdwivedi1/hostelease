@@ -2263,6 +2263,7 @@ export default function AdminDashboard({
 
   const [hostelLocations, setHostelLocations] = useState<any[]>([]);
   const [expandedLocations, setExpandedLocations] = useState<Record<number, boolean>>({});
+  const [expandedVerificationResults, setExpandedVerificationResults] = useState<Record<number, boolean>>({});
   const [activeGuideTab, setActiveGuideTab] = useState<'admin' | 'warden' | 'student' | 'parent'>('admin');
   const [isLocationsLoading, setIsLocationsLoading] = useState(false);
   const [showLocationModal, setShowLocationModal] = useState(false);
@@ -2390,11 +2391,19 @@ export default function AdminDashboard({
     parentNightAbsent: true,
     parentScanInOut: true,
     parentLeaveApproval: true,
+    parentOutingOverdue: true,
     studentLeaveStatus: true,
     studentAttendanceReminder: true,
+    paymentVerified: true,
+    studentConsentRequired: true,
     wardenNewLeaveRequest: true,
+    wardenParentConsent: true,
+    wardenOutingOverdue: true,
     wardenScanFailure: true,
-    deanSecurityAlert: true
+    deanLeaveRequest: true,
+    deanParentConsent: true,
+    deanSecurityAlert: true,
+    deanOutingOverdue: true
   });
 
 
@@ -3498,24 +3507,30 @@ export default function AdminDashboard({
       try {
         const type = localStorage.getItem("userType");
         const storedWarden = localStorage.getItem("wardenUsername") || sessionStorage.getItem("wardenUsername");
+        const storedDeanPhone = localStorage.getItem("deanPhone") || sessionStorage.getItem("deanPhone");
+        const storedWardenPhone = localStorage.getItem("wardenPhone") || sessionStorage.getItem("wardenPhone");
         
         let mappedType: "student" | "parent" | "warden" | "dean" | null = null;
         let userId = "admin";
+        let phone = "";
 
         if (isWarden || type === "warden") {
           mappedType = "warden";
           userId = storedWarden || (wardenHostelName ? `${wardenHostelName.toLowerCase().replace(/ /g, "_")}_warden` : "warden");
+          phone = storedWardenPhone || "";
         } else if (type === "dean" || title === "Dean Dashboard") {
           mappedType = "dean";
           userId = "admin";
+          phone = storedDeanPhone || "";
         } else if (title === "Super Admin Dashboard" || type === "admin" || type === "super_admin") {
           mappedType = "dean";
           userId = "admin";
+          phone = storedDeanPhone || "";
         }
 
         if (mappedType && userId) {
-          console.log(`[PUSH] Auto-registering device for role: ${mappedType}, userId: ${userId}`);
-          await registerPushNotifications(userId, mappedType);
+          console.log(`[PUSH] Auto-registering device for role: ${mappedType}, userId: ${userId}, phone: ${phone}`);
+          await registerPushNotifications(userId, mappedType, phone);
         }
       } catch (e) {
         console.error("Failed to register admin push notifications:", e);
@@ -3879,17 +3894,18 @@ export default function AdminDashboard({
 
   useEffect(() => {
     let interval: any;
-    if (showSystemSettingsModal || showHostelSettingsModal) {
+    if (showSystemSettingsModal) {
       fetchSystemSettings();
+    }
+    if (showHostelSettingsModal) {
       fetchHostels(true);
       interval = setInterval(() => {
-        fetchSystemSettings();
         fetchHostels(true);
-      }, 8000);
+      }, 15000);
     }
     const handleFocus = () => {
-      fetchSystemSettings();
-      fetchHostels(true);
+      if (showSystemSettingsModal) fetchSystemSettings();
+      if (showHostelSettingsModal) fetchHostels(true);
     };
     window.addEventListener("focus", handleFocus);
     return () => {
@@ -3899,43 +3915,46 @@ export default function AdminDashboard({
   }, [showSystemSettingsModal, showHostelSettingsModal]);
 
   const handleToggleDeveloperSetting = async (key: string, value: boolean) => {
+    // 🚀 Optimistic UI update: 0ms instant touch feedback
+    const setterMap: Record<string, (v: boolean) => void> = {
+      overlapRadius: setOverlapRadius,
+      prioritizeAssignedHostel: setPrioritizeAssignedHostel,
+      enableManualAttendance: setEnableManualAttendance,
+      enforceUniqueErpId: setEnforceUniqueErpId,
+      enforceUniquePhone: setEnforceUniquePhone,
+      enforceUniqueEmail: setEnforceUniqueEmail,
+      enforceUniqueFace: setEnforceUniqueFace,
+      allowEmergencyExitWithoutCooldown: setAllowEmergencyExitWithoutCooldown,
+      allowWardenAddStudent: setAllowWardenAddStudent,
+      allowDeanAddStudent: setAllowDeanAddStudent,
+      allowWardenEditProfile: setAllowWardenEditProfile,
+      allowDeanEditProfile: setAllowDeanEditProfile,
+      allowWardenRemoveStudent: setAllowWardenRemoveStudent,
+      allowDeanRemoveStudent: setAllowDeanRemoveStudent,
+      allowBulkStudentUpdates: setAllowBulkStudentUpdates,
+      allowBulkPermissionManagement: setAllowBulkPermissionManagement,
+      superAdminNotifications: setSuperAdminNotifications,
+      deanNotifications: setDeanNotifications,
+      parentNotifications: setParentNotifications,
+      studentNotifications: setStudentNotifications,
+    };
+    if (setterMap[key]) setterMap[key](value);
+
     try {
-      setIsUpdatingSettings(true);
       const res = await fetch("/api/admin/settings", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ [key]: value })
       });
       const data = await res.json();
-      if (data.success) {
-        if (key === 'overlapRadius') setOverlapRadius(value);
-        if (key === 'prioritizeAssignedHostel') setPrioritizeAssignedHostel(value);
-        if (key === 'enableManualAttendance') setEnableManualAttendance(value);
-        if (key === 'enforceUniqueErpId') setEnforceUniqueErpId(value);
-        if (key === 'enforceUniquePhone') setEnforceUniquePhone(value);
-        if (key === 'enforceUniqueEmail') setEnforceUniqueEmail(value);
-        if (key === 'enforceUniqueFace') setEnforceUniqueFace(value);
-        if (key === 'allowEmergencyExitWithoutCooldown') setAllowEmergencyExitWithoutCooldown(value);
-        if (key === 'allowWardenAddStudent') setAllowWardenAddStudent(value);
-        if (key === 'allowDeanAddStudent') setAllowDeanAddStudent(value);
-        if (key === 'allowWardenEditProfile') setAllowWardenEditProfile(value);
-        if (key === 'allowDeanEditProfile') setAllowDeanEditProfile(value);
-        if (key === 'allowWardenRemoveStudent') setAllowWardenRemoveStudent(value);
-        if (key === 'allowDeanRemoveStudent') setAllowDeanRemoveStudent(value);
-        if (key === 'allowBulkStudentUpdates') setAllowBulkStudentUpdates(value);
-        if (key === 'allowBulkPermissionManagement') setAllowBulkPermissionManagement(value);
-        if (key === 'superAdminNotifications') setSuperAdminNotifications(value);
-        if (key === 'deanNotifications') setDeanNotifications(value);
-        if (key === 'parentNotifications') setParentNotifications(value);
-        if (key === 'studentNotifications') setStudentNotifications(value);
-      } else {
+      if (!data.success) {
+        if (setterMap[key]) setterMap[key](!value); // Revert on failure
         alert("Failed to update setting: " + (data.error || "Unknown error"));
       }
     } catch (e: any) {
       console.error("Failed to update setting", e);
+      if (setterMap[key]) setterMap[key](!value); // Revert on network error
       alert("Error: " + (e.message || "Network error"));
-    } finally {
-      setIsUpdatingSettings(false);
     }
   };
 
@@ -4668,25 +4687,26 @@ export default function AdminDashboard({
   };
 
   const handleToggleNotificationSetting = async (key: string, value: boolean) => {
+    // 🚀 Optimistic UI update: instantly update state for 0ms lag
+    const previous = { ...notificationSettings };
+    const updated = { ...notificationSettings, [key]: value };
+    setNotificationSettings(updated);
+
     try {
-      setIsUpdatingSettings(true);
-      const updated = { ...notificationSettings, [key]: value };
       const res = await fetch("/api/admin/settings", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ notificationSettings: updated })
       });
       const data = await res.json();
-      if (data.success) {
-        setNotificationSettings(updated);
-      } else {
+      if (!data.success) {
+        setNotificationSettings(previous); // Revert on failure
         alert("Failed to update setting: " + (data.error || "Unknown error"));
       }
     } catch (e: any) {
       console.error("Failed to update notification setting", e);
+      setNotificationSettings(previous); // Revert on network error
       alert("Error: " + (e.message || "Network error"));
-    } finally {
-      setIsUpdatingSettings(false);
     }
   };
 
@@ -5831,6 +5851,42 @@ export default function AdminDashboard({
       return studentHostel.toLowerCase() === selectedAttendanceHostel.trim().toLowerCase();
     });
   }, [absentees, selectedAttendanceHostel]);
+
+  // ⚡ DYNAMIC ATTENDANCE WINDOW VISIBILITY
+  // Controls visibility for the Anomaly Alert banner & Today's Absentee List
+  // Visible during admin-set attendance hours (e.g. 9:00 PM – 11:59 PM or 2:00 PM – 5:00 PM), or always for past dates.
+  const isAttendanceWindowActive = useMemo(() => {
+    // 1. If viewing a past date, always show so wardens/admins can audit history
+    const now = new Date();
+    const istNow = new Date(now.getTime() + (5.5 * 60 * 60 * 1000));
+    const todayIST = istNow.toISOString().split('T')[0];
+    if (selectedDate !== todayIST) {
+      return true;
+    }
+
+    // 2. Compute current IST minutes of the day (0 to 1439)
+    const currentMinutes = istNow.getUTCHours() * 60 + istNow.getUTCMinutes();
+
+    const [startH, startM] = (attendanceTimeSettings.startTime || "21:00").split(":").map(Number);
+    const [endH, endM] = (attendanceTimeSettings.endTime || "22:00").split(":").map(Number);
+
+    const startMinutes = (startH || 0) * 60 + (startM || 0);
+    const endMinutes = (endH || 0) * 60 + (endM || 0);
+
+    // If attendance starts in evening/night (>= 18:00 / 6:00 PM),
+    // keep it visible from startTime all the way until midnight (11:59 PM = 1439 mins)
+    // If admin set daytime window (e.g. 2 PM to 5 PM / 14:00 to 17:00),
+    // it appears between startTime and endTime!
+    if (startMinutes >= 18 * 60) {
+      return currentMinutes >= startMinutes && currentMinutes <= 1439;
+    } else {
+      if (endMinutes < startMinutes) {
+        // Window crosses midnight
+        return currentMinutes >= startMinutes || currentMinutes <= endMinutes;
+      }
+      return currentMinutes >= startMinutes && currentMinutes <= endMinutes;
+    }
+  }, [selectedDate, attendanceTimeSettings.startTime, attendanceTimeSettings.endTime]);
 
   // Filter present students based on selected hostel card
   const presentStudentsForSelectedHostel = useMemo(() => {
@@ -8900,7 +8956,7 @@ export default function AdminDashboard({
 
               {title === "Super Admin Dashboard" && (
                 <div className="mb-6 space-y-4">
-                  <div className="space-y-2">
+                  <div className="hidden sm:block space-y-2">
                     <button
                       onClick={() => getAccurateLocation('test')}
                       disabled={isLocationChecking}
@@ -8937,9 +8993,46 @@ export default function AdminDashboard({
                   </div>
 
                   <div className="bg-white pl-3 pr-1 py-3 md:p-6 rounded-2xl border border-dashed border-gray-300 font-mono text-[10.5px] sm:text-[13px] md:text-sm shadow-sm">
-                    <div className="text-center space-y-1 mb-6">
-                      <h3 className="font-bold text-gray-900 tracking-widest uppercase text-xs md:text-sm">INFORMATION</h3>
-                      <p className="font-bold text-gray-500 tracking-wider uppercase text-[10px] md:text-xs">YOU HAVE ADDED {hostelLocations.length} LOCATION{hostelLocations.length !== 1 ? "S" : ""}</p>
+                    {/* Mobile: "YOU HAVE ADDED X LOCATIONS" with compact "🔍 Test Current Location Proximity" on its right side */}
+                    <div className="sm:hidden flex items-center justify-between gap-1.5 pb-2.5 mb-2.5 border-b border-dashed border-gray-200">
+                      <p className="font-bold text-gray-600 tracking-wider uppercase text-[9.5px] leading-tight">
+                        YOU HAVE ADDED {hostelLocations.length} LOCATION{hostelLocations.length !== 1 ? "S" : ""}
+                      </p>
+                      <button
+                        onClick={() => getAccurateLocation('test')}
+                        disabled={isLocationChecking}
+                        className="px-2 py-1 bg-indigo-50 text-indigo-700 rounded-lg font-bold border border-indigo-100 hover:bg-indigo-100 transition-all shadow-sm active:scale-95 disabled:opacity-80 text-[9px] flex items-center gap-1 shrink-0 whitespace-nowrap"
+                        title="Test Current Location Proximity"
+                      >
+                        {isLocationChecking ? (
+                          <div className="flex items-center gap-1">
+                            <div className="w-3 h-3 border-2 border-indigo-600/20 border-t-indigo-600 rounded-full animate-spin" />
+                            <span className="text-[8px] uppercase tracking-wider font-bold">Locking... {gpsAccuracy ? `${gpsAccuracy}m` : ''}</span>
+                          </div>
+                        ) : (
+                          "🔍 Test Current Location Proximity"
+                        )}
+                      </button>
+                    </div>
+
+                    {/* Mobile Location Checking Progress */}
+                    {isLocationChecking && (
+                      <div className="sm:hidden px-1 flex flex-col gap-1 mb-2.5 animate-in fade-in slide-in-from-top-1 duration-300">
+                        <div className="w-full h-1 bg-gray-100 rounded-full overflow-hidden">
+                          <div
+                            className="h-full bg-indigo-500 transition-all duration-500"
+                            style={{ width: `${lockProgress}%` }}
+                          />
+                        </div>
+                        <p className="text-[8px] text-gray-400 font-bold uppercase tracking-widest text-center">
+                          {gpsAccuracy && gpsAccuracy > 100 ? "📍 Move for better signal" : "Synchronizing..."}
+                        </p>
+                      </div>
+                    )}
+
+                    {/* Desktop: Header (with INFORMATION removed) */}
+                    <div className="hidden sm:block text-center mb-6">
+                      <p className="font-bold text-gray-500 tracking-wider uppercase text-xs md:text-sm">YOU HAVE ADDED {hostelLocations.length} LOCATION{hostelLocations.length !== 1 ? "S" : ""}</p>
                     </div>
 
                     <div className="space-y-0.5 mb-3 text-gray-600">
@@ -8992,48 +9085,69 @@ export default function AdminDashboard({
 
                     {locationVerificationResults.length > 0 ? (
                       <>
-                        <div className="text-center mb-4 pt-4 border-t border-dashed border-gray-200">
-                          <p className="font-bold text-gray-900 tracking-wider uppercase text-xs">CURRENTLY YOU ARE ON</p>
+                        <div className="text-center mb-2.5 sm:mb-4 pt-3 sm:pt-4 border-t border-dashed border-gray-200">
+                          <p className="font-bold text-gray-900 tracking-wider uppercase text-[9.5px] sm:text-xs">CURRENTLY YOU ARE ON</p>
                         </div>
 
                         <div className="space-y-0.5 md:space-y-1.5">
-                          {locationVerificationResults.map((result, index) => (
-                            <div key={index} className="flex flex-col gap-0.5 group relative p-1 md:p-1.5 rounded bg-gray-50/50">
-                              <div className="flex items-center gap-2">
-                                <span className="font-bold text-gray-500">{index + 1}.</span>
-                                {result.isVerified ? (
-                                  <span className="text-green-600 font-bold flex items-center gap-1">
-                                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" /></svg>
-                                    Verification Success
-                                  </span>
-                                ) : (
-                                  <span className="text-red-500 font-bold flex items-center gap-1">
-                                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M6 18L18 6M6 6l12 12" /></svg>
-                                    Verification Failed
-                                  </span>
-                                )}
-                              </div>
-                              <p className="text-gray-700 leading-relaxed w-full">
-                                You are <strong className="text-gray-900">{Math.round(result.distance)} meters</strong> away from <strong className="text-gray-900">{result.name}</strong>
-                                {lastCheckAccuracy && (
-                                  <span className="inline-flex flex-wrap gap-1 ml-1 align-baseline">
-                                    <span className={`text-[10px] ${lastCheckAccuracy > 50 ? "text-orange-600 font-bold" : "text-gray-400"}`}>
-                                      (GPS Accuracy: {lastCheckAccuracy}m)
+                          {locationVerificationResults.map((result, index) => {
+                            const isResultExpanded = !!expandedVerificationResults[index];
+                            return (
+                              <div key={index} className="flex flex-col gap-0.5 group relative p-1 md:p-1.5 rounded bg-gray-50/50">
+                                <div
+                                  onClick={() => setExpandedVerificationResults(prev => ({ ...prev, [index]: !prev[index] }))}
+                                  className="flex items-center gap-1.5 sm:gap-2 flex-wrap cursor-pointer sm:cursor-default select-none"
+                                >
+                                  <span className="font-bold text-gray-500 text-[10px] sm:text-xs">{index + 1}.</span>
+                                  {result.isVerified ? (
+                                    <span className="text-green-600 font-bold flex items-center gap-1 text-[10px] sm:text-xs">
+                                      <svg className="w-3 h-3 sm:w-4 sm:h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" /></svg>
+                                      Verification Success{lastCheckAccuracy ? ":" : ""}
                                     </span>
+                                  ) : (
+                                    <span className="text-red-500 font-bold flex items-center gap-1 text-[10px] sm:text-xs">
+                                      <svg className="w-3 h-3 sm:w-4 sm:h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M6 18L18 6M6 6l12 12" /></svg>
+                                      Verification Failed{lastCheckAccuracy ? ":" : ""}
+                                    </span>
+                                  )}
+                                  {lastCheckAccuracy && (
+                                    <span
+                                      className={`sm:hidden text-[9px] hover:underline underline-offset-1 font-medium transition-all ${lastCheckAccuracy > 50 ? "text-orange-600 font-bold" : "text-gray-500"}`}
+                                      title="Click to view full information"
+                                    >
+                                      (GPS Accuracy: {lastCheckAccuracy}m) <span className="text-[7.5px] text-gray-400 font-normal">{isResultExpanded ? "▲" : "▼"}</span>
+                                    </span>
+                                  )}
+                                </div>
+                                <div className={`${isResultExpanded ? "block" : "hidden sm:block"} w-full pt-0.5`}>
+                                  <p className="text-gray-700 leading-tight sm:leading-relaxed text-[10px] sm:text-[10.5px] md:text-sm w-full">
+                                    You are <strong className="text-gray-900">{Math.round(result.distance)} meters</strong> away from <strong className="text-gray-900">{result.name}</strong>
+                                    {lastCheckAccuracy && (
+                                      <span className="hidden sm:inline-flex flex-wrap gap-1 ml-1 align-baseline">
+                                        <span className={`text-[8.5px] sm:text-[10px] ${lastCheckAccuracy > 50 ? "text-orange-600 font-bold" : "text-gray-400"}`}>
+                                          (GPS Accuracy: {lastCheckAccuracy}m)
+                                        </span>
+                                      </span>
+                                    )}
                                     {Math.round(result.distance) > result.radius && (
-                                      <span className="text-[10px] px-1.5 py-0.5 bg-indigo-50 text-indigo-600 rounded border border-indigo-100 font-bold whitespace-nowrap">
+                                      <span className="text-[8px] sm:text-[10px] px-1 sm:px-1.5 py-0.5 bg-indigo-50 text-indigo-600 rounded border border-indigo-100 font-bold whitespace-nowrap ml-1">
                                         Offset Applied: -{result.appliedOffset ?? Math.min(lastCheckAccuracy, 50)}m
                                       </span>
                                     )}
-                                  </span>
-                                )}
-                              </p>
-                            </div>
-                          ))}
+                                  </p>
+                                  {isResultExpanded && (
+                                    <div className="sm:hidden text-[8.5px] text-gray-400 mt-0.5 font-mono">
+                                      Radius: {result.radius}m • Coordinates: {result.lat}, {result.lng}
+                                    </div>
+                                  )}
+                                </div>
+                              </div>
+                            );
+                          })}
                         </div>
                       </>
                     ) : (
-                      <p className="text-center text-gray-400 italic py-2 border-b border-dashed border-gray-200 mb-2">Click the GPS test button above to verify proximity</p>
+                      <p className="text-center text-gray-400 italic py-2 border-b border-dashed border-gray-200 mb-2 text-[9.5px] sm:text-xs">Click the GPS test button above to verify proximity</p>
                     )}
                   </div>
                 </div>
@@ -9095,12 +9209,12 @@ export default function AdminDashboard({
                           } else if (isViewAs) {
                             setShowViewAsDropdown(prev => !prev);
                           } else {
-                            startTransition(() => setCurrentTab(tab.id as any));
+                            setCurrentTab(tab.id as any);
                           }
                         }}
                         className={`w-full ${
                           isMobile ? 'px-0.5 sm:px-1 py-1 text-[10px] sm:text-[11px] min-h-[28px]' : 'px-3 py-2.5 text-xs lg:text-sm'
-                        } font-bold transition-all duration-150 rounded-lg whitespace-nowrap text-center touch-manipulation active:scale-95 flex items-center justify-center gap-1 ${
+                        } font-bold transition-colors duration-100 rounded-lg whitespace-nowrap text-center touch-manipulation active:opacity-80 flex items-center justify-center gap-1 ${
                           isGatepass
                             ? 'text-blue-600 hover:bg-blue-50 group'
                             : isViewAs
@@ -9159,7 +9273,7 @@ export default function AdminDashboard({
                 })()}
               </div>
 
-              <div className={currentTab === 'permissions' ? 'block space-y-6' : 'hidden'}>
+              <div className={currentTab === 'permissions' ? 'block space-y-6' : 'hidden'} style={{ contentVisibility: currentTab === 'permissions' ? 'visible' : 'hidden', contain: 'style layout paint' }}>
                 <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
                     <div className="flex bg-[#F3F4F6] p-1 rounded-xl w-full max-w-sm md:max-w-md">
                       <button
@@ -9693,7 +9807,7 @@ export default function AdminDashboard({
                   )}
               </div>
 
-              <div className={currentTab === 'attendance' ? 'block space-y-6' : 'hidden'}>
+              <div className={currentTab === 'attendance' ? 'block space-y-6' : 'hidden'} style={{ contentVisibility: currentTab === 'attendance' ? 'visible' : 'hidden', contain: 'style layout paint' }}>
                   {/* View Mode Toggle */}
                   <div className="flex justify-center mb-6">
                     <div className="bg-gray-100 p-1 rounded-xl inline-flex">
@@ -9715,16 +9829,16 @@ export default function AdminDashboard({
                   {attendanceViewMode === "daily" ? (
                     <>
                       <div className="flex flex-wrap items-center justify-between gap-3 w-full">
-                        <div>
-                          <h2 className="text-lg font-bold text-foreground">Daily Attendance Monitoring</h2>
-                          <p className="text-sm text-secondary">
+                        <div className="w-full sm:w-auto">
+                          <h2 className="text-sm sm:text-lg font-bold text-foreground">Daily Attendance Monitoring</h2>
+                          <p className="text-[11px] sm:text-sm text-secondary">
                             {selectedDate === selectedEndDate
                               ? `Student entries and absentees for ${selectedDate === new Date(new Date().getTime() + (5.5 * 60 * 60 * 1000)).toISOString().split('T')[0] ? 'today' : formatDateDDMMYYYY(selectedDate)}`
                               : `Date range report: ${formatDateDDMMYYYY(selectedDate)} to ${formatDateDDMMYYYY(selectedEndDate)}`}
                           </p>
                         </div>
-                        <div className="flex flex-wrap items-center gap-2">
-                          <div className="flex items-center gap-1 bg-white p-1 rounded-xl border border-gray-200 shadow-sm">
+                        <div className="flex flex-wrap items-center justify-center sm:justify-end gap-2 w-full sm:w-auto">
+                          <div className="flex items-center justify-center gap-1 bg-white p-1 rounded-xl border border-gray-200 shadow-sm w-full sm:w-auto">
                             <input
                               type="date"
                               value={selectedDate}
@@ -9734,7 +9848,7 @@ export default function AdminDashboard({
                                 if (selectedEndDate < val) setSelectedEndDate(val);
                               }}
                               max={new Date(new Date().getTime() + (5.5 * 60 * 60 * 1000)).toISOString().split('T')[0]}
-                              className="h-9 px-2 text-xs font-bold text-gray-700 bg-transparent focus:outline-none cursor-pointer"
+                              className="h-8 sm:h-9 px-2 text-xs font-bold text-gray-700 bg-transparent focus:outline-none cursor-pointer"
                               title="Start Date"
                             />
                             <span className="text-xs font-bold text-gray-400 px-0.5">to</span>
@@ -9744,11 +9858,11 @@ export default function AdminDashboard({
                               min={selectedDate}
                               max={new Date(new Date().getTime() + (5.5 * 60 * 60 * 1000)).toISOString().split('T')[0]}
                               onChange={(e) => setSelectedEndDate(e.target.value)}
-                              className="h-9 px-2 text-xs font-bold text-gray-700 bg-transparent focus:outline-none cursor-pointer"
+                              className="h-8 sm:h-9 px-2 text-xs font-bold text-gray-700 bg-transparent focus:outline-none cursor-pointer"
                               title="End Date"
                             />
                           </div>
-                          <div className="flex items-center gap-2 flex-nowrap">
+                          <div className="w-full sm:w-auto flex items-center justify-center gap-1.5 sm:gap-2 flex-nowrap">
                             <select
                               value={attendanceHostelFilter}
                               onChange={(e) => {
@@ -9757,7 +9871,7 @@ export default function AdminDashboard({
                                 setAttendanceHostelFilter(normalized);
                               }}
                               disabled={isWarden && authorizedHostels.length <= 1}
-                              className={`bg-blue-50 border-0 text-blue-900 px-3 py-2 rounded-xl font-bold text-xs focus:ring-0 focus:outline-none h-9 ${isWarden && authorizedHostels.length <= 1 ? 'opacity-70 cursor-not-allowed' : ''}`}
+                              className={`bg-blue-50 border-0 text-blue-900 px-2 sm:px-3 py-1 sm:py-2 rounded-lg sm:rounded-xl font-bold text-[11px] sm:text-xs focus:ring-0 focus:outline-none h-8 sm:h-9 ${isWarden && authorizedHostels.length <= 1 ? 'opacity-70 cursor-not-allowed' : ''}`}
                             >
                               {!isWarden && <option value="all">All Hostels</option>}
                               {Object.keys(hostelStats)
@@ -9776,15 +9890,15 @@ export default function AdminDashboard({
                             </select>
                             <button
                               onClick={exportAttendanceToExcel}
-                              className="px-3 py-2 text-xs font-semibold text-blue-600 bg-blue-50 rounded-lg hover:bg-blue-100 transition-colors flex items-center gap-1.5 h-9 whitespace-nowrap"
+                              className="px-2 sm:px-3 py-1 sm:py-2 text-[11px] sm:text-xs font-semibold text-blue-600 bg-blue-50 rounded-lg hover:bg-blue-100 transition-colors flex items-center gap-1 sm:gap-1.5 h-8 sm:h-9 whitespace-nowrap"
                             >
-                              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a2 2 0 002 2h12a2 2 0 002-2v-1m-4-4l-4 4m0 0l-4-4m4 4V4" /></svg>
+                              <svg className="w-3 h-3 sm:w-3.5 sm:h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a2 2 0 002 2h12a2 2 0 002-2v-1m-4-4l-4 4m0 0l-4-4m4 4V4" /></svg>
                               Export Excel
                             </button>
                             {(userType === "admin" || userType === "superadmin") && (
                               <button
                                 onClick={() => handleCleanup("attendance")}
-                                className="px-3 py-2 text-xs font-semibold text-red-600 bg-red-50 rounded-lg hover:bg-red-100 transition-colors h-9 whitespace-nowrap"
+                                className="px-2 sm:px-3 py-1 sm:py-2 text-[11px] sm:text-xs font-semibold text-red-600 bg-red-50 rounded-lg hover:bg-red-100 transition-colors h-8 sm:h-9 whitespace-nowrap"
                               >
                                 Purge Logs
                               </button>
@@ -9794,7 +9908,7 @@ export default function AdminDashboard({
                       </div>
 
                       {/* ⚠️ CURFEW ANOMALY DETECTED PANEL */}
-                      {anomalyAlerts.length > 0 && (() => {
+                      {isAttendanceWindowActive && anomalyAlerts.length > 0 && (() => {
                         return (
                           <div className="bg-gradient-to-r from-red-50 to-orange-50 border-2 border-red-100 rounded-2xl md:rounded-3xl p-3 md:p-6 space-y-2 md:space-y-4 shadow-sm animate-in slide-in-from-top duration-300">
                             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 md:gap-3">
@@ -10256,84 +10370,86 @@ export default function AdminDashboard({
                         </div>
                       )}
 
-                      {/* Absentee List */}
-                      <div ref={absenteesRef} className="bg-transparent md:bg-red-50/30 rounded-none md:rounded-xl border-0 md:border md:border-red-100 p-0 md:p-4">
-                        <h3 className="text-xs md:text-sm font-bold text-red-900 mb-3 flex items-center justify-between gap-1.5 md:gap-2">
-                          <span className="flex items-center gap-1.5 md:gap-2 min-w-0">
-                            <svg className="w-3.5 h-3.5 md:w-4 md:h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" /></svg>
-                            <span className="truncate">
-                              <span className="hidden md:inline">{selectedDate === new Date(new Date().getTime() + (5.5 * 60 * 60 * 1000)).toISOString().split('T')[0] ? "Today's " : `${selectedDate} `}</span>
-                              Absentee List ({displayedAbsentees.length}<span className="hidden md:inline"> students</span>)
+                      {/* Absentee List - Only visible during active attendance window or for past dates */}
+                      {isAttendanceWindowActive && (
+                        <div ref={absenteesRef} className="bg-transparent md:bg-red-50/30 rounded-none md:rounded-xl border-0 md:border md:border-red-100 p-0 md:p-4">
+                          <h3 className="text-xs md:text-sm font-bold text-red-900 mb-3 flex items-center justify-between gap-1.5 md:gap-2">
+                            <span className="flex items-center gap-1.5 md:gap-2 min-w-0">
+                              <svg className="w-3.5 h-3.5 md:w-4 md:h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" /></svg>
+                              <span className="truncate">
+                                <span className="hidden md:inline">{selectedDate === new Date(new Date().getTime() + (5.5 * 60 * 60 * 1000)).toISOString().split('T')[0] ? "Today's " : `${selectedDate} `}</span>
+                                Absentee List ({displayedAbsentees.length}<span className="hidden md:inline"> students</span>)
+                              </span>
                             </span>
-                          </span>
-                          {displayedAbsentees.length > 0 && (
-                            <button
-                              onClick={handleNotifyAbsentees}
-                              disabled={isNotifyingAbsentees}
-                              className="px-2 py-0.5 md:px-2.5 md:py-1 bg-red-600 hover:bg-red-700 disabled:opacity-50 text-white text-[8px] md:text-[9px] font-black uppercase tracking-wider rounded-md md:rounded-lg transition-all flex items-center gap-1 md:gap-1.5 shadow-sm active:scale-95 flex-shrink-0 whitespace-nowrap"
-                            >
-                              <span className="text-[9px] md:text-xs">🔔</span>
-                              {isNotifyingAbsentees ? "Notifying..." : "Notify Parents"}
-                            </button>
-                          )}
-                        </h3>
-                        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-                          {(showAllAbsentees ? displayedAbsentees : displayedAbsentees.slice(0, 9)).map(s => (
-                            <div key={s.id} className="bg-white p-2 sm:p-2.5 md:p-3 rounded-lg border border-red-100 flex flex-col gap-1 sm:gap-1.5 md:gap-2 shadow-sm hover:shadow-md transition-shadow">
-                              <div className="flex items-start gap-1.5 sm:gap-2">
-                                <div className="w-6 h-6 rounded-md bg-red-100 text-red-600 border-[0.5px] border-blue-600 flex items-center justify-center text-[9px] font-black flex-shrink-0 self-start mt-0.5 overflow-hidden">
-                                  {s.profilePicture ? (
-                                    <img src={s.profilePicture} alt={s.name} className="w-full h-full object-cover" />
-                                  ) : (
-                                    getInitials(s.name)
-                                  )}
+                            {displayedAbsentees.length > 0 && (
+                              <button
+                                onClick={handleNotifyAbsentees}
+                                disabled={isNotifyingAbsentees}
+                                className="px-2 py-0.5 md:px-2.5 md:py-1 bg-red-600 hover:bg-red-700 disabled:opacity-50 text-white text-[8px] md:text-[9px] font-black uppercase tracking-wider rounded-md md:rounded-lg transition-all flex items-center gap-1 md:gap-1.5 shadow-sm active:scale-95 flex-shrink-0 whitespace-nowrap"
+                              >
+                                <span className="text-[9px] md:text-xs">🔔</span>
+                                {isNotifyingAbsentees ? "Notifying..." : "Notify Parents"}
+                              </button>
+                            )}
+                          </h3>
+                          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                            {(showAllAbsentees ? displayedAbsentees : displayedAbsentees.slice(0, 12)).map(s => (
+                              <div key={s.id} className="bg-white p-2 sm:p-2.5 md:p-3 rounded-lg border border-red-100 flex flex-col gap-1 sm:gap-1.5 md:gap-2 shadow-sm hover:shadow-md transition-shadow">
+                                <div className="flex items-start gap-1.5 sm:gap-2">
+                                  <div className="w-6 h-6 rounded-md bg-red-100 text-red-600 border-[0.5px] border-blue-600 flex items-center justify-center text-[9px] font-black flex-shrink-0 self-start mt-0.5 overflow-hidden">
+                                    {s.profilePicture ? (
+                                      <img src={s.profilePicture} alt={s.name} className="w-full h-full object-cover" />
+                                    ) : (
+                                      getInitials(s.name)
+                                    )}
+                                  </div>
+                                  <div className="min-w-0 flex-1">
+                                    <p className="text-[9px] font-bold text-foreground break-words leading-tight">{s.name}</p>
+                                    <p className="text-[8px] text-secondary truncate uppercase leading-tight whitespace-nowrap">{s.roomNumber} • {s.floorNumber ? normalizeFloorName(s.floorNumber) : s.hostelName}</p>
+                                  </div>
+                                  <a href={`tel:${s.phoneNumber}`} className="w-5 h-5 bg-green-50 text-green-600 rounded-full flex items-center justify-center hover:bg-green-100 transition-colors flex-shrink-0">
+                                    <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z" /></svg>
+                                  </a>
                                 </div>
-                                <div className="min-w-0 flex-1">
-                                  <p className="text-[9px] font-bold text-foreground break-words leading-tight">{s.name}</p>
-                                  <p className="text-[8px] text-secondary truncate uppercase leading-tight whitespace-nowrap">{s.roomNumber} • {s.floorNumber ? normalizeFloorName(s.floorNumber) : s.hostelName}</p>
-                                </div>
-                                <a href={`tel:${s.phoneNumber}`} className="w-5 h-5 bg-green-50 text-green-600 rounded-full flex items-center justify-center hover:bg-green-100 transition-colors flex-shrink-0">
-                                  <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z" /></svg>
-                                </a>
-                              </div>
 
-                              {/* ⚡ NEW: Manual Campus Toggle for Absentees who are 'OUT' */}
-                              {s.studentStatus === 'out' && (
-                                <button
-                                  onClick={() => handleManualToggle(s.id, "out")}
-                                  className="w-fit self-center py-0.5 px-2.5 rounded-md bg-amber-500 hover:bg-amber-600 text-white text-[7.5px] md:text-[8px] font-black uppercase tracking-wider transition-all flex items-center justify-center shadow-xs active:scale-95 whitespace-nowrap"
-                                >
-                                  Mark IN (Campus)
-                                </button>
-                              )}
-                            </div>
-                          ))}
-                        </div>
-                        {displayedAbsentees.length > 9 && (
-                          <div className="mt-4 flex justify-center">
-                            <button
-                              onClick={() => setShowAllAbsentees(!showAllAbsentees)}
-                              className="px-4 py-2 text-sm font-semibold text-red-600 hover:bg-red-50 rounded-lg transition-colors flex items-center gap-2"
-                            >
-                              {showAllAbsentees ? (
-                                <>
-                                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 15l7-7 7 7" />
-                                  </svg>
-                                  Show Less
-                                </>
-                              ) : (
-                                <>
-                                  See More ({displayedAbsentees.length - 9} more)
-                                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                                  </svg>
-                                </>
-                              )}
-                            </button>
+                                {/* ⚡ NEW: Manual Campus Toggle for Absentees who are 'OUT' */}
+                                {s.studentStatus === 'out' && (
+                                  <button
+                                    onClick={() => handleManualToggle(s.id, "out")}
+                                    className="w-fit self-center py-0.5 px-2.5 rounded-md bg-amber-500 hover:bg-amber-600 text-white text-[7.5px] md:text-[8px] font-black uppercase tracking-wider transition-all flex items-center justify-center shadow-xs active:scale-95 whitespace-nowrap"
+                                  >
+                                    Mark IN (Campus)
+                                  </button>
+                                )}
+                              </div>
+                            ))}
                           </div>
-                        )}
-                      </div>
+                          {displayedAbsentees.length > 12 && (
+                            <div className="mt-4 flex justify-center">
+                              <button
+                                onClick={() => setShowAllAbsentees(!showAllAbsentees)}
+                                className="px-4 py-2 text-sm font-semibold text-red-600 hover:bg-red-50 rounded-lg transition-colors flex items-center gap-2"
+                              >
+                                {showAllAbsentees ? (
+                                  <>
+                                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 15l7-7 7 7" />
+                                    </svg>
+                                    Show Less
+                                  </>
+                                ) : (
+                                  <>
+                                    See More ({displayedAbsentees.length - 12} more)
+                                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                                    </svg>
+                                  </>
+                                )}
+                              </button>
+                            </div>
+                          )}
+                        </div>
+                      )}
                     </>
                   ) : (
                     /* Student History View */
@@ -10520,7 +10636,7 @@ export default function AdminDashboard({
                   )}
               </div>
 
-              <div className={currentTab === 'settings' ? 'block space-y-6' : 'hidden'}>
+              <div className={currentTab === 'settings' ? 'block space-y-6' : 'hidden'} style={{ contentVisibility: currentTab === 'settings' ? 'visible' : 'hidden', contain: 'style layout paint' }}>
                   {/* Settings Sub-Navigation */}
                   <div className="flex border-b border-gray-200 overflow-x-auto [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden">
                     {title === "Super Admin Dashboard" && (
@@ -10560,7 +10676,7 @@ export default function AdminDashboard({
                   {/* Settings Content */}
                   <div className="pt-2">
                     {settingsTab === "fieldEnforcement" && title === "Super Admin Dashboard" && (
-                      <FieldEnforcementComponent hostels={hostels.map(h => h.name)} />
+                      <FieldEnforcementComponent hostels={hostels.map(h => h.name)} students={students} />
                     )}
                     {settingsTab !== "fieldEnforcement" && (
                       <TenantSettingsView 
@@ -10572,7 +10688,7 @@ export default function AdminDashboard({
                   </div>
               </div>
 
-              <div className={currentTab === 'wifi_sync' ? 'block space-y-6' : 'hidden'}>
+              <div className={currentTab === 'wifi_sync' ? 'block space-y-6' : 'hidden'} style={{ contentVisibility: currentTab === 'wifi_sync' ? 'visible' : 'hidden', contain: 'style layout paint' }}>
                   {/* Header */}
                   <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                     <div>
@@ -11012,7 +11128,7 @@ export default function AdminDashboard({
                   )}
               </div>
 
-              <div className={currentTab === 'messaging' ? 'block space-y-6' : 'hidden'}>
+              <div className={currentTab === 'messaging' ? 'block space-y-6' : 'hidden'} style={{ contentVisibility: currentTab === 'messaging' ? 'visible' : 'hidden', contain: 'style layout paint' }}>
                   <div className="flex items-center justify-between">
                     <div>
                       <h2 className="text-lg font-bold text-foreground">{isWarden ? "Warden Messaging System" : "Dean Messaging System"}</h2>
@@ -11287,7 +11403,7 @@ export default function AdminDashboard({
                   </div>
               </div>
 
-              <div className={currentTab === 'payments' ? 'block space-y-6' : 'hidden'}>
+              <div className={currentTab === 'payments' ? 'block space-y-6' : 'hidden'} style={{ contentVisibility: currentTab === 'payments' ? 'visible' : 'hidden', contain: 'style layout paint' }}>
                   <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
                     <div>
                       <h2 className="text-lg font-bold text-foreground">Hostel/Mess Fee Payment Details</h2>
@@ -11611,7 +11727,7 @@ export default function AdminDashboard({
                     </div>
                   </div>
 
-              <div className={currentTab === 'rooms' ? 'block space-y-6' : 'hidden'}>
+              <div className={currentTab === 'rooms' ? 'block space-y-6' : 'hidden'} style={{ contentVisibility: currentTab === 'rooms' ? 'visible' : 'hidden', contain: 'style layout paint' }}>
                   <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
                     <div>
                       <div className="flex items-center gap-2">
@@ -12062,7 +12178,7 @@ export default function AdminDashboard({
                   )}
               </div>
 
-              <div className={currentTab === 'alerts' ? 'block space-y-6' : 'hidden'}>
+              <div className={currentTab === 'alerts' ? 'block space-y-6' : 'hidden'} style={{ contentVisibility: currentTab === 'alerts' ? 'visible' : 'hidden', contain: 'style layout paint' }}>
                   <div>
                     <h2 className="text-lg font-bold text-foreground">Dean Disciplinary & Security Alerts Console</h2>
                     <p className="text-sm text-secondary">Audit system-wide security alerts, failed face matches, and device resets</p>
@@ -12181,7 +12297,7 @@ export default function AdminDashboard({
                   </div>
               </div>
 
-              <div className={currentTab === 'add_student' ? 'block space-y-6' : 'hidden'}>
+              <div className={currentTab === 'add_student' ? 'block space-y-6' : 'hidden'} style={{ contentVisibility: currentTab === 'add_student' ? 'visible' : 'hidden', contain: 'style layout paint' }}>
                   <div>
                     <h2 className="text-lg font-black text-foreground uppercase tracking-wide">Manual Student Registration</h2>
                     <p className="text-xs text-secondary font-bold uppercase tracking-tight">Pre-register a student directly in the database. They can link their credentials later by logging in with their email.</p>
@@ -17760,8 +17876,8 @@ export default function AdminDashboard({
       }
       {
         showSystemSettingsModal && (
-          <div className="fixed inset-0 z-[100] bg-black/60 backdrop-blur-md flex items-center justify-center p-2 sm:p-4 animate-in fade-in duration-300">
-            <div className="bg-white rounded-[20px] sm:rounded-[32px] w-full max-w-4xl max-h-[96vh] sm:max-h-[90vh] overflow-hidden shadow-2xl flex flex-col transition-all duration-300 scale-100">
+          <div className="fixed inset-0 z-[100] bg-black/75 sm:bg-black/60 sm:backdrop-blur-md flex items-center justify-center p-2 sm:p-4 animate-in fade-in duration-200 transform-gpu">
+            <div className="bg-white rounded-[20px] sm:rounded-[32px] w-full max-w-4xl max-h-[96vh] sm:max-h-[90vh] overflow-hidden shadow-2xl flex flex-col transition-all duration-200 scale-100 transform-gpu will-change-transform">
               {/* Modal Header */}
               <div className="p-3.5 sm:p-8 border-b border-gray-100 flex items-center justify-between bg-gray-50/50">
                 <div className="flex items-center gap-2.5 sm:gap-4">
@@ -17805,10 +17921,14 @@ export default function AdminDashboard({
                   return (
                     <button
                       key={tab.id}
-                      onClick={() => setActiveSettingsTab(tab.id as any)}
-                      className={`${mobileSpan} sm:col-auto sm:flex-1 flex items-center justify-center gap-1 sm:gap-1.5 py-2 px-1 sm:px-2.5 rounded-xl transition-all duration-200 ${
+                      onClick={() => {
+                        startTransition(() => {
+                          setActiveSettingsTab(tab.id as any);
+                        });
+                      }}
+                      className={`${mobileSpan} sm:col-auto sm:flex-1 flex items-center justify-center gap-1 sm:gap-1.5 py-2 px-1 sm:px-2.5 rounded-xl transition-colors duration-150 transform-gpu ${
                         activeSettingsTab === tab.id
-                          ? "bg-white text-indigo-600 shadow-md shadow-slate-300/50 font-black border border-slate-200/80 ring-2 ring-indigo-500/10 scale-[1.01]"
+                          ? "bg-white text-indigo-600 shadow-md shadow-slate-300/50 font-black border border-slate-200/80 ring-2 ring-indigo-500/10 sm:scale-[1.01]"
                           : "text-slate-600 hover:text-slate-900 hover:bg-white/60 font-bold"
                       }`}
                     >
@@ -17822,7 +17942,7 @@ export default function AdminDashboard({
               </div>
 
               {/* Modal Body */}
-              <div className="flex-1 overflow-y-auto p-2.5 sm:p-6 md:p-8 custom-scrollbar overscroll-contain">
+              <div className="flex-1 overflow-y-auto p-2.5 sm:p-6 md:p-8 custom-scrollbar overscroll-contain transform-gpu [webkit-overflow-scrolling:touch]">
 
                 {activeSettingsTab === "general" && (
                   <div className="space-y-6">
@@ -18325,15 +18445,15 @@ export default function AdminDashboard({
 
                     <div className="space-y-4 sm:space-y-6">
                       {/* Parent Alerts */}
-                      <div className="bg-gray-50/50 p-3 sm:p-4 rounded-[20px] border border-gray-100 space-y-2.5 sm:space-y-3">
-                        <h4 className="text-[9.5px] sm:text-[10px] font-bold text-slate-500 px-1">Parent Alerts</h4>
-                        <div className="space-y-2.5 sm:space-y-3">
-                          <div className="bg-white p-3 sm:p-4 rounded-2xl border-2 border-slate-100 flex items-center justify-between shadow-sm hover:border-indigo-100 transition-all gap-2">
-                            <div className="flex-1 min-w-0">
-                              <h3 className="text-[11px] sm:text-xs font-bold text-slate-900 leading-snug">Night Attendance Absentee Alert</h3>
-                              <p className="text-[9px] sm:text-[10px] text-slate-500 font-normal mt-0.5 leading-tight">Vibrate & sound parents when a student misses night curfew</p>
+                      <div className="sm:bg-gray-50/50 sm:p-4 sm:rounded-[20px] sm:border sm:border-gray-100 space-y-1.5 sm:space-y-3">
+                        <h4 className="text-[9.5px] sm:text-[10px] font-bold text-slate-500 px-0.5 sm:px-1">Parent Alerts</h4>
+                        <div className="grid grid-cols-2 gap-2 sm:gap-3">
+                          <div className="bg-white p-2 sm:p-3.5 rounded-xl sm:rounded-2xl border sm:border-2 border-slate-100 flex items-center justify-between shadow-sm hover:border-indigo-100 transition-all gap-1.5 sm:gap-2">
+                            <div className="flex-1 min-w-0 pr-1">
+                              <h3 className="text-[10px] sm:text-xs font-bold text-slate-900 leading-tight line-clamp-2">Night Attendance Absentee Alert</h3>
+                              <p className="hidden sm:block text-[9px] sm:text-[10px] text-slate-500 font-normal mt-0.5 leading-tight">Vibrate & sound parents when a student misses night curfew</p>
                             </div>
-                            <label className="relative inline-flex items-center cursor-pointer shrink-0">
+                            <label className="relative inline-flex items-center cursor-pointer shrink-0 scale-75 sm:scale-100 origin-right">
                               <input
                                 type="checkbox"
                                 checked={notificationSettings.parentNightAbsent !== false}
@@ -18344,12 +18464,12 @@ export default function AdminDashboard({
                             </label>
                           </div>
 
-                          <div className="bg-white p-3 sm:p-4 rounded-2xl border-2 border-slate-100 flex items-center justify-between shadow-sm hover:border-indigo-100 transition-all gap-2">
-                            <div className="flex-1 min-w-0">
-                              <h3 className="text-[11px] sm:text-xs font-bold text-slate-900 leading-snug">Gate Scan Entry/Exit Alerts</h3>
-                              <p className="text-[9px] sm:text-[10px] text-slate-500 font-normal mt-0.5 leading-tight">Instant push notification when student checks out or checks in at the gate</p>
+                          <div className="bg-white p-2 sm:p-3.5 rounded-xl sm:rounded-2xl border sm:border-2 border-slate-100 flex items-center justify-between shadow-sm hover:border-indigo-100 transition-all gap-1.5 sm:gap-2">
+                            <div className="flex-1 min-w-0 pr-1">
+                              <h3 className="text-[10px] sm:text-xs font-bold text-slate-900 leading-tight line-clamp-2">Gate Scan Entry/Exit Alerts</h3>
+                              <p className="hidden sm:block text-[9px] sm:text-[10px] text-slate-500 font-normal mt-0.5 leading-tight">Instant push notification when student checks out or checks in at the gate</p>
                             </div>
-                            <label className="relative inline-flex items-center cursor-pointer shrink-0">
+                            <label className="relative inline-flex items-center cursor-pointer shrink-0 scale-75 sm:scale-100 origin-right">
                               <input
                                 type="checkbox"
                                 checked={notificationSettings.parentScanInOut !== false}
@@ -18360,12 +18480,12 @@ export default function AdminDashboard({
                             </label>
                           </div>
 
-                          <div className="bg-white p-3 sm:p-4 rounded-2xl border-2 border-slate-100 flex items-center justify-between shadow-sm hover:border-indigo-100 transition-all gap-2">
-                            <div className="flex-1 min-w-0">
-                              <h3 className="text-[11px] sm:text-xs font-bold text-slate-900 leading-snug">Gatepass / Leave Decisions</h3>
-                              <p className="text-[9px] sm:text-[10px] text-slate-500 font-normal mt-0.5 leading-tight">Notify parents immediately upon approval/rejection of out-pass requests</p>
+                          <div className="bg-white p-2 sm:p-3.5 rounded-xl sm:rounded-2xl border sm:border-2 border-slate-100 flex items-center justify-between shadow-sm hover:border-indigo-100 transition-all gap-1.5 sm:gap-2">
+                            <div className="flex-1 min-w-0 pr-1">
+                              <h3 className="text-[10px] sm:text-xs font-bold text-slate-900 leading-tight line-clamp-2">Gatepass / Leave Decisions</h3>
+                              <p className="hidden sm:block text-[9px] sm:text-[10px] text-slate-500 font-normal mt-0.5 leading-tight">Notify parents immediately upon approval/rejection of out-pass requests</p>
                             </div>
-                            <label className="relative inline-flex items-center cursor-pointer shrink-0">
+                            <label className="relative inline-flex items-center cursor-pointer shrink-0 scale-75 sm:scale-100 origin-right">
                               <input
                                 type="checkbox"
                                 checked={notificationSettings.parentLeaveApproval !== false}
@@ -18375,19 +18495,35 @@ export default function AdminDashboard({
                               <div className="w-11 h-6 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-indigo-600"></div>
                             </label>
                           </div>
+
+                          <div className="bg-white p-2 sm:p-3.5 rounded-xl sm:rounded-2xl border sm:border-2 border-slate-100 flex items-center justify-between shadow-sm hover:border-indigo-100 transition-all gap-1.5 sm:gap-2">
+                            <div className="flex-1 min-w-0 pr-1">
+                              <h3 className="text-[10px] sm:text-xs font-bold text-slate-900 leading-tight line-clamp-2">Outing Overdue Alerts</h3>
+                              <p className="hidden sm:block text-[9px] sm:text-[10px] text-slate-500 font-normal mt-0.5 leading-tight">Notify parents when their ward has not returned before grace period expires</p>
+                            </div>
+                            <label className="relative inline-flex items-center cursor-pointer shrink-0 scale-75 sm:scale-100 origin-right">
+                              <input
+                                type="checkbox"
+                                checked={notificationSettings.parentOutingOverdue !== false}
+                                onChange={(e) => handleToggleNotificationSetting('parentOutingOverdue', e.target.checked)}
+                                className="sr-only peer"
+                              />
+                              <div className="w-11 h-6 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-indigo-600"></div>
+                            </label>
+                          </div>
                         </div>
                       </div>
 
                       {/* Student Alerts */}
-                      <div className="bg-gray-50/50 p-3 sm:p-4 rounded-[20px] border border-gray-100 space-y-2.5 sm:space-y-3">
-                        <h4 className="text-[9.5px] sm:text-[10px] font-bold text-slate-500 px-1">Student Alerts</h4>
-                        <div className="space-y-2.5 sm:space-y-3">
-                          <div className="bg-white p-3 sm:p-4 rounded-2xl border-2 border-slate-100 flex items-center justify-between shadow-sm hover:border-indigo-100 transition-all gap-2">
-                            <div className="flex-1 min-w-0">
-                              <h3 className="text-[11px] sm:text-xs font-bold text-slate-900 leading-snug">Gatepass Approval Alerts</h3>
-                              <p className="text-[9px] sm:text-[10px] text-slate-500 font-normal mt-0.5 leading-tight">Push updates directly to student when leave is approved/rejected</p>
+                      <div className="sm:bg-gray-50/50 sm:p-4 sm:rounded-[20px] sm:border sm:border-gray-100 space-y-1.5 sm:space-y-3">
+                        <h4 className="text-[9.5px] sm:text-[10px] font-bold text-slate-500 px-0.5 sm:px-1">Student Alerts</h4>
+                        <div className="grid grid-cols-2 gap-2 sm:gap-3">
+                          <div className="bg-white p-2 sm:p-3.5 rounded-xl sm:rounded-2xl border sm:border-2 border-slate-100 flex items-center justify-between shadow-sm hover:border-indigo-100 transition-all gap-1.5 sm:gap-2">
+                            <div className="flex-1 min-w-0 pr-1">
+                              <h3 className="text-[10px] sm:text-xs font-bold text-slate-900 leading-tight line-clamp-2">Gatepass Approval Alerts</h3>
+                              <p className="hidden sm:block text-[9px] sm:text-[10px] text-slate-500 font-normal mt-0.5 leading-tight">Push updates directly to student when leave is approved/rejected</p>
                             </div>
-                            <label className="relative inline-flex items-center cursor-pointer shrink-0">
+                            <label className="relative inline-flex items-center cursor-pointer shrink-0 scale-75 sm:scale-100 origin-right">
                               <input
                                 type="checkbox"
                                 checked={notificationSettings.studentLeaveStatus !== false}
@@ -18398,12 +18534,12 @@ export default function AdminDashboard({
                             </label>
                           </div>
 
-                          <div className="bg-white p-3 sm:p-4 rounded-2xl border-2 border-slate-100 flex items-center justify-between shadow-sm hover:border-indigo-100 transition-all gap-2">
-                            <div className="flex-1 min-w-0">
-                              <h3 className="text-[11px] sm:text-xs font-bold text-slate-900 leading-snug">Curfew Attendance Reminders</h3>
-                              <p className="text-[9px] sm:text-[10px] text-slate-500 font-normal mt-0.5 leading-tight">Daily background reminder to mark attendance before curfew hour closes</p>
+                          <div className="bg-white p-2 sm:p-3.5 rounded-xl sm:rounded-2xl border sm:border-2 border-slate-100 flex items-center justify-between shadow-sm hover:border-indigo-100 transition-all gap-1.5 sm:gap-2">
+                            <div className="flex-1 min-w-0 pr-1">
+                              <h3 className="text-[10px] sm:text-xs font-bold text-slate-900 leading-tight line-clamp-2">Curfew Attendance Reminders</h3>
+                              <p className="hidden sm:block text-[9px] sm:text-[10px] text-slate-500 font-normal mt-0.5 leading-tight">Daily background reminder to mark attendance before curfew hour closes</p>
                             </div>
-                            <label className="relative inline-flex items-center cursor-pointer shrink-0">
+                            <label className="relative inline-flex items-center cursor-pointer shrink-0 scale-75 sm:scale-100 origin-right">
                               <input
                                 type="checkbox"
                                 checked={notificationSettings.studentAttendanceReminder !== false}
@@ -18413,19 +18549,51 @@ export default function AdminDashboard({
                               <div className="w-11 h-6 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-indigo-600"></div>
                             </label>
                           </div>
+
+                          <div className="bg-white p-2 sm:p-3.5 rounded-xl sm:rounded-2xl border sm:border-2 border-slate-100 flex items-center justify-between shadow-sm hover:border-indigo-100 transition-all gap-1.5 sm:gap-2">
+                            <div className="flex-1 min-w-0 pr-1">
+                              <h3 className="text-[10px] sm:text-xs font-bold text-slate-900 leading-tight line-clamp-2">Payment & Fee Verification</h3>
+                              <p className="hidden sm:block text-[9px] sm:text-[10px] text-slate-500 font-normal mt-0.5 leading-tight">Instant push notification when student bill or fee payment is verified</p>
+                            </div>
+                            <label className="relative inline-flex items-center cursor-pointer shrink-0 scale-75 sm:scale-100 origin-right">
+                              <input
+                                type="checkbox"
+                                checked={notificationSettings.paymentVerified !== false}
+                                onChange={(e) => handleToggleNotificationSetting('paymentVerified', e.target.checked)}
+                                className="sr-only peer"
+                              />
+                              <div className="w-11 h-6 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-indigo-600"></div>
+                            </label>
+                          </div>
+
+                          <div className="bg-white p-2 sm:p-3.5 rounded-xl sm:rounded-2xl border sm:border-2 border-slate-100 flex items-center justify-between shadow-sm hover:border-indigo-100 transition-all gap-1.5 sm:gap-2">
+                            <div className="flex-1 min-w-0 pr-1">
+                              <h3 className="text-[10px] sm:text-xs font-bold text-slate-900 leading-tight line-clamp-2">Parent Video Consent Required</h3>
+                              <p className="hidden sm:block text-[9px] sm:text-[10px] text-slate-500 font-normal mt-0.5 leading-tight">Notify student when an applied leave is awaiting parent video upload</p>
+                            </div>
+                            <label className="relative inline-flex items-center cursor-pointer shrink-0 scale-75 sm:scale-100 origin-right">
+                              <input
+                                type="checkbox"
+                                checked={notificationSettings.studentConsentRequired !== false}
+                                onChange={(e) => handleToggleNotificationSetting('studentConsentRequired', e.target.checked)}
+                                className="sr-only peer"
+                              />
+                              <div className="w-11 h-6 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-indigo-600"></div>
+                            </label>
+                          </div>
                         </div>
                       </div>
 
                       {/* Warden Alerts */}
-                      <div className="bg-gray-50/50 p-3 sm:p-4 rounded-[20px] border border-gray-100 space-y-2.5 sm:space-y-3">
-                        <h4 className="text-[9.5px] sm:text-[10px] font-bold text-slate-500 px-1">Warden Alerts</h4>
-                        <div className="space-y-2.5 sm:space-y-3">
-                          <div className="bg-white p-3 sm:p-4 rounded-2xl border-2 border-slate-100 flex items-center justify-between shadow-sm hover:border-indigo-100 transition-all gap-2">
-                            <div className="flex-1 min-w-0">
-                              <h3 className="text-[11px] sm:text-xs font-bold text-slate-900 leading-snug">New Leave Request Alerts</h3>
-                              <p className="text-[9px] sm:text-[10px] text-slate-500 font-normal mt-0.5 leading-tight">Notify wardens instantly when a student submits a new gatepass request</p>
+                      <div className="sm:bg-gray-50/50 sm:p-4 sm:rounded-[20px] sm:border sm:border-gray-100 space-y-1.5 sm:space-y-3">
+                        <h4 className="text-[9.5px] sm:text-[10px] font-bold text-slate-500 px-0.5 sm:px-1">Warden Alerts</h4>
+                        <div className="grid grid-cols-2 gap-2 sm:gap-3">
+                          <div className="bg-white p-2 sm:p-3.5 rounded-xl sm:rounded-2xl border sm:border-2 border-slate-100 flex items-center justify-between shadow-sm hover:border-indigo-100 transition-all gap-1.5 sm:gap-2">
+                            <div className="flex-1 min-w-0 pr-1">
+                              <h3 className="text-[10px] sm:text-xs font-bold text-slate-900 leading-tight line-clamp-2">New Leave Request Alerts</h3>
+                              <p className="hidden sm:block text-[9px] sm:text-[10px] text-slate-500 font-normal mt-0.5 leading-tight">Notify wardens instantly when a student submits a new gatepass request</p>
                             </div>
-                            <label className="relative inline-flex items-center cursor-pointer shrink-0">
+                            <label className="relative inline-flex items-center cursor-pointer shrink-0 scale-75 sm:scale-100 origin-right">
                               <input
                                 type="checkbox"
                                 checked={notificationSettings.wardenNewLeaveRequest !== false}
@@ -18436,12 +18604,44 @@ export default function AdminDashboard({
                             </label>
                           </div>
 
-                          <div className="bg-white p-3 sm:p-4 rounded-2xl border-2 border-slate-100 flex items-center justify-between shadow-sm hover:border-indigo-100 transition-all gap-2">
-                            <div className="flex-1 min-w-0">
-                              <h3 className="text-[11px] sm:text-xs font-bold text-slate-900 leading-snug">Emergency Scan Failure Alerts</h3>
-                              <p className="text-[9px] sm:text-[10px] text-slate-500 font-normal mt-0.5 leading-tight">Push alert when device locks out or checks in with GPS/biometric failures</p>
+                          <div className="bg-white p-2 sm:p-3.5 rounded-xl sm:rounded-2xl border sm:border-2 border-slate-100 flex items-center justify-between shadow-sm hover:border-indigo-100 transition-all gap-1.5 sm:gap-2">
+                            <div className="flex-1 min-w-0 pr-1">
+                              <h3 className="text-[10px] sm:text-xs font-bold text-slate-900 leading-tight line-clamp-2">Parent Video Consent Uploads</h3>
+                              <p className="hidden sm:block text-[9px] sm:text-[10px] text-slate-500 font-normal mt-0.5 leading-tight">Notify wardens when a parent uploads video approval for student leave</p>
                             </div>
-                            <label className="relative inline-flex items-center cursor-pointer shrink-0">
+                            <label className="relative inline-flex items-center cursor-pointer shrink-0 scale-75 sm:scale-100 origin-right">
+                              <input
+                                type="checkbox"
+                                checked={notificationSettings.wardenParentConsent !== false}
+                                onChange={(e) => handleToggleNotificationSetting('wardenParentConsent', e.target.checked)}
+                                className="sr-only peer"
+                              />
+                              <div className="w-11 h-6 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-indigo-600"></div>
+                            </label>
+                          </div>
+
+                          <div className="bg-white p-2 sm:p-3.5 rounded-xl sm:rounded-2xl border sm:border-2 border-slate-100 flex items-center justify-between shadow-sm hover:border-indigo-100 transition-all gap-1.5 sm:gap-2">
+                            <div className="flex-1 min-w-0 pr-1">
+                              <h3 className="text-[10px] sm:text-xs font-bold text-slate-900 leading-tight line-clamp-2">Outing Overdue Alerts</h3>
+                              <p className="hidden sm:block text-[9px] sm:text-[10px] text-slate-500 font-normal mt-0.5 leading-tight">Notify wardens when a student from their hostel has not returned on time</p>
+                            </div>
+                            <label className="relative inline-flex items-center cursor-pointer shrink-0 scale-75 sm:scale-100 origin-right">
+                              <input
+                                type="checkbox"
+                                checked={notificationSettings.wardenOutingOverdue !== false}
+                                onChange={(e) => handleToggleNotificationSetting('wardenOutingOverdue', e.target.checked)}
+                                className="sr-only peer"
+                              />
+                              <div className="w-11 h-6 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-indigo-600"></div>
+                            </label>
+                          </div>
+
+                          <div className="bg-white p-2 sm:p-3.5 rounded-xl sm:rounded-2xl border sm:border-2 border-slate-100 flex items-center justify-between shadow-sm hover:border-indigo-100 transition-all gap-1.5 sm:gap-2">
+                            <div className="flex-1 min-w-0 pr-1">
+                              <h3 className="text-[10px] sm:text-xs font-bold text-slate-900 leading-tight line-clamp-2">Emergency Scan Failure Alerts</h3>
+                              <p className="hidden sm:block text-[9px] sm:text-[10px] text-slate-500 font-normal mt-0.5 leading-tight">Push alert when device locks out or checks in with GPS/biometric failures</p>
+                            </div>
+                            <label className="relative inline-flex items-center cursor-pointer shrink-0 scale-75 sm:scale-100 origin-right">
                               <input
                                 type="checkbox"
                                 checked={notificationSettings.wardenScanFailure !== false}
@@ -18455,19 +18655,71 @@ export default function AdminDashboard({
                       </div>
 
                       {/* Dean & Admin Alerts */}
-                      <div className="bg-gray-50/50 p-3 sm:p-4 rounded-[20px] border border-gray-100 space-y-2.5 sm:space-y-3">
-                        <h4 className="text-[9.5px] sm:text-[10px] font-bold text-slate-500 px-1">Dean & Super Admin Alerts</h4>
-                        <div className="space-y-2.5 sm:space-y-3">
-                          <div className="bg-white p-3 sm:p-4 rounded-2xl border-2 border-slate-100 flex items-center justify-between shadow-sm hover:border-indigo-100 transition-all gap-2">
-                            <div className="flex-1 min-w-0">
-                              <h3 className="text-[11px] sm:text-xs font-bold text-slate-900 leading-snug">High Security & Lockout Alerts</h3>
-                              <p className="text-[9px] sm:text-[10px] text-slate-500 font-normal mt-0.5 leading-tight">Notify deans instantly upon student device resets or locks</p>
+                      <div className="sm:bg-gray-50/50 sm:p-4 sm:rounded-[20px] sm:border sm:border-gray-100 space-y-1.5 sm:space-y-3">
+                        <h4 className="text-[9.5px] sm:text-[10px] font-bold text-slate-500 px-0.5 sm:px-1">Dean & Super Admin Alerts</h4>
+                        <div className="grid grid-cols-2 gap-2 sm:gap-3">
+                          {/* Dean Leave Request */}
+                          <div className="bg-white p-2 sm:p-3.5 rounded-xl sm:rounded-2xl border sm:border-2 border-slate-100 flex items-center justify-between shadow-sm hover:border-indigo-100 transition-all gap-1.5 sm:gap-2">
+                            <div className="flex-1 min-w-0 pr-1">
+                              <h3 className="text-[10px] sm:text-xs font-bold text-slate-900 leading-tight line-clamp-2">New Leave Request Alerts</h3>
+                              <p className="hidden sm:block text-[9px] sm:text-[10px] text-slate-500 font-normal mt-0.5 leading-tight">Notify deans instantly when out-of-station or vacation leave is submitted</p>
                             </div>
-                            <label className="relative inline-flex items-center cursor-pointer shrink-0">
+                            <label className="relative inline-flex items-center cursor-pointer shrink-0 scale-75 sm:scale-100 origin-right">
+                              <input
+                                type="checkbox"
+                                checked={notificationSettings.deanLeaveRequest !== false}
+                                onChange={(e) => handleToggleNotificationSetting('deanLeaveRequest', e.target.checked)}
+                                className="sr-only peer"
+                              />
+                              <div className="w-11 h-6 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-indigo-600"></div>
+                            </label>
+                          </div>
+
+                          {/* Dean Parent Video Upload */}
+                          <div className="bg-white p-2 sm:p-3.5 rounded-xl sm:rounded-2xl border sm:border-2 border-slate-100 flex items-center justify-between shadow-sm hover:border-indigo-100 transition-all gap-1.5 sm:gap-2">
+                            <div className="flex-1 min-w-0 pr-1">
+                              <h3 className="text-[10px] sm:text-xs font-bold text-slate-900 leading-tight line-clamp-2">Parent Video Consent Uploads</h3>
+                              <p className="hidden sm:block text-[9px] sm:text-[10px] text-slate-500 font-normal mt-0.5 leading-tight">Notify deans with direct link to watch parent consent videos</p>
+                            </div>
+                            <label className="relative inline-flex items-center cursor-pointer shrink-0 scale-75 sm:scale-100 origin-right">
+                              <input
+                                type="checkbox"
+                                checked={notificationSettings.deanParentConsent !== false}
+                                onChange={(e) => handleToggleNotificationSetting('deanParentConsent', e.target.checked)}
+                                className="sr-only peer"
+                              />
+                              <div className="w-11 h-6 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-indigo-600"></div>
+                            </label>
+                          </div>
+
+                          {/* Dean Security Alert */}
+                          <div className="bg-white p-2 sm:p-3.5 rounded-xl sm:rounded-2xl border sm:border-2 border-slate-100 flex items-center justify-between shadow-sm hover:border-indigo-100 transition-all gap-1.5 sm:gap-2">
+                            <div className="flex-1 min-w-0 pr-1">
+                              <h3 className="text-[10px] sm:text-xs font-bold text-slate-900 leading-tight line-clamp-2">High Security & Lockout Alerts</h3>
+                              <p className="hidden sm:block text-[9px] sm:text-[10px] text-slate-500 font-normal mt-0.5 leading-tight">Notify deans instantly upon student device resets or locks</p>
+                            </div>
+                            <label className="relative inline-flex items-center cursor-pointer shrink-0 scale-75 sm:scale-100 origin-right">
                               <input
                                 type="checkbox"
                                 checked={notificationSettings.deanSecurityAlert !== false}
                                 onChange={(e) => handleToggleNotificationSetting('deanSecurityAlert', e.target.checked)}
+                                className="sr-only peer"
+                              />
+                              <div className="w-11 h-6 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-indigo-600"></div>
+                            </label>
+                          </div>
+
+                          {/* Dean Outing Overdue */}
+                          <div className="bg-white p-2 sm:p-3.5 rounded-xl sm:rounded-2xl border sm:border-2 border-slate-100 flex items-center justify-between shadow-sm hover:border-indigo-100 transition-all gap-1.5 sm:gap-2">
+                            <div className="flex-1 min-w-0 pr-1">
+                              <h3 className="text-[10px] sm:text-xs font-bold text-slate-900 leading-tight line-clamp-2">Critical Outing Overdue Alerts</h3>
+                              <p className="hidden sm:block text-[9px] sm:text-[10px] text-slate-500 font-normal mt-0.5 leading-tight">Notify deans when students exceed critical curfew cutoff limits</p>
+                            </div>
+                            <label className="relative inline-flex items-center cursor-pointer shrink-0 scale-75 sm:scale-100 origin-right">
+                              <input
+                                type="checkbox"
+                                checked={notificationSettings.deanOutingOverdue !== false}
+                                onChange={(e) => handleToggleNotificationSetting('deanOutingOverdue', e.target.checked)}
                                 className="sr-only peer"
                               />
                               <div className="w-11 h-6 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-indigo-600"></div>
@@ -18518,19 +18770,19 @@ export default function AdminDashboard({
                     {/* Developer Settings Toggles */}
                     <div className="space-y-3">
                       {/* Pair 1: Overlap Radii & Filter List (Side-by-Side on Mobile & Desktop) */}
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5 sm:gap-3">
+                      <div className="grid grid-cols-2 gap-1.5 sm:gap-3">
                         {/* Slightly Overlap the Radii */}
-                        <div className="bg-white p-3 sm:p-3.5 rounded-2xl border-2 border-slate-100 flex items-center justify-between gap-2 shadow-sm hover:border-indigo-100 transition-all min-w-0">
-                          <div className="flex items-center gap-2 sm:gap-2.5 min-w-0">
-                            <div className="p-1.5 sm:p-2 bg-indigo-50 rounded-lg text-indigo-600 shrink-0">
-                              <svg className="w-4 h-4 sm:w-5 sm:h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" /></svg>
+                        <div className="bg-white p-2 sm:p-3.5 rounded-xl sm:rounded-2xl border sm:border-2 border-slate-100 flex items-center justify-between gap-1 sm:gap-2 shadow-sm hover:border-indigo-100 transition-all min-w-0">
+                          <div className="flex items-center gap-1.5 sm:gap-2.5 min-w-0">
+                            <div className="p-1 sm:p-2 bg-indigo-50 rounded-lg text-indigo-600 shrink-0">
+                              <svg className="w-3.5 h-3.5 sm:w-5 sm:h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" /></svg>
                             </div>
                             <div className="min-w-0">
-                              <h3 className="text-[11px] sm:text-xs font-bold text-slate-900 leading-snug truncate">Slightly Overlap Radii</h3>
-                              <p className="text-[8.5px] sm:text-[9.5px] text-slate-500 font-medium leading-tight truncate mt-0.5">GPS jitter (+20m offset)</p>
+                              <h3 className="text-[9.5px] sm:text-xs font-bold text-slate-900 leading-tight line-clamp-2">Slightly Overlap Radii</h3>
+                              <p className="hidden sm:block text-[8.5px] sm:text-[9.5px] text-slate-500 font-medium leading-tight truncate mt-0.5">GPS jitter (+20m offset)</p>
                             </div>
                           </div>
-                          <label className="relative inline-flex items-center cursor-pointer shrink-0 ml-1">
+                          <label className="relative inline-flex items-center cursor-pointer shrink-0 scale-75 sm:scale-100 origin-right">
                             <input
                               type="checkbox"
                               checked={overlapRadius}
@@ -18542,17 +18794,17 @@ export default function AdminDashboard({
                         </div>
 
                         {/* Filter the List */}
-                        <div className="bg-white p-3 sm:p-3.5 rounded-2xl border-2 border-slate-100 flex items-center justify-between gap-2 shadow-sm hover:border-purple-100 transition-all min-w-0">
-                          <div className="flex items-center gap-2 sm:gap-2.5 min-w-0">
-                            <div className="p-1.5 sm:p-2 bg-purple-50 rounded-lg text-purple-600 shrink-0">
-                              <svg className="w-4 h-4 sm:w-5 sm:h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z" /></svg>
+                        <div className="bg-white p-2 sm:p-3.5 rounded-xl sm:rounded-2xl border sm:border-2 border-slate-100 flex items-center justify-between gap-1 sm:gap-2 shadow-sm hover:border-purple-100 transition-all min-w-0">
+                          <div className="flex items-center gap-1.5 sm:gap-2.5 min-w-0">
+                            <div className="p-1 sm:p-2 bg-purple-50 rounded-lg text-purple-600 shrink-0">
+                              <svg className="w-3.5 h-3.5 sm:w-5 sm:h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z" /></svg>
                             </div>
                             <div className="min-w-0">
-                              <h3 className="text-[11px] sm:text-xs font-bold text-slate-900 leading-snug truncate">Filter the List</h3>
-                              <p className="text-[8.5px] sm:text-[9.5px] text-slate-500 font-medium leading-tight truncate mt-0.5">Prioritize assigned hostel</p>
+                              <h3 className="text-[9.5px] sm:text-xs font-bold text-slate-900 leading-tight line-clamp-2">Filter the List</h3>
+                              <p className="hidden sm:block text-[8.5px] sm:text-[9.5px] text-slate-500 font-medium leading-tight truncate mt-0.5">Prioritize assigned hostel</p>
                             </div>
                           </div>
-                          <label className="relative inline-flex items-center cursor-pointer shrink-0 ml-1">
+                          <label className="relative inline-flex items-center cursor-pointer shrink-0 scale-75 sm:scale-100 origin-right">
                             <input
                               type="checkbox"
                               checked={prioritizeAssignedHostel}
@@ -18565,17 +18817,17 @@ export default function AdminDashboard({
                       </div>
 
                       {/* Manual Attendance Mode (Full Width) */}
-                      <div className="bg-white p-3.5 sm:p-4 rounded-2xl border-2 border-slate-100 flex items-center justify-between shadow-sm hover:border-green-100 transition-all">
-                        <div className="flex items-center gap-2.5 sm:gap-3">
-                          <div className="p-1.5 sm:p-2 bg-green-50 rounded-lg text-green-600 shrink-0">
-                            <svg className="w-4 h-4 sm:w-5 sm:h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" /></svg>
+                      <div className="bg-white p-2.5 sm:p-4 rounded-xl sm:rounded-2xl border sm:border-2 border-slate-100 flex items-center justify-between shadow-sm hover:border-green-100 transition-all gap-2">
+                        <div className="flex items-center gap-2 sm:gap-3 min-w-0">
+                          <div className="p-1 sm:p-2 bg-green-50 rounded-lg text-green-600 shrink-0">
+                            <svg className="w-3.5 h-3.5 sm:w-5 sm:h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" /></svg>
                           </div>
-                          <div>
-                            <h3 className="text-xs sm:text-sm font-bold text-slate-900">Manual Attendance Mode</h3>
-                            <p className="text-[9px] sm:text-[10px] text-slate-500 font-medium mt-0.5">Enable warden to manually mark attendance toolbar</p>
+                          <div className="min-w-0">
+                            <h3 className="text-[10px] sm:text-sm font-bold text-slate-900 leading-tight">Manual Attendance Mode</h3>
+                            <p className="hidden sm:block text-[9px] sm:text-[10px] text-slate-500 font-medium mt-0.5">Enable warden to manually mark attendance toolbar</p>
                           </div>
                         </div>
-                        <label className="relative inline-flex items-center cursor-pointer shrink-0">
+                        <label className="relative inline-flex items-center cursor-pointer shrink-0 scale-75 sm:scale-100 origin-right">
                           <input
                             type="checkbox"
                             checked={enableManualAttendance}
@@ -18587,19 +18839,19 @@ export default function AdminDashboard({
                       </div>
 
                       {/* Pair 2: QR Scan Cooldown & Emergency Immediate Outing (Side-by-Side on Mobile & Desktop) */}
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5 sm:gap-3">
+                      <div className="grid grid-cols-2 gap-1.5 sm:gap-3">
                         {/* ⏱️ QR Scan Anti-Spoof Cooldown Minutes */}
-                        <div className="bg-white p-3 sm:p-3.5 rounded-2xl border-2 border-emerald-100 flex items-center justify-between gap-2 shadow-sm hover:border-emerald-200 transition-all min-w-0">
-                          <div className="flex items-center gap-2 sm:gap-2.5 min-w-0">
-                            <div className="p-1.5 sm:p-2 bg-emerald-50 rounded-lg text-emerald-600 font-bold text-sm sm:text-base shrink-0">
+                        <div className="bg-white p-2 sm:p-3.5 rounded-xl sm:rounded-2xl border sm:border-2 border-emerald-100 flex items-center justify-between gap-1 sm:gap-2 shadow-sm hover:border-emerald-200 transition-all min-w-0">
+                          <div className="flex items-center gap-1 sm:gap-2.5 min-w-0">
+                            <div className="p-1 sm:p-2 bg-emerald-50 rounded-lg text-emerald-600 font-bold text-xs sm:text-base shrink-0">
                               ⏱️
                             </div>
                             <div className="min-w-0">
-                              <h3 className="text-[11px] sm:text-xs font-bold text-slate-900 leading-snug truncate">QR Anti-Spoof Cooldown</h3>
-                              <p className="text-[8.5px] sm:text-[9.5px] text-slate-500 font-medium leading-tight truncate mt-0.5">Wait between scans</p>
+                              <h3 className="text-[9.5px] sm:text-xs font-bold text-slate-900 leading-tight line-clamp-2">QR Anti-Spoof Cooldown</h3>
+                              <p className="hidden sm:block text-[8.5px] sm:text-[9.5px] text-slate-500 font-medium leading-tight truncate mt-0.5">Wait between scans</p>
                             </div>
                           </div>
-                          <div className="flex items-center gap-1 shrink-0 ml-1">
+                          <div className="flex items-center gap-0.5 sm:gap-1 shrink-0">
                             <input
                               type="number"
                               min="1"
@@ -18613,24 +18865,24 @@ export default function AdminDashboard({
                                 const val = Math.max(1, Math.min(60, parseInt(e.target.value) || 1));
                                 handleUpdateQrCooldown(val);
                               }}
-                              className="w-11 sm:w-14 px-1 py-1 bg-slate-50 border border-slate-200 rounded-lg text-center text-xs sm:text-sm font-bold text-slate-800 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                              className="w-8 sm:w-14 px-0.5 sm:px-1 py-0.5 sm:py-1 bg-slate-50 border border-slate-200 rounded sm:rounded-lg text-center text-[10px] sm:text-sm font-bold text-slate-800 focus:outline-none focus:ring-2 focus:ring-emerald-500"
                             />
-                            <span className="text-[9px] sm:text-xs font-bold text-slate-600">Min</span>
+                            <span className="text-[8.5px] sm:text-xs font-bold text-slate-600">Min</span>
                           </div>
                         </div>
 
                         {/* ⚡ Emergency Immediate Outing Toggle */}
-                        <div className="bg-white p-3 sm:p-3.5 rounded-2xl border-2 border-emerald-100 flex items-center justify-between gap-2 shadow-sm hover:border-emerald-200 transition-all min-w-0">
-                          <div className="flex items-center gap-2 sm:gap-2.5 min-w-0">
-                            <div className="p-1.5 sm:p-2 bg-emerald-50 rounded-lg text-emerald-600 font-bold text-sm sm:text-base shrink-0">
+                        <div className="bg-white p-2 sm:p-3.5 rounded-xl sm:rounded-2xl border sm:border-2 border-emerald-100 flex items-center justify-between gap-1 sm:gap-2 shadow-sm hover:border-emerald-200 transition-all min-w-0">
+                          <div className="flex items-center gap-1.5 sm:gap-2.5 min-w-0">
+                            <div className="p-1 sm:p-2 bg-emerald-50 rounded-lg text-emerald-600 font-bold text-xs sm:text-base shrink-0">
                               🚪
                             </div>
                             <div className="min-w-0">
-                              <h3 className="text-[11px] sm:text-xs font-bold text-slate-900 leading-snug truncate">Emergency Outing</h3>
-                              <p className="text-[8.5px] sm:text-[9.5px] text-slate-500 font-medium leading-tight truncate mt-0.5">Bypass cooldown on exit</p>
+                              <h3 className="text-[9.5px] sm:text-xs font-bold text-slate-900 leading-tight line-clamp-2">Emergency Outing</h3>
+                              <p className="hidden sm:block text-[8.5px] sm:text-[9.5px] text-slate-500 font-medium leading-tight truncate mt-0.5">Bypass cooldown on exit</p>
                             </div>
                           </div>
-                          <label className="relative inline-flex items-center cursor-pointer shrink-0 ml-1">
+                          <label className="relative inline-flex items-center cursor-pointer shrink-0 scale-75 sm:scale-100 origin-right">
                             <input
                               type="checkbox"
                               checked={allowEmergencyExitWithoutCooldown}
@@ -18649,7 +18901,7 @@ export default function AdminDashboard({
                             <div className="p-2 bg-amber-50 rounded-lg text-amber-600 font-bold text-sm sm:text-base">📶</div>
                             <div>
                               <h3 className="text-xs sm:text-sm font-bold text-slate-900">Campus WiFi IP Whitelist</h3>
-                              <p className="text-[9px] sm:text-[10px] text-slate-500 font-medium mt-0.5">Enable 100% reliable tracking via Network IP</p>
+                              <p className="hidden sm:block text-[9px] sm:text-[10px] text-slate-500 font-medium mt-0.5">Enable 100% reliable tracking via Network IP</p>
                             </div>
                           </div>
                           <div className="grid grid-cols-3 gap-1.5 sm:gap-2.5 w-full sm:w-auto items-center">
@@ -18784,7 +19036,7 @@ export default function AdminDashboard({
                                 {/* Full-Width BSSIDs 2-Column Grid */}
                                 <div className="w-full">
                                   {item.hostelName || item.bssids ? (
-                                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-1 sm:gap-1.5 p-1.5 bg-white/60 rounded-lg border border-amber-200/50 w-full">
+                                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-1 sm:gap-1.5 p-0 sm:p-1.5 bg-transparent sm:bg-white/60 rounded-none sm:rounded-lg border-0 sm:border sm:border-amber-200/50 w-full">
                                       {item.bssids?.map((b: string, i: number) => (
                                         <span
                                           key={i}

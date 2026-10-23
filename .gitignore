@@ -73,3 +73,5 @@ __pycache__/
 *.apk
 *.exe
 
+recordings/
+public/videos/

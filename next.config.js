@@ -89,10 +89,10 @@ const nextConfig = {
         ignoreBuildErrors: true,
     },
     experimental: {
-        optimizePackageImports: ['firebase', 'firebase-admin', 'mongoose', 'lucide-react', '@radix-ui/react-slider'],
+        optimizePackageImports: ['firebase', 'firebase-admin', 'mongoose', 'lucide-react', '@radix-ui/react-slider', '@aws-sdk/client-s3', 'exceljs', 'googleapis'],
     },
 
-    reactStrictMode: true,
+    reactStrictMode: false,
     async rewrites() {
         return [
             {

@@ -66,6 +66,8 @@ interface Tenant {
     contactPhone?: string;
     isDeleted?: boolean;
     healthScore?: number;
+    logoUrl?: string | null;
+    logo?: string | null;
 }
 
 // ⚡ LIVE SWITCH COMPONENT (SUPABASE ↔ RAILWAY)
@@ -1328,6 +1330,8 @@ export default function SuperAdminDashboard() {
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({
                     id: editingTenant._id,
+                    name: editingTenant.name,
+                    logoUrl: editingTenant.logoUrl || editingTenant.logo || null,
                     subscriptionStatus: editingTenant.subscriptionStatus,
                     is_active: editingTenant.isActive,
                     subscriptionEndDate: editingTenant.subscriptionEndDate || null,
@@ -2168,6 +2172,11 @@ export default function SuperAdminDashboard() {
                                         <div className="flex items-start justify-between gap-3">
                                             <div className="flex flex-col min-w-0">
                                                 <div className="flex items-center flex-wrap gap-1.5">
+                                                    {(tenant.logoUrl || tenant.logo) && (
+                                                        <div className="w-5 h-5 sm:w-6 sm:h-6 rounded-md bg-slate-100 border border-slate-200 overflow-hidden shrink-0 flex items-center justify-center p-0.5">
+                                                            <img src={tenant.logoUrl || tenant.logo || ""} alt={tenant.name} className="w-full h-full object-contain" />
+                                                        </div>
+                                                    )}
                                                     <h3 className="font-black text-gray-900 uppercase tracking-tight text-sm leading-tight break-words">{tenant.name}</h3>
                                                     <span className={`text-[7px] font-black uppercase tracking-widest px-1.5 py-0.5 rounded border select-none leading-none ${
                                                         tenant.subscriptionStatus === 'trial' ? 'bg-indigo-50 text-indigo-600 border-indigo-100' :
@@ -2606,13 +2615,83 @@ export default function SuperAdminDashboard() {
                     <div className="bg-white w-full max-w-lg rounded-2xl sm:rounded-[32px] shadow-2xl overflow-hidden animate-in zoom-in duration-500 border border-white max-h-[92vh] sm:max-h-[90vh] flex flex-col">
                         <div className="bg-slate-800 px-4 sm:px-6 py-3 sm:py-4 text-white flex justify-between items-center shrink-0">
                             <div>
-                                <h3 className="text-base sm:text-xl font-black uppercase tracking-tight sm:tracking-tighter">Configure Node</h3>
+                                <h3 className="text-base sm:text-xl font-black uppercase tracking-tight sm:tracking-tighter">Campus Profile & Configuration</h3>
                                 <p className="text-slate-400 text-[8px] sm:text-[9px] font-black uppercase tracking-wider sm:tracking-widest mt-0.5">{editingTenant?.name}</p>
                             </div>
                             <X className="w-4 h-4 sm:w-5 sm:h-5 text-slate-400 hover:text-white cursor-pointer transition-colors" onClick={() => setEditingTenant(null)} />
                         </div>
 
                         <form onSubmit={handleUpdateTenant} className="p-5 sm:p-6 space-y-4 animate-in fade-in duration-300 overflow-y-auto flex-1 [&::-webkit-scrollbar]:w-1.5 [&::-webkit-scrollbar-thumb]:bg-slate-200 [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-track]:bg-transparent">
+                            {/* Campus Profile & Logo Section */}
+                            <div className="space-y-3 p-3.5 bg-slate-50 rounded-2xl border border-slate-200/50">
+                                <div className="space-y-1">
+                                    <label className="text-[9px] font-black text-slate-500 uppercase tracking-widest px-0.5">Campus / College Name</label>
+                                    <input
+                                        type="text"
+                                        value={editingTenant?.name || ""}
+                                        onChange={(e) => editingTenant && setEditingTenant({ ...editingTenant, name: e.target.value })}
+                                        placeholder="e.g. Oriental Group of Institutes (OGI)"
+                                        className="w-full bg-white border border-slate-200 p-2.5 rounded-lg font-bold focus:ring-2 focus:ring-blue-500/20 outline-none text-slate-700 text-xs placeholder:text-gray-300"
+                                    />
+                                </div>
+
+                                <div className="space-y-1.5 pt-1">
+                                    <div className="flex items-center justify-between px-0.5">
+                                        <label className="text-[9px] font-black text-slate-500 uppercase tracking-widest">Campus Logo</label>
+                                        {(editingTenant?.logoUrl || editingTenant?.logo) && (
+                                            <button
+                                                type="button"
+                                                onClick={() => editingTenant && setEditingTenant({ ...editingTenant, logoUrl: null, logo: null })}
+                                                className="text-[9px] font-bold text-rose-500 hover:text-rose-700 uppercase tracking-wider"
+                                            >
+                                                Remove Logo
+                                            </button>
+                                        )}
+                                    </div>
+                                    <div className="flex items-center gap-3 bg-white border border-slate-200 p-2.5 rounded-xl">
+                                        <div className="w-14 h-14 rounded-lg bg-slate-100 border border-slate-200 flex items-center justify-center overflow-hidden shrink-0 shadow-inner">
+                                            {editingTenant?.logoUrl || editingTenant?.logo ? (
+                                                <img
+                                                    src={editingTenant.logoUrl || editingTenant.logo || ""}
+                                                    alt="Campus Logo"
+                                                    className="w-full h-full object-contain"
+                                                />
+                                            ) : (
+                                                <Building2 className="w-6 h-6 text-slate-300" />
+                                            )}
+                                        </div>
+                                        <div className="flex-1 space-y-1">
+                                            <label className="cursor-pointer inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-[9.5px] font-black uppercase tracking-wider transition-colors shadow-xs">
+                                                <span>Upload Campus Logo</span>
+                                                <input
+                                                    type="file"
+                                                    className="hidden"
+                                                    accept="image/*"
+                                                    onChange={(e) => {
+                                                        const file = e.target.files?.[0];
+                                                        if (file) {
+                                                            const reader = new FileReader();
+                                                            reader.onloadend = () => {
+                                                                if (editingTenant) {
+                                                                    setEditingTenant({
+                                                                        ...editingTenant,
+                                                                        logoUrl: reader.result as string,
+                                                                        logo: reader.result as string
+                                                                    });
+                                                                }
+                                                            };
+                                                            reader.readAsDataURL(file);
+                                                        }
+                                                    }}
+                                                />
+                                            </label>
+                                            <p className="text-[8px] text-slate-400 font-medium leading-tight">
+                                                Visible on suspended portal, login screen, and campus dashboards.
+                                            </p>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
                             {editingTenant.renewalStatus === 'pending' && (
                                 <div className="bg-amber-50 border border-amber-200 p-4 rounded-2xl space-y-2.5 shadow-sm animate-pulse shrink-0">
                                     <div className="flex items-center gap-2 text-amber-800">

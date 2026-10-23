@@ -20,7 +20,8 @@ function urlBase64ToUint8Array(base64String: string) {
  */
 export async function registerPushNotifications(
   userId: string,
-  userType: "student" | "parent" | "warden" | "dean"
+  userType: "student" | "parent" | "warden" | "dean",
+  phone?: string
 ) {
   if (typeof window === "undefined" || !("serviceWorker" in navigator) || !("PushManager" in window)) {
     console.warn("Push notifications are not supported in this browser environment.");
@@ -42,14 +43,18 @@ export async function registerPushNotifications(
     // 2. Wait for Service Worker to be fully active and ready
     const registration = await navigator.serviceWorker.ready;
 
-    // 3. Request push notification permissions
-    const permission = await Notification.requestPermission();
+    // 3. Request push notification permissions if not already granted
+    let permission = Notification.permission;
+    if (permission !== "granted") {
+      permission = await Notification.requestPermission();
+    }
+
     if (permission !== "granted") {
       console.warn("Notification permission was denied by the user.");
       return;
     }
 
-    // 4. Check if subscription already exists
+    // 4. Check if subscription already exists or create new
     let subscription = null;
     try {
       subscription = await registration.pushManager.getSubscription();
@@ -67,6 +72,11 @@ export async function registerPushNotifications(
       return;
     }
 
+    if (!subscription) {
+      console.warn("No active push subscription created.");
+      return;
+    }
+
     // 6. Send the subscription object to our server-side API
     const res = await fetch("/api/push-subscription", {
       method: "POST",
@@ -74,6 +84,7 @@ export async function registerPushNotifications(
       body: JSON.stringify({
         userId,
         userType,
+        phone,
         subscription
       })
     });
@@ -85,7 +96,7 @@ export async function registerPushNotifications(
 
     const data = await res.json();
     if (data.success) {
-      console.log(`Successfully registered push notifications for ${userType} ID: ${userId}`);
+      console.log(`Successfully registered push notifications for ${userType} ID: ${userId} (Phone: ${phone || "N/A"})`);
     } else {
       console.warn("Push subscription warning:", data.error || "Failed to persist subscription");
     }

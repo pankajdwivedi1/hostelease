@@ -550,6 +550,22 @@ export async function POST(request: NextRequest) {
 
         console.log(`✅ Attendance saved via DB ADAPTER for ${student.name}`);
 
+        // 🚨 Dispatch Scan Review / Anomaly Push Notification to Warden if flagged
+        if (finalFaceMatchStatus === 'flagged' || attendanceData.needsReview) {
+            try {
+                import("@/lib/pushNotification").then(({ sendPushNotification }) => {
+                    const wardenTarget = student.hostelName ? student.hostelName.toLowerCase().replace(/ /g, "_") + "_warden" : "warden";
+                    sendPushNotification(wardenTarget, "warden", "wardenScanFailure", {
+                        title: "⚠️ Attendance Scan Review Required",
+                        body: `Flagged check-in: ${student.name} (${student.registrationId || student.roomNumber || "N/A"}) marked attendance with low face match (${finalFaceMatchPercentage || "N/A"}%).`,
+                        url: "/admin/attendance"
+                    }).catch(err => console.error("Warden scan failure push failed:", err));
+                });
+            } catch (notifErr) {
+                console.warn("Could not dispatch warden scan failure notification:", notifErr);
+            }
+        }
+
         return NextResponse.json(
             {
                 success: true,

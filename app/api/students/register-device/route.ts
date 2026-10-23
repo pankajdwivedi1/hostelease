@@ -36,6 +36,17 @@ export async function POST(request: NextRequest) {
         );
 
         if (deviceUsedBy) {
+            // 🚨 Dispatch Dean Security Alert for unauthorized duplicate device binding
+            try {
+                import("@/lib/pushNotification").then(({ sendPushNotification }) => {
+                    sendPushNotification("admin", "dean", "deanSecurityAlert", {
+                        title: "🚨 Security Alert: Duplicate Device Attempt",
+                        body: `Student ${existingStudent.name} (${existingStudent.registrationId || "N/A"}) attempted to bind device already used by ${deviceUsedBy.name} (${deviceUsedBy.registrationId || "N/A"}).`,
+                        url: "/admin/students"
+                    }).catch(err => console.error("Dean security alert push failed:", err));
+                });
+            } catch (notifErr) {}
+
             return NextResponse.json(
                 { error: "This device is already registered with another student account (Registration ID: " + (deviceUsedBy.registrationId || "N/A") + "). Multiple accounts are not allowed on the same device." },
                 { status: 403 }

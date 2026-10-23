@@ -7,11 +7,15 @@ self.addEventListener('push', function (event) {
         icon: data.icon || "/icons/icon-192x192.png",
         badge: data.badge || "/icons/icon-72x72.png",
         image: data.image || undefined,
+        vibrate: [300, 150, 300, 150, 300],
+        requireInteraction: true,
+        renotify: true,
+        tag: data.tag || ("hosteleaze_" + Date.now()),
         data: {
           url: data.url || "/"
         }
       };
-      event.waitUntil(self.registration.showNotification(data.title || "Hosteleaze", options));
+      event.waitUntil(self.registration.showNotification(data.title || "Hosteleaze Alert", options));
     } catch (e) {
       const text = event.data.text();
       event.waitUntil(
@@ -19,6 +23,10 @@ self.addEventListener('push', function (event) {
           body: text,
           icon: "/icons/icon-192x192.png",
           badge: "/icons/icon-72x72.png",
+          vibrate: [300, 150, 300],
+          requireInteraction: true,
+          renotify: true,
+          tag: "hosteleaze_fallback",
           data: { url: "/" }
         })
       );

@@ -58,8 +58,37 @@ export async function GET(request: NextRequest) {
 
     const ruleUpdatedAt = enforcement.updatedAt ? new Date(enforcement.updatedAt).getTime() : 0;
 
-    // Build completion status per student
-    const studentsCompletionStatus = students.map((student: any) => {
+    // Build completion status per student (filter only students targeted by active rules)
+    const targetedStudents = students.filter((student: any) => {
+      if (!enforcement.enforcedFields || enforcement.enforcedFields.length === 0) return true;
+      return enforcement.enforcedFields.some((field: any) => {
+        if (Array.isArray(field.targetSemesters) && field.targetSemesters.length > 0) {
+          const sSem = (student.semester || "").toString().trim().toUpperCase();
+          const semMatches = field.targetSemesters.some((ts: string) => {
+            const cleanTs = ts.toString().trim().toUpperCase();
+            if (!cleanTs || cleanTs === "ALL") return true;
+            const sDigit = sSem.match(/\d+/)?.[0];
+            const tDigit = cleanTs.match(/\d+/)?.[0];
+            if (sDigit && tDigit) return sDigit === tDigit;
+            return sSem === cleanTs || sSem.includes(cleanTs);
+          });
+          if (!semMatches) return false;
+        }
+        if (Array.isArray(field.targetStudentIds) && field.targetStudentIds.length > 0) {
+          const sId = (student._id || student.id || "").toString().trim();
+          const regId = (student.registrationId || "").toString().trim().toUpperCase();
+          const email = (student.email || "").toString().trim().toLowerCase();
+          const studentMatches = field.targetStudentIds.some((targetId: string) => {
+            const clean = (targetId || "").toString().trim();
+            return clean === sId || clean.toUpperCase() === regId || clean.toLowerCase() === email;
+          });
+          if (!studentMatches) return false;
+        }
+        return true;
+      });
+    });
+
+    const studentsCompletionStatus = targetedStudents.map((student: any) => {
       const studentProgress = fieldProgress.filter(
         (fp: any) => (fp.studentId || "").toString() === (student._id || student.id || "").toString()
       );

@@ -41,6 +41,8 @@ export async function POST(request: NextRequest) {
       notificationPriority,
       successMessage,
       autoCloseNotification,
+      targetSemesters,
+      targetStudentIds,
     } = body;
 
     if (!hostelName) {
@@ -59,7 +61,11 @@ export async function POST(request: NextRequest) {
 
     const normalizedHostelName = hostelName.trim();
 
-    const sortedFields = enforcedFields.sort(
+    const sortedFields = enforcedFields.map((f: any) => ({
+      ...f,
+      targetSemesters: Array.isArray(f.targetSemesters) ? f.targetSemesters : (Array.isArray(targetSemesters) ? targetSemesters : []),
+      targetStudentIds: Array.isArray(f.targetStudentIds) ? f.targetStudentIds : (Array.isArray(targetStudentIds) ? targetStudentIds : []),
+    })).sort(
       (a: any, b: any) => (a.order || 0) - (b.order || 0)
     );
 
@@ -84,8 +90,16 @@ export async function POST(request: NextRequest) {
     // If active rules are applied, reset progress records for this hostel so all students get prompted
     if (isActive && sortedFields.length > 0) {
       try {
-        await db.studentFieldProgress.deleteMany({ hostelName: normalizedHostelName });
-        console.log(`[FieldEnforcement API] Cleared old progress for ${normalizedHostelName}`);
+        if (Array.isArray(targetStudentIds) && targetStudentIds.length > 0) {
+          await db.studentFieldProgress.deleteMany({
+            hostelName: normalizedHostelName,
+            studentId: { $in: targetStudentIds }
+          });
+          console.log(`[FieldEnforcement API] Cleared old progress for ${targetStudentIds.length} targeted students in ${normalizedHostelName}`);
+        } else {
+          await db.studentFieldProgress.deleteMany({ hostelName: normalizedHostelName });
+          console.log(`[FieldEnforcement API] Cleared old progress for ${normalizedHostelName}`);
+        }
       } catch (delErr) {
         console.warn("[FieldEnforcement API] Could not clear old studentFieldProgress:", delErr);
       }

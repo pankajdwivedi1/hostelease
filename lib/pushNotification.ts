@@ -49,9 +49,17 @@ async function isNotificationEnabledGlobally(notificationType: string): Promise<
       studentLeaveStatus: "leaveDecisionEnabled",
       parentLeaveApproval: "leaveDecisionEnabled",
       parentConsentVideoUploaded: "parentConsentVideoUploadedEnabled",
+      wardenParentConsent: "parentConsentVideoUploadedEnabled",
+      deanParentConsent: "parentConsentVideoUploadedEnabled",
+      studentConsentRequired: "parentConsentVideoUploadedEnabled",
       paymentVerified: "paymentVerifiedEnabled",
       studentOutingOverdue: "outingOverdueEnabled",
-      parentOutingOverdue: "outingOverdueEnabled"
+      parentOutingOverdue: "outingOverdueEnabled",
+      wardenOutingOverdue: "outingOverdueEnabled",
+      deanOutingOverdue: "outingOverdueEnabled",
+      studentAttendanceReminder: "parentCurfewAbsentEnabled",
+      wardenScanFailure: "wardenScanFailureEnabled",
+      deanSecurityAlert: "deanSecurityAlertEnabled"
     };
 
     const globalKey = typeMapping[notificationType];
@@ -144,28 +152,74 @@ export async function sendPushNotification(
       return { success: false, reason: "disabled_by_settings" };
     }
 
-    // 2. Fetch all registered subscriptions for the recipient
-    let subscriptions = await db.pushSubscription.findMany({ userId, userType });
+    // 2. Build candidate identifiers for the recipient (ensures phone numbers & role IDs match)
+    const candidateUserIds = new Set<string>();
+    if (userId) {
+      candidateUserIds.add(String(userId).trim());
+      const cleanPhone = String(userId).replace(/\D/g, "");
+      if (cleanPhone.length >= 10) candidateUserIds.add(cleanPhone.slice(-10));
+    }
 
-    // Fallback: If recipient is a warden and not found by username, lookup by extracted 10-digit mobile numbers
-    if ((!subscriptions || subscriptions.length === 0) && userType === "warden") {
+    if (userType === "dean" || userId === "admin") {
+      candidateUserIds.add("admin");
+      const bankDetails: any = settings?.universityBankDetails || {};
+      const deanPhone = (settings?.deanPhone || bankDetails?.deanPhone || bankDetails?.contactPhone || "").replace(/\D/g, "");
+      if (deanPhone.length >= 10) candidateUserIds.add(deanPhone.slice(-10));
+    }
+
+    if (userType === "warden") {
       const extractedPhones = (userId || "").match(/\d{10}/g) || [];
-      for (const phone of extractedPhones) {
-        const byPhone = await db.pushSubscription.findMany({ userId: phone, userType });
-        if (byPhone && byPhone.length > 0) {
-          subscriptions = [...(subscriptions || []), ...byPhone];
+      extractedPhones.forEach((p: string) => candidateUserIds.add(p));
+
+      try {
+        const hostels = await db.hostels.getAll();
+        for (const h of (hostels || [])) {
+          const wUsername = h.wardenUsername || "";
+          const hNameSlug = h.name ? `${h.name.toLowerCase().replace(/ /g, "_")}_warden` : "";
+          const hPhones = wUsername.match(/\d{10}/g) || [];
+          const matchesWarden = wUsername === userId || hNameSlug === userId || (extractedPhones.length > 0 && extractedPhones.some((p: string) => wUsername.includes(p)));
+          if (matchesWarden) {
+            if (wUsername) candidateUserIds.add(wUsername);
+            if (hNameSlug) candidateUserIds.add(hNameSlug);
+            hPhones.forEach((p: string) => candidateUserIds.add(p));
+          }
         }
+      } catch (hostelErr) {
+        console.warn("Could not inspect hostels for warden phone candidates:", hostelErr);
       }
     }
 
+    // Query all subscriptions for any of the candidate user IDs
+    let allFoundSubs: any[] = [];
+    for (const cId of Array.from(candidateUserIds)) {
+      try {
+        const found = await db.pushSubscription.findMany({ userId: cId, userType });
+        if (found && found.length > 0) {
+          allFoundSubs = [...allFoundSubs, ...found];
+        }
+      } catch (subErr) {
+        console.warn(`Error querying subscriptions for ${cId}:`, subErr);
+      }
+    }
+
+    // Deduplicate by push endpoint so each physical device receives exactly 1 alert
+    const uniqueSubsMap = new Map<string, any>();
+    for (const sub of allFoundSubs) {
+      const endpoint = sub.subscription?.endpoint;
+      if (endpoint && !uniqueSubsMap.has(endpoint)) {
+        uniqueSubsMap.set(endpoint, sub);
+      }
+    }
+    const subscriptions = Array.from(uniqueSubsMap.values());
+
     if (!subscriptions || subscriptions.length === 0) {
-      console.log(`No active push subscription registered for ${userType} ID: ${userId}`);
+      console.log(`No active push subscription registered for ${userType} ID: ${userId} (checked candidates: ${Array.from(candidateUserIds).join(", ")})`);
       return { success: false, reason: "no_subscriptions" };
     }
 
-    console.log(`Dispatching [${notificationType}] push notification to ${subscriptions.length} devices for ${userType} ID: ${userId}`);
+    console.log(`⚡ Dispatching [${notificationType}] HIGH-PRIORITY push notification to ${subscriptions.length} devices for ${userType} ID: ${userId}`);
 
-    // 3. Send notification to all registered devices in parallel
+    // 3. Send notification to all registered devices in parallel with HIGH urgency
     const pushPromises = subscriptions.map(async (subRecord: any) => {
       try {
         await webpush.sendNotification(
@@ -176,17 +230,20 @@ export async function sendPushNotification(
             url: payload.url || "/",
             icon: payload.icon || "/icons/icon-192x192.png",
             badge: payload.badge || "/icons/icon-72x72.png",
-            image: payload.image || undefined
-          })
+            image: payload.image || undefined,
+            tag: payload.tag || ("hosteleaze_" + Date.now())
+          }),
+          {
+            TTL: 86400, // 24-hour cache on FCM server if device is temporarily offline
+            urgency: "high" // ⚡ Critical: Wakes up Android screen & radio immediately
+          }
         );
       } catch (err: any) {
         // Clear out expired / unsubscribed push tokens (status code 410 or 404)
         if (err.statusCode === 410 || err.statusCode === 404) {
-          console.log(`Cleaning up expired subscription endpoint: ${subRecord.subscription.endpoint}`);
+          console.log(`Cleaning up expired subscription endpoint: ${subRecord.subscription?.endpoint}`);
           await db.pushSubscription.deleteMany({
-            userId,
-            userType,
-            "subscription.endpoint": subRecord.subscription.endpoint
+            endpoint: subRecord.subscription?.endpoint
           }).catch(() => {});
         } else {
           console.error("Failed to push to subscription endpoint:", err.message);
@@ -195,7 +252,7 @@ export async function sendPushNotification(
     });
 
     await Promise.all(pushPromises);
-    return { success: true };
+    return { success: true, count: subscriptions.length };
   } catch (error: any) {
     console.error("Error dispatching push notifications:", error);
     return { success: false, error: error.message };

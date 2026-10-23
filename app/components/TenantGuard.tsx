@@ -37,6 +37,44 @@ function QRCodeCanvas({ data, size = 120 }: { data: string; size?: number }) {
     );
 }
 
+function CampusSuspendedLogo({ status }: { status: any }) {
+    const [imgFailed, setImgFailed] = useState(false);
+    const [cachedLogo, setCachedLogo] = useState<string | null>(null);
+
+    useEffect(() => {
+        if (typeof window !== "undefined") {
+            const stored = localStorage.getItem("lastTenantLogo") || localStorage.getItem("tenantLogo");
+            if (stored) setCachedLogo(stored);
+        }
+    }, []);
+
+    const logoSrc = !imgFailed ? (status?.logo || status?.logoUrl || cachedLogo) : null;
+
+    if (logoSrc) {
+        return (
+            <div className="relative mb-1 sm:mb-2 group">
+                <div className="w-16 h-16 sm:w-24 sm:h-24 md:w-28 md:h-28 rounded-full bg-white/10 backdrop-blur-md border-2 border-red-500/30 p-1.5 sm:p-2.5 flex items-center justify-center shadow-xl sm:shadow-2xl shadow-red-500/20 overflow-hidden">
+                    <img 
+                        src={logoSrc} 
+                        alt={status?.name || "Campus Logo"} 
+                        className="w-full h-full object-contain rounded-full"
+                        onError={() => setImgFailed(true)}
+                    />
+                </div>
+                <div className="absolute -bottom-0.5 -right-0.5 sm:-bottom-1 sm:-right-1 w-5 h-5 sm:w-7 sm:h-7 rounded-full bg-red-600 border-2 border-[#050510] flex items-center justify-center shadow-md" title="Access Suspended">
+                    <ShieldAlert className="w-3 h-3 sm:w-4 sm:h-4 text-white" />
+                </div>
+            </div>
+        );
+    }
+
+    return (
+        <div className="w-14 h-14 sm:w-20 sm:h-20 bg-red-500/10 border border-red-500/20 rounded-full flex items-center justify-center shadow-lg shadow-red-500/5 mb-1 sm:mb-2">
+            <ShieldAlert className="w-7 h-7 sm:w-10 sm:h-10 text-red-500" />
+        </div>
+    );
+}
+
 function AdminExpiredPortal({ 
     status, 
     handleLogout, 
@@ -167,53 +205,70 @@ function AdminExpiredPortal({
 
     if (view === "suspended") {
         return (
-            <div className="fixed inset-0 z-[9999] bg-[#050510] flex flex-col items-center justify-center p-4 text-white overflow-y-auto">
+            <div className="fixed inset-0 z-[9999] bg-[#050510] flex flex-col items-center justify-center p-2.5 min-[400px]:p-3 sm:p-4 text-white overflow-hidden select-none">
                 <div className="absolute top-[-10%] left-[-10%] w-[50%] h-[50%] bg-blue-600/10 rounded-full blur-[120px] pointer-events-none"></div>
                 <div className="absolute bottom-[-10%] right-[-10%] w-[50%] h-[50%] bg-red-600/10 rounded-full blur-[120px] pointer-events-none"></div>
 
-                <div className="w-full max-w-md relative z-10 animate-in fade-in zoom-in duration-500 flex flex-col items-center text-center space-y-6">
-                    <div className="w-20 h-20 bg-red-500/10 border border-red-500/20 rounded-full flex items-center justify-center shadow-lg shadow-red-500/5 mb-2">
-                        <ShieldAlert className="w-10 h-10 text-red-500" />
-                    </div>
+                <div className="w-full max-w-sm sm:max-w-md relative z-10 animate-in fade-in zoom-in duration-300 flex flex-col items-center text-center space-y-2 sm:space-y-4 my-auto max-h-[100dvh]">
+                    <CampusSuspendedLogo status={status} />
                     
-                    <div className="space-y-2">
-                        <div className="inline-flex items-center gap-2 px-3 py-1 bg-red-500/10 border border-red-500/20 rounded-full text-xs text-red-400 font-bold uppercase tracking-wider mb-2">
-                            <span className="h-2 w-2 rounded-full bg-red-500 animate-ping"></span>
+                    <div className="space-y-0.5 sm:space-y-1.5 w-full px-2">
+                        <div className="inline-flex items-center gap-1.5 px-2 py-0.5 sm:px-3 sm:py-1 bg-red-500/10 border border-red-500/20 rounded-full text-[8.5px] min-[400px]:text-[9px] sm:text-xs text-red-400 font-black uppercase tracking-wider mb-0.5 sm:mb-1">
+                            <span className="h-1.5 w-1.5 sm:h-2 sm:w-2 rounded-full bg-red-500 animate-ping"></span>
                             {status?.daysRemaining && status.daysRemaining > 0 ? "Expiring Soon" : "Access Suspended"}
                         </div>
-                        <h1 className="text-3xl font-black tracking-tight uppercase sm:text-4xl bg-gradient-to-r from-white via-gray-200 to-gray-400 bg-clip-text text-transparent">
+                        <h1 className="text-base min-[380px]:text-lg sm:text-3xl md:text-4xl font-black tracking-tight uppercase leading-snug sm:leading-tight bg-gradient-to-r from-white via-gray-200 to-gray-400 bg-clip-text text-transparent break-words">
                             {status.name || "University Node"}
                         </h1>
-                        <p className="text-gray-400 text-sm font-bold uppercase tracking-widest mt-2">
+                        <p className="text-gray-400 text-[9px] min-[400px]:text-[10px] sm:text-xs md:text-sm font-bold uppercase tracking-widest">
                             Portal Offline
                         </p>
                     </div>
 
-                    <div className="bg-white/5 border border-white/10 p-6 rounded-3xl backdrop-blur-xl w-full">
-                        <p className="text-gray-300 text-sm leading-relaxed mb-6">
+                    <div className="bg-white/5 border border-white/10 p-3 min-[400px]:p-3.5 sm:p-6 rounded-2xl sm:rounded-3xl backdrop-blur-xl w-full shadow-2xl">
+                        <p className="text-gray-300 text-[10.5px] min-[400px]:text-[11px] sm:text-sm leading-relaxed mb-2.5 sm:mb-5 px-1">
                             Access to the digital campus portal is currently suspended. Please contact your college administration for further assistance.
                         </p>
                         
-                        <div className="flex flex-col gap-3">
+                        <div className="flex flex-col gap-1.5 sm:gap-3">
                             <button
                                 onClick={() => switchView("history")}
-                                className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-black py-4 rounded-2xl transition-all active:scale-95 text-xs uppercase tracking-widest"
+                                className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-black py-2.5 sm:py-3.5 rounded-xl sm:rounded-2xl transition-all active:scale-95 text-[9.5px] min-[400px]:text-[10px] sm:text-xs uppercase tracking-wider sm:tracking-widest shadow-md shadow-indigo-600/20"
                             >
                                 📊 View Subscription History
                             </button>
                             <button
                                 onClick={() => switchView("renew")}
-                                className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-black py-4 rounded-2xl transition-all active:scale-95 text-xs uppercase tracking-widest"
+                                className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-black py-2.5 sm:py-3.5 rounded-xl sm:rounded-2xl transition-all active:scale-95 text-[9.5px] min-[400px]:text-[10px] sm:text-xs uppercase tracking-wider sm:tracking-widest shadow-md shadow-emerald-600/20"
                             >
                                 💳 Renew Subscription Now
                             </button>
                             <button
                                 onClick={handleLogout}
-                                className="w-full bg-white/5 hover:bg-white/10 border border-white/5 text-gray-400 hover:text-white font-bold py-3 rounded-2xl transition-all text-[10px] uppercase tracking-widest mt-2"
+                                className="w-full bg-white/5 hover:bg-white/10 border border-white/5 text-gray-400 hover:text-white font-bold py-1.5 sm:py-2.5 rounded-xl sm:rounded-2xl transition-all text-[8.5px] min-[400px]:text-[9px] sm:text-[10px] uppercase tracking-wider sm:tracking-widest mt-0.5"
                             >
                                 Return to Login
                             </button>
                         </div>
+                    </div>
+
+                    {/* Support Contact Footer */}
+                    <div className="flex flex-col sm:flex-row items-center justify-center gap-0.5 sm:gap-2 text-[8px] min-[400px]:text-[9px] sm:text-[10.5px] text-gray-400 font-bold uppercase tracking-wider w-full px-1">
+                        <span className="truncate max-w-full">
+                            NEED ASSISTANCE? <a href="mailto:support@hosteleaze.com" className="text-blue-400 hover:underline">SUPPORT@HOSTELEAZE.COM</a>
+                        </span>
+                        <span className="hidden sm:inline text-gray-600">•</span>
+                        <a 
+                            href="https://wa.me/918269418956" 
+                            target="_blank" 
+                            rel="noopener noreferrer" 
+                            className="inline-flex items-center justify-center gap-1 text-gray-400 hover:text-white transition-colors shrink-0"
+                        >
+                            <svg viewBox="0 0 24 24" width="11" height="11" fill="currentColor" className="text-[#25D366] shrink-0">
+                                <path d="M12.012 2C6.48 2 2 6.48 2 12.01c0 1.83.49 3.62 1.43 5.2L2 22l4.95-1.42a9.98 9.98 0 0 0 5.06 1.43h.01c5.53 0 10.01-4.48 10.01-10.01C22.03 6.48 17.54 2 12.012 2zm6.2 14.15c-.27.76-1.34 1.39-2.02 1.48-.68.09-1.57.12-2.52-.18a11.16 11.16 0 0 1-5.11-3.26c-1.36-1.36-2.28-2.92-2.52-3.87-.24-.95-.03-1.47.25-1.78.27-.3.6-.36.79-.36.19 0 .38 0 .54.01.17.01.39-.06.6.45.23.55.79 1.93.86 2.07.07.15.12.32.02.5-.09.19-.19.3-.38.53-.19.22-.38.37-.55.57-.19.21-.39.44-.17.82.22.38.97 1.6 2.08 2.58 1.43 1.28 2.62 1.67 3 1.85.38.18.61.15.83-.1.22-.26.97-1.12 1.22-1.51.25-.39.51-.32.86-.19.36.13 2.27 1.07 2.66 1.27.39.2.66.3.76.47.1.17.1.99-.17 1.75z"/>
+                            </svg>
+                            <span>WHATSAPP: +91 82694 18956</span>
+                        </a>
                     </div>
                 </div>
             </div>
@@ -1176,6 +1231,12 @@ export default function TenantGuard({ children }: { children: React.ReactNode })
                 if (data.success) {
                     lastCheckRef.current = { data, timestamp: Date.now() };
                     setStatus(data);
+                    if (data.logo && typeof window !== "undefined") {
+                        try {
+                            localStorage.setItem("lastTenantLogo", data.logo);
+                            localStorage.setItem("tenantLogo", data.logo);
+                        } catch (e) {}
+                    }
                 }
             } catch (e) {
                 console.error("Guard check failed", e);
@@ -1198,38 +1259,55 @@ export default function TenantGuard({ children }: { children: React.ReactNode })
         // Basic user suspended screen (Screenshot 2)
         if (!canSeeRenewal) {
             return (
-                <div className="fixed inset-0 z-[9999] bg-[#050510] flex flex-col items-center justify-center p-4 text-white overflow-y-auto">
+                <div className="fixed inset-0 z-[9999] bg-[#050510] flex flex-col items-center justify-center p-2.5 min-[400px]:p-3 sm:p-4 text-white overflow-hidden select-none">
                     <div className="absolute top-[-10%] left-[-10%] w-[50%] h-[50%] bg-blue-600/10 rounded-full blur-[120px] pointer-events-none"></div>
                     <div className="absolute bottom-[-10%] right-[-10%] w-[50%] h-[50%] bg-red-600/10 rounded-full blur-[120px] pointer-events-none"></div>
 
-                    <div className="w-full max-w-md relative z-10 animate-in fade-in zoom-in duration-500 flex flex-col items-center text-center space-y-6">
-                        <div className="w-20 h-20 bg-red-500/10 border border-red-500/20 rounded-full flex items-center justify-center shadow-lg shadow-red-500/5 mb-2">
-                            <ShieldAlert className="w-10 h-10 text-red-500" />
-                        </div>
+                    <div className="w-full max-w-sm sm:max-w-md relative z-10 animate-in fade-in zoom-in duration-300 flex flex-col items-center text-center space-y-2 sm:space-y-4 my-auto max-h-[100dvh]">
+                        <CampusSuspendedLogo status={status} />
                         
-                        <div className="space-y-2">
-                            <div className="inline-flex items-center gap-2 px-3 py-1 bg-red-500/10 border border-red-500/20 rounded-full text-xs text-red-400 font-bold uppercase tracking-wider mb-2">
-                                <span className="h-2 w-2 rounded-full bg-red-500 animate-ping"></span>
+                        <div className="space-y-0.5 sm:space-y-1.5 w-full px-2">
+                            <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 sm:px-3 sm:py-1 bg-red-500/10 border border-red-500/20 rounded-full text-[8.5px] min-[400px]:text-[9px] sm:text-xs text-red-400 font-black uppercase tracking-wider mb-0.5 sm:mb-1">
+                                <span className="h-1.5 w-1.5 sm:h-2 sm:w-2 rounded-full bg-red-500 animate-ping"></span>
                                 Access Suspended
                             </div>
-                            <h1 className="text-3xl font-black tracking-tight uppercase sm:text-4xl bg-gradient-to-r from-white via-gray-200 to-gray-400 bg-clip-text text-transparent">
+                            <h1 className="text-base min-[380px]:text-lg sm:text-3xl md:text-4xl font-black tracking-tight uppercase leading-snug sm:leading-tight bg-gradient-to-r from-white via-gray-200 to-gray-400 bg-clip-text text-transparent break-words">
                                 {status.name || "University Node"}
                             </h1>
-                            <p className="text-gray-400 text-sm font-bold uppercase tracking-widest mt-2">
+                            <p className="text-gray-400 text-[9px] min-[400px]:text-[10px] sm:text-xs md:text-sm font-bold uppercase tracking-widest">
                                 Portal Offline
                             </p>
                         </div>
 
-                        <div className="bg-white/5 border border-white/10 p-6 rounded-3xl backdrop-blur-xl w-full">
-                            <p className="text-gray-300 text-sm leading-relaxed mb-6">
+                        <div className="bg-white/5 border border-white/10 p-3.5 min-[400px]:p-4 sm:p-6 rounded-2xl sm:rounded-3xl backdrop-blur-xl w-full shadow-2xl">
+                            <p className="text-gray-300 text-[10.5px] min-[400px]:text-[11px] sm:text-sm leading-relaxed mb-3 sm:mb-6 px-1">
                                 Access to the digital campus portal is currently suspended. Please contact your college administration for further assistance.
                             </p>
                             <button
                                 onClick={handleLogout}
-                                className="w-full bg-white/10 hover:bg-white/20 border border-white/10 text-white font-black py-4 rounded-2xl transition-all active:scale-95 text-xs uppercase tracking-widest"
+                                className="w-full bg-white/10 hover:bg-white/20 border border-white/10 text-white font-black py-2.5 sm:py-4 rounded-xl sm:rounded-2xl transition-all active:scale-95 text-[10px] sm:text-xs uppercase tracking-wider sm:tracking-widest"
                             >
                                 Return to Login
                             </button>
+                        </div>
+
+                        {/* Support Contact Footer */}
+                        <div className="flex flex-col sm:flex-row items-center justify-center gap-0.5 sm:gap-2 text-[8px] min-[400px]:text-[9px] sm:text-[10.5px] text-gray-400 font-bold uppercase tracking-wider w-full px-1">
+                            <span className="truncate max-w-full">
+                                NEED ASSISTANCE? <a href="mailto:support@hosteleaze.com" className="text-blue-400 hover:underline">SUPPORT@HOSTELEAZE.COM</a>
+                            </span>
+                            <span className="hidden sm:inline text-gray-600">•</span>
+                            <a 
+                                href="https://wa.me/918269418956" 
+                                target="_blank" 
+                                rel="noopener noreferrer" 
+                                className="inline-flex items-center justify-center gap-1 text-gray-400 hover:text-white transition-colors shrink-0"
+                            >
+                                <svg viewBox="0 0 24 24" width="11" height="11" fill="currentColor" className="text-[#25D366] shrink-0">
+                                    <path d="M12.012 2C6.48 2 2 6.48 2 12.01c0 1.83.49 3.62 1.43 5.2L2 22l4.95-1.42a9.98 9.98 0 0 0 5.06 1.43h.01c5.53 0 10.01-4.48 10.01-10.01C22.03 6.48 17.54 2 12.012 2zm6.2 14.15c-.27.76-1.34 1.39-2.02 1.48-.68.09-1.57.12-2.52-.18a11.16 11.16 0 0 1-5.11-3.26c-1.36-1.36-2.28-2.92-2.52-3.87-.24-.95-.03-1.47.25-1.78.27-.3.6-.36.79-.36.19 0 .38 0 .54.01.17.01.39-.06.6.45.23.55.79 1.93.86 2.07.07.15.12.32.02.5-.09.19-.19.3-.38.53-.19.22-.38.37-.55.57-.19.21-.39.44-.17.82.22.38.97 1.6 2.08 2.58 1.43 1.28 2.62 1.67 3 1.85.38.18.61.15.83-.1.22-.26.97-1.12 1.22-1.51.25-.39.51-.32.86-.19.36.13 2.27 1.07 2.66 1.27.39.2.66.3.76.47.1.17.1.99-.17 1.75z"/>
+                                </svg>
+                                <span>WHATSAPP: +91 82694 18956</span>
+                            </a>
                         </div>
                     </div>
                 </div>

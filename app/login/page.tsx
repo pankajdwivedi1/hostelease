@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import { useState, useEffect } from "react";
 
@@ -1005,7 +1005,7 @@ function LoginForm() {
           const { registerPushNotifications } =
             await import("@/lib/pushRegister");
 
-          await registerPushNotifications("admin", "dean");
+          await registerPushNotifications("admin", "dean", cleanPhone);
         } catch (pushErr) {}
 
         showToast("Welcome Dean! Portal unlocked successfully.", "success");
@@ -1213,7 +1213,7 @@ function LoginForm() {
           const { registerPushNotifications } =
             await import("@/lib/pushRegister");
 
-          await registerPushNotifications(cleanPhone, "warden");
+          await registerPushNotifications(cleanPhone, "warden", cleanPhone);
         } catch (pushErr) {}
 
         showToast(`Welcome! Logged into ${data.hostelName}`, "success");

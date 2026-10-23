@@ -34,7 +34,8 @@ export async function GET(request: NextRequest) {
             subscription_status: t.subscriptionStatus,
             subscription_end_date: t.subscriptionEndDate,
             primary_color: t.primaryColor,
-            created_at: t.createdAt
+            created_at: t.createdAt,
+            logo_url: t.logoUrl
         }));
 
         const tenantIds = tenants.map((t: any) => t.id);
@@ -86,6 +87,8 @@ export async function GET(request: NextRequest) {
                 _id: t.id,
                 name: t.name,
                 slug: t.slug,
+                logoUrl: t.logo_url,
+                logo: t.logo_url,
                 adminEmail: t.admin_email,
                 isActive: t.is_active,
                 isDeleted: t.is_deleted || false,
@@ -150,7 +153,7 @@ export async function POST(request: NextRequest) {
             return NextResponse.json({ success: true, message: "University restored to active duty." });
         }
 
-        const { name, slug, adminEmail, subscriptionStatus, primaryColor } = body;
+        const { name, slug, adminEmail, subscriptionStatus, primaryColor, logoUrl, logo } = body;
         if (!name || !slug || !adminEmail) {
             return NextResponse.json({ success: false, error: "Missing required fields" }, { status: 400 });
         }
@@ -178,7 +181,8 @@ export async function POST(request: NextRequest) {
                 subscriptionStatus: subscriptionStatus || 'trial',
                 primaryColor: primaryColor || '#3b82f6',
                 isActive: true,
-                subscriptionEndDate: tenantEndDate
+                subscriptionEndDate: tenantEndDate,
+                logoUrl: logoUrl || logo || null
             }
         });
 
@@ -188,6 +192,8 @@ export async function POST(request: NextRequest) {
                 _id: newTenant.id,
                 name: newTenant.name,
                 slug: newTenant.slug,
+                logoUrl: newTenant.logoUrl,
+                logo: newTenant.logoUrl,
                 adminEmail: newTenant.adminEmail,
                 subscriptionStatus: newTenant.subscriptionStatus || 'trial',
                 isActive: true
@@ -204,11 +210,14 @@ export async function POST(request: NextRequest) {
 export async function PATCH(request: NextRequest) {
     try {
         const body = await request.json();
-        const { id, is_active, subscriptionStatus, subscriptionEndDate, createdAt, contactName, contactPhone, totalHostelars, features, storageQuotaMb } = body;
+        const { id, is_active, subscriptionStatus, subscriptionEndDate, createdAt, contactName, contactPhone, totalHostelars, features, storageQuotaMb, name, logoUrl, logo } = body;
 
         if (!id) return NextResponse.json({ success: false, error: "Tenant ID is required" }, { status: 400 });
 
         const updateData: any = {};
+        if (name) updateData.name = name;
+        if (logoUrl !== undefined) updateData.logoUrl = logoUrl;
+        else if (logo !== undefined) updateData.logoUrl = logo;
         if (typeof is_active !== 'undefined') updateData.isActive = is_active;
         if (subscriptionStatus) updateData.subscriptionStatus = subscriptionStatus;
         if (typeof subscriptionEndDate !== 'undefined') {
@@ -261,6 +270,8 @@ export async function PATCH(request: NextRequest) {
             _id: tenant.id,
             name: tenant.name,
             slug: tenant.slug,
+            logoUrl: tenant.logoUrl,
+            logo: tenant.logoUrl,
             adminEmail: tenant.adminEmail,
             isActive: tenant.isActive,
             subscriptionStatus: tenant.subscriptionStatus,

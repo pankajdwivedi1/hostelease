@@ -266,6 +266,19 @@ export async function PATCH(
       await db.students.update(studentId, updateData);
       console.log(`🔓 [DEVICE_RESET] Cleared device mapping for student: ${studentId}`);
 
+      // 🚨 Dispatch Dean Security Alert if device has been reset multiple times
+      if (updateData.deviceResetCount >= 2) {
+        try {
+          import("@/lib/pushNotification").then(({ sendPushNotification }) => {
+            sendPushNotification("admin", "dean", "deanSecurityAlert", {
+              title: "⚠️ Security Alert: High Device Reset Count",
+              body: `Student ${updatedStudent?.name || student?.name || "Student"} has had their device mapping reset ${updateData.deviceResetCount} times.`,
+              url: "/admin/students"
+            }).catch(() => {});
+          });
+        } catch (e) {}
+      }
+
       // 📝 AUDIT LOG: device reset
       writeAdminAuditLog({
         action: "STUDENT_DEVICE_RESET",
