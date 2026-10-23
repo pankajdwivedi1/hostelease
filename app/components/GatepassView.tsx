@@ -1090,9 +1090,9 @@ export default function GatepassView({ onClose }: { onClose?: () => void }) {
     };
 
     return (
-        <div className="flex flex-col md:flex-row w-screen min-h-screen md:h-screen bg-[#0a0a1a] font-sans text-white overflow-x-hidden overflow-y-auto scrollbar-thin scrollbar-thumb-blue-500/20 scrollbar-track-transparent">
+        <div className="flex flex-col md:flex-row w-full min-h-screen md:h-screen bg-[#0a0a1a] font-sans text-white overflow-x-hidden overflow-y-auto touch-pan-y scrollbar-thin scrollbar-thumb-blue-500/20 scrollbar-track-transparent">
             {/* =================== LEFT PANEL: QR CODE =================== */}
-            <div className="w-full md:w-[42%] flex flex-col items-center justify-center gap-6 p-6 md:p-6 bg-gradient-to-b from-[#0a0a1a] via-[#0d1420] to-[#0a0a1a] border-b md:border-b-0 md:border-r border-[#00ff881a] relative shrink-0 transition-all duration-300 overflow-hidden">
+            <div className="w-full md:w-[42%] flex flex-col items-center justify-center gap-6 p-6 md:p-6 bg-gradient-to-b from-[#0a0a1a] via-[#0d1420] to-[#0a0a1a] border-b md:border-b-0 md:border-r border-[#00ff881a] relative shrink-0 transition-all duration-300 overflow-visible md:overflow-hidden touch-pan-y">
 
                 {/* ── TOP ROW: Logo left + Instructions / Mobile Gate info right ── */}
                 <div className="flex items-start justify-between w-full mb-2">

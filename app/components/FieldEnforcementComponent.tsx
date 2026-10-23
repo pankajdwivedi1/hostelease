@@ -720,7 +720,7 @@ const FieldEnforcementComponent: React.FC<FieldEnforcementProps> = ({
 
                 {/* Student Cards with Checkboxes */}
                 {displayedStudents.length > 0 ? (
-                  <div className="max-h-60 overflow-y-auto pr-1 border border-slate-200 rounded-xl bg-slate-50/70 p-2 grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-1.5">
+                  <div className="max-h-60 overflow-y-auto pr-0 sm:pr-1 border-0 sm:border border-slate-200 rounded-none sm:rounded-xl bg-transparent sm:bg-slate-50/70 p-0 sm:p-2 grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-1.5">
                     {displayedStudents.map((st: any) => {
                       const stId = (st._id || st.id || "").toString();
                       const isChecked = selectedStudentIds.includes(stId);

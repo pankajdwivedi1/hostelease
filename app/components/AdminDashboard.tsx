@@ -9273,7 +9273,7 @@ export default function AdminDashboard({
                 })()}
               </div>
 
-              <div className={currentTab === 'permissions' ? 'block space-y-6' : 'hidden'} style={{ contentVisibility: currentTab === 'permissions' ? 'visible' : 'hidden', contain: 'style layout paint' }}>
+              <div className={currentTab === 'permissions' ? 'block space-y-6' : 'hidden'}>
                 <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
                     <div className="flex bg-[#F3F4F6] p-1 rounded-xl w-full max-w-sm md:max-w-md">
                       <button
@@ -9807,7 +9807,7 @@ export default function AdminDashboard({
                   )}
               </div>
 
-              <div className={currentTab === 'attendance' ? 'block space-y-6' : 'hidden'} style={{ contentVisibility: currentTab === 'attendance' ? 'visible' : 'hidden', contain: 'style layout paint' }}>
+              <div className={currentTab === 'attendance' ? 'block space-y-6' : 'hidden'}>
                   {/* View Mode Toggle */}
                   <div className="flex justify-center mb-6">
                     <div className="bg-gray-100 p-1 rounded-xl inline-flex">
@@ -10636,7 +10636,7 @@ export default function AdminDashboard({
                   )}
               </div>
 
-              <div className={currentTab === 'settings' ? 'block space-y-6' : 'hidden'} style={{ contentVisibility: currentTab === 'settings' ? 'visible' : 'hidden', contain: 'style layout paint' }}>
+              <div className={currentTab === 'settings' ? 'block space-y-6' : 'hidden'}>
                   {/* Settings Sub-Navigation */}
                   <div className="flex border-b border-gray-200 overflow-x-auto [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden">
                     {title === "Super Admin Dashboard" && (
@@ -10688,7 +10688,7 @@ export default function AdminDashboard({
                   </div>
               </div>
 
-              <div className={currentTab === 'wifi_sync' ? 'block space-y-6' : 'hidden'} style={{ contentVisibility: currentTab === 'wifi_sync' ? 'visible' : 'hidden', contain: 'style layout paint' }}>
+              <div className={currentTab === 'wifi_sync' ? 'block space-y-6' : 'hidden'}>
                   {/* Header */}
                   <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                     <div>
@@ -11128,7 +11128,7 @@ export default function AdminDashboard({
                   )}
               </div>
 
-              <div className={currentTab === 'messaging' ? 'block space-y-6' : 'hidden'} style={{ contentVisibility: currentTab === 'messaging' ? 'visible' : 'hidden', contain: 'style layout paint' }}>
+              <div className={currentTab === 'messaging' ? 'block space-y-6' : 'hidden'}>
                   <div className="flex items-center justify-between">
                     <div>
                       <h2 className="text-lg font-bold text-foreground">{isWarden ? "Warden Messaging System" : "Dean Messaging System"}</h2>
@@ -11403,7 +11403,7 @@ export default function AdminDashboard({
                   </div>
               </div>
 
-              <div className={currentTab === 'payments' ? 'block space-y-6' : 'hidden'} style={{ contentVisibility: currentTab === 'payments' ? 'visible' : 'hidden', contain: 'style layout paint' }}>
+              <div className={currentTab === 'payments' ? 'block space-y-6' : 'hidden'}>
                   <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
                     <div>
                       <h2 className="text-lg font-bold text-foreground">Hostel/Mess Fee Payment Details</h2>
@@ -11727,7 +11727,7 @@ export default function AdminDashboard({
                     </div>
                   </div>
 
-              <div className={currentTab === 'rooms' ? 'block space-y-6' : 'hidden'} style={{ contentVisibility: currentTab === 'rooms' ? 'visible' : 'hidden', contain: 'style layout paint' }}>
+              <div className={currentTab === 'rooms' ? 'block space-y-6' : 'hidden'}>
                   <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
                     <div>
                       <div className="flex items-center gap-2">
@@ -12178,7 +12178,7 @@ export default function AdminDashboard({
                   )}
               </div>
 
-              <div className={currentTab === 'alerts' ? 'block space-y-6' : 'hidden'} style={{ contentVisibility: currentTab === 'alerts' ? 'visible' : 'hidden', contain: 'style layout paint' }}>
+              <div className={currentTab === 'alerts' ? 'block space-y-6' : 'hidden'}>
                   <div>
                     <h2 className="text-lg font-bold text-foreground">Dean Disciplinary & Security Alerts Console</h2>
                     <p className="text-sm text-secondary">Audit system-wide security alerts, failed face matches, and device resets</p>
@@ -12297,7 +12297,7 @@ export default function AdminDashboard({
                   </div>
               </div>
 
-              <div className={currentTab === 'add_student' ? 'block space-y-6' : 'hidden'} style={{ contentVisibility: currentTab === 'add_student' ? 'visible' : 'hidden', contain: 'style layout paint' }}>
+              <div className={currentTab === 'add_student' ? 'block space-y-6' : 'hidden'}>
                   <div>
                     <h2 className="text-lg font-black text-foreground uppercase tracking-wide">Manual Student Registration</h2>
                     <p className="text-xs text-secondary font-bold uppercase tracking-tight">Pre-register a student directly in the database. They can link their credentials later by logging in with their email.</p>
@@ -21237,7 +21237,7 @@ export default function AdminDashboard({
 
       {/* ⚡ LIVE GATEPASS OVERLAY */}
       {showGatepassOverlay && (
-        <div className="fixed inset-0 z-[9999] bg-[#0a0a1a] overflow-y-auto animate-in fade-in duration-300">
+        <div className="fixed inset-0 z-[9999] bg-[#0a0a1a] overflow-y-auto touch-pan-y animate-in fade-in duration-300 [webkit-overflow-scrolling:touch]">
           <GatepassView onClose={() => window.history.back()} />
         </div>
       )}
