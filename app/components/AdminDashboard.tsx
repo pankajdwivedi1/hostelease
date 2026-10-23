@@ -9093,21 +9093,21 @@ export default function AdminDashboard({
                           {locationVerificationResults.map((result, index) => {
                             const isResultExpanded = !!expandedVerificationResults[index];
                             return (
-                              <div key={index} className="flex flex-col gap-0.5 group relative p-1 md:p-1.5 rounded bg-gray-50/50">
+                              <div key={index} className="flex flex-col md:flex-row md:items-center md:gap-2 group relative p-1 md:py-1 md:px-2 rounded bg-gray-50/50">
                                 <div
                                   onClick={() => setExpandedVerificationResults(prev => ({ ...prev, [index]: !prev[index] }))}
-                                  className="flex items-center gap-1.5 sm:gap-2 flex-wrap cursor-pointer sm:cursor-default select-none"
+                                  className="flex items-center gap-1.5 sm:gap-2 shrink-0 cursor-pointer md:cursor-default select-none"
                                 >
-                                  <span className="font-bold text-gray-500 text-[10px] sm:text-xs">{index + 1}.</span>
+                                  <span className="font-bold text-gray-500 text-[10px] sm:text-xs md:text-[13px]">{index + 1}.</span>
                                   {result.isVerified ? (
-                                    <span className="text-green-600 font-bold flex items-center gap-1 text-[10px] sm:text-xs">
+                                    <span className="text-green-600 font-bold flex items-center gap-1 text-[10px] sm:text-xs md:text-[13px] whitespace-nowrap">
                                       <svg className="w-3 h-3 sm:w-4 sm:h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" /></svg>
-                                      Verification Success{lastCheckAccuracy ? ":" : ""}
+                                      Verification Success:
                                     </span>
                                   ) : (
-                                    <span className="text-red-500 font-bold flex items-center gap-1 text-[10px] sm:text-xs">
+                                    <span className="text-red-500 font-bold flex items-center gap-1 text-[10px] sm:text-xs md:text-[13px] whitespace-nowrap">
                                       <svg className="w-3 h-3 sm:w-4 sm:h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M6 18L18 6M6 6l12 12" /></svg>
-                                      Verification Failed{lastCheckAccuracy ? ":" : ""}
+                                      Verification Failed:
                                     </span>
                                   )}
                                   {lastCheckAccuracy && (
@@ -9119,18 +9119,16 @@ export default function AdminDashboard({
                                     </span>
                                   )}
                                 </div>
-                                <div className={`${isResultExpanded ? "block" : "hidden sm:block"} w-full pt-0.5`}>
-                                  <p className="text-gray-700 leading-tight sm:leading-relaxed text-[10px] sm:text-[10.5px] md:text-sm w-full">
-                                    You are <strong className="text-gray-900">{Math.round(result.distance)} meters</strong> away from <strong className="text-gray-900">{result.name}</strong>
+                                <div className={`${isResultExpanded ? "block" : "hidden sm:block"} w-full md:w-auto pt-0.5 md:pt-0`}>
+                                  <p className="text-gray-700 leading-tight sm:leading-relaxed text-[10px] sm:text-xs md:text-[13px] flex items-center flex-wrap md:flex-nowrap gap-1 md:whitespace-nowrap">
+                                    <span>You are <strong className="text-gray-900">{Math.round(result.distance)} meters</strong> away from <strong className="text-gray-900">{result.name}</strong></span>
                                     {lastCheckAccuracy && (
-                                      <span className="hidden sm:inline-flex flex-wrap gap-1 ml-1 align-baseline">
-                                        <span className={`text-[8.5px] sm:text-[10px] ${lastCheckAccuracy > 50 ? "text-orange-600 font-bold" : "text-gray-400"}`}>
-                                          (GPS Accuracy: {lastCheckAccuracy}m)
-                                        </span>
+                                      <span className={`text-[8.5px] sm:text-[10px] md:text-[11px] whitespace-nowrap ${lastCheckAccuracy > 50 ? "text-orange-600 font-bold" : "text-gray-400"}`}>
+                                        (GPS Accuracy: {lastCheckAccuracy}m)
                                       </span>
                                     )}
                                     {Math.round(result.distance) > result.radius && (
-                                      <span className="text-[8px] sm:text-[10px] px-1 sm:px-1.5 py-0.5 bg-indigo-50 text-indigo-600 rounded border border-indigo-100 font-bold whitespace-nowrap ml-1">
+                                      <span className="text-[8px] sm:text-[9.5px] md:text-[10.5px] px-1 sm:px-1.5 py-0.5 bg-indigo-50 text-indigo-600 rounded border border-indigo-100 font-bold whitespace-nowrap">
                                         Offset Applied: -{result.appliedOffset ?? Math.min(lastCheckAccuracy, 50)}m
                                       </span>
                                     )}
@@ -11727,23 +11725,23 @@ export default function AdminDashboard({
                     </div>
                   </div>
 
-              <div className={currentTab === 'rooms' ? 'block space-y-6' : 'hidden'}>
-                  <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
+              <div className={currentTab === 'rooms' ? 'block space-y-2 sm:space-y-6' : 'hidden'}>
+                  <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-1 sm:gap-4">
                     <div>
-                      <div className="flex items-center gap-2">
-                        <h2 className="text-lg font-bold text-foreground">Warden Visual Room Grid</h2>
+                      <div className="flex items-center gap-1.5 sm:gap-2 flex-wrap">
+                        <h2 className="text-xs sm:text-lg font-black sm:font-bold text-foreground tracking-tight sm:tracking-normal">Warden Visual Room Grid</h2>
                         {showAttendanceStatusUntilMidnight && (
-                          <span className="flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-blue-50 text-blue-600 border border-blue-100 text-[10px] font-bold animate-pulse">
-                            <span className="w-1.5 h-1.5 rounded-full bg-blue-600" />
+                          <span className="flex items-center gap-1 sm:gap-1.5 px-1.5 sm:px-2 py-0.5 rounded-full bg-blue-50 text-blue-600 border border-blue-100 text-[8px] sm:text-[10px] font-bold animate-pulse shrink-0">
+                            <span className="w-1 h-1 sm:w-1.5 sm:h-1.5 rounded-full bg-blue-600" />
                             Live Night Attendance
                           </span>
                         )}
                       </div>
-                      <p className="text-sm text-secondary">Monitor room occupancy and roommate statuses visually</p>
+                      <p className="text-[10px] sm:text-sm text-secondary leading-tight mt-0.5 sm:mt-1">Monitor room occupancy and roommate statuses visually</p>
                     </div>
-                    {/* Hostel Filter Dropdown */}
-                    <div className="flex items-center gap-2">
-                      <label className="text-xs font-bold text-slate-500 uppercase">Select Hostel:</label>
+                    {/* Hostel Filter Dropdown - Centered on Mobile, Sized like Floor Badges */}
+                    <div className="w-full md:w-auto flex items-center justify-center md:justify-end gap-1.5 sm:gap-2 mt-0.5 sm:mt-0">
+                      <label className="text-[9px] sm:text-xs font-bold text-slate-500 uppercase tracking-tight whitespace-nowrap">Select Hostel:</label>
                       <select
                         value={activeVisualHostel}
                         onChange={e => {
@@ -11753,7 +11751,7 @@ export default function AdminDashboard({
                             localStorage.setItem("hosteleaze_active_visual_hostel", val);
                           }
                         }}
-                        className="h-9 px-3 rounded-lg border border-solid border-[#9CA3AF] bg-white text-foreground text-xs focus:outline-none focus:border-blue-500 font-bold"
+                        className="h-6 sm:h-9 px-2 sm:px-3 py-0.5 rounded sm:rounded-lg border border-slate-300 bg-white text-foreground text-[8.5px] sm:text-xs focus:outline-none focus:border-blue-500 font-bold shadow-2xs cursor-pointer"
                       >
                         {isWarden ? (
                           authorizedHostels.map(h => <option key={h} value={h.toUpperCase()}>{h.toUpperCase()}</option>)

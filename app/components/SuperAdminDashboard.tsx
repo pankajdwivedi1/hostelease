@@ -34,7 +34,8 @@ import {
     ArrowDown,
     ArrowUpDown,
     GripVertical,
-    Bell
+    Bell,
+    Receipt
 } from "lucide-react";
 import { generateOfficialInvoicePDF } from "@/lib/invoicePdfGenerator";
 import { formatToDDMMYYYY, formatDateDDMMYYYY, formatDateTimeDDMMYYYY } from "@/lib/dateFormat";
@@ -625,6 +626,7 @@ export default function SuperAdminDashboard() {
 
     const [billingLogs, setBillingLogs] = useState<any[]>([]);
     const [loadingBilling, setLoadingBilling] = useState(false);
+    const [selectedSubscriptionTenant, setSelectedSubscriptionTenant] = useState<any | null>(null);
     const [dnsStatus, setDnsStatus] = useState<Record<string, 'resolved' | 'pending' | 'checking'>>({});
 
     // Billing details states in edit modal
@@ -771,7 +773,7 @@ export default function SuperAdminDashboard() {
             setInvoiceCollegeCoordinatorPhone("7974704918");
             setInvoiceCollegeGstin("");
         }
-        setInvoiceRatePerStudentMonth("30");
+        setInvoiceRatePerStudentMonth(String(paymentSettings.pricePerStudentPerMonth || 30));
         setInvoiceBillingPeriod("1 Year");
         setInvoiceAmount("");
         setInvoiceExtraDiscountType("amount");
@@ -862,8 +864,19 @@ export default function SuperAdminDashboard() {
                 invoiceBillingPeriod.includes("3 Year") ? 36 : 12;
 
             const studentCount = Number(invoiceStudentCount) || 500;
-            const ratePerStudentMonth = Number(invoiceRatePerStudentMonth) || 30;
+            const ratePerStudentMonth = Number(invoiceRatePerStudentMonth) || (paymentSettings.pricePerStudentPerMonth || 30);
             const grossBase = studentCount * ratePerStudentMonth * months;
+
+            // 1-to-1 Mapping to Global Subscription Plan Discount Controls (%)
+            const stdDiscPct = months === 1 
+                ? (paymentSettings.discount1Month !== undefined ? Number(paymentSettings.discount1Month) : 0)
+                : months === 3 
+                ? (paymentSettings.discount3Month !== undefined ? Number(paymentSettings.discount3Month) : 15)
+                : months === 6 
+                ? (paymentSettings.discount6Month !== undefined ? Number(paymentSettings.discount6Month) : 25)
+                : (paymentSettings.discount12Month !== undefined ? Number(paymentSettings.discount12Month) : 30);
+
+            const stdDiscAmount = Math.round(grossBase * (stdDiscPct / 100));
 
             const collegeDetails = {
                 name: invoiceTenantName,
@@ -884,6 +897,8 @@ export default function SuperAdminDashboard() {
                 billingPeriod: invoiceBillingPeriod,
                 months,
                 grossBase,
+                standardDiscountPercent: stdDiscPct,
+                standardDiscountAmount: stdDiscAmount,
                 amount: invoiceAmount ? Number(invoiceAmount) : undefined,
                 extraDiscountType: invoiceExtraDiscountType,
                 extraDiscountValue: discountNum,
@@ -2167,46 +2182,90 @@ export default function SuperAdminDashboard() {
                                         <Globe className="w-8 h-8 text-gray-200 mx-auto" />
                                         <p className="text-gray-400 text-[10px] italic font-bold">No global nodes provisioned yet.</p>
                                     </div>
-                                ) : tenants.map((tenant) => (
+                                ) : tenants.map((tenant) => {
+                                    const selId = tenant._id || tenant.id;
+                                    const selSlug = tenant.slug?.toLowerCase();
+                                    const selName = tenant.name?.toLowerCase().trim();
+                                    const tenantBillingCount = billingLogs.filter(log => {
+                                        if (log.tenantId && selId && log.tenantId === selId) return true;
+                                        if (log.tenantSlug && selSlug && log.tenantSlug.toLowerCase() === selSlug) return true;
+                                        if (log.tenantName && selName) {
+                                            const logName = log.tenantName.toLowerCase().trim();
+                                            if (logName === selName || logName.includes(selName) || selName.includes(logName)) return true;
+                                        }
+                                        return false;
+                                    }).length;
+
+                                    return (
                                     <div key={tenant._id} className="bg-white rounded-2xl sm:rounded-[32px] p-3.5 sm:p-6 shadow-xs sm:shadow-sm border border-slate-100 hover:shadow-2xl hover:shadow-blue-500/10 hover:-translate-y-1 transition-all duration-300 flex flex-col group">
-                                        <div className="flex items-start justify-between gap-3">
-                                            <div className="flex flex-col min-w-0">
-                                                <div className="flex items-center flex-wrap gap-1.5">
-                                                    {(tenant.logoUrl || tenant.logo) && (
-                                                        <div className="w-5 h-5 sm:w-6 sm:h-6 rounded-md bg-slate-100 border border-slate-200 overflow-hidden shrink-0 flex items-center justify-center p-0.5">
-                                                            <img src={tenant.logoUrl || tenant.logo || ""} alt={tenant.name} className="w-full h-full object-contain" />
-                                                        </div>
-                                                    )}
-                                                    <h3 className="font-black text-gray-900 uppercase tracking-tight text-sm leading-tight break-words">{tenant.name}</h3>
-                                                    <span className={`text-[7px] font-black uppercase tracking-widest px-1.5 py-0.5 rounded border select-none leading-none ${
-                                                        tenant.subscriptionStatus === 'trial' ? 'bg-indigo-50 text-indigo-600 border-indigo-100' :
-                                                        tenant.subscriptionStatus === 'active' ? 'bg-emerald-50 text-emerald-600 border-emerald-100' :
-                                                        tenant.subscriptionStatus === 'expired' ? 'bg-rose-50 text-rose-600 border-rose-100' :
-                                                        'bg-slate-50 text-slate-500 border-slate-150'
-                                                    }`}>
-                                                        {tenant.subscriptionStatus}
-                                                    </span>
-                                                    {viewMode === 'active' && tenant.liveTraffic && tenant.liveTraffic > 0 ? (
-                                                        <span className="flex h-1.5 w-1.5 rounded-full bg-emerald-500 animate-ping shrink-0" />
-                                                    ) : null}
+                                        <div className="flex items-start justify-between gap-2 sm:gap-3">
+                                            <div className="flex items-start gap-1.5 sm:gap-2.5 min-w-0 flex-1">
+                                                {(tenant.logoUrl || tenant.logo) && (
+                                                    <div className="w-5 h-5 sm:w-6 sm:h-6 rounded-md bg-slate-100 border border-slate-200 overflow-hidden shrink-0 flex items-center justify-center p-0.5 mt-0.5">
+                                                        <img src={tenant.logoUrl || tenant.logo || ""} alt={tenant.name} className="w-full h-full object-contain" />
+                                                    </div>
+                                                )}
+                                                <div className="flex flex-col min-w-0 flex-1">
+                                                    {/* College Name: single line so (OGI) stays right next to name */}
+                                                    <h3 
+                                                        className="font-black text-gray-900 uppercase tracking-tight text-[10px] sm:text-xs md:text-sm leading-tight truncate whitespace-nowrap"
+                                                        title={tenant.name}
+                                                    >
+                                                        {tenant.name}
+                                                    </h3>
+
+                                                    {/* Row 2: Active Tab & Subscription History Tab side-by-side */}
+                                                    <div className="flex items-center gap-1.5 flex-wrap mt-0.5 sm:mt-1">
+                                                        <span className={`text-[6.5px] sm:text-[7px] font-black uppercase tracking-widest px-1.5 py-0.5 rounded border select-none leading-none shrink-0 ${
+                                                            tenant.subscriptionStatus === 'trial' ? 'bg-indigo-50 text-indigo-600 border-indigo-100' :
+                                                            tenant.subscriptionStatus === 'active' ? 'bg-emerald-50 text-emerald-600 border-emerald-100' :
+                                                            tenant.subscriptionStatus === 'expired' ? 'bg-rose-50 text-rose-600 border-rose-100' :
+                                                            'bg-slate-50 text-slate-500 border-slate-150'
+                                                        }`}>
+                                                            {tenant.subscriptionStatus}
+                                                        </span>
+
+                                                        {/* Subscription History Tab right beside Active Tab */}
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => setSelectedSubscriptionTenant(tenant)}
+                                                            className="flex items-center gap-1 px-1.5 py-0.5 bg-blue-50/90 hover:bg-blue-100 active:scale-95 text-blue-700 border border-blue-200/80 rounded text-[6.5px] sm:text-[7.5px] font-black uppercase tracking-wider transition-all cursor-pointer shrink-0 shadow-2xs group"
+                                                            title={`View subscription & billing history for ${tenant.name}`}
+                                                        >
+                                                            <Receipt className="w-2.5 h-2.5 text-blue-600 shrink-0" />
+                                                            <span>Subscription History</span>
+                                                            {tenantBillingCount > 0 && (
+                                                                <span className="text-[6px] sm:text-[6.5px] bg-white px-1 py-0.2 rounded border border-blue-200 text-blue-600 font-extrabold group-hover:bg-blue-600 group-hover:text-white transition-colors">
+                                                                    {tenantBillingCount}
+                                                                </span>
+                                                            )}
+                                                        </button>
+
+                                                        {viewMode === 'active' && tenant.liveTraffic && tenant.liveTraffic > 0 ? (
+                                                            <span className="flex h-1.5 w-1.5 rounded-full bg-emerald-500 animate-ping shrink-0" />
+                                                        ) : null}
+                                                    </div>
+
+                                                    {/* Email */}
+                                                    <p className="text-[8px] sm:text-[9px] text-slate-400 font-bold italic opacity-70 break-all mt-0.5">{tenant.adminEmail}</p>
                                                 </div>
-                                                <p className="text-[9px] text-slate-400 font-bold italic opacity-70 break-all mt-0.5">{tenant.adminEmail}</p>
                                             </div>
+
+                                            {/* Circled Operational Tab: Decreased tab & font size on mobile */}
                                             {viewMode === 'active' ? (
                                                 <button
                                                     onClick={() => toggleTenantStatus(tenant._id, tenant.isActive)}
-                                                    className={`shrink-0 text-[8px] font-black uppercase tracking-widest flex items-center gap-1.5 px-2 py-1 rounded-lg border transition-colors ${tenant.isActive ? 'text-emerald-600 border-emerald-100 bg-emerald-50 hover:bg-emerald-100' : 'text-red-500 border-red-100 bg-red-50 hover:bg-red-100'}`}
+                                                    className={`shrink-0 text-[6.5px] sm:text-[8px] font-black uppercase tracking-wider sm:tracking-widest flex items-center gap-1 sm:gap-1.5 px-1.5 py-0.5 sm:px-2 sm:py-1 rounded-md sm:rounded-lg border transition-colors cursor-pointer ${tenant.isActive ? 'text-emerald-600 border-emerald-100 bg-emerald-50 hover:bg-emerald-100' : 'text-red-500 border-red-100 bg-red-50 hover:bg-red-100'}`}
                                                 >
-                                                    <div className={`w-1.5 h-1.5 rounded-full ${tenant.isActive ? 'bg-emerald-500 shadow-emerald-500 shadow-sm' : 'bg-red-500 animate-pulse'}`}></div>
+                                                    <div className={`w-1 h-1 sm:w-1.5 sm:h-1.5 rounded-full ${tenant.isActive ? 'bg-emerald-500 shadow-emerald-500 shadow-sm' : 'bg-red-500 animate-pulse'}`}></div>
                                                     {tenant.isActive ? 'OPERATIONAL' : 'OFFLINE'}
                                                 </button>
                                             ) : (
-                                                <div className="shrink-0 text-[8px] font-black text-red-500/60 uppercase tracking-widest px-2 py-1 bg-red-50/50 rounded-lg border border-red-100/50">
+                                                <div className="shrink-0 text-[6.5px] sm:text-[8px] font-black text-red-500/60 uppercase tracking-wider sm:tracking-widest px-1.5 py-0.5 sm:px-2 sm:py-1 bg-red-50/50 rounded-md sm:rounded-lg border border-red-100/50">
                                                     Deleted
                                                 </div>
                                             )}
                                         </div>
-
                                         <div className="mt-3 flex flex-col gap-2.5 border-t border-slate-100 pt-3 w-full">
                                             {/* Badges Row (Students, Healthy, Subscription) */}
                                             <div className={`grid ${tenant.subscriptionEndDate ? 'grid-cols-3' : 'grid-cols-2'} gap-1.5 w-full`}>
@@ -2259,15 +2318,32 @@ export default function SuperAdminDashboard() {
                                                 })()}
                                             </div>
 
-                                            {/* Contact Details */}
-                                            <div className="flex flex-col gap-1 min-w-0">
-                                                {tenant.contactName && <p className="text-[9px] text-slate-600 font-bold flex items-center gap-1.5"><span className="text-slate-400 uppercase tracking-widest text-[7px] w-12 inline-block">Contact:</span> {tenant.contactName}</p>}
-                                                {tenant.contactPhone && <p className="text-[9px] text-slate-600 font-bold flex items-center gap-1.5"><span className="text-slate-400 uppercase tracking-widest text-[7px] w-12 inline-block">Phone:</span> {tenant.contactPhone}</p>}
-                                                {tenant.totalHostelars && <p className="text-[9px] text-slate-600 font-bold flex items-center gap-1.5"><span className="text-slate-400 uppercase tracking-widest text-[7px] w-12 inline-block">Hostelars:</span> {tenant.totalHostelars}</p>}
+                                            {/* Contact Details - Justified Left & Right */}
+                                            <div className="flex items-center justify-between gap-1 text-[7.5px] sm:text-[9px] font-bold text-slate-600 w-full min-w-0">
+                                                {tenant.contactName && (
+                                                    <div className="flex items-center gap-1 min-w-0 shrink truncate">
+                                                        <span className="text-slate-400 uppercase tracking-wider text-[6.5px] sm:text-[7.5px] font-black shrink-0">Contact:</span>
+                                                        <span className="text-slate-700 truncate" title={tenant.contactName}>{tenant.contactName}</span>
+                                                    </div>
+                                                )}
+                                                {tenant.contactPhone && (
+                                                    <div className="flex items-center gap-1 shrink-0">
+                                                        <span className="text-slate-400 uppercase tracking-wider text-[6.5px] sm:text-[7.5px] font-black shrink-0">Phone:</span>
+                                                        <span className="text-slate-700 font-mono text-[7.5px] sm:text-[9px]">{tenant.contactPhone}</span>
+                                                    </div>
+                                                )}
+                                                {tenant.totalHostelars && (
+                                                    <div className="flex items-center gap-1 shrink-0">
+                                                        <span className="text-slate-400 uppercase tracking-wider text-[6.5px] sm:text-[7.5px] font-black shrink-0">Hostelars:</span>
+                                                        <span className="text-slate-700">{tenant.totalHostelars}</span>
+                                                    </div>
+                                                )}
                                                 {!tenant.contactName && !tenant.contactPhone && !tenant.totalHostelars && (
-                                                    <p className="text-[9px] text-slate-400 italic">No college details provided.</p>
+                                                    <p className="text-[7.5px] sm:text-[9px] text-slate-400 italic">No college details provided.</p>
                                                 )}
                                             </div>
+
+
                                         </div>
 
                                         {/* Start Date & End Date (Full Width Row) */}
@@ -2408,7 +2484,8 @@ export default function SuperAdminDashboard() {
                                             </div>
                                         </div>
                                     </div>
-                                ))}
+                                    );
+                                })}
                             </div>
                         )}
                         </div>
@@ -4026,15 +4103,21 @@ export default function SuperAdminDashboard() {
                                 {/* Live Auto-Calculation Breakdown Card */}
                                 {(() => {
                                     const count = Number(invoiceStudentCount) || 0;
-                                    const rate = Number(invoiceRatePerStudentMonth) || 30;
+                                     const rate = Number(invoiceRatePerStudentMonth) || (paymentSettings.pricePerStudentPerMonth || 30);
                                     const months = invoiceBillingPeriod.includes("1 Month") ? 1 :
                                         invoiceBillingPeriod.includes("3") ? 3 :
                                         invoiceBillingPeriod.includes("6") ? 6 :
                                         invoiceBillingPeriod.includes("2 Year") ? 24 :
                                         invoiceBillingPeriod.includes("3 Year") ? 36 : 12;
                                     const gross = count * rate * months;
-                                    const isDirect = invoicePaymentSource.toLowerCase().includes("direct") || invoicePaymentSource.toLowerCase().includes("bank");
-                                    const stdDiscPct = (months === 1 ? 0 : months === 3 ? 20 : months === 6 ? 30 : 40) + (isDirect ? 3 : 0);
+                                     // 1-to-1 Mapping to Global Subscription Plan Discount Controls (%)
+                                     const stdDiscPct = months === 1 
+                                         ? (paymentSettings.discount1Month !== undefined ? Number(paymentSettings.discount1Month) : 0)
+                                         : months === 3 
+                                         ? (paymentSettings.discount3Month !== undefined ? Number(paymentSettings.discount3Month) : 15)
+                                         : months === 6 
+                                         ? (paymentSettings.discount6Month !== undefined ? Number(paymentSettings.discount6Month) : 25)
+                                         : (paymentSettings.discount12Month !== undefined ? Number(paymentSettings.discount12Month) : 30);
                                     const stdDiscAmount = Math.round(gross * (stdDiscPct / 100));
                                     const extraVal = Number(invoiceExtraDiscountValue) || 0;
                                     const extraAmount = invoiceExtraDiscountType === "amount" ? extraVal : Math.round(gross * (extraVal / 100));
@@ -4298,11 +4381,207 @@ export default function SuperAdminDashboard() {
                                         Save Changes
                                     </>
                                 )}
+
                             </button>
                         </div>
                     </div>
                 </div>
             )}
+
+            {/* Subscription History Modal for Specific Tenant Node */}
+            {selectedSubscriptionTenant && (() => {
+                const tenantLogs = billingLogs.filter(log => {
+                    const selId = selectedSubscriptionTenant._id || selectedSubscriptionTenant.id;
+                    const selSlug = selectedSubscriptionTenant.slug?.toLowerCase();
+                    const selName = selectedSubscriptionTenant.name?.toLowerCase().trim();
+                    if (log.tenantId && selId && log.tenantId === selId) return true;
+                    if (log.tenantSlug && selSlug && log.tenantSlug.toLowerCase() === selSlug) return true;
+                    if (log.tenantName && selName) {
+                        const logName = log.tenantName.toLowerCase().trim();
+                        if (logName === selName || logName.includes(selName) || selName.includes(logName)) return true;
+                    }
+                    return false;
+                });
+
+                const totalApproved = tenantLogs.reduce((acc: number, curr: any) => acc + (Number(curr.amount) || 0), 0);
+
+                return (
+                    <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4 animate-in fade-in">
+                        <div className="bg-white rounded-2xl sm:rounded-3xl border border-slate-200 shadow-2xl max-w-2xl w-full max-h-[90vh] flex flex-col overflow-hidden animate-in zoom-in-95 duration-200">
+                            {/* Header */}
+                            <div className="p-4 sm:p-6 border-b border-slate-100 flex items-center justify-between gap-3 bg-gradient-to-r from-slate-50 via-white to-blue-50/40 shrink-0">
+                                <div className="flex items-center gap-3 min-w-0">
+                                    <div className="w-10 h-10 rounded-2xl bg-blue-50 border border-blue-100 flex items-center justify-center shrink-0 shadow-xs">
+                                        <CreditCard className="w-5 h-5 text-blue-600" />
+                                    </div>
+                                    <div className="min-w-0">
+                                        <div className="flex items-center gap-2 flex-wrap">
+                                            <h3 className="text-sm sm:text-lg font-black text-slate-900 uppercase tracking-tight truncate">
+                                                Subscription History
+                                            </h3>
+                                            <span className="text-[8px] sm:text-[9px] font-black uppercase tracking-wider px-2 py-0.5 rounded-full bg-blue-50 text-blue-700 border border-blue-200 shrink-0">
+                                                {tenantLogs.length} {tenantLogs.length === 1 ? "Record" : "Records"}
+                                            </span>
+                                        </div>
+                                        <p className="text-[10px] sm:text-xs text-slate-500 font-bold truncate mt-0.5">
+                                            {selectedSubscriptionTenant.name}
+                                        </p>
+                                    </div>
+                                </div>
+                                <button
+                                    type="button"
+                                    onClick={() => setSelectedSubscriptionTenant(null)}
+                                    className="w-8 h-8 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-600 flex items-center justify-center transition-colors cursor-pointer shrink-0"
+                                >
+                                    <X className="w-4 h-4" />
+                                </button>
+                            </div>
+
+                            {/* Body - List of Invoices matching Screenshot 2 */}
+                            <div className="p-3.5 sm:p-6 overflow-y-auto space-y-2.5 flex-1">
+                                {tenantLogs.length === 0 ? (
+                                    <div className="py-12 text-center flex flex-col items-center gap-3">
+                                        <div className="w-12 h-12 rounded-full bg-slate-100 flex items-center justify-center text-slate-400">
+                                            <CreditCard className="w-6 h-6" />
+                                        </div>
+                                        <p className="text-slate-500 font-bold text-xs sm:text-sm">No subscription or billing records found for this node.</p>
+                                        <p className="text-[10px] text-slate-400">Approved payments, complimentary access, and custom invoices will appear here.</p>
+                                    </div>
+                                ) : (
+                                    tenantLogs.map((log: any, idx: number) => (
+                                        <div key={log.id || idx} className="bg-slate-50/70 hover:bg-slate-50 border border-slate-200/80 rounded-xl p-2.5 sm:p-3 space-y-2 transition-all shadow-2xs">
+                                            {/* Line 1: Order, College, Date, Proof & Amount */}
+                                            <div className="flex items-center justify-between gap-1.5">
+                                                <div className="flex items-center gap-1.5 min-w-0 flex-1">
+                                                    <span className="text-[7.5px] sm:text-[8px] font-black px-1.5 py-0.5 rounded bg-white text-indigo-700 border border-slate-200 shrink-0 shadow-2xs">
+                                                        #{idx + 1}
+                                                    </span>
+                                                    <span className="font-bold text-slate-900 text-[9.5px] sm:text-xs leading-tight truncate" title={log.tenantName}>
+                                                        {log.tenantName}
+                                                    </span>
+                                                    {log.screenshotUrl && (
+                                                        <a
+                                                            href={log.screenshotUrl}
+                                                            target="_blank"
+                                                            rel="noreferrer"
+                                                            className="text-indigo-600 hover:text-indigo-800 text-[7px] bg-indigo-50 px-1.5 py-0.5 rounded border border-indigo-200 shrink-0 font-bold"
+                                                            title="Proof Screenshot on Cloudflare R2"
+                                                        >
+                                                            📷
+                                                        </a>
+                                                    )}
+                                                    <span className="text-[7px] sm:text-[8px] text-slate-400 font-medium shrink-0">
+                                                        ({formatDateDDMMYYYY(log.date)})
+                                                    </span>
+                                                </div>
+                                                <div className="text-right shrink-0 font-black text-[11px] sm:text-sm text-slate-900">
+                                                    {log.amount > 0 ? `₹${log.amount.toLocaleString("en-IN")}` : "₹0"}
+                                                </div>
+                                            </div>
+
+                                            {/* Line 2: Plan Badge, Period, Students, UTR, Discount & Action Buttons */}
+                                            <div className="flex items-center justify-between gap-1.5 pt-1.5 border-t border-slate-200/50">
+                                                <div className="flex items-center flex-wrap gap-1 min-w-0">
+                                                    <span className={`px-1.5 py-0.5 rounded text-[7px] sm:text-[7.5px] font-black uppercase tracking-tight ${
+                                                        log.billingType === 'Verified Payment' ? 'bg-emerald-50 text-emerald-600 border border-emerald-100' :
+                                                        log.billingType === 'Complimentary' ? 'bg-purple-50 text-purple-600 border border-purple-100' :
+                                                        'bg-amber-50 text-amber-600 border border-amber-100'
+                                                    }`}>
+                                                        {log.billingType}
+                                                    </span>
+                                                    <span className="text-slate-600 font-bold text-[7.5px] sm:text-[8px] bg-white px-1.5 py-0.5 rounded border border-slate-200">
+                                                        {log.billingPeriod}
+                                                    </span>
+                                                    <span className="text-slate-500 font-bold text-[7.5px] sm:text-[8px]">
+                                                        {log.studentCount || 500} Std
+                                                    </span>
+                                                    {log.utr && log.utr !== "N/A" && (
+                                                        <span className="font-mono text-[7px] sm:text-[7.5px] text-slate-500 truncate max-w-[85px]" title={log.utr}>
+                                                            UTR:{log.utr}
+                                                        </span>
+                                                    )}
+                                                    {log.extraDiscountAmount && Number(log.extraDiscountAmount) > 0 && (
+                                                        <span className="text-[7px] sm:text-[7.5px] text-purple-600 font-black bg-purple-50 px-1 py-0.5 rounded border border-purple-100">
+                                                            -₹{Number(log.extraDiscountAmount).toLocaleString("en-IN")}
+                                                        </span>
+                                                    )}
+                                                </div>
+                                                
+                                                {/* Actions */}
+                                                <div className="flex items-center gap-1 shrink-0">
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => handleViewInvoicePDF(log)}
+                                                        className="px-2 py-0.5 bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200 rounded text-[8px] sm:text-[8.5px] font-black uppercase tracking-wider active:scale-95 flex items-center gap-0.5 cursor-pointer shadow-2xs"
+                                                        title="View PDF"
+                                                    >
+                                                        <FileText className="w-2.5 h-2.5" /> PDF
+                                                    </button>
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => {
+                                                            setSelectedSubscriptionTenant(null);
+                                                            handleOpenEditInvoiceModal(log);
+                                                        }}
+                                                        className="p-1 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 rounded text-[8px] active:scale-95 cursor-pointer shadow-2xs"
+                                                        title="Edit"
+                                                    >
+                                                        <Edit3 className="w-2.5 h-2.5" />
+                                                    </button>
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => handleDeleteInvoice(log.id, log.tenantName)}
+                                                        disabled={isDeletingInvoiceId === log.id}
+                                                        className="p-1 bg-red-50 hover:bg-red-100 text-red-600 border border-red-200 rounded text-[8px] active:scale-95 disabled:opacity-50 cursor-pointer shadow-2xs"
+                                                        title="Delete"
+                                                    >
+                                                        {isDeletingInvoiceId === log.id ? (
+                                                            <Loader2 className="w-2.5 h-2.5 animate-spin" />
+                                                        ) : (
+                                                            <Trash2 className="w-2.5 h-2.5" />
+                                                        )}
+                                                    </button>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    ))
+                                )}
+                            </div>
+
+                            {/* Footer */}
+                            <div className="p-3.5 sm:p-5 border-t border-slate-100 bg-slate-50 flex items-center justify-between gap-3 shrink-0">
+                                <div>
+                                    <p className="text-[7px] sm:text-[8px] font-black text-slate-400 uppercase tracking-widest">Total Approved Billing</p>
+                                    <p className="text-xs sm:text-sm font-black text-slate-900">₹{totalApproved.toLocaleString("en-IN")}</p>
+                                </div>
+                                <div className="flex items-center gap-2">
+                                    <button
+                                        type="button"
+                                        onClick={() => {
+                                            const tenantToInvoice = selectedSubscriptionTenant;
+                                            setSelectedSubscriptionTenant(null);
+                                            setInvoiceTenantId(tenantToInvoice._id || tenantToInvoice.id || "");
+                                            setInvoiceTenantName(tenantToInvoice.name || "");
+                                            setInvoiceCollegeEmail(tenantToInvoice.adminEmail || "");
+                                            handleOpenCreateInvoiceModal();
+                                        }}
+                                        className="px-3 py-1.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-black text-[9px] uppercase tracking-wider active:scale-95 transition-all shadow-sm flex items-center gap-1 cursor-pointer"
+                                    >
+                                        <Plus className="w-3 h-3" /> New Invoice
+                                    </button>
+                                    <button
+                                        type="button"
+                                        onClick={() => setSelectedSubscriptionTenant(null)}
+                                        className="px-3.5 py-1.5 rounded-xl border border-slate-200 bg-white text-slate-600 font-black text-[9px] uppercase tracking-wider hover:bg-slate-100 transition-all cursor-pointer"
+                                    >
+                                        Close
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                );
+            })()}
         </div>
     );
 }

@@ -725,10 +725,12 @@ const FieldEnforcementComponent: React.FC<FieldEnforcementProps> = ({
                       const stId = (st._id || st.id || "").toString();
                       const isChecked = selectedStudentIds.includes(stId);
                       const erpId = st.erpId || st.erpInformation || st.dynamicFields?.erpId || st.dynamicFields?.erpInformation || "";
+                      const photoUrl = st.profilePicture || st.photo || st.photoUrl || st.image || st.profilePhoto || st.avatarUrl;
+                      const initial = (st.name || "S").trim().charAt(0).toUpperCase();
                       return (
                         <label
                           key={stId}
-                          className={`flex items-start gap-2 p-2 rounded-lg border cursor-pointer transition select-none ${
+                          className={`flex items-center gap-2 p-1.5 sm:p-2 rounded-lg border cursor-pointer transition select-none ${
                             isChecked
                               ? "bg-indigo-50 border-indigo-300 shadow-xs"
                               : "bg-white border-slate-200 hover:bg-slate-100/60"
@@ -738,8 +740,21 @@ const FieldEnforcementComponent: React.FC<FieldEnforcementProps> = ({
                             type="checkbox"
                             checked={isChecked}
                             onChange={() => handleToggleStudent(stId)}
-                            className="mt-0.5 w-3.5 h-3.5 text-indigo-600 rounded border-slate-300 focus:ring-indigo-500 shrink-0"
+                            className="w-3.5 h-3.5 text-indigo-600 rounded border-slate-300 focus:ring-indigo-500 shrink-0"
                           />
+                          <div className="w-6 h-6 sm:w-7 sm:h-7 rounded-md overflow-hidden bg-blue-50 border border-blue-500 shrink-0 flex items-center justify-center relative text-blue-600 font-bold text-[10px] select-none shadow-xs">
+                            <span>{initial}</span>
+                            {photoUrl && (
+                              <img
+                                src={photoUrl}
+                                alt={st.name || "Student"}
+                                className="absolute inset-0 w-full h-full object-cover rounded-[inherit]"
+                                onError={(e) => {
+                                  (e.target as HTMLElement).style.display = "none";
+                                }}
+                              />
+                            )}
+                          </div>
                           <div className="min-w-0 flex-1">
                             <div className="flex items-center justify-between gap-1">
                               <p className="text-[10px] sm:text-[11px] font-bold text-slate-900 truncate">

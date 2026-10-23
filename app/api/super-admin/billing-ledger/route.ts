@@ -206,10 +206,24 @@ export async function POST(request: NextRequest) {
         const ratePerStudentMonth = Number(newRecord.ratePerStudentMonth) || 30;
         const grossBase = studentCount * ratePerStudentMonth * months;
 
-        const isDirect = (newRecord.paymentSource || "").toLowerCase().includes("direct") || (newRecord.paymentSource || "").toLowerCase().includes("bank");
+        // Fetch global platform settings for 1-to-1 discount mapping
+        let platformSettings: any = null;
+        try {
+            const row = await prisma.platformSetting.findUnique({ where: { id: 'boss_payment_config' } });
+            if (row?.settings) platformSettings = row.settings;
+        } catch (e) {}
+
+        const defaultPlanDisc = months === 1
+            ? (platformSettings?.discount1Month !== undefined ? Number(platformSettings.discount1Month) : 0)
+            : months === 3
+            ? (platformSettings?.discount3Month !== undefined ? Number(platformSettings.discount3Month) : 15)
+            : months === 6
+            ? (platformSettings?.discount6Month !== undefined ? Number(platformSettings.discount6Month) : 25)
+            : (platformSettings?.discount12Month !== undefined ? Number(platformSettings.discount12Month) : 30);
+
         let standardDiscountPercent = newRecord.standardDiscountPercent !== undefined 
             ? Number(newRecord.standardDiscountPercent)
-            : (months === 1 ? 0 : months === 3 ? 20 : months === 6 ? 30 : 40) + (isDirect ? 3 : 0);
+            : defaultPlanDisc;
 
         const standardDiscountAmount = Math.round(grossBase * (standardDiscountPercent / 100));
 
@@ -345,10 +359,24 @@ export async function PUT(request: NextRequest) {
         const ratePerStudentMonth = updateData.ratePerStudentMonth !== undefined ? Number(updateData.ratePerStudentMonth) : (existing.ratePerStudentMonth || 30);
         const grossBase = studentCount * ratePerStudentMonth * months;
 
-        const isDirect = (updateData.paymentSource || existing.paymentSource || "").toLowerCase().includes("direct") || (updateData.paymentSource || existing.paymentSource || "").toLowerCase().includes("bank");
+        // Fetch global platform settings for 1-to-1 discount mapping
+        let platformSettings: any = null;
+        try {
+            const row = await prisma.platformSetting.findUnique({ where: { id: 'boss_payment_config' } });
+            if (row?.settings) platformSettings = row.settings;
+        } catch (e) {}
+
+        const defaultPlanDisc = months === 1
+            ? (platformSettings?.discount1Month !== undefined ? Number(platformSettings.discount1Month) : 0)
+            : months === 3
+            ? (platformSettings?.discount3Month !== undefined ? Number(platformSettings.discount3Month) : 15)
+            : months === 6
+            ? (platformSettings?.discount6Month !== undefined ? Number(platformSettings.discount6Month) : 25)
+            : (platformSettings?.discount12Month !== undefined ? Number(platformSettings.discount12Month) : 30);
+
         const standardDiscountPercent = updateData.standardDiscountPercent !== undefined 
             ? Number(updateData.standardDiscountPercent)
-            : (existing.standardDiscountPercent !== undefined ? Number(existing.standardDiscountPercent) : (months === 1 ? 0 : months === 3 ? 20 : months === 6 ? 30 : 40) + (isDirect ? 3 : 0));
+            : (existing.standardDiscountPercent !== undefined ? Number(existing.standardDiscountPercent) : defaultPlanDisc);
 
         const standardDiscountAmount = Math.round(grossBase * (standardDiscountPercent / 100));
 

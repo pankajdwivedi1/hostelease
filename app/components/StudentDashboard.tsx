@@ -655,7 +655,7 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
     const [isRequestingPush, setIsRequestingPush] = useState<boolean>(false);
 
     // ⚡ FIELD ENFORCEMENT: Dynamic blocker system driven by admin settings
-    const [enforcedMissingFields, setEnforcedMissingFields] = useState<{ fieldId: string; fieldLabel: string; displayMode: string; order: number }[]>([]);
+    const [enforcedMissingFields, setEnforcedMissingFields] = useState<{ fieldId: string; fieldLabel: string; displayMode: string; order: number; currentValue?: string }[]>([]);
     const [enforcementConfig, setEnforcementConfig] = useState<{ notificationPriority?: string; successMessage?: string; autoCloseNotification?: boolean } | null>(null);
     const [showFieldEnforcementModal, setShowFieldEnforcementModal] = useState(false);
     const [enforcementFormData, setEnforcementFormData] = useState<Record<string, string>>({});
@@ -2544,21 +2544,10 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
                     if (data.hasBlockers && data.missingFields.length > 0) {
                         setEnforcedMissingFields(data.missingFields);
                         setEnforcementConfig(data.enforcement);
-                        // Pre-fill form with existing values (Check top-level AND dynamicFields)
+                        // Start with empty values so students must actively enter their new/updated information
                         const initialFormData: Record<string, string> = {};
                         data.missingFields.forEach((f: any) => {
-                            const val = f.currentValue ?? (studentProfile as any)[f.fieldId] ?? studentProfile.dynamicFields?.[f.fieldId] ?? "";
-                            const strVal = (val || "").toString();
-                            if (f.fieldId === 'semester') {
-                                const upper = strVal.toUpperCase();
-                                if (upper.includes('2ND') || upper.includes('4TH') || upper.includes('6TH') || upper.includes('8TH')) {
-                                    initialFormData[f.fieldId] = "";
-                                } else {
-                                    initialFormData[f.fieldId] = strVal;
-                                }
-                            } else {
-                                initialFormData[f.fieldId] = strVal;
-                            }
+                            initialFormData[f.fieldId] = "";
                         });
                         setEnforcementFormData(initialFormData);
                         setShowFieldEnforcementModal(true);
@@ -3580,7 +3569,7 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
     const handleFieldEnforcementSubmit = async () => {
         if (!studentProfile) return;
 
-        // Check all required fields are filled
+        // 1. Check all required fields are filled
         const emptyFields = enforcedMissingFields.filter(f => {
             const val = enforcementFormData[f.fieldId];
             return !val || (typeof val === 'string' && val.trim() === '');
@@ -3588,6 +3577,20 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
 
         if (emptyFields.length > 0) {
             alert(`Please fill all required fields: ${emptyFields.map(f => f.fieldLabel).join(', ')}`);
+            return;
+        }
+
+        // 2. ⚡ DIRTY CHECK: Reject old unchanged values
+        const unchangedFields = enforcedMissingFields.filter(f => {
+            const oldVal = (f.currentValue || '').toString().trim();
+            if (!oldVal) return false; // Was empty in database, any valid value is accepted
+            const newVal = (enforcementFormData[f.fieldId] || '').toString().trim();
+            return newVal.toUpperCase() === oldVal.toUpperCase();
+        });
+
+        if (unchangedFields.length > 0) {
+            const fieldDetails = unchangedFields.map(f => `• ${f.fieldLabel}: Matches your previous record ("${f.currentValue}")`).join('\n');
+            alert(`⚠️ Update is required!\n\nThe following field(s) were submitted without changes:\n${fieldDetails}\n\nPlease enter the new, updated information assigned to you.`);
             return;
         }
 
@@ -7285,7 +7288,14 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
 
                                         {/* Scrollable Form Fields */}
                                         <div className="px-6 pb-6 space-y-4 overflow-y-auto flex-1">
-                                            {enforcedMissingFields.map((field) => (
+                                            {enforcedMissingFields.map((field) => {
+                                                const isSameAsOld = Boolean(
+                                                    field.currentValue &&
+                                                    enforcementFormData[field.fieldId]?.trim() &&
+                                                    enforcementFormData[field.fieldId]?.trim().toUpperCase() === field.currentValue.trim().toUpperCase()
+                                                );
+
+                                                return (
                                                 <div key={field.fieldId}>
                                                     <label className="block text-[11px] font-black text-blue-600 uppercase tracking-widest mb-2 px-1">
                                                         {field.fieldLabel} <span className="text-red-500">*</span>
@@ -7455,37 +7465,73 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
                                                             placeholder={`Enter ${field.fieldLabel}`}
                                                             value={enforcementFormData[field.fieldId] || ''}
                                                             onChange={(e) => setEnforcementFormData(prev => ({ ...prev, [field.fieldId]: e.target.value }))}
-                                                            className="w-full h-12 px-4 rounded-xl border border-gray-200 bg-gray-50 font-bold text-gray-800 transition-all focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 focus:bg-white"
+                                                            className={`w-full h-12 px-4 rounded-xl border font-bold text-gray-800 transition-all focus:ring-4 ${isSameAsOld ? 'border-red-400 bg-red-50/20 focus:ring-red-100 focus:border-red-500' : 'border-gray-200 bg-gray-50 focus:ring-blue-500/10 focus:border-blue-500 focus:bg-white'}`}
                                                         />
                                                     ))}
+
+                                                    {/* Helper Badge: Previous Record and Real-time Dirty Check */}
+                                                    {field.currentValue ? (
+                                                        <div className="mt-1.5 flex flex-col sm:flex-row sm:items-center justify-between gap-1 text-[10.5px] px-1">
+                                                            <span className="text-slate-500 font-medium">
+                                                                Previous on record: <span className="font-bold text-slate-700 bg-slate-100 border border-slate-200 px-1.5 py-0.5 rounded">{field.currentValue}</span>
+                                                            </span>
+                                                            {isSameAsOld && (
+                                                                <span className="text-red-600 font-bold flex items-center gap-1 animate-pulse">
+                                                                    ⚠️ Update is required (new value needed)
+                                                                </span>
+                                                            )}
+                                                        </div>
+                                                    ) : null}
                                                 </div>
-                                            ))}
+                                            );
+                                        })}
 
                                             {/* Submit Button */}
-                                            <button
-                                                onClick={handleFieldEnforcementSubmit}
-                                                disabled={savingEnforcementFields || enforcedMissingFields.some(f => !enforcementFormData[f.fieldId]?.trim())}
-                                                className={`w-full h-14 text-white rounded-2xl font-black text-lg shadow-xl transition-all active:scale-95 disabled:opacity-50 disabled:active:scale-100 flex items-center justify-center gap-2 ${enforcementConfig?.notificationPriority === 'critical'
-                                                    ? 'bg-red-600 hover:bg-red-700 shadow-red-200'
-                                                    : enforcementConfig?.notificationPriority === 'urgent'
-                                                        ? 'bg-orange-600 hover:bg-orange-700 shadow-orange-200'
-                                                        : 'bg-blue-600 hover:bg-blue-700 shadow-blue-200'
-                                                    }`}
-                                            >
-                                                {savingEnforcementFields ? (
-                                                    <>
-                                                        <div className="w-5 h-5 border-3 border-white/30 border-t-white rounded-full animate-spin" />
-                                                        Saving...
-                                                    </>
-                                                ) : (
-                                                    <>
-                                                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" />
-                                                        </svg>
-                                                        Save & Continue
-                                                    </>
-                                                )}
-                                            </button>
+                                            {(() => {
+                                                const hasEmptyFields = enforcedMissingFields.some(f => !enforcementFormData[f.fieldId]?.trim());
+                                                const hasUnchangedFields = enforcedMissingFields.some(f => {
+                                                    const oldVal = (f.currentValue || '').toString().trim();
+                                                    if (!oldVal) return false;
+                                                    const newVal = (enforcementFormData[f.fieldId] || '').toString().trim();
+                                                    return newVal.toUpperCase() === oldVal.toUpperCase();
+                                                });
+                                                const isBlocked = savingEnforcementFields || hasEmptyFields || hasUnchangedFields;
+
+                                                return (
+                                                    <button
+                                                        onClick={handleFieldEnforcementSubmit}
+                                                        disabled={isBlocked}
+                                                        className={`w-full h-14 text-white rounded-2xl font-black text-lg shadow-xl transition-all active:scale-95 disabled:opacity-50 disabled:active:scale-100 flex items-center justify-center gap-2 ${
+                                                            hasUnchangedFields
+                                                                ? 'bg-amber-600 hover:bg-amber-700 shadow-amber-200'
+                                                                : enforcementConfig?.notificationPriority === 'critical'
+                                                                ? 'bg-red-600 hover:bg-red-700 shadow-red-200'
+                                                                : enforcementConfig?.notificationPriority === 'urgent'
+                                                                    ? 'bg-orange-600 hover:bg-orange-700 shadow-orange-200'
+                                                                    : 'bg-blue-600 hover:bg-blue-700 shadow-blue-200'
+                                                        }`}
+                                                    >
+                                                        {savingEnforcementFields ? (
+                                                            <>
+                                                                <div className="w-5 h-5 border-3 border-white/30 border-t-white rounded-full animate-spin" />
+                                                                Saving...
+                                                            </>
+                                                        ) : hasUnchangedFields ? (
+                                                            <>
+                                                                <span>⚠️</span>
+                                                                <span>Update Required (Enter New Value)</span>
+                                                            </>
+                                                        ) : (
+                                                            <>
+                                                                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" />
+                                                                </svg>
+                                                                Save & Continue
+                                                            </>
+                                                        )}
+                                                    </button>
+                                                );
+                                            })()}
                                         </div>
                                     </div>
                                 </div>

@@ -74,7 +74,7 @@ export function generateOfficialInvoicePDF(
   // Standard discount rule % from stored snapshot or default tier
   let standardDiscountPercent = tx.standardDiscountPercent !== undefined ? Number(tx.standardDiscountPercent) :
     tx.discountPercent !== undefined ? Number(tx.discountPercent) : 
-    (months === 1 ? 0 : months === 3 ? 20 : months === 6 ? 30 : 40) + (isDirectTransfer ? 3 : 0);
+    (months === 1 ? 0 : months === 3 ? 15 : months === 6 ? 25 : 30);
 
   const standardDiscountAmount = tx.standardDiscountAmount !== undefined 
     ? Number(tx.standardDiscountAmount) 
