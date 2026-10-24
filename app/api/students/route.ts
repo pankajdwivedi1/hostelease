@@ -63,6 +63,22 @@ export async function POST(request: NextRequest) {
     }
 
     // ✅ Check for duplicate phone numbers belonging to another student (if enforced)
+    // 🛡️ STRICT DATABASE UNIQUENESS CHECK
+    const { checkStudentUniqueness } = await import("@/lib/studentUniqueness");
+    const uniquenessCheck = await checkStudentUniqueness({
+      currentStudentId: existingStudent?._id || existingStudent?.id || existingStudent?.firebaseUID || null,
+      phoneNumber: phoneNumber,
+      erpInformation: erpInformation,
+      email: email,
+      registrationId: body.registrationId,
+    });
+    if (uniquenessCheck.hasConflict) {
+      return NextResponse.json(
+        { error: uniquenessCheck.conflictMessage, field: uniquenessCheck.field },
+        { status: 409 }
+      );
+    }
+
     if (adminSettings?.enforceUniquePhone) {
       const phoneExists = await db.students.findOne({ phoneNumber: phoneNumber.trim() });
       if (phoneExists && (!existingStudent || phoneExists.firebaseUID !== existingStudent.firebaseUID)) {
@@ -389,6 +405,25 @@ export async function PUT(request: NextRequest) {
     if (body.floorNumber !== undefined) updateFields.floorNumber = body.floorNumber;
     if (body.deviceId !== undefined) updateFields.deviceId = body.deviceId;
     if (body.webAuthnCredentials !== undefined) updateFields.webAuthnCredentials = body.webAuthnCredentials;
+
+    // 🛡️ STRICT DATABASE UNIQUENESS CHECK
+    // Prevents duplicate Student Mobile Number, ERP ID, Registration ID, and Email from mistakenly overwriting another student.
+    // Parent mobile numbers (fatherNumber, motherNumber) are deliberately permitted to be identical.
+    const { checkStudentUniqueness } = await import("@/lib/studentUniqueness");
+    const uniquenessCheck = await checkStudentUniqueness({
+      currentStudentId: targetId,
+      phoneNumber: updateFields.phoneNumber,
+      erpInformation: updateFields.erpInformation,
+      email: updateFields.email,
+      registrationId: updateFields.registrationId,
+    });
+
+    if (uniquenessCheck.hasConflict) {
+      return NextResponse.json(
+        { error: uniquenessCheck.conflictMessage, field: uniquenessCheck.field },
+        { status: 409 }
+      );
+    }
 
     const student = await db.students.update(targetId, { $set: updateFields });
     return NextResponse.json({ success: true, student }, { status: 200 });

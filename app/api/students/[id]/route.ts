@@ -162,6 +162,25 @@ export async function PATCH(
       body.erp_id = validation.cleanedValue;
     }
 
+    // 🛡️ STRICT DATABASE UNIQUENESS CHECK
+    // Prevents duplicate Student Mobile Number, ERP ID, Registration ID, and Email from mistakenly overwriting or colliding with another student.
+    // Parent mobile numbers (fatherNumber, motherNumber) are deliberately permitted to be identical.
+    const { checkStudentUniqueness } = await import("@/lib/studentUniqueness");
+    const uniquenessCheck = await checkStudentUniqueness({
+      currentStudentId: studentId,
+      phoneNumber: body.phoneNumber || body.phone_number,
+      erpInformation: body.erpInformation || body.erpId || body.erp_id,
+      email: body.email,
+      registrationId: body.registrationId || body.registration_id,
+    });
+
+    if (uniquenessCheck.hasConflict) {
+      return NextResponse.json(
+        { error: uniquenessCheck.conflictMessage, field: uniquenessCheck.field },
+        { status: 409 }
+      );
+    }
+
     // ✅ NEW: Extract any non-standard fields (custom dynamic fields) and merge them into dynamicFields
     const standardFields = new Set([
       'firebaseUID', 'firebase_uid', 'name', 'email', 'phoneNumber', 'phone_number',

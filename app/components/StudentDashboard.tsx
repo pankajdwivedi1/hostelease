@@ -3577,8 +3577,8 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
                 body: JSON.stringify(updateData),
             });
 
-            if (!response.ok) throw new Error(`Failed to update profile: ${response.status}`);
-            const data = await response.json();
+            const data = await response.json().catch(() => null);
+            if (!response.ok) throw new Error(data?.error || `Failed to update profile: ${response.status}`);
 
             if (data.success) {
                 setStudentProfile(data.student);
@@ -3674,8 +3674,8 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
                 body: JSON.stringify(updateData),
             });
 
-            if (!response.ok) throw new Error(`Failed to update profile: ${response.status}`);
-            const data = await response.json();
+            const data = await response.json().catch(() => null);
+            if (!response.ok) throw new Error(data?.error || `Failed to update profile: ${response.status}`);
 
             if (data.success) {
                 // ⚡ NEW: Mark fields as completed in the FieldEnforcement tracking system
