@@ -58,6 +58,17 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // 🔒 0.6 Prevent new leave if ERP ID is missing or invalid
+    const studentErp = student.erpInformation || student.erpId || (student as any).dynamicFields?.erpId || (student as any).dynamicFields?.erpInformation || "";
+    const { validateErpId } = await import("@/lib/erpValidation");
+    const erpCheck = validateErpId(studentErp, student.collegeName || student.college);
+    if (!erpCheck.isValid) {
+      return NextResponse.json(
+        { error: `Action Blocked: You must enter a valid College ERP ID on your Hosteleaze dashboard before applying for a gate pass or leave. (${erpCheck.error})` },
+        { status: 403 }
+      );
+    }
+
     // 🔒 1. Prevent new leave if student is already marked OUT
     if (student.studentStatus === "out") {
       return NextResponse.json(

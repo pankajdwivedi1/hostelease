@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/dbAdapter";
+import { isErpField, validateErpId } from "@/lib/erpValidation";
 
 export const dynamic = "force-dynamic";
 
@@ -131,13 +132,15 @@ export async function GET(request: NextRequest) {
 
             // Check if student profile already has a value saved
             const profileVal = (student as any)[field.fieldId] ?? student.dynamicFields?.[field.fieldId] ?? "";
-            const hasValueInProfile = profileVal !== null && profileVal !== undefined && String(profileVal).trim() !== "";
+            const isErp = isErpField(field.fieldId, field.fieldLabel);
+            const erpValid = isErp ? validateErpId(String(profileVal || ""), student.collegeName || student.college).isValid : true;
+            const hasValueInProfile = profileVal !== null && profileVal !== undefined && String(profileVal).trim() !== "" && (!isErp || erpValid);
 
             const isProgressCompleted = !!progressRecord?.isCompleted;
             const progressCompletedAt = progressRecord?.completedAt ? new Date(progressRecord.completedAt).getTime() : 0;
 
             // Verified completion for this cycle (completed on/after the rule was configured/applied)
-            const isCompletedInCurrentCycle = isProgressCompleted && (ruleUpdatedAt === 0 || progressCompletedAt >= (ruleUpdatedAt - 10000));
+            const isCompletedInCurrentCycle = isProgressCompleted && (ruleUpdatedAt === 0 || progressCompletedAt >= (ruleUpdatedAt - 10000)) && (!isErp || erpValid);
 
             // Check field-level durationDays if specified
             if (field.durationDays && field.durationDays > 0 && ruleUpdatedAt > 0) {

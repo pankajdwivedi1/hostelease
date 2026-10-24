@@ -144,6 +144,17 @@ export async function POST(request: NextRequest) {
         const actualStudentId = (student._id || student.id || studentId).toString();
         const isTester = false;
 
+        // 🔒 FIELD ENFORCEMENT CHECK: Ensure student has a valid College ERP ID
+        const studentErp = student.erpInformation || student.erpId || (student as any).dynamicFields?.erpId || (student as any).dynamicFields?.erpInformation || "";
+        const { validateErpId } = await import("@/lib/erpValidation");
+        const erpCheck = validateErpId(studentErp, student.collegeName || student.college);
+        if (!erpCheck.isValid) {
+            return NextResponse.json(
+                { error: `Action Blocked: You must complete your College ERP ID on your Hosteleaze dashboard before marking attendance. (${erpCheck.error})` },
+                { status: 403 }
+            );
+        }
+
         // 🔥 SECURITY RESTRICTION: Mandatory Check-In First
         // If a student is marked as "out" in the gate system, they must scan the entry QR code 
         // to come "inside" before the daily attendance can be marked.

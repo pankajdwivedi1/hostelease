@@ -27,6 +27,7 @@ import {
     getHardwareWifiInfo,
     isAndroidNativeApp,
 } from "@/lib/hardwarePlugin";
+import { isErpField, resolveCollegeAndErpPrefix, validateErpId } from "@/lib/erpValidation";
 
 interface Permission {
     _id: string;
@@ -3320,6 +3321,15 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
     const handleRequestPermission = async () => {
         if (!fromDateTime || !toDateTime || !reason || !studentProfile) return;
 
+        // 🔒 ERP ID ENFORCEMENT CHECK: Hard-block gatepass if ERP ID is missing or invalid
+        const studentErp = studentProfile.erpInformation || studentProfile.erpId || studentProfile.dynamicFields?.erpId || studentProfile.dynamicFields?.erpInformation || "";
+        const erpCheck = validateErpId(studentErp, studentProfile.collegeName || studentProfile.college);
+        if (!erpCheck.isValid || (showFieldEnforcementModal && enforcedMissingFields.length > 0)) {
+            setShowFieldEnforcementModal(true);
+            showToast("⚠️ ERP ID Required: Please enter your valid College ERP ID before applying for a gate pass.", "error");
+            return;
+        }
+
         if (hasActiveLeave) {
             showToast("You already have an active leave request pending or approved. Please use 'Edit Leave' or 'Cancel Leave' below.", "error");
             setShowRequestForm(false);
@@ -3594,12 +3604,31 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
             return;
         }
 
+        // 3. 🎓 ERP ID VALIDATION: Enforce strict college prefix and reject dummy/phone/room inputs
+        for (const f of enforcedMissingFields) {
+            if (isErpField(f.fieldId, f.fieldLabel)) {
+                const val = enforcementFormData[f.fieldId] || '';
+                const collegeInfo = resolveCollegeAndErpPrefix(studentProfile);
+                const validation = validateErpId(val, studentProfile?.collegeName || collegeInfo.college);
+                if (!validation.isValid) {
+                    alert(`⚠️ Invalid ERP ID:\n\n${validation.error}\n\nExample for your college (${collegeInfo.college}): ${collegeInfo.placeholder}`);
+                    return;
+                }
+            }
+        }
+
         try {
             setSavingEnforcementFields(true);
 
             const updateData: Record<string, string> = {};
             enforcedMissingFields.forEach(f => {
-                updateData[f.fieldId] = enforcementFormData[f.fieldId].trim();
+                let val = enforcementFormData[f.fieldId].trim();
+                if (isErpField(f.fieldId, f.fieldLabel)) {
+                    val = val.toUpperCase().replace(/\s+/g, '');
+                    updateData['erpInformation'] = val;
+                    updateData['erpId'] = val;
+                }
+                updateData[f.fieldId] = val;
             });
 
             const response = await fetch(`/api/students/${studentProfile._id}${getTenantParam()}`, {
@@ -4381,6 +4410,15 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
 
     const handleMarkAttendance = async (retryAttempt = 0) => {
         if (!studentProfile) return;
+
+        // 🔒 ERP ID ENFORCEMENT CHECK: Hard-block attendance if ERP ID is missing or invalid
+        const studentErp = studentProfile.erpInformation || studentProfile.erpId || studentProfile.dynamicFields?.erpId || studentProfile.dynamicFields?.erpInformation || "";
+        const erpCheck = validateErpId(studentErp, studentProfile.collegeName || studentProfile.college);
+        if (!erpCheck.isValid || (showFieldEnforcementModal && enforcedMissingFields.length > 0)) {
+            setShowFieldEnforcementModal(true);
+            showToast("⚠️ ERP ID Required: Please enter your valid College ERP ID before marking attendance.", "error");
+            return;
+        }
 
         // ⚡ EAGER PRE-WARM: Guarantee models are hot in memory while location/time checks run
         const isMobileEager = (
@@ -7459,7 +7497,54 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
                                                             maxLength={10}
                                                             className="w-full h-12 px-4 rounded-xl border border-gray-200 bg-gray-50 font-bold text-gray-800 transition-all focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 focus:bg-white"
                                                         />
-                                                    ) : (
+                                                    ) : isErpField(field.fieldId, field.fieldLabel) ? (() => {
+                                                        const collegeInfo = resolveCollegeAndErpPrefix(studentProfile);
+                                                        const erpVal = enforcementFormData[field.fieldId] || '';
+                                                        const erpValidation = validateErpId(erpVal, studentProfile?.collegeName || collegeInfo.college);
+
+                                                        return (
+                                                            <div className="space-y-1.5">
+                                                                <div className="relative">
+                                                                    <input
+                                                                        type="text"
+                                                                        placeholder={`e.g. ${collegeInfo.placeholder}`}
+                                                                        value={erpVal}
+                                                                        onChange={(e) => {
+                                                                            const val = e.target.value.toUpperCase().replace(/\s+/g, '');
+                                                                            setEnforcementFormData(prev => ({ ...prev, [field.fieldId]: val }));
+                                                                        }}
+                                                                        className={`w-full h-12 px-4 pr-10 rounded-xl border font-bold text-gray-800 tracking-wider transition-all focus:ring-4 ${
+                                                                            erpVal && !erpValidation.isValid
+                                                                                ? 'border-red-400 bg-red-50/20 focus:ring-red-100 focus:border-red-500'
+                                                                                : erpVal && erpValidation.isValid
+                                                                                ? 'border-emerald-400 bg-emerald-50/20 focus:ring-emerald-100 focus:border-emerald-500'
+                                                                                : 'border-gray-200 bg-gray-50 focus:ring-blue-500/10 focus:border-blue-500 focus:bg-white'
+                                                                        }`}
+                                                                    />
+                                                                    {erpVal && (
+                                                                        <span className="absolute right-3.5 top-1/2 -translate-y-1/2 text-sm select-none">
+                                                                            {erpValidation.isValid ? '✅' : '❌'}
+                                                                        </span>
+                                                                    )}
+                                                                </div>
+
+                                                                {/* Dynamic Real-time Help / Validation Badge */}
+                                                                {erpVal ? (
+                                                                    <div className={`flex items-start gap-1.5 text-[11px] font-bold px-1 ${erpValidation.isValid ? 'text-emerald-700' : 'text-red-600'}`}>
+                                                                        <span>{erpValidation.isValid ? '✅' : '⚠️'}</span>
+                                                                        <span>{erpValidation.isValid ? `Valid ${collegeInfo.college} ERP ID format` : erpValidation.error}</span>
+                                                                    </div>
+                                                                ) : (
+                                                                    <div className="flex items-center gap-1.5 text-[10.5px] font-semibold text-slate-500 px-1">
+                                                                        <span>ℹ️</span>
+                                                                        <span>
+                                                                            College: <strong className="text-slate-800">{collegeInfo.college}</strong> — Must start with <strong className="text-blue-600">{collegeInfo.prefix}</strong> (e.g. {collegeInfo.placeholder})
+                                                                        </span>
+                                                                    </div>
+                                                                )}
+                                                            </div>
+                                                        );
+                                                    })() : (
                                                         <input
                                                             type="text"
                                                             placeholder={`Enter ${field.fieldLabel}`}
@@ -7495,14 +7580,25 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
                                                     const newVal = (enforcementFormData[f.fieldId] || '').toString().trim();
                                                     return newVal.toUpperCase() === oldVal.toUpperCase();
                                                 });
-                                                const isBlocked = savingEnforcementFields || hasEmptyFields || hasUnchangedFields;
+                                                const hasInvalidErp = enforcedMissingFields.some(f => {
+                                                    if (isErpField(f.fieldId, f.fieldLabel)) {
+                                                        const val = enforcementFormData[f.fieldId] || '';
+                                                        const collegeInfo = resolveCollegeAndErpPrefix(studentProfile);
+                                                        const res = validateErpId(val, studentProfile?.collegeName || collegeInfo.college);
+                                                        return !res.isValid;
+                                                    }
+                                                    return false;
+                                                });
+                                                const isBlocked = savingEnforcementFields || hasEmptyFields || hasUnchangedFields || hasInvalidErp;
 
                                                 return (
                                                     <button
                                                         onClick={handleFieldEnforcementSubmit}
                                                         disabled={isBlocked}
                                                         className={`w-full h-14 text-white rounded-2xl font-black text-lg shadow-xl transition-all active:scale-95 disabled:opacity-50 disabled:active:scale-100 flex items-center justify-center gap-2 ${
-                                                            hasUnchangedFields
+                                                            hasInvalidErp
+                                                                ? 'bg-rose-600 hover:bg-rose-700 shadow-rose-200'
+                                                                : hasUnchangedFields
                                                                 ? 'bg-amber-600 hover:bg-amber-700 shadow-amber-200'
                                                                 : enforcementConfig?.notificationPriority === 'critical'
                                                                 ? 'bg-red-600 hover:bg-red-700 shadow-red-200'
@@ -7515,6 +7611,11 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
                                                             <>
                                                                 <div className="w-5 h-5 border-3 border-white/30 border-t-white rounded-full animate-spin" />
                                                                 Saving...
+                                                            </>
+                                                        ) : hasInvalidErp ? (
+                                                            <>
+                                                                <span>⚠️</span>
+                                                                <span>Valid College ERP ID Required</span>
                                                             </>
                                                         ) : hasUnchangedFields ? (
                                                             <>

@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useMemo } from "react";
 import { Badge } from "@/components/ui/badge";
+import { validateErpId } from "@/lib/erpValidation";
 
 interface EnforcedField {
   fieldId: string;
@@ -317,6 +318,18 @@ const FieldEnforcementComponent: React.FC<FieldEnforcementProps> = ({
   const handleSelectAllFilteredStudents = () => {
     const ids = filteredStudents.map((s: any) => (s._id || s.id || "").toString());
     setSelectedStudentIds(prev => Array.from(new Set([...prev, ...ids])));
+  };
+
+  const invalidErpStudentIds = useMemo(() => {
+    return filteredStudents.filter(st => {
+      const erp = st.erpId || st.erpInformation || st.dynamicFields?.erpId || st.dynamicFields?.erpInformation || "";
+      if (!erp) return true;
+      return !validateErpId(erp, st.collegeName || st.college).isValid;
+    }).map(st => (st._id || st.id || "").toString());
+  }, [filteredStudents]);
+
+  const handleSelectInvalidErpStudents = () => {
+    setSelectedStudentIds(prev => Array.from(new Set([...prev, ...invalidErpStudentIds])));
   };
 
   const handleDeselectAllStudents = () => {
@@ -690,6 +703,17 @@ const FieldEnforcementComponent: React.FC<FieldEnforcementProps> = ({
                     >
                       Uncheck All
                     </button>
+                    {invalidErpStudentIds.length > 0 && (
+                      <button
+                        type="button"
+                        onClick={handleSelectInvalidErpStudents}
+                        className="px-2.5 py-1 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 rounded-md text-[9px] sm:text-[10px] font-bold transition flex items-center gap-1 shadow-2xs"
+                        title="Click to automatically select all students with missing or invalid ERP IDs (e.g. phone numbers or dummy entries)"
+                      >
+                        <span>⚠️</span>
+                        <span>Select Invalid ERP ({invalidErpStudentIds.length})</span>
+                      </button>
+                    )}
                     <span className="px-2.5 py-1 bg-indigo-600 text-white rounded-md text-[9px] sm:text-[10px] font-bold shadow-xs">
                       {selectedStudentIds.length} Selected
                     </span>
@@ -725,6 +749,8 @@ const FieldEnforcementComponent: React.FC<FieldEnforcementProps> = ({
                       const stId = (st._id || st.id || "").toString();
                       const isChecked = selectedStudentIds.includes(stId);
                       const erpId = st.erpId || st.erpInformation || st.dynamicFields?.erpId || st.dynamicFields?.erpInformation || "";
+                      const erpCheck = erpId ? validateErpId(erpId, st.collegeName || st.college) : null;
+                      const isErpInvalid = erpCheck ? !erpCheck.isValid : false;
                       const photoUrl = st.profilePicture || st.photo || st.photoUrl || st.image || st.profilePhoto || st.avatarUrl;
                       const initial = (st.name || "S").trim().charAt(0).toUpperCase();
                       return (
@@ -771,7 +797,16 @@ const FieldEnforcementComponent: React.FC<FieldEnforcementProps> = ({
                               {erpId && (
                                 <>
                                   <span>•</span>
-                                  <span className="truncate font-semibold text-slate-700">{erpId}</span>
+                                  <span
+                                    className={`truncate font-semibold px-1 py-0.5 rounded ${
+                                      isErpInvalid
+                                        ? "text-red-700 bg-red-50 border border-red-200"
+                                        : "text-slate-700"
+                                    }`}
+                                    title={isErpInvalid ? `Invalid ERP ID: ${erpCheck?.error}` : "Valid ERP ID"}
+                                  >
+                                    {isErpInvalid ? `⚠️ ${erpId} (Invalid)` : erpId}
+                                  </span>
                                 </>
                               )}
                             </div>

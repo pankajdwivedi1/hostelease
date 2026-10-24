@@ -138,6 +138,20 @@ export async function PATCH(
       }
     }
 
+    // 🎓 ERP ID VALIDATION & AUTO-SYNC
+    const incomingErp = body.erpInformation || body.erpId || body.erp_id;
+    if (incomingErp && typeof incomingErp === 'string') {
+      const student = await db.students.getById(studentId);
+      const { validateErpId } = await import("@/lib/erpValidation");
+      const validation = validateErpId(incomingErp, student?.collegeName || student?.college);
+      if (!validation.isValid) {
+        return NextResponse.json({ error: validation.error }, { status: 400 });
+      }
+      body.erpInformation = validation.cleanedValue;
+      body.erpId = validation.cleanedValue;
+      body.erp_id = validation.cleanedValue;
+    }
+
     // ✅ NEW: Extract any non-standard fields (custom dynamic fields) and merge them into dynamicFields
     const standardFields = new Set([
       'firebaseUID', 'firebase_uid', 'name', 'email', 'phoneNumber', 'phone_number',
