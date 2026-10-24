@@ -264,16 +264,22 @@ export async function PATCH(
 
 
     // 🔒 If profile picture is updated with a valid faceDescriptor, immediately stop and clear enforcement
-    if (body.profilePicture && Array.isArray(body.faceDescriptor) && body.faceDescriptor.length >= 68) {
+    const isNewPhotoUpload = typeof body.profilePicture === 'string' && (body.profilePicture.startsWith("data:image/") || body.profilePicture.startsWith("data:"));
+
+    if (isNewPhotoUpload && Array.isArray(body.faceDescriptor) && body.faceDescriptor.length >= 68) {
       const currentDyn = typeof body.dynamicFields === 'object' && body.dynamicFields !== null 
         ? { ...body.dynamicFields } 
         : (typeof (await db.students.getById(studentId))?.dynamicFields === 'object' ? { ...(await db.students.getById(studentId))?.dynamicFields } : {});
       currentDyn.requiresFaceRecapture = false;
       body.dynamicFields = currentDyn;
       console.log(`✅ [Face Recapture Complete] Cleared requiresFaceRecapture for ${studentId}`);
-    } else if (body.profilePicture && (!body.faceDescriptor || !Array.isArray(body.faceDescriptor) || body.faceDescriptor.length === 0)) {
+    } else if (isNewPhotoUpload && (!body.faceDescriptor || !Array.isArray(body.faceDescriptor) || body.faceDescriptor.length === 0)) {
       body.faceDescriptor = [];
-      console.log(`🔒 [Option A Enforcement] Profile picture updated for ${studentId}. Cleared old faceDescriptor vector array.`);
+      console.log(`🔒 [Option A Enforcement] New profile picture uploaded for ${studentId}. Cleared old faceDescriptor vector array.`);
+    } else if (body.faceDescriptor === undefined) {
+      // 🛡️ CRITICAL PRESERVATION: If faceDescriptor was not part of this update (e.g. warden updated ERP ID or room),
+      // DO NOT overwrite or delete the existing faceDescriptor in the database!
+      delete body.faceDescriptor;
     }
 
     // Use the Database Adapter for a database-aware update (Mongo/Supabase)
