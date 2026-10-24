@@ -16,11 +16,11 @@ export interface CollegeInfo {
 }
 
 export const OGI_COLLEGE_CONFIG: Record<string, CollegeInfo> = {
-  OIST: { college: "OIST", prefix: "STOIST", placeholder: "STOIST261235" },
-  OCT: { college: "OCT", prefix: "STOCT", placeholder: "STOCT261235" },
-  OCP: { college: "OCP", prefix: "STOCP", placeholder: "STOCP261235" },
-  OPM: { college: "OPM", prefix: "STOPM", placeholder: "STOPM261235" },
-  OIPR: { college: "OIPR", prefix: "STOIPR", placeholder: "STOIPR261235" },
+  OIST: { college: "OIST", prefix: "STOIST", placeholder: "Enter your official College ERP ID" },
+  OCT: { college: "OCT", prefix: "STOCT", placeholder: "Enter your official College ERP ID" },
+  OCP: { college: "OCP", prefix: "STOCP", placeholder: "Enter your official College ERP ID" },
+  OPM: { college: "OPM", prefix: "STOPM", placeholder: "Enter your official College ERP ID" },
+  OIPR: { college: "OIPR", prefix: "STOIPR", placeholder: "Enter your official College ERP ID" },
 };
 
 /**
@@ -87,22 +87,28 @@ export interface ErpValidationResult {
 /**
  * Comprehensive Anti-Dummy / Anti-Fake ERP ID Validator
  *
- * Checks:
- *   1. Reject blank / empty
- *   2. Reject 10-digit mobile numbers (e.g., 7804856308, 9171586074)
- *   3. Reject short room numbers (e.g., 20, 126)
+ * Rules:
+ *   1. ADMIN / GUEST EXEMPTION: Admins and Guest accounts are never blocked.
+ *   2. Reject blank / empty
+ *   3. Reject 10-digit mobile numbers (e.g., 7804856308, 9171586074)
  *   4. Require valid OGI prefix (STOIST, STOCT, STOCP, STOPM, STOIPR)
  *   5. Require prefix to match student's college if college is known
- *   6. Check length: prefix + 5 to 8 digits (e.g. STOIST261235)
- *   7. Reject dummy all-same digits (e.g., STOIST000000, STOIST111111, STOIST999999)
- *   8. Reject sequential ascending/descending digits (e.g., STOIST123456, STOIST654321)
- *   9. Reject repetitive patterns (e.g., STOIST121212, STOIST123123)
+ *   6. Check length: prefix + 2 to 8 digits (supports 2, 3, 4, 5, 6, 7 digits)
+ *   7. Reject all zeros (e.g., STOIST00, STOIST000000)
+ *   8. Reject dummy all-same digits (e.g., STOIST111111, STOIST999999)
+ *   9. Reject sequential digits for 4+ digits (e.g., STOIST123456, STOIST654321)
  */
 export function validateErpId(
   value: string = "",
-  expectedCollege?: string
+  expectedCollege?: string,
+  options?: { isAdmin?: boolean }
 ): ErpValidationResult {
   const cleaned = (value || "").toString().trim().toUpperCase().replace(/\s+/g, "");
+
+  // 0. ADMIN / GUEST EXEMPTION: Never restrict admin or guest accounts
+  if (options?.isAdmin || cleaned.startsWith("GUEST") || cleaned.startsWith("ADMIN")) {
+    return { isValid: true, error: null, cleanedValue: cleaned };
+  }
 
   if (!cleaned) {
     return { isValid: false, error: "ERP ID is required.", cleanedValue: "" };
@@ -117,11 +123,11 @@ export function validateErpId(
     };
   }
 
-  // 2. Room number or short serial number
+  // 2. Room number or short serial number without letters
   if (/^\d{1,4}$/.test(cleaned)) {
     return {
       isValid: false,
-      error: "Room numbers or short digits are not allowed. Must start with your college prefix (e.g. STOIST).",
+      error: "Room numbers or short digits are not allowed. Must start with your college prefix.",
       cleanedValue: cleaned,
     };
   }
@@ -139,7 +145,7 @@ export function validateErpId(
   if (!matchedPrefix) {
     return {
       isValid: false,
-      error: "Must start with a valid college prefix: STOIST, STOCT, STOCP, STOPM, or STOIPR.",
+      error: "Must start with your college prefix: STOIST, STOCT, STOCP, STOPM, or STOIPR.",
       cleanedValue: cleaned,
     };
   }
@@ -163,13 +169,13 @@ export function validateErpId(
     }
   }
 
-  // 5. Digits / Body verification
+  // 5. Digits / Body verification (Allows 2, 3, 4, 5, 6, 7, 8 digits)
   const body = cleaned.slice(matchedPrefix.length);
 
-  if (!body || body.length < 5) {
+  if (!body || body.length < 2) {
     return {
       isValid: false,
-      error: `ERP ID is too short. Expected format: ${matchedPrefix}261235`,
+      error: `ERP ID number is too short. Please check your College ID Card / Fee Receipt.`,
       cleanedValue: cleaned,
     };
   }
@@ -185,14 +191,23 @@ export function validateErpId(
   if (!/^\d+$/.test(body)) {
     return {
       isValid: false,
-      error: `Characters after ${matchedPrefix} must be numbers only (e.g. ${matchedPrefix}261235).`,
+      error: `Characters after ${matchedPrefix} must be numbers only. Check your ID card / Fee receipt.`,
       cleanedValue: cleaned,
     };
   }
 
-  // 6. Anti-Dummy Check: All identical digits (e.g., 000000, 111111, 999999)
+  // 6. Anti-Dummy Check: Reject all zeros (e.g., STOIST00, STOIST000, STOIST00000000)
   const uniqueChars = new Set(body.split(""));
-  if (uniqueChars.size <= 1) {
+  if (uniqueChars.size === 1 && body[0] === "0") {
+    return {
+      isValid: false,
+      error: `All-zero numbers like ${matchedPrefix}${body} are strictly not acceptable.`,
+      cleanedValue: cleaned,
+    };
+  }
+
+  // Reject repeated digits for 4 or more digits (e.g. 1111, 999999)
+  if (body.length >= 4 && uniqueChars.size <= 1) {
     return {
       isValid: false,
       error: `Dummy numbers like ${matchedPrefix}${body} are strictly not acceptable.`,
@@ -200,21 +215,23 @@ export function validateErpId(
     };
   }
 
-  // 7. Anti-Sequential Check: Ascending / Descending sequences (e.g., 123456, 654321, 012345)
-  let isAscending = true;
-  let isDescending = true;
-  for (let i = 1; i < body.length; i++) {
-    const prev = parseInt(body[i - 1], 10);
-    const curr = parseInt(body[i], 10);
-    if (curr !== prev + 1) isAscending = false;
-    if (curr !== prev - 1) isDescending = false;
-  }
-  if (isAscending || isDescending) {
-    return {
-      isValid: false,
-      error: `Sequential fake numbers like ${matchedPrefix}${body} are not acceptable.`,
-      cleanedValue: cleaned,
-    };
+  // 7. Anti-Sequential Check: Ascending / Descending sequences for 4 or more digits (e.g. 1234, 123456, 654321)
+  if (body.length >= 4) {
+    let isAscending = true;
+    let isDescending = true;
+    for (let i = 1; i < body.length; i++) {
+      const prev = parseInt(body[i - 1], 10);
+      const curr = parseInt(body[i], 10);
+      if (curr !== prev + 1) isAscending = false;
+      if (curr !== prev - 1) isDescending = false;
+    }
+    if (isAscending || isDescending) {
+      return {
+        isValid: false,
+        error: `Sequential fake numbers like ${matchedPrefix}${body} are not acceptable.`,
+        cleanedValue: cleaned,
+      };
+    }
   }
 
   // 8. Anti-Repetitive Pattern: e.g., 121212 or 123123

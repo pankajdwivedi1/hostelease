@@ -144,15 +144,24 @@ export async function POST(request: NextRequest) {
         const actualStudentId = (student._id || student.id || studentId).toString();
         const isTester = false;
 
-        // 🔒 FIELD ENFORCEMENT CHECK: Ensure student has a valid College ERP ID
-        const studentErp = student.erpInformation || student.erpId || (student as any).dynamicFields?.erpId || (student as any).dynamicFields?.erpInformation || "";
-        const { validateErpId } = await import("@/lib/erpValidation");
-        const erpCheck = validateErpId(studentErp, student.collegeName || student.college);
-        if (!erpCheck.isValid) {
-            return NextResponse.json(
-                { error: `Action Blocked: You must complete your College ERP ID on your Hosteleaze dashboard before marking attendance. (${erpCheck.error})` },
-                { status: 403 }
-            );
+        // 🔒 FIELD ENFORCEMENT CHECK: Ensure student has a valid College ERP ID (Bypassed for Admins & Guests)
+        const isGuestOrAdmin = Boolean(
+            student.registrationId?.toUpperCase().startsWith("GUEST") ||
+            student.role === "admin" ||
+            (student as any).isAdmin ||
+            isTester
+        );
+
+        if (!isGuestOrAdmin) {
+            const studentErp = student.erpInformation || student.erpId || (student as any).dynamicFields?.erpId || (student as any).dynamicFields?.erpInformation || "";
+            const { validateErpId } = await import("@/lib/erpValidation");
+            const erpCheck = validateErpId(studentErp, student.collegeName || student.college);
+            if (!erpCheck.isValid) {
+                return NextResponse.json(
+                    { error: `Action Blocked: You must complete your College ERP ID on your Hosteleaze dashboard before marking attendance. (${erpCheck.error})` },
+                    { status: 403 }
+                );
+            }
         }
 
         // 🔥 SECURITY RESTRICTION: Mandatory Check-In First

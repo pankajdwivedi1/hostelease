@@ -138,13 +138,23 @@ export async function PATCH(
       }
     }
 
-    // 🎓 ERP ID VALIDATION & AUTO-SYNC
+    // 🎓 ERP ID VALIDATION & AUTO-SYNC (Bypassed for Admins & Guest accounts)
+    const isAdminRequest = Boolean(
+      request.headers.get("x-admin-email") ||
+      request.headers.get("x-admin-role") ||
+      body.isAdmin ||
+      body.operator ||
+      body.action === "adminUpdate"
+    );
+
     const incomingErp = body.erpInformation || body.erpId || body.erp_id;
     if (incomingErp && typeof incomingErp === 'string') {
       const student = await db.students.getById(studentId);
+      const isGuestOrAdmin = isAdminRequest || student?.registrationId?.toUpperCase().startsWith("GUEST") || student?.role === "admin" || (student as any)?.isAdmin;
+
       const { validateErpId } = await import("@/lib/erpValidation");
-      const validation = validateErpId(incomingErp, student?.collegeName || student?.college);
-      if (!validation.isValid) {
+      const validation = validateErpId(incomingErp, student?.collegeName || student?.college, { isAdmin: isGuestOrAdmin });
+      if (!isGuestOrAdmin && !validation.isValid) {
         return NextResponse.json({ error: validation.error }, { status: 400 });
       }
       body.erpInformation = validation.cleanedValue;

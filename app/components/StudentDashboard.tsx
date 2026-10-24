@@ -2527,9 +2527,20 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
                 setShowLiveFaceRecaptureModal(isFlagged);
             }
 
+            const isGuestOrAdmin = Boolean(
+                (typeof window !== "undefined" && (
+                    localStorage.getItem("userType") === "admin" ||
+                    localStorage.getItem("userType") === "warden" ||
+                    localStorage.getItem("userType") === "superadmin"
+                )) ||
+                studentProfile?.registrationId?.toUpperCase().startsWith("GUEST") ||
+                (studentProfile as any)?.role === "admin" ||
+                (studentProfile as any)?.isAdmin
+            );
+
             // ⚡ FIELD ENFORCEMENT: Check for admin-enforced missing fields (replaces old hardcoded check)
             const checkFieldEnforcement = async () => {
-                if (isParentView) {
+                if (isParentView || isGuestOrAdmin) {
                     setShowFieldEnforcementModal(false);
                     setShowMandatoryUpdate(false);
                     return;
@@ -3321,13 +3332,26 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
     const handleRequestPermission = async () => {
         if (!fromDateTime || !toDateTime || !reason || !studentProfile) return;
 
-        // 🔒 ERP ID ENFORCEMENT CHECK: Hard-block gatepass if ERP ID is missing or invalid
-        const studentErp = studentProfile.erpInformation || studentProfile.erpId || studentProfile.dynamicFields?.erpId || studentProfile.dynamicFields?.erpInformation || "";
-        const erpCheck = validateErpId(studentErp, studentProfile.collegeName || studentProfile.college);
-        if (!erpCheck.isValid || (showFieldEnforcementModal && enforcedMissingFields.length > 0)) {
-            setShowFieldEnforcementModal(true);
-            showToast("⚠️ ERP ID Required: Please enter your valid College ERP ID before applying for a gate pass.", "error");
-            return;
+        const isGuestOrAdmin = Boolean(
+            (typeof window !== "undefined" && (
+                localStorage.getItem("userType") === "admin" ||
+                localStorage.getItem("userType") === "warden" ||
+                localStorage.getItem("userType") === "superadmin"
+            )) ||
+            studentProfile?.registrationId?.toUpperCase().startsWith("GUEST") ||
+            (studentProfile as any)?.role === "admin" ||
+            (studentProfile as any)?.isAdmin
+        );
+
+        // 🔒 ERP ID ENFORCEMENT CHECK: Hard-block gatepass if ERP ID is missing or invalid (Bypassed for Admins & Guests)
+        if (!isGuestOrAdmin) {
+            const studentErp = studentProfile.erpInformation || studentProfile.erpId || studentProfile.dynamicFields?.erpId || studentProfile.dynamicFields?.erpInformation || "";
+            const erpCheck = validateErpId(studentErp, studentProfile.collegeName || studentProfile.college);
+            if (!erpCheck.isValid || (showFieldEnforcementModal && enforcedMissingFields.length > 0)) {
+                setShowFieldEnforcementModal(true);
+                showToast("⚠️ ERP ID Required: Please enter your valid College ERP ID before applying for a gate pass.", "error");
+                return;
+            }
         }
 
         if (hasActiveLeave) {
@@ -3604,15 +3628,28 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
             return;
         }
 
-        // 3. 🎓 ERP ID VALIDATION: Enforce strict college prefix and reject dummy/phone/room inputs
-        for (const f of enforcedMissingFields) {
-            if (isErpField(f.fieldId, f.fieldLabel)) {
-                const val = enforcementFormData[f.fieldId] || '';
-                const collegeInfo = resolveCollegeAndErpPrefix(studentProfile);
-                const validation = validateErpId(val, studentProfile?.collegeName || collegeInfo.college);
-                if (!validation.isValid) {
-                    alert(`⚠️ Invalid ERP ID:\n\n${validation.error}\n\nExample for your college (${collegeInfo.college}): ${collegeInfo.placeholder}`);
-                    return;
+        // 3. 🎓 ERP ID VALIDATION: Enforce strict college prefix and reject dummy/phone/room inputs (Bypassed for Admins & Guests)
+        const isGuestOrAdmin = Boolean(
+            (typeof window !== "undefined" && (
+                localStorage.getItem("userType") === "admin" ||
+                localStorage.getItem("userType") === "warden" ||
+                localStorage.getItem("userType") === "superadmin"
+            )) ||
+            studentProfile?.registrationId?.toUpperCase().startsWith("GUEST") ||
+            (studentProfile as any)?.role === "admin" ||
+            (studentProfile as any)?.isAdmin
+        );
+
+        if (!isGuestOrAdmin) {
+            for (const f of enforcedMissingFields) {
+                if (isErpField(f.fieldId, f.fieldLabel)) {
+                    const val = enforcementFormData[f.fieldId] || '';
+                    const collegeInfo = resolveCollegeAndErpPrefix(studentProfile);
+                    const validation = validateErpId(val, studentProfile?.collegeName || collegeInfo.college);
+                    if (!validation.isValid) {
+                        alert(`⚠️ Invalid ERP ID:\n\n${validation.error}\n\nPlease check your College ID Card / Fee Receipt, or contact your College ERP Coordinator.`);
+                        return;
+                    }
                 }
             }
         }
@@ -4411,13 +4448,26 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
     const handleMarkAttendance = async (retryAttempt = 0) => {
         if (!studentProfile) return;
 
-        // 🔒 ERP ID ENFORCEMENT CHECK: Hard-block attendance if ERP ID is missing or invalid
-        const studentErp = studentProfile.erpInformation || studentProfile.erpId || studentProfile.dynamicFields?.erpId || studentProfile.dynamicFields?.erpInformation || "";
-        const erpCheck = validateErpId(studentErp, studentProfile.collegeName || studentProfile.college);
-        if (!erpCheck.isValid || (showFieldEnforcementModal && enforcedMissingFields.length > 0)) {
-            setShowFieldEnforcementModal(true);
-            showToast("⚠️ ERP ID Required: Please enter your valid College ERP ID before marking attendance.", "error");
-            return;
+        const isGuestOrAdmin = Boolean(
+            (typeof window !== "undefined" && (
+                localStorage.getItem("userType") === "admin" ||
+                localStorage.getItem("userType") === "warden" ||
+                localStorage.getItem("userType") === "superadmin"
+            )) ||
+            studentProfile?.registrationId?.toUpperCase().startsWith("GUEST") ||
+            (studentProfile as any)?.role === "admin" ||
+            (studentProfile as any)?.isAdmin
+        );
+
+        // 🔒 ERP ID ENFORCEMENT CHECK: Hard-block attendance if ERP ID is missing or invalid (Bypassed for Admins & Guests)
+        if (!isGuestOrAdmin) {
+            const studentErp = studentProfile.erpInformation || studentProfile.erpId || studentProfile.dynamicFields?.erpId || studentProfile.dynamicFields?.erpInformation || "";
+            const erpCheck = validateErpId(studentErp, studentProfile.collegeName || studentProfile.college);
+            if (!erpCheck.isValid || (showFieldEnforcementModal && enforcedMissingFields.length > 0)) {
+                setShowFieldEnforcementModal(true);
+                showToast("⚠️ ERP ID Required: Please enter your valid College ERP ID before marking attendance.", "error");
+                return;
+            }
         }
 
         // ⚡ EAGER PRE-WARM: Guarantee models are hot in memory while location/time checks run
@@ -7507,7 +7557,7 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
                                                                 <div className="relative">
                                                                     <input
                                                                         type="text"
-                                                                        placeholder={`e.g. ${collegeInfo.placeholder}`}
+                                                                        placeholder="Enter your official College ERP ID"
                                                                         value={erpVal}
                                                                         onChange={(e) => {
                                                                             const val = e.target.value.toUpperCase().replace(/\s+/g, '');
@@ -7535,10 +7585,10 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
                                                                         <span>{erpValidation.isValid ? `Valid ${collegeInfo.college} ERP ID format` : erpValidation.error}</span>
                                                                     </div>
                                                                 ) : (
-                                                                    <div className="flex items-center gap-1.5 text-[10.5px] font-semibold text-slate-500 px-1">
-                                                                        <span>ℹ️</span>
+                                                                    <div className="flex items-start gap-1.5 text-[10.5px] font-semibold text-slate-500 px-1 leading-snug">
+                                                                        <span className="text-sm shrink-0">ℹ️</span>
                                                                         <span>
-                                                                            College: <strong className="text-slate-800">{collegeInfo.college}</strong> — Must start with <strong className="text-blue-600">{collegeInfo.prefix}</strong> (e.g. {collegeInfo.placeholder})
+                                                                            College: <strong className="text-slate-800">{collegeInfo.college}</strong> (Prefix: <strong className="text-blue-600">{collegeInfo.prefix}</strong>). Please enter your original ERP ID from your ID Card / Fee Receipt, or contact your College ERP Coordinator.
                                                                         </span>
                                                                     </div>
                                                                 )}
@@ -7580,7 +7630,17 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
                                                     const newVal = (enforcementFormData[f.fieldId] || '').toString().trim();
                                                     return newVal.toUpperCase() === oldVal.toUpperCase();
                                                 });
-                                                const hasInvalidErp = enforcedMissingFields.some(f => {
+                                                const isGuestOrAdmin = Boolean(
+                                                    (typeof window !== "undefined" && (
+                                                        localStorage.getItem("userType") === "admin" ||
+                                                        localStorage.getItem("userType") === "warden" ||
+                                                        localStorage.getItem("userType") === "superadmin"
+                                                    )) ||
+                                                    studentProfile?.registrationId?.toUpperCase().startsWith("GUEST") ||
+                                                    (studentProfile as any)?.role === "admin" ||
+                                                    (studentProfile as any)?.isAdmin
+                                                );
+                                                const hasInvalidErp = !isGuestOrAdmin && enforcedMissingFields.some(f => {
                                                     if (isErpField(f.fieldId, f.fieldLabel)) {
                                                         const val = enforcementFormData[f.fieldId] || '';
                                                         const collegeInfo = resolveCollegeAndErpPrefix(studentProfile);

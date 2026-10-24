@@ -31,6 +31,23 @@ export async function GET(request: NextRequest) {
 
         // Fetch student
         const student = await db.students.getById(studentId);
+
+        // 🔒 ADMIN / GUEST BYPASS: Never block admin or guest test accounts
+        if (
+            student && (
+                student.registrationId?.toUpperCase().startsWith("GUEST") ||
+                student.role === "admin" ||
+                (student as any).isAdmin ||
+                request.headers.get("x-admin-email")
+            )
+        ) {
+            return NextResponse.json({
+                hasBlockers: false,
+                missingFields: [],
+                enforcement: null,
+                message: "Admin / Guest account bypassed from field enforcement",
+            });
+        }
         if (!student) {
             return NextResponse.json(
                 { error: "Student not found" },
