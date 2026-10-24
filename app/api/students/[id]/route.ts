@@ -291,7 +291,10 @@ export async function PATCH(
 
     const response = NextResponse.json({ success: true, student: updatedStudent }, { status: 200 });
 
-    const adminEmail = request.headers.get("x-admin-email") || "admin";
+    const adminHeader = request.headers.get("x-admin-email") || request.headers.get("x-warden-username");
+    const isOperatorAdmin = Boolean(adminHeader || body.isAdmin || body.operator || isAdminRequest);
+    const operator = isOperatorAdmin ? (adminHeader || body.operator || "admin") : "Self (Student)";
+    const adminEmail = isOperatorAdmin ? operator : "Self (Student)";
 
     // 🔓 DEVICE RESET: If admin resets a student's device, we MUST also clear the
     // browser-side 'trusted_device_owner' cookie so the student can re-register freely.

@@ -337,10 +337,10 @@ export async function POST(request: NextRequest) {
     try {
       const adminEmail = request.headers.get("x-admin-email");
       const wardenUsername = request.headers.get("x-warden-username");
-      const isOnboarding = body.isOnboarding === true || body.source === 'onboarding' || (!adminEmail && !wardenUsername);
+      const isInitialOnboard = (body.isOnboarding === true || body.source === 'onboarding') && !existingStudent;
       
-      const operator = isOnboarding ? "Self (Onboarding)" : (adminEmail || wardenUsername || "Admin");
-      const actionType = isOnboarding ? 'ONBOARD' : (existingStudent ? 'UPDATE' : 'ADD');
+      const operator = isInitialOnboard ? "Self (Onboarding)" : (adminEmail || wardenUsername || "Self (Student)");
+      const actionType = isInitialOnboard ? 'ONBOARD' : (existingStudent ? 'UPDATE' : 'ADD');
 
       if (student) {
         await writeHostelActivityLog({
