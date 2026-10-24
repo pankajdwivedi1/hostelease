@@ -324,7 +324,8 @@ const FieldEnforcementComponent: React.FC<FieldEnforcementProps> = ({
     return filteredStudents.filter(st => {
       const erp = st.erpId || st.erpInformation || st.dynamicFields?.erpId || st.dynamicFields?.erpInformation || "";
       if (!erp) return true;
-      return !validateErpId(erp, st.collegeName || st.college).isValid;
+      const college = st.collegeName || st.college || st.college_name || st.dynamicFields?.collegeName || st.dynamicFields?.college;
+      return !validateErpId(erp, college).isValid;
     }).map(st => (st._id || st.id || "").toString());
   }, [filteredStudents]);
 
@@ -749,7 +750,8 @@ const FieldEnforcementComponent: React.FC<FieldEnforcementProps> = ({
                       const stId = (st._id || st.id || "").toString();
                       const isChecked = selectedStudentIds.includes(stId);
                       const erpId = st.erpId || st.erpInformation || st.dynamicFields?.erpId || st.dynamicFields?.erpInformation || "";
-                      const erpCheck = erpId ? validateErpId(erpId, st.collegeName || st.college) : null;
+                      const college = st.collegeName || st.college || st.college_name || st.dynamicFields?.collegeName || st.dynamicFields?.college;
+                      const erpCheck = erpId ? validateErpId(erpId, college) : null;
                       const isErpInvalid = erpCheck ? !erpCheck.isValid : false;
                       const photoUrl = st.profilePicture || st.photo || st.photoUrl || st.image || st.profilePhoto || st.avatarUrl;
                       const initial = (st.name || "S").trim().charAt(0).toUpperCase();
