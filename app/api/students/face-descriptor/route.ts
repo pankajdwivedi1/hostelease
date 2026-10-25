@@ -61,20 +61,26 @@ export async function GET(request: NextRequest) {
 
         let student: any = null;
 
-        if (firebaseUID || email) {
+        if (studentId) {
+            student = await db.students.getById(studentId);
+        }
+
+        if (!student && (firebaseUID || email)) {
             student = await (db.students as any).findOneFast({
                 firebaseUID: firebaseUID || undefined,
                 email: email || undefined
             });
+            if (!student) {
+                student = await db.students.getById(firebaseUID || email || "");
+            }
         }
 
         if (!student && registrationId) {
-            const list = await db.students.list({ registrationId });
-            student = list && list.length > 0 ? list[0] : null;
-        }
-
-        if (!student && studentId) {
-            student = await db.students.getById(studentId);
+            student = await db.students.getById(registrationId);
+            if (!student) {
+                const list = await db.students.list({ registrationId }, { includeBiometrics: true });
+                student = list && list.length > 0 ? list[0] : null;
+            }
         }
 
         if (!student) {

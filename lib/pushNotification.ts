@@ -59,7 +59,9 @@ async function isNotificationEnabledGlobally(notificationType: string): Promise<
       deanOutingOverdue: "outingOverdueEnabled",
       studentAttendanceReminder: "parentCurfewAbsentEnabled",
       wardenScanFailure: "wardenScanFailureEnabled",
-      deanSecurityAlert: "deanSecurityAlertEnabled"
+      deanSecurityAlert: "deanSecurityAlertEnabled",
+      studentFieldEnforcement: "studentFieldEnforcement",
+      studentFaceRecapture: "studentFaceRecapture"
     };
 
     const globalKey = typeMapping[notificationType];

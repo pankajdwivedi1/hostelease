@@ -37,6 +37,10 @@
   - If the local server closes or terminates, restart it immediately (`npm run dev`).
 
 ## 6. PRESERVATION OF SETTINGS & CODE INTEGRITY
+- **Strict Scope of Work (Assigned Tasks Only)**:
+  - Touch and modify ONLY the exact setting, field, or feature explicitly assigned by the user.
+  - NEVER alter, clear, reset, overwrite, or touch ANY other field, data, configuration, or setting (e.g., face descriptors, biometrics, device bindings, tokens, parental numbers, or any other profile/system data) across the entire application.
+  - All database updates and code edits must be strictly surgical and isolated to the requested task with zero side-effects.
 - **Strict Settings Preservation**:
   - NEVER modify, alter, or remove any settings, form fields, configurations, rules, or features in HOSTELEAZE unless the user explicitly and specifically instructs you to modify that particular setting.
 - **Preserve All Data & Payload Fields**:

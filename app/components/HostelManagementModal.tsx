@@ -10,7 +10,8 @@ interface HostelLogItem {
   hostelName: string;
   actionType: 'ADD' | 'DELETE' | 'UPDATE' | 'ONBOARD';
   studentName: string;
-  erpId: string;
+  erpId: string;
+  changeSummary?: string;
   operator: string;
   createdAt: string;
 }
@@ -32,10 +33,26 @@ function HostelLogsButton({ hostelName, onClick }: { hostelName: string; onClick
         console.warn("Failed to load logs count for " + hostelName, err);
       }
     }
-    loadCount();
-    return () => {
-      active = false;
-    };
+    loadCount();
+
+    // ⚡ Event-driven real-time update: updates instantly when server publishes an event, no 4s polling
+    let eventSource: EventSource | null = null;
+    try {
+      eventSource = new EventSource("/api/admin/events");
+      eventSource.addEventListener("hostel_activity", (e: MessageEvent) => {
+        try {
+          const payload = JSON.parse(e.data);
+          if (!payload.hostelName || payload.hostelName.toUpperCase().trim() === hostelName.toUpperCase().trim()) {
+            loadCount();
+          }
+        } catch (parseErr) {}
+      });
+    } catch (e) {}
+
+    return () => {
+      active = false;
+      if (eventSource) eventSource.close();
+    };
   }, [hostelName]);
 
   return (
@@ -467,9 +484,30 @@ function HostelLogsModal({ hostelName, onClose }: { hostelName: string; onClose:
   };
 
   useEffect(() => {
-    loadLogs();
-    loadDeletedStudents();
-  }, [hostelName]);
+    loadLogs();
+    loadDeletedStudents();
+
+    // ⚡ Event-driven real-time update: updates instantly when server publishes an event, no 4s polling
+    let eventSource: EventSource | null = null;
+    try {
+      eventSource = new EventSource("/api/admin/events");
+      eventSource.addEventListener("hostel_activity", (e: MessageEvent) => {
+        try {
+          const payload = JSON.parse(e.data);
+          if (!payload.hostelName || payload.hostelName.toUpperCase().trim() === hostelName.toUpperCase().trim()) {
+            loadLogs();
+            if (payload.actionType === 'DELETE' || payload.actionType === 'ADD' || payload.actionType === 'RESTORE') {
+              loadDeletedStudents();
+            }
+          }
+        } catch (parseErr) {}
+      });
+    } catch (e) {}
+
+    return () => {
+      if (eventSource) eventSource.close();
+    };
+  }, [hostelName]);
 
   const formatTime = (isoString: string) => {
     if (!isoString) return "N/A";
@@ -788,7 +826,7 @@ function HostelLogsModal({ hostelName, onClose }: { hostelName: string; onClose:
             ) : (
               <div className="space-y-3">
                 {logs.map((log) => {
-                  const isSelfOnboard = log.actionType === 'ONBOARD' || log.operator?.toLowerCase().includes('onboard') || log.operator?.toLowerCase() === 'student' || log.operator?.toLowerCase().includes('self');
+                  const isSelfOnboard = log.actionType === 'ONBOARD';
                   const emoji = isSelfOnboard ? '🟢' : log.actionType === 'ADD' ? '🟢' : log.actionType === 'DELETE' ? '🔴' : '🟡';
                   const actionText = isSelfOnboard ? 'ONBOARDED' : log.actionType === 'ADD' ? 'ADDED' : log.actionType === 'DELETE' ? 'DELETED' : 'UPDATED';
                   const isSelected = selectedLogIds.has(log.id);
@@ -822,7 +860,13 @@ function HostelLogsModal({ hostelName, onClose }: { hostelName: string; onClose:
                           ) : (
                             <span>by <span className="font-black text-slate-800">{log.operator}</span></span>
                           )}
-                        </p>
+                        </p>
+                        {log.changeSummary && (
+                          <div className="mt-1.5 flex items-center gap-1.5 px-2 py-0.5 rounded-md bg-amber-50 text-amber-900 border border-amber-200/80 text-[10px] font-bold w-fit">
+                            <span>📝</span>
+                            <span>{log.changeSummary}</span>
+                          </div>
+                        )}
                         <p className="text-[10px] text-slate-400 font-semibold mt-1">
                           ⏱️ {formatTime(log.createdAt)}
                         </p>

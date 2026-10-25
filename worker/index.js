@@ -15,7 +15,16 @@ self.addEventListener('push', function (event) {
           url: data.url || "/"
         }
       };
-      event.waitUntil(self.registration.showNotification(data.title || "Hosteleaze Alert", options));
+      const notifyPromise = self.registration.showNotification(data.title || "Hosteleaze Alert", options);
+      const broadcastPromise = self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then(function (clientList) {
+        for (let i = 0; i < clientList.length; i++) {
+          clientList[i].postMessage({
+            type: 'PUSH_NOTIFICATION_RECEIVED',
+            data: data
+          });
+        }
+      });
+      event.waitUntil(Promise.all([notifyPromise, broadcastPromise]));
     } catch (e) {
       const text = event.data.text();
       event.waitUntil(

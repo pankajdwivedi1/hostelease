@@ -105,8 +105,8 @@ export function validateErpId(
 ): ErpValidationResult {
   const cleaned = (value || "").toString().trim().toUpperCase().replace(/\s+/g, "");
 
-  // 0. ADMIN / GUEST EXEMPTION: Never restrict admin or guest accounts
-  if (options?.isAdmin || cleaned.startsWith("GUEST") || cleaned.startsWith("ADMIN")) {
+  // 0. ADMIN EXEMPTION: Never restrict admin accounts
+  if (options?.isAdmin) {
     return { isValid: true, error: null, cleanedValue: cleaned };
   }
 

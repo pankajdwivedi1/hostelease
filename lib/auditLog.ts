@@ -42,22 +42,26 @@ export async function writeHostelActivityLog({
   actionType,
   studentName,
   erpId,
-  operator
+  operator,
+  changeSummary
 }: {
   hostelName: string;
   actionType: 'ADD' | 'DELETE' | 'UPDATE' | 'ONBOARD';
   studentName: string;
   erpId: string;
   operator: string;
+  changeSummary?: string;
 }): Promise<void> {
   try {
     const action = actionType === 'ONBOARD' ? 'STUDENT_ONBOARDED' : actionType === 'ADD' ? 'STUDENT_CREATED' : actionType === 'DELETE' ? 'STUDENT_DELETED' : 'STUDENT_EDITED';
+    const cleanSummary = changeSummary || "";
     const details = {
       hostelName,
       studentName,
       erpId,
       operator,
       actionType,
+      changeSummary: cleanSummary,
       timestamp: new Date().toISOString(),
       isHostelActivity: true
     };
@@ -72,6 +76,21 @@ export async function writeHostelActivityLog({
         createdAt: new Date(),
       }
     });
+
+    // ⚡ Real-Time Push: Broadcast immediately to connected admin & warden screens via SSE
+    try {
+      const { broadcastHostelActivity } = await import("@/lib/eventEmitter");
+      broadcastHostelActivity({
+        hostelName,
+        actionType,
+        studentName,
+        erpId,
+        operator,
+        changeSummary: cleanSummary
+      });
+    } catch (sseErr) {
+      console.warn("⚠️ Failed to broadcast SSE hostel activity:", sseErr);
+    }
   } catch (err) {
     console.error("[AUDIT LOG] writeHostelActivityLog failed:", err);
   }

@@ -103,6 +103,72 @@ export async function POST(request: NextRequest) {
       } catch (delErr) {
         console.warn("[FieldEnforcement API] Could not clear old studentFieldProgress:", delErr);
       }
+
+      // ⚡ INSTANT PUSH NOTIFICATION DISPATCH (Lock Screen Banner + Live Dashboard Modal)
+      (async () => {
+        try {
+          const { sendPushNotification } = await import("@/lib/pushNotification");
+          const fieldNames = sortedFields.map((f: any) => f.fieldLabel || f.fieldId).join(", ");
+          const pushTitle = "⚠️ Profile Update Required";
+          const pushBody = `Admin has enforced: ${fieldNames}. Tap here to update your student profile.`;
+          const payload = {
+            title: pushTitle,
+            body: pushBody,
+            url: "/",
+            tag: `enforcement_${Date.now()}`
+          };
+
+          // Also create an in-app notification in notification inbox
+          await db.notifications.create({
+            senderId: "admin",
+            senderRole: "admin",
+            senderHostel: normalizedHostelName,
+            targetType: (Array.isArray(targetStudentIds) && targetStudentIds.length > 0) ? "individual" : "hostel",
+            targetHostel: normalizedHostelName,
+            targetStudentId: (Array.isArray(targetStudentIds) && targetStudentIds.length === 1) ? targetStudentIds[0] : null,
+            message: `⚠️ Action Required: Please update your ${fieldNames} in your student profile.`,
+            priority: notificationPriority === "critical" ? "critical" : (notificationPriority === "high" ? "high" : "normal"),
+            expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000)
+          }).catch(() => {});
+
+          if (Array.isArray(targetStudentIds) && targetStudentIds.length > 0) {
+            for (const sId of targetStudentIds) {
+              if (!sId) continue;
+              const std = await db.students.getById(sId).catch(() => null);
+              const pushId = std?._id || std?.id || sId;
+              sendPushNotification(String(pushId), "student", "studentFieldEnforcement", payload).catch(err => {
+                console.warn(`[FieldEnforcement Push] Failed for student ${pushId}:`, err.message);
+              });
+              if (std?.phoneNumber) {
+                sendPushNotification(String(std.phoneNumber), "student", "studentFieldEnforcement", payload).catch(() => {});
+              }
+            }
+          } else {
+            const students = await db.students.list({ hostelName: normalizedHostelName });
+            const targetSems = Array.isArray(targetSemesters) && targetSemesters.length > 0 ? targetSemesters.map(String) : [];
+
+            for (const s of (students || [])) {
+              if (!s) continue;
+              const sId = s._id || s.id;
+              if (!sId) continue;
+
+              if (targetSems.length > 0) {
+                const sSem = String(s.semester || s.dynamicFields?.semester || s.dynamicFields?.Semester || "").trim();
+                if (!targetSems.includes(sSem)) continue;
+              }
+
+              sendPushNotification(String(sId), "student", "studentFieldEnforcement", payload).catch(err => {
+                console.warn(`[FieldEnforcement Push] Failed for student ${sId}:`, err.message);
+              });
+              if (s.phoneNumber) {
+                sendPushNotification(String(s.phoneNumber), "student", "studentFieldEnforcement", payload).catch(() => {});
+              }
+            }
+          }
+        } catch (pushErr: any) {
+          console.warn("[FieldEnforcement API] Error sending push notification:", pushErr.message);
+        }
+      })();
     }
 
     return NextResponse.json({
@@ -143,6 +209,50 @@ export async function PUT(request: NextRequest) {
         { error: "Hostel enforcement rules not found" },
         { status: 404 }
       );
+    }
+
+    if (updateData.isActive && Array.isArray(updateData.enforcedFields) && updateData.enforcedFields.length > 0) {
+      (async () => {
+        try {
+          const { sendPushNotification } = await import("@/lib/pushNotification");
+          const fieldNames = updateData.enforcedFields.map((f: any) => f.fieldLabel || f.fieldId).join(", ");
+          const pushTitle = "⚠️ Profile Update Required";
+          const pushBody = `Admin has enforced: ${fieldNames}. Tap here to update your student profile.`;
+          const payload = {
+            title: pushTitle,
+            body: pushBody,
+            url: "/",
+            tag: `enforcement_${Date.now()}`
+          };
+
+          const targetStudentIds = updateData.targetStudentIds;
+          if (Array.isArray(targetStudentIds) && targetStudentIds.length > 0) {
+            for (const sId of targetStudentIds) {
+              if (!sId) continue;
+              const std = await db.students.getById(sId).catch(() => null);
+              const pushId = std?._id || std?.id || sId;
+              sendPushNotification(String(pushId), "student", "studentFieldEnforcement", payload).catch(() => {});
+              if (std?.phoneNumber) {
+                sendPushNotification(String(std.phoneNumber), "student", "studentFieldEnforcement", payload).catch(() => {});
+              }
+            }
+          } else {
+            const students = await db.students.list({ hostelName: normalizedHostelName });
+            for (const s of (students || [])) {
+              if (!s) continue;
+              const sId = s._id || s.id;
+              if (sId) {
+                sendPushNotification(String(sId), "student", "studentFieldEnforcement", payload).catch(() => {});
+              }
+              if (s.phoneNumber) {
+                sendPushNotification(String(s.phoneNumber), "student", "studentFieldEnforcement", payload).catch(() => {});
+              }
+            }
+          }
+        } catch (pushErr: any) {
+          console.warn("[FieldEnforcement API PUT] Error sending push notification:", pushErr.message);
+        }
+      })();
     }
 
     return NextResponse.json({

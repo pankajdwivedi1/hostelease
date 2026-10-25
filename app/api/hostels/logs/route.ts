@@ -29,12 +29,14 @@ export async function GET(request: NextRequest) {
       const details = typeof item.details === 'object' && item.details !== null ? item.details : {};
       const op = details.operator || item.performed_by || item.performedBy || "Admin";
       let actionType: 'ADD' | 'DELETE' | 'UPDATE' | 'ONBOARD' = 'UPDATE';
-      if (item.action === 'STUDENT_ONBOARDED' || details.actionType === 'ONBOARD' || String(op).toLowerCase().includes('onboard')) {
+      if (details.actionType === 'ONBOARD' || item.action === 'STUDENT_ONBOARDED') {
         actionType = 'ONBOARD';
-      } else if (item.action === 'STUDENT_CREATED') {
+      } else if (details.actionType === 'ADD' || item.action === 'STUDENT_CREATED') {
         actionType = 'ADD';
-      } else if (item.action === 'STUDENT_DELETED') {
+      } else if (details.actionType === 'DELETE' || item.action === 'STUDENT_DELETED') {
         actionType = 'DELETE';
+      } else if (details.actionType === 'UPDATE' || item.action === 'STUDENT_EDITED') {
+        actionType = 'UPDATE';
       }
 
       return {
@@ -43,6 +45,7 @@ export async function GET(request: NextRequest) {
         actionType,
         studentName: details.studentName || item.entity_name || item.entityName || "Unknown Student",
         erpId: details.erpId || "N/A",
+        changeSummary: details.changeSummary || "",
         operator: op,
         createdAt: item.created_at || item.createdAt || new Date().toISOString()
       };

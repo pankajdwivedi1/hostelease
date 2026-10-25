@@ -64,6 +64,27 @@ export async function POST(req: NextRequest) {
                     updatedAt: new Date().toISOString()
                 });
                 updatedCount++;
+
+                // ⚡ INSTANT PUSH NOTIFICATION DISPATCH (Lock screen alert for live face retake)
+                if (requiresFaceRecapture) {
+                    (async () => {
+                        try {
+                            const { sendPushNotification } = await import("@/lib/pushNotification");
+                            const payload = {
+                                title: "⚠️ Biometric Verification Required",
+                                body: "Admin has requested a live face retake. Tap here to verify your face.",
+                                url: "/",
+                                tag: `face_retake_${id}_${Date.now()}`
+                            };
+                            sendPushNotification(String(id), "student", "studentFaceRecapture", payload).catch(() => {});
+                            if (student.phoneNumber) {
+                                sendPushNotification(String(student.phoneNumber), "student", "studentFaceRecapture", payload).catch(() => {});
+                            }
+                        } catch (pErr) {
+                            console.warn("Face recapture push error:", pErr);
+                        }
+                    })();
+                }
             } catch (err) {
                 console.warn(`Failed to update face retake flag for student ${id}:`, err);
             }

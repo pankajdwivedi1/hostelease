@@ -661,6 +661,77 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
     const [showFieldEnforcementModal, setShowFieldEnforcementModal] = useState(false);
     const [enforcementFormData, setEnforcementFormData] = useState<Record<string, string>>({});
     const [savingEnforcementFields, setSavingEnforcementFields] = useState(false);
+
+    // ⚡ INSTANT LIVE FIELD ENFORCEMENT CHECK: Checks live from server immediately when dashboard is opened or resumed
+    const checkFieldEnforcement = useCallback(async (profileOverride?: any) => {
+        const currentProfile = profileOverride || studentProfile;
+        if (isParentView) {
+            setShowFieldEnforcementModal(false);
+            setShowMandatoryUpdate(false);
+            return;
+        }
+        const studentId = currentProfile?._id || currentProfile?.id;
+        if (!studentId) return;
+
+        // Genuine admin or guest accounts bypass enforcement.
+        const isGuestOrAdmin = Boolean(
+            currentProfile?.registrationId?.toUpperCase().startsWith("GUEST") ||
+            currentProfile?.role === "admin" ||
+            currentProfile?.isAdmin
+        );
+        if (isGuestOrAdmin) {
+            setShowFieldEnforcementModal(false);
+            setShowMandatoryUpdate(false);
+            return;
+        }
+
+        try {
+            const res = await fetch(`/api/student/profile-blockers?studentId=${studentId}${getTenantParam(false)}`, {
+                cache: 'no-store',
+                headers: { 'Cache-Control': 'no-cache, no-store, must-revalidate' }
+            });
+            if (!res.ok) throw new Error('Failed to check profile blockers');
+            const data = await res.json();
+
+            if (data.hasBlockers && Array.isArray(data.missingFields) && data.missingFields.length > 0) {
+                console.log(`[FieldEnforcement] Enforced student ${currentProfile.registrationId} has ${data.missingFields.length} active blockers`);
+                setEnforcedMissingFields(data.missingFields);
+                setEnforcementConfig(data.enforcement);
+                const initialFormData: Record<string, string> = {};
+                data.missingFields.forEach((f: any) => {
+                    initialFormData[f.fieldId] = "";
+                });
+                setEnforcementFormData(initialFormData);
+                setShowFieldEnforcementModal(true);
+                setShowMandatoryUpdate(false);
+            } else {
+                setShowFieldEnforcementModal(false);
+                setEnforcedMissingFields([]);
+            }
+        } catch (e) {
+            console.error("Error checking field enforcement:", e);
+        }
+    }, [isParentView, studentProfile, getTenantParam]);
+
+    // ⚡ AUTO-RECHECK ON TAB RESUME: When student switches back to dashboard on phone, re-check enforcement live immediately
+    useEffect(() => {
+        const handleVisibilityChange = () => {
+            if (document.visibilityState === "visible") {
+                checkFieldEnforcement();
+            }
+        };
+        const handleFocus = () => {
+            checkFieldEnforcement();
+        };
+
+        document.addEventListener("visibilitychange", handleVisibilityChange);
+        window.addEventListener("focus", handleFocus);
+
+        return () => {
+            document.removeEventListener("visibilitychange", handleVisibilityChange);
+            window.removeEventListener("focus", handleFocus);
+        };
+    }, [checkFieldEnforcement]);
     const [showLiveFaceRecaptureModal, setShowLiveFaceRecaptureModal] = useState<boolean>(() => {
         if (isParentView) return false;
         const dyn = initialData?.dynamicFields;
@@ -684,8 +755,9 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
                 ) || (initialData as any)?.requiresFaceRecapture
             );
             setShowLiveFaceRecaptureModal(isFlagged);
+            checkFieldEnforcement(initialData);
         }
-    }, [initialData, isParentView]);
+    }, [initialData, isParentView, checkFieldEnforcement]);
     
     // ⚡ Student Profile History State (Permissions, Home-Leave & Gate-Pass)
     const [studentHistoryTab, setStudentHistoryTab] = useState<"permissions" | "home_leave" | "gate_pass">("permissions");
@@ -2527,80 +2599,12 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
                 setShowLiveFaceRecaptureModal(isFlagged);
             }
 
-            const isGuestOrAdmin = Boolean(
-                (typeof window !== "undefined" && (
-                    localStorage.getItem("userType") === "admin" ||
-                    localStorage.getItem("userType") === "warden" ||
-                    localStorage.getItem("userType") === "superadmin"
-                )) ||
-                studentProfile?.registrationId?.toUpperCase().startsWith("GUEST") ||
-                (studentProfile as any)?.role === "admin" ||
-                (studentProfile as any)?.isAdmin
-            );
-
-            // ⚡ FIELD ENFORCEMENT: Check for admin-enforced missing fields (replaces old hardcoded check)
-            const checkFieldEnforcement = async () => {
-                if (isParentView || isGuestOrAdmin) {
-                    setShowFieldEnforcementModal(false);
-                    setShowMandatoryUpdate(false);
-                    return;
-                }
-                if (!isFullProfileLoaded) {
-                    return;
-                }
-                try {
-                    const res = await fetch(`/api/student/profile-blockers?studentId=${studentProfile._id}${getTenantParam(false)}`, { cache: 'no-store' });
-                    if (!res.ok) throw new Error('Failed to check profile blockers');
-                    const data = await res.json();
-
-                    if (data.hasBlockers && data.missingFields.length > 0) {
-                        setEnforcedMissingFields(data.missingFields);
-                        setEnforcementConfig(data.enforcement);
-                        // Start with empty values so students must actively enter their new/updated information
-                        const initialFormData: Record<string, string> = {};
-                        data.missingFields.forEach((f: any) => {
-                            initialFormData[f.fieldId] = "";
-                        });
-                        setEnforcementFormData(initialFormData);
-                        setShowFieldEnforcementModal(true);
-                        setShowMandatoryUpdate(false); // Use new system instead
-                    } else {
-                        console.log("✅ No Profile Blockers found for hostel:", studentProfile.hostelName);
-                        setShowFieldEnforcementModal(false);
-                        // Fallback: Hard Redirect Check for critical fields (legacy support)
-                        const isSectionInvalid = !studentProfile.section || studentProfile.section === "NIL" || studentProfile.section === "NILL";
-                        if (!studentProfile.dob || !studentProfile.category || !studentProfile.homeState || isSectionInvalid) {
-                            setShowMandatoryUpdate(true);
-                            setMandatoryFormData({
-                                dob: studentProfile.dob || "",
-                                category: studentProfile.category || "",
-                                homeState: studentProfile.homeState || "",
-                                section: isSectionInvalid ? "" : (studentProfile.section || "")
-                            });
-                        } else {
-                            setShowMandatoryUpdate(false);
-                        }
-                    }
-                } catch (e) {
-                    console.error("Error checking field enforcement:", e);
-                    // Fallback to old hardcoded check
-                    const isSectionInvalid = !studentProfile.section || studentProfile.section === "NIL" || studentProfile.section === "NILL";
-                    if (!studentProfile.dob || !studentProfile.category || !studentProfile.homeState || isSectionInvalid) {
-                        setShowMandatoryUpdate(true);
-                        setMandatoryFormData({
-                            dob: studentProfile.dob || "",
-                            category: studentProfile.category || "",
-                            homeState: studentProfile.homeState || "",
-                            section: isSectionInvalid ? "" : (studentProfile.section || "")
-                        });
-                    }
-                }
-            };
+            // ⚡ FIELD ENFORCEMENT: Check for admin-enforced missing fields immediately
             if (isParentView) {
                 setShowFieldEnforcementModal(false);
                 setShowMandatoryUpdate(false);
             } else {
-                checkFieldEnforcement();
+                checkFieldEnforcement(studentProfile);
             }
 
             // Check attendance status
@@ -2821,7 +2825,9 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
                     const userId = isParent ? (studentProfile.fatherNumber || studentProfile._id + "_parent") : studentProfile._id;
                     const userType = isParent ? "parent" : "student";
                     
-                    await registerPushNotifications(userId, userType);
+                    const phone = isParent ? (studentProfile.fatherNumber || "") : (studentProfile.phoneNumber || "");
+                    
+                    await registerPushNotifications(userId, userType, phone);
                     checkPushPermission();
                 } catch (e) {
                     console.error("Failed to register student/parent push notifications:", e);
@@ -2829,7 +2835,24 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
             };
             initPush();
         }
-    }, [studentProfile?._id, isParentView]);
+    }, [studentProfile?._id, studentProfile?.phoneNumber, isParentView]);
+
+    // ⚡ REAL-TIME PUSH NOTIFICATION ACTIVE-TAB LISTENER (WhatsApp-style live modal popup)
+    useEffect(() => {
+        if (typeof window === "undefined" || !("serviceWorker" in navigator)) return;
+        const handleSwMessage = (event: MessageEvent) => {
+            if (event.data?.type === "PUSH_NOTIFICATION_RECEIVED") {
+                console.log("⚡ [Push Event] Live Push Notification received in active dashboard tab:", event.data);
+                if (studentProfile) {
+                    checkFieldEnforcement(studentProfile);
+                }
+            }
+        };
+        navigator.serviceWorker.addEventListener("message", handleSwMessage);
+        return () => {
+            navigator.serviceWorker.removeEventListener("message", handleSwMessage);
+        };
+    }, [studentProfile, checkFieldEnforcement]);
 
     // ⚡ Realtime Push Notification Permission Watcher & Auto-Unlock
     const checkPushPermission = useCallback(() => {
@@ -2981,6 +3004,7 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
                             setIsFullProfileLoaded(true);
                             setLoading(false);
                             console.log("⚡ [Device Caching] Profile loaded instantly from local device storage!");
+                            checkFieldEnforcement(currentStudent);
                         }
                     }
                 } catch (e) {
@@ -3025,6 +3049,7 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
                             setStudentProfile(currentStudent);
                             localStorage.setItem("cachedStudentData", JSON.stringify(currentStudent));
                             setLoading(false);
+                            checkFieldEnforcement(currentStudent);
                         }
                     }
                 } catch (error) {
@@ -3126,6 +3151,7 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
                             setStudentProfile(fullStudentData);
                             setIsFullProfileLoaded(true);
                             localStorage.setItem("cachedStudentData", JSON.stringify(fullStudentData));
+                            checkFieldEnforcement(fullStudentData);
 
                             // ⚡ NEW: Check for Missing Required Fields (Strict Mode)
                             if (formBuilderConfig && formBuilderConfig.length > 0) {
@@ -3343,15 +3369,11 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
             (studentProfile as any)?.isAdmin
         );
 
-        // 🔒 ERP ID ENFORCEMENT CHECK: Hard-block gatepass if ERP ID is missing or invalid (Bypassed for Admins & Guests)
-        if (!isGuestOrAdmin) {
-            const studentErp = studentProfile.erpInformation || studentProfile.erpId || studentProfile.dynamicFields?.erpId || studentProfile.dynamicFields?.erpInformation || "";
-            const erpCheck = validateErpId(studentErp, studentProfile.collegeName || studentProfile.college);
-            if (!erpCheck.isValid || (showFieldEnforcementModal && enforcedMissingFields.length > 0)) {
-                setShowFieldEnforcementModal(true);
-                showToast("⚠️ ERP ID Required: Please enter your valid College ERP ID before applying for a gate pass.", "error");
-                return;
-            }
+        // 🔒 FIELD ENFORCEMENT CHECK: Hard-block gatepass only if student has pending enforced fields from admin
+        if (!isGuestOrAdmin && showFieldEnforcementModal && enforcedMissingFields.length > 0) {
+            setShowFieldEnforcementModal(true);
+            showToast("⚠️ Action Required: Please complete your mandatory profile details before applying for a gate pass.", "error");
+            return;
         }
 
         if (hasActiveLeave) {
@@ -3630,11 +3652,6 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
 
         // 3. 🎓 ERP ID VALIDATION: Enforce strict college prefix and reject dummy/phone/room inputs (Bypassed for Admins & Guests)
         const isGuestOrAdmin = Boolean(
-            (typeof window !== "undefined" && (
-                localStorage.getItem("userType") === "admin" ||
-                localStorage.getItem("userType") === "warden" ||
-                localStorage.getItem("userType") === "superadmin"
-            )) ||
             studentProfile?.registrationId?.toUpperCase().startsWith("GUEST") ||
             (studentProfile as any)?.role === "admin" ||
             (studentProfile as any)?.isAdmin
@@ -3696,6 +3713,11 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
                 }
 
                 setStudentProfile(data.student);
+                if (typeof window !== "undefined") {
+                    try {
+                        localStorage.setItem("cachedStudentData", JSON.stringify(data.student));
+                    } catch (e) {}
+                }
                 setShowFieldEnforcementModal(false);
                 setEnforcedMissingFields([]);
                 const successMsg = enforcementConfig?.successMessage || "All required fields have been completed! Thank you.";
@@ -4459,15 +4481,11 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
             (studentProfile as any)?.isAdmin
         );
 
-        // 🔒 ERP ID ENFORCEMENT CHECK: Hard-block attendance if ERP ID is missing or invalid (Bypassed for Admins & Guests)
-        if (!isGuestOrAdmin) {
-            const studentErp = studentProfile.erpInformation || studentProfile.erpId || studentProfile.dynamicFields?.erpId || studentProfile.dynamicFields?.erpInformation || "";
-            const erpCheck = validateErpId(studentErp, studentProfile.collegeName || studentProfile.college);
-            if (!erpCheck.isValid || (showFieldEnforcementModal && enforcedMissingFields.length > 0)) {
-                setShowFieldEnforcementModal(true);
-                showToast("⚠️ ERP ID Required: Please enter your valid College ERP ID before marking attendance.", "error");
-                return;
-            }
+        // 🔒 FIELD ENFORCEMENT CHECK: Hard-block attendance only if student has pending enforced fields from admin
+        if (!isGuestOrAdmin && showFieldEnforcementModal && enforcedMissingFields.length > 0) {
+            setShowFieldEnforcementModal(true);
+            showToast("⚠️ Action Required: Please complete your mandatory profile details before marking attendance.", "error");
+            return;
         }
 
         // ⚡ EAGER PRE-WARM: Guarantee models are hot in memory while location/time checks run
@@ -7631,11 +7649,6 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
                                                     return newVal.toUpperCase() === oldVal.toUpperCase();
                                                 });
                                                 const isGuestOrAdmin = Boolean(
-                                                    (typeof window !== "undefined" && (
-                                                        localStorage.getItem("userType") === "admin" ||
-                                                        localStorage.getItem("userType") === "warden" ||
-                                                        localStorage.getItem("userType") === "superadmin"
-                                                    )) ||
                                                     studentProfile?.registrationId?.toUpperCase().startsWith("GUEST") ||
                                                     (studentProfile as any)?.role === "admin" ||
                                                     (studentProfile as any)?.isAdmin

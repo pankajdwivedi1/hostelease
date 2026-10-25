@@ -1148,7 +1148,7 @@ export const db = {
                 tenantId: true,
                 createdAt: true,
                 updatedAt: true,
-                ...(options.includeBiometrics ? { faceDescriptor: true } : {})
+                faceDescriptor: true,
             };
 
 

@@ -333,22 +333,25 @@ export async function POST(request: NextRequest) {
       console.warn("⚠️ [Field Enforcement] Failed to auto-initialize progress for new onboarding student:", enforceError);
     }
 
-    // 📝 LOG ACTIVITY
+    // 📝 LOG ACTIVITY (Newly onboarded students OR Dean/Warden updates ONLY)
     try {
       const adminEmail = request.headers.get("x-admin-email");
       const wardenUsername = request.headers.get("x-warden-username");
+      const isOperatorAdmin = Boolean(adminEmail || wardenUsername);
       const isInitialOnboard = (body.isOnboarding === true || body.source === 'onboarding') && !existingStudent;
-      
-      const operator = isInitialOnboard ? "Self (Onboarding)" : (adminEmail || wardenUsername || "Self (Student)");
-      const actionType = isInitialOnboard ? 'ONBOARD' : (existingStudent ? 'UPDATE' : 'ADD');
 
-      if (student) {
+      if (student && (isInitialOnboard || isOperatorAdmin)) {
+        const operator = isInitialOnboard ? "Self (Onboarding)" : (adminEmail || wardenUsername || "Admin");
+        const actionType = isInitialOnboard ? 'ONBOARD' : (existingStudent ? 'UPDATE' : 'ADD');
+
+        const summary = isInitialOnboard ? "New student registered via onboarding" : (existingStudent ? "Student details updated" : `New student created (Room: ${student.roomNumber || 'Unassigned'})`);
         await writeHostelActivityLog({
           hostelName: student.hostelName || hostelName,
           actionType,
           studentName: student.name || name || "Unknown Student",
           erpId: student.erpInformation || erpInformation || "N/A",
           operator,
+          changeSummary: summary,
         });
       }
     } catch (logErr) {
@@ -790,6 +793,7 @@ export async function GET(request: NextRequest) {
           delete s.profilePicture;
         }
         // ⚡ CRITICAL BANDWIDTH FIX: Never send heavy 128-float face vectors in general student lists!
+        s.hasVector = Boolean(Array.isArray(s.faceDescriptor) && s.faceDescriptor.length > 0);
         delete s.faceDescriptor;
         delete s.webAuthnCredentials;
         delete s.deviceHistory;

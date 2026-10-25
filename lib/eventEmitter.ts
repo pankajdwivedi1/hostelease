@@ -26,6 +26,16 @@ export interface GateStatusEvent {
     timestamp: number;
 }
 
+export interface HostelActivityEvent {
+    hostelName: string;
+    actionType: "ADD" | "DELETE" | "UPDATE" | "ONBOARD";
+    studentName: string;
+    erpId: string;
+    operator: string;
+    changeSummary?: string;
+    timestamp: number;
+}
+
 export function broadcastGateEvent(eventData: Omit<GateStatusEvent, "timestamp"> & { timestamp?: number }) {
     try {
         const payload: GateStatusEvent = {
@@ -35,5 +45,17 @@ export function broadcastGateEvent(eventData: Omit<GateStatusEvent, "timestamp">
         gateEventEmitter.emit("gate_status_change", payload);
     } catch (err) {
         console.warn("⚠️ Failed to broadcast gate event:", err);
+    }
+}
+
+export function broadcastHostelActivity(eventData: Omit<HostelActivityEvent, "timestamp"> & { timestamp?: number }) {
+    try {
+        const payload: HostelActivityEvent = {
+            ...eventData,
+            timestamp: eventData.timestamp || Date.now()
+        };
+        gateEventEmitter.emit("hostel_activity", payload);
+    } catch (err) {
+        console.warn("⚠️ Failed to broadcast hostel activity event:", err);
     }
 }

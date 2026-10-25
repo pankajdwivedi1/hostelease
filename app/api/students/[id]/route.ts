@@ -87,6 +87,7 @@ export async function DELETE(
         studentName: student.name || "Unknown Student",
         erpId: student.erpInformation || "N/A",
         operator: adminEmail,
+        changeSummary: "Student removed from hostel roster",
       });
     } catch (logErr) {
       console.error("Failed to write hostel activity log for delete:", logErr);
@@ -282,6 +283,9 @@ export async function PATCH(
       delete body.faceDescriptor;
     }
 
+    // Fetch previous student state before updating for field-level change tracking
+    const previousStudent = await db.students.getById(studentId);
+
     // Use the Database Adapter for a database-aware update (Mongo/Supabase)
     const updatedStudent = await db.students.update(studentId, body);
 
@@ -348,50 +352,131 @@ export async function PATCH(
         maxAge: 0, // Immediately expire the cookie → browser deletes it
         path: '/'
       });
-    } else if (body.isProfileLocked !== undefined) {
-      // 📝 AUDIT LOG: profile lock/unlock
-      writeAdminAuditLog({
-        action: body.isProfileLocked ? "STUDENT_PROFILE_LOCKED" : "STUDENT_PROFILE_UNLOCKED",
-        entityType: "student",
-        entityId: studentId,
-        entityName: updatedStudent?.name || "Unknown",
-        details: { changedAt: new Date().toISOString() },
-        performedBy: adminEmail,
-      }).catch(console.error);
-    } else if (body.studentStatus) {
-      // 📝 AUDIT LOG: status change
-      writeAdminAuditLog({
-        action: "STUDENT_STATUS_CHANGED",
-        entityType: "student",
-        entityId: studentId,
-        entityName: updatedStudent?.name || "Unknown",
-        details: { newStatus: body.studentStatus, changedAt: new Date().toISOString() },
-        performedBy: adminEmail,
-      }).catch(console.error);
     }
 
-    // Write general edit audit log
-    if (!body.action && body.isProfileLocked === undefined && !body.studentStatus) {
-      writeAdminAuditLog({
-        action: "STUDENT_EDITED",
-        entityType: "student",
-        entityId: studentId,
-        entityName: updatedStudent?.name || "Unknown",
-        details: { editedAt: new Date().toISOString() },
-        performedBy: adminEmail,
-      }).catch(console.error);
+    const hasProfileFields = Boolean(
+      body.name !== undefined ||
+      body.erpInformation !== undefined ||
+      body.erpId !== undefined ||
+      body.roomNumber !== undefined ||
+      body.phoneNumber !== undefined ||
+      body.email !== undefined ||
+      body.fatherName !== undefined ||
+      body.fatherNumber !== undefined ||
+      body.motherName !== undefined ||
+      body.motherNumber !== undefined ||
+      body.permanentAddress !== undefined ||
+      body.collegeName !== undefined ||
+      body.branch !== undefined ||
+      body.year !== undefined ||
+      body.semester !== undefined ||
+      body.floorNumber !== undefined ||
+      body.profilePicture !== undefined ||
+      body.category !== undefined ||
+      body.dob !== undefined ||
+      body.dynamicFields !== undefined
+    );
 
-      // 📝 LOG ACTIVITY
-      try {
-        await writeHostelActivityLog({
-          hostelName: updatedStudent.hostelName,
-          actionType: 'UPDATE',
-          studentName: updatedStudent.name || "Unknown Student",
-          erpId: updatedStudent.erpInformation || "N/A",
-          operator: adminEmail,
-        });
-      } catch (logErr) {
-        console.error("Failed to write hostel activity log for update:", logErr);
+    if (body.action !== "resetDevice") {
+      if (body.isProfileLocked !== undefined && !hasProfileFields) {
+        // 📝 AUDIT LOG: dedicated profile lock/unlock toggle
+        writeAdminAuditLog({
+          action: body.isProfileLocked ? "STUDENT_PROFILE_LOCKED" : "STUDENT_PROFILE_UNLOCKED",
+          entityType: "student",
+          entityId: studentId,
+          entityName: updatedStudent?.name || "Unknown",
+          details: { changedAt: new Date().toISOString() },
+          performedBy: adminEmail,
+        }).catch(console.error);
+      } else if (body.studentStatus && !hasProfileFields) {
+        // 📝 AUDIT LOG: dedicated status change
+        writeAdminAuditLog({
+          action: "STUDENT_STATUS_CHANGED",
+          entityType: "student",
+          entityId: studentId,
+          entityName: updatedStudent?.name || "Unknown",
+          details: { newStatus: body.studentStatus, changedAt: new Date().toISOString() },
+          performedBy: adminEmail,
+        }).catch(console.error);
+      }
+
+      // Write general edit audit log (Dean/Warden profile edits)
+      if (isOperatorAdmin && (hasProfileFields || (!body.action && body.isProfileLocked === undefined && !body.studentStatus))) {
+        writeAdminAuditLog({
+          action: "STUDENT_EDITED",
+          entityType: "student",
+          entityId: studentId,
+          entityName: updatedStudent?.name || "Unknown",
+          details: { editedAt: new Date().toISOString() },
+          performedBy: adminEmail,
+        }).catch(console.error);
+
+        // 📝 Compute exact field-level diffs
+        const diffs: string[] = [];
+        if (body.roomNumber !== undefined && String(body.roomNumber).trim() !== String(previousStudent?.roomNumber || "").trim()) {
+          diffs.push(`Room: ${previousStudent?.roomNumber || 'None'} → ${body.roomNumber}`);
+        }
+        const incomingErp = body.erpInformation || body.erpId || body.erp_id;
+        if (incomingErp !== undefined && String(incomingErp).trim() !== String(previousStudent?.erpInformation || "").trim()) {
+          diffs.push(`ERP ID: ${previousStudent?.erpInformation || 'None'} → ${incomingErp}`);
+        }
+        if (body.name !== undefined && String(body.name).trim() !== String(previousStudent?.name || "").trim()) {
+          diffs.push(`Name: ${previousStudent?.name || 'None'} → ${body.name}`);
+        }
+        if (body.phoneNumber !== undefined && String(body.phoneNumber).trim() !== String(previousStudent?.phoneNumber || "").trim()) {
+          diffs.push(`Phone: ${previousStudent?.phoneNumber || 'None'} → ${body.phoneNumber}`);
+        }
+        if (body.hostelName !== undefined && String(body.hostelName).trim() !== String(previousStudent?.hostelName || "").trim()) {
+          diffs.push(`Hostel: ${previousStudent?.hostelName || 'None'} → ${body.hostelName}`);
+        }
+        if (body.floorNumber !== undefined && String(body.floorNumber).trim() !== String(previousStudent?.floorNumber || "").trim()) {
+          diffs.push(`Floor: ${previousStudent?.floorNumber || 'None'} → ${body.floorNumber}`);
+        }
+        if (body.branch !== undefined && String(body.branch).trim() !== String(previousStudent?.branch || "").trim()) {
+          diffs.push(`Branch: ${previousStudent?.branch || 'None'} → ${body.branch}`);
+        }
+        if (body.year !== undefined && String(body.year).trim() !== String(previousStudent?.year || "").trim()) {
+          diffs.push(`Year: ${previousStudent?.year || 'None'} → ${body.year}`);
+        }
+        if (body.semester !== undefined && String(body.semester).trim() !== String(previousStudent?.semester || "").trim()) {
+          diffs.push(`Semester: ${previousStudent?.semester || 'None'} → ${body.semester}`);
+        }
+        if (body.fatherName !== undefined && String(body.fatherName).trim() !== String(previousStudent?.fatherName || "").trim()) {
+          diffs.push(`Father Name: ${previousStudent?.fatherName || 'None'} → ${body.fatherName}`);
+        }
+        if (body.fatherNumber !== undefined && String(body.fatherNumber).trim() !== String(previousStudent?.fatherNumber || "").trim()) {
+          diffs.push(`Father Phone: ${previousStudent?.fatherNumber || 'None'} → ${body.fatherNumber}`);
+        }
+        if (body.motherName !== undefined && String(body.motherName).trim() !== String(previousStudent?.motherName || "").trim()) {
+          diffs.push(`Mother Name: ${previousStudent?.motherName || 'None'} → ${body.motherName}`);
+        }
+        if (body.motherNumber !== undefined && String(body.motherNumber).trim() !== String(previousStudent?.motherNumber || "").trim()) {
+          diffs.push(`Mother Phone: ${previousStudent?.motherNumber || 'None'} → ${body.motherNumber}`);
+        }
+        if (body.collegeName !== undefined && String(body.collegeName).trim() !== String(previousStudent?.collegeName || "").trim()) {
+          diffs.push(`College: ${previousStudent?.collegeName || 'None'} → ${body.collegeName}`);
+        }
+        if (body.permanentAddress !== undefined && String(body.permanentAddress).trim() !== String(previousStudent?.permanentAddress || "").trim()) {
+          diffs.push(`Address updated`);
+        }
+        if (body.profilePicture !== undefined && body.profilePicture !== previousStudent?.profilePicture) {
+          diffs.push(`Photo updated`);
+        }
+        const changeSummary = diffs.length > 0 ? diffs.join(", ") : "Profile details updated";
+
+        // 📝 LOG ACTIVITY (Dean/Warden edits)
+        try {
+          await writeHostelActivityLog({
+            hostelName: updatedStudent.hostelName,
+            actionType: 'UPDATE',
+            studentName: updatedStudent.name || "Unknown Student",
+            erpId: updatedStudent.erpInformation || "N/A",
+            operator: adminEmail,
+            changeSummary,
+          });
+        } catch (logErr) {
+          console.error("Failed to write hostel activity log for update:", logErr);
+        }
       }
     }
 
