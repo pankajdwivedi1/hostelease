@@ -5,6 +5,7 @@ import { triggerLeaveVoiceCall } from "@/lib/msg91";
 import { assertTenantActive } from "@/lib/tenant";
 import { parseAsIST } from "@/lib/dateFormat";
 import { jsonWithEtag } from "@/lib/etag";
+import { canAccessStudent, getAuthSession, isPrivilegedSession } from "@/lib/authSession";
 
 export const dynamic = "force-dynamic";
 
@@ -44,6 +45,10 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Student not found" }, { status: 404 });
     }
 
+    if (!canAccessStudent(getAuthSession(request), student)) {
+      return NextResponse.json({ error: "You are not authorized to create a request for this student" }, { status: 403 });
+    }
+
     // 🔒 0.5 Prevent new leave if student is flagged for mandatory photo retake
     const pDyn = (student as any).dynamicFields || {};
     const isRetakeFlagged = Boolean(
@@ -61,15 +66,15 @@ export async function POST(request: NextRequest) {
     // 🔒 0.6 Prevent new leave if ERP ID is missing or invalid (Bypassed for Admins & Guests)
     const isGuestOrAdmin = Boolean(
       student.registrationId?.toUpperCase().startsWith("GUEST") ||
-      student.role === "admin" ||
+      (student as any).role === "admin" ||
       (student as any).isAdmin ||
-      request.headers.get("x-admin-email")
+      isPrivilegedSession(getAuthSession(request))
     );
 
     if (!isGuestOrAdmin) {
-      const studentErp = student.erpInformation || student.erpId || (student as any).dynamicFields?.erpId || (student as any).dynamicFields?.erpInformation || "";
+      const studentErp = student.erpInformation || (student as any).erpId || (student as any).dynamicFields?.erpId || (student as any).dynamicFields?.erpInformation || "";
       const { validateErpId } = await import("@/lib/erpValidation");
-      const erpCheck = validateErpId(studentErp, student.collegeName || student.college);
+      const erpCheck = validateErpId(studentErp, student.collegeName || (student as any).college);
       if (!erpCheck.isValid) {
         return NextResponse.json(
           { error: `Action Blocked: You must enter a valid College ERP ID on your Hosteleaze dashboard before applying for a gate pass or leave. (${erpCheck.error})` },
@@ -232,6 +237,8 @@ export async function POST(request: NextRequest) {
 
 export async function GET(request: NextRequest) {
   try {
+    const session = getAuthSession(request);
+    if (!session) return NextResponse.json({ error: "Authentication required" }, { status: 401 });
     const searchParams = request.nextUrl.searchParams;
     const studentId = searchParams.get("studentId");
     const firebaseUID = searchParams.get("firebaseUID") || searchParams.get("firebaseUid");
@@ -241,7 +248,30 @@ export async function GET(request: NextRequest) {
     const hostelName = searchParams.get("hostelName");
     const authorizedHostelsStr = searchParams.get("authorizedHostels");
 
+    if (session.role === "student" || session.role === "parent") {
+      if (!studentId) return NextResponse.json({ error: "A studentId is required" }, { status: 400 });
+      const requestedStudent = await db.students.getById(studentId);
+      if (!requestedStudent || !canAccessStudent(session, requestedStudent)) {
+        return NextResponse.json({ error: "You are not authorized to view these requests" }, { status: 403 });
+      }
+    } else if (session.role === "warden") {
+      if (hostelName && !session.hostelNames?.some((name) => name.toLowerCase() === hostelName.toLowerCase())) {
+        return NextResponse.json({ error: "You are not authorized for this hostel" }, { status: 403 });
+      }
+      if (studentId) {
+        const requestedStudent = await db.students.getById(studentId);
+        if (!requestedStudent || !canAccessStudent(session, requestedStudent)) {
+          return NextResponse.json({ error: "You are not authorized to view these requests" }, { status: 403 });
+        }
+      }
+    } else if (!isPrivilegedSession(session)) {
+      return NextResponse.json({ error: "You are not authorized to view requests" }, { status: 403 });
+    }
+
     const filters: any = {};
+    if (session.role === "student" || session.role === "parent") {
+      filters.studentId = studentId;
+    }
     if (studentId) {
       filters.studentId = studentId;
     }
@@ -260,7 +290,10 @@ export async function GET(request: NextRequest) {
     if (hostelName) {
       filters.hostelName = hostelName;
     }
-    if (authorizedHostelsStr) {
+    if (session.role === "warden" && !hostelName) {
+      filters.authorizedHostels = session.hostelNames || [];
+    }
+    if (authorizedHostelsStr && isPrivilegedSession(session)) {
       try {
         filters.authorizedHostels = JSON.parse(authorizedHostelsStr);
       } catch (e) {
@@ -390,10 +423,15 @@ export async function PATCH(request: NextRequest) {
     }
 
     const body = await request.json();
+    const session = getAuthSession(request);
+    if (!session) return NextResponse.json({ error: "Authentication required" }, { status: 401 });
     const { permissionId, permissionIds, action, isHidden, status, wardenStatus, deanStatus, parentStatus, fromDateTime, toDateTime, reason, role, userType } = body;
 
     // Handle Bulk Hide / Unhide Action
     if (action === 'bulkHide' || action === 'bulkUnhide' || (permissionIds && Array.isArray(permissionIds) && action === 'hide')) {
+      if (!isPrivilegedSession(session)) {
+        return NextResponse.json({ error: "Administrator access required" }, { status: 403 });
+      }
       const targetIds = permissionIds || (permissionId ? [permissionId] : []);
       const hideFlag = isHidden !== undefined ? Boolean(isHidden) : action === 'bulkHide' || action === 'hide';
       await db.permissions.hideByIds(targetIds, hideFlag);
@@ -412,6 +450,24 @@ export async function PATCH(request: NextRequest) {
       return NextResponse.json({ error: "Permission not found" }, { status: 404 });
     }
 
+    const linkedStudentId = typeof currentPermission.studentId === "object"
+      ? currentPermission.studentId?._id || currentPermission.studentId?.id
+      : currentPermission.studentId;
+    const linkedStudent = linkedStudentId ? await db.students.getById(String(linkedStudentId)) : null;
+    if (!linkedStudent || !canAccessStudent(session, linkedStudent)) {
+      return NextResponse.json({ error: "You are not authorized to modify this request" }, { status: 403 });
+    }
+    const hasDecision = status !== undefined || wardenStatus !== undefined || deanStatus !== undefined || parentStatus !== undefined;
+    if (hasDecision && !isPrivilegedSession(session) && session.role !== "warden") {
+      return NextResponse.json({ error: "Only authorized staff can change request status" }, { status: 403 });
+    }
+    if (session.role === "warden" && (deanStatus !== undefined || parentStatus !== undefined || (status && status !== "rejected"))) {
+      return NextResponse.json({ error: "Wardens cannot update dean or parent decisions" }, { status: 403 });
+    }
+    if ((session.role === "student" || session.role === "parent") && (status && status !== "cancelled" || wardenStatus || deanStatus || parentStatus)) {
+      return NextResponse.json({ error: "Students and parents may only cancel their own request" }, { status: 403 });
+    }
+
     let update: any = {};
     if (status) update.status = status;
     if (wardenStatus) update.wardenStatus = wardenStatus;
@@ -420,7 +476,7 @@ export async function PATCH(request: NextRequest) {
 
     // Handle Edit Leave Dates & Reason
     if (fromDateTime !== undefined || toDateTime !== undefined || reason !== undefined) {
-      const isStudent = role === "student" || userType === "student";
+      const isStudent = session.role === "student" || session.role === "parent";
       const isAlreadyApproved =
         currentPermission.status === "allowed" ||
         currentPermission.wardenStatus === "allowed" ||
@@ -620,6 +676,9 @@ export async function PATCH(request: NextRequest) {
 
 export async function DELETE(request: NextRequest) {
   try {
+    if (!isPrivilegedSession(getAuthSession(request))) {
+      return NextResponse.json({ error: "Administrator access required" }, { status: 403 });
+    }
     const body = await request.json().catch(() => ({}));
     const searchParams = request.nextUrl.searchParams;
     const idFromQuery = searchParams.get("id");

@@ -202,6 +202,8 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
     const [highlightLocation, setHighlightLocation] = useState(false);
     const [requestType, setRequestType] = useState<"outing" | "leave">("outing");
     const [studentProfile, setStudentProfile] = useState<StudentProfile | null>(initialData || null);
+    const studentProfileRef = useRef<StudentProfile | null>(studentProfile);
+    studentProfileRef.current = studentProfile;
     const [isFullProfileLoaded, setIsFullProfileLoaded] = useState(!!initialData?.collegeName || !!initialData?.joiningDate);
     const [permissions, setPermissions] = useState<Permission[]>(() => {
         if (typeof window !== "undefined") {
@@ -329,7 +331,7 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
             email: p.deanEmail || "vijendrasinghthakur@oriental.ac.in",
             designation: "Dean Hostel"
         };
-    }, [studentProfile]);
+    }, [studentProfile, serverHostelConfigs]);
 
     const deanContactPhone = deanContactInfo.phone;
 
@@ -488,13 +490,15 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
     }, [isParentView]);
 
     // Helper to get tenant from URL, localStorage, or student profile
+    const tenantFromUrl = searchParams.get('tenant');
     const getTenantParam = (includeQuestionMark = true) => {
-        let tenant = searchParams.get('tenant');
+        let tenant = tenantFromUrl;
         if (!tenant && typeof window !== 'undefined') {
             tenant = localStorage.getItem('lastTenantSlug') || localStorage.getItem('savedTenantSlug') || localStorage.getItem('tenantSlug');
         }
-        if (!tenant && studentProfile) {
-            const rawSlug = (studentProfile as any).tenantId || (studentProfile as any).collegeName || '';
+        const currentProfile = studentProfileRef.current;
+        if (!tenant && currentProfile) {
+            const rawSlug = (currentProfile as any).tenantId || currentProfile.collegeName || '';
             const upper = String(rawSlug).toUpperCase();
             if (upper === 'OIST' || upper === 'OCT' || upper === 'OCP' || upper === 'OPM' || upper === 'OIPR' || rawSlug === '26739d24-0214-409b-aa81-42e628e88c2b') {
                 tenant = 'ogi';
@@ -604,7 +608,7 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
 
         checkNetwork();
         return () => { isCancelled = true; };
-    }, [studentProfile]);
+    }, [studentProfile?._id, studentProfile?.collegeName, (studentProfile as any)?.tenantId, tenantFromUrl]);
 
     const getAttendanceDisplay = () => {
         if (isAttendanceMarked) {
@@ -664,7 +668,7 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
 
     // ⚡ INSTANT LIVE FIELD ENFORCEMENT CHECK: Checks live from server immediately when dashboard is opened or resumed
     const checkFieldEnforcement = useCallback(async (profileOverride?: any) => {
-        const currentProfile = profileOverride || studentProfile;
+        const currentProfile = profileOverride || studentProfileRef.current;
         if (isParentView) {
             setShowFieldEnforcementModal(false);
             setShowMandatoryUpdate(false);
@@ -709,9 +713,9 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
                 setEnforcedMissingFields([]);
             }
         } catch (e) {
-            console.error("Error checking field enforcement:", e);
+                console.warn("Profile enforcement check is temporarily unavailable:", e);
         }
-    }, [isParentView, studentProfile, getTenantParam]);
+    }, [isParentView, tenantFromUrl]);
 
     // ⚡ AUTO-RECHECK ON TAB RESUME: When student switches back to dashboard on phone, re-check enforcement live immediately
     useEffect(() => {
@@ -746,7 +750,7 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
     // ⚡ Reactive Prop Sync: Whenever parent (app/page.tsx) pushes fresh student data, synchronize immediately
     useEffect(() => {
         if (initialData && !isParentView) {
-            setStudentProfile(prev => prev ? { ...prev, ...initialData } : initialData);
+            setStudentProfile(prev => prev === initialData ? prev : prev ? { ...prev, ...initialData } : initialData);
             const dyn = initialData.dynamicFields;
             const isFlagged = Boolean(
                 dyn && typeof dyn === 'object' && (
@@ -1110,7 +1114,7 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
                 }
             }
         } catch (error) {
-            console.error("Error fetching gatepass history:", error);
+            console.warn("Gatepass history is temporarily unavailable:", error);
             // Retain cached data on network error
         } finally {
             setLoadingGatePasses(false);
@@ -2131,7 +2135,7 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
                 }
             }
         } catch (e) {
-            console.error("Error fetching payment data:", e);
+            console.warn("Payment data is temporarily unavailable:", e);
         }
     };
 
@@ -2233,7 +2237,7 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
 
             setHostelLocations(merged);
         } catch (error) {
-            console.error("Error fetching locations:", error);
+            console.warn("Hostel locations are temporarily unavailable:", error);
             setHostelLocations([]);
         } finally {
             setIsLocationsLoading(false);
@@ -2956,6 +2960,7 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
 
     const handleLogout = async () => {
         try {
+            await fetch("/api/auth/session", { method: "DELETE" }).catch(() => {});
             try {
                 await firebaseSignOut(firebaseAuth);
             } catch (e) {
@@ -7713,15 +7718,10 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
 
                             {/* Face Verification Overlay */}
                             {cameraActive && (
-                                <div className="fixed inset-0 z-[120] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-in fade-in duration-300">
+                                <div className="fixed inset-0 z-[120] flex items-start justify-center p-4 pt-5 bg-slate-900/60 backdrop-blur-sm animate-in fade-in duration-300">
                                     <div className="bg-white rounded-3xl w-full max-w-md shadow-2xl overflow-hidden border border-white/20">
-                                        <div className="p-6 pb-2 text-center">
-                                            <h2 className="text-xl font-black text-gray-900 mb-1">Face Verification</h2>
-                                            <p className="text-gray-500 text-xs">Position your face clearly within the camera view.</p>
-                                        </div>
-
-                                        <div className="p-5 relative">
-                                            <div className="relative aspect-square bg-black rounded-2xl overflow-hidden shadow-inner border-2 border-slate-100">
+                                        <div className="px-3 pt-0 pb-2 relative">
+                                            <div className="relative mt-0 aspect-[3.1/4] bg-black rounded-2xl overflow-hidden shadow-inner border-2 border-slate-100">
                                                 <video
                                                     ref={videoRef}
                                                     autoPlay
@@ -7802,9 +7802,14 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
                                                 )}
                                             </div>
 
-                                            <div className="mt-5 space-y-3">
+                                            <div className="px-1 pt-2 pb-1 text-center">
+                                                <h2 className="text-xl font-black text-gray-900 mb-1">Face Verification</h2>
+                                                <p className="text-gray-500 text-xs">Position your face clearly within the camera view.</p>
+                                            </div>
+
+                                            <div className="mt-2.5 space-y-2.5">
                                                 {(faceMatchStep === 'detecting' || faceMatchStep === 'matching') && (
-                                                    <div className="w-full py-2 text-center space-y-3">
+                                                    <div className="w-full text-center space-y-2.5">
                                                         {faceDetected ? (
                                                             <div className="space-y-2 animate-in fade-in duration-200">
                                                                 <div className={`font-black text-sm flex items-center justify-center gap-2 ${
@@ -7823,9 +7828,9 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
                                                                             : "MEASURING LIVE FACE REALITY..."}
                                                                     </span>
                                                                 </div>
-                                                                <div className="w-full bg-slate-100 rounded-full h-2.5 overflow-hidden">
+                                                                <div className="w-full bg-slate-100 rounded-full h-2 overflow-hidden">
                                                                     <div
-                                                                        className={`h-2.5 rounded-full transition-all duration-200 shadow-sm ${
+                                                                        className={`h-2 rounded-full transition-all duration-200 shadow-sm ${
                                                                             liveMatchScore >= 75 ? 'bg-emerald-500' :
                                                                             liveMatchScore > 0 ? 'bg-amber-500' : 'bg-blue-500'
                                                                         }`}
@@ -7837,11 +7842,14 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
                                                                         ? "✅ Authenticity Verified! Submitting attendance..."
                                                                         : liveMatchScore > 0
                                                                         ? "Hold steady in good light to match your registered face (≥ 75%)."
-                                                                        : "Align face inside frame and look directly at camera."}
+                                                                        : "Keep your face inside the box and look at the camera."}
                                                                 </p>
                                                             </div>
                                                         ) : (
                                                             <div className="space-y-2">
+                                                                <div className="text-[10px] text-gray-600 font-bold tracking-[0.18em] uppercase leading-relaxed">
+                                                                    Keep your face inside the box and look at the camera
+                                                                </div>
                                                                 <div className="font-black text-sm flex items-center justify-center gap-2 text-blue-600">
                                                                     <div className="w-4 h-4 rounded-full border-2 border-blue-600 border-t-transparent animate-spin" />
                                                                     <span>ALIGN FACE IN FRAME (0%)...</span>

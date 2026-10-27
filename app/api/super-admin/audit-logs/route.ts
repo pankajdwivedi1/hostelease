@@ -1,11 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { isSuperAdminSession } from "@/lib/authSession";
 
 export const dynamic = 'force-dynamic';
 export const revalidate = 0;
 
-export async function GET() {
+export async function GET(request: NextRequest) {
     try {
+    if (!isSuperAdminSession(request)) return NextResponse.json({ success: false, error: "Super admin access required" }, { status: 403 });
         let logs: any[] = [];
         try {
             const setting = await prisma.platformSetting.findUnique({
@@ -26,6 +28,7 @@ export async function GET() {
 
 export async function POST(request: NextRequest) {
     try {
+    if (!isSuperAdminSession(request)) return NextResponse.json({ success: false, error: "Super admin access required" }, { status: 403 });
         const newLog = await request.json(); // { action: string, details: string, user: string }
 
         // Fetch existing from Prisma (Railway PostgreSQL)
@@ -62,6 +65,7 @@ export async function POST(request: NextRequest) {
 
 export async function DELETE(request: NextRequest) {
     try {
+    if (!isSuperAdminSession(request)) return NextResponse.json({ success: false, error: "Super admin access required" }, { status: 403 });
         const body = await request.json();
         const { timestamps, clearAll } = body;
 

@@ -17,6 +17,20 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const router = useRouter();
 
     useEffect(() => {
+        const unsubscribe = onAuthStateChanged(firebaseAuth, async (user) => {
+            if (!user) return;
+            try {
+                const idToken = await user.getIdToken();
+                await fetch("/api/auth/session", {
+                    method: "POST",
+                    headers: { Authorization: `Bearer ${idToken}` },
+                    cache: "no-store",
+                });
+            } catch (sessionError) {
+                console.error("Could not establish server session", sessionError);
+            }
+        });
+
         // ⚡ SILENT HANDOFF LOGIC (Deprecated: Students use Firebase directly now)
         const performSilentHandoff = async () => {
             console.log("ℹ️ Student Firebase login active. Supabase migration disabled.");
@@ -24,6 +38,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         };
 
         performSilentHandoff();
+        return unsubscribe;
     }, [router]);
 
     if (isMigrating) {

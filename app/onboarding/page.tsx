@@ -79,6 +79,7 @@ export default function OnboardingPage() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const overlayCanvasRef = useRef<HTMLCanvasElement>(null);
   const [capturedImage, setCapturedImage] = useState<string | null>(null);
+  const [processingImage, setProcessingImage] = useState<string | null>(null);
   const [faceDescriptor, setFaceDescriptor] = useState<Float32Array | null>(null);
   const [isCapturingDescriptor, setIsCapturingDescriptor] = useState(false);
   const [isCameraOpen, setIsCameraOpen] = useState(false);
@@ -1035,11 +1036,14 @@ export default function OnboardingPage() {
       const ctx = canvas.getContext("2d");
       if (ctx) {
         ctx.drawImage(video, 0, 0, targetW, targetH);
+        const processingDataUrl = canvas.toDataURL("image/jpeg", 0.90);
+        setProcessingImage(processingDataUrl);
         setIsFaceProcessing(true);
         setFaceError(null);
 
         const res = await validateAndProcessBiometricPhoto(canvas);
         setIsFaceProcessing(false);
+        setProcessingImage(null);
 
         if (!res.valid) {
           setFaceError(res.error || "Biometric validation failed. Please try again.");
@@ -1241,20 +1245,22 @@ export default function OnboardingPage() {
   };
 
   return (
-    <div className="min-h-screen bg-white flex items-center justify-center p-4">
-      <main className="w-full max-w-md">
-        <div className="space-y-6">
-          <div className="relative flex flex-col items-center">
+    <div className={isCameraOpen
+      ? "fixed inset-0 z-[100] flex h-[100dvh] items-stretch justify-center overflow-hidden bg-black p-0 md:relative md:min-h-screen md:h-auto md:items-center md:overflow-visible md:bg-white md:p-4"
+      : "min-h-screen bg-white flex items-center justify-center p-4"}>
+      <main className={`w-full ${isCameraOpen ? "h-full max-w-none md:h-auto md:max-w-md" : "max-w-md"}`}>
+        <div className={isCameraOpen ? "flex h-full flex-col gap-0 md:block md:space-y-6" : "space-y-6"}>
+          <div className={`relative flex flex-col items-center ${isCameraOpen ? "h-[calc(3.5rem+env(safe-area-inset-top))] shrink-0 justify-center bg-black px-4 pt-[env(safe-area-inset-top)] md:h-auto md:bg-transparent md:px-0 md:pt-0" : ""}`}>
             <button
-              onClick={handleBack}
-              className="absolute left-0 top-0 text-secondary hover:text-foreground transition-colors flex items-center gap-1 text-sm font-medium h-6"
+              onClick={isCameraOpen ? stopCamera : handleBack}
+              className={`${isCameraOpen ? "absolute left-4 top-[calc(0.75rem+env(safe-area-inset-top))] text-white hover:text-white md:left-0 md:top-0 md:text-secondary md:hover:text-foreground" : "absolute left-0 top-0 text-secondary hover:text-foreground"} transition-colors flex items-center gap-1 text-sm font-medium h-6`}
             >
               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
               </svg>
               <span>Back</span>
             </button>
-            <div className="text-center pt-8 sm:pt-0">
+            <div className={`text-center pt-8 sm:pt-0 ${isCameraOpen ? "hidden md:block" : ""}`}>
               <h1 className="text-base font-semibold text-foreground">Welcome to Hosteleaze</h1>
               <p className="mt-2 text-sm text-secondary">Please fill in your details to get started</p>
               {isProfileLocked && (
@@ -1273,7 +1279,7 @@ export default function OnboardingPage() {
             </div>
           </div>
 
-          <form onSubmit={handleSubmit} className="space-y-4">
+          <form onSubmit={handleSubmit} className={isCameraOpen ? "min-h-0 flex-1 space-y-0 md:block md:space-y-4" : "space-y-4"}>
 
             {/* ===== MULTI-STEP WIZARD ===== */}
             {formBuilderConfig.length > 0 && (() => {
@@ -1415,7 +1421,7 @@ export default function OnboardingPage() {
 
               const renderField = (field: any) => (
                 <div key={field.id} className={field.type === 'image' || field.type === 'textarea' ? 'col-span-2' : ''}>
-                  <label htmlFor={field.id} className="block text-[10px] font-black text-gray-500 uppercase tracking-widest mb-1 px-1">
+                  <label htmlFor={field.id} className={`block text-[10px] font-black text-gray-500 uppercase tracking-widest mb-1 px-1 ${isCameraOpen ? "hidden md:block" : ""}`}>
                     {field.label} {field.required && <span className="text-red-500">*</span>}
                   </label>
 
@@ -1435,35 +1441,43 @@ export default function OnboardingPage() {
                       )}
 
                       {isCameraOpen && (
-                        <div className="relative w-full max-w-sm mx-auto aspect-[4/5] rounded-[32px] overflow-hidden shadow-2xl bg-black border border-gray-200">
-                          {/* Live Status HUD */}
-                          <div className="absolute top-4 left-0 right-0 flex flex-col items-center gap-2 z-20">
-                            <div className={`px-4 py-1.5 rounded-full text-[10px] md:text-xs font-black uppercase tracking-widest flex items-center gap-2 shadow-2xl transition-all border-2 ${isFaceInFrame ? 'bg-green-500 border-green-400 text-white' : 'bg-blue-600 border-blue-400 text-white'}`}>
-                              <span className={`w-2 h-2 rounded-full ${isFaceInFrame ? 'bg-white' : 'bg-white/80 animate-ping'}`}></span>
-                              {isFaceInFrame ? 'Face In Frame ✓' : 'Live Camera Ready'}
+                        <div className="fixed inset-x-0 top-[calc(3.5rem+env(safe-area-inset-top))] bottom-[calc(5rem+env(safe-area-inset-bottom))] z-40 flex items-center justify-center bg-black md:relative md:inset-auto md:z-auto md:block md:w-full md:max-w-sm md:aspect-[4/5] md:overflow-hidden md:rounded-[32px] md:border md:border-gray-200 md:shadow-2xl">
+                          <div className="relative h-full w-[calc(100%-32px)] max-w-none aspect-auto rounded-[24px] overflow-hidden bg-black md:absolute md:inset-0 md:h-full md:w-full md:max-w-none md:aspect-auto md:rounded-[32px]">
+                            <div className="absolute top-4 left-0 right-0 flex flex-col items-center gap-2 z-20">
+                              <div className={`px-4 py-1.5 rounded-full text-[10px] md:text-xs font-black uppercase tracking-widest flex items-center gap-2 shadow-2xl transition-all border-2 ${isFaceInFrame ? 'bg-green-500 border-green-400 text-white' : 'bg-blue-600 border-blue-400 text-white'}`}>
+                                <span className={`w-2 h-2 rounded-full ${isFaceInFrame ? 'bg-white' : 'bg-white/80 animate-ping'}`}></span>
+                                {isFaceInFrame ? 'Face In Frame ✓' : 'Live Camera Ready'}
+                              </div>
                             </div>
+
+                            {processingImage ? (
+                              <img
+                                src={processingImage}
+                                alt="Captured photo being verified"
+                                className="w-full h-full object-cover"
+                              />
+                            ) : (
+                              <video
+                                ref={videoRef}
+                                autoPlay
+                                playsInline
+                                className="w-full h-full object-cover"
+                              />
+                            )}
+                            <canvas
+                              ref={overlayCanvasRef}
+                              className={`absolute inset-0 w-full h-full object-cover pointer-events-none z-[15] ${processingImage ? 'hidden' : ''}`}
+                            />
+
+                            {isFaceProcessing && (
+                              <div className="absolute inset-0 flex flex-col items-center justify-center bg-black/60 backdrop-blur-sm z-30">
+                                <div className="w-8 h-8 border-3 border-white border-t-transparent rounded-full animate-spin mb-2"></div>
+                                <span className="text-[10px] text-white font-black uppercase tracking-widest">Checking liveness…</span>
+                              </div>
+                            )}
                           </div>
 
-                          <video
-                            ref={videoRef}
-                            autoPlay
-                            playsInline
-                            className="w-full h-full object-cover"
-                          />
-                          <canvas 
-                            ref={overlayCanvasRef} 
-                            className="absolute inset-0 w-full h-full object-cover pointer-events-none z-[15]" 
-                          />
-
-                          {isFaceProcessing && (
-                            <div className="absolute inset-0 flex flex-col items-center justify-center bg-black/60 backdrop-blur-sm z-30">
-                              <div className="w-8 h-8 border-3 border-white border-t-transparent rounded-full animate-spin mb-2"></div>
-                              <span className="text-[10px] text-white font-black uppercase tracking-widest">Scanning Biometrics...</span>
-                            </div>
-                          )}
-
-                          {/* Full Screen Controls */}
-                          <div className="absolute bottom-6 left-0 right-0 flex flex-row items-center justify-center gap-3 z-20 px-4">
+                          <div className="fixed bottom-[calc(1rem+env(safe-area-inset-bottom))] left-0 right-0 flex flex-row items-center justify-center gap-3 px-4 z-50 md:absolute md:bottom-6">
                             <button
                               type="button"
                               onClick={stopCamera}
@@ -1614,9 +1628,9 @@ export default function OnboardingPage() {
               );
 
               return (
-                <div className="space-y-5">
+                <div className={isCameraOpen ? "h-full space-y-5 md:block md:h-auto md:space-y-5" : "space-y-5"}>
                   {/* ── PROGRESS BAR ── */}
-                  <div className="space-y-2">
+                  <div className={`${isCameraOpen ? "hidden md:block" : "block"} space-y-2`}>
                     <div className="flex justify-between items-center">
                       <span className="text-[9px] font-black text-gray-400 uppercase tracking-widest">Step {currentStep + 1} of {totalSteps}</span>
                       <span className="text-[9px] font-black text-blue-600 uppercase tracking-widest">{isLastStep ? '📋 Review & Submit' : currentSection}</span>
@@ -1633,7 +1647,7 @@ export default function OnboardingPage() {
 
                   {/* ── STEP HEADER ── */}
                   {!isLastStep && (
-                    <div className="flex items-center gap-2 pb-1 border-b border-gray-100">
+                    <div className={`flex items-center gap-2 pb-1 border-b border-gray-100 ${isCameraOpen ? "hidden md:flex" : ""}`}>
                       <div className="w-7 h-7 rounded-xl bg-blue-50 flex items-center justify-center shrink-0">
                         <span className="text-[11px] font-black text-blue-600">{currentStep + 1}</span>
                       </div>
@@ -1648,7 +1662,7 @@ export default function OnboardingPage() {
 
                   {/* ── STEP FIELDS ── */}
                   {!isLastStep ? (
-                    <div className="grid grid-cols-2 gap-x-4 gap-y-3">
+                    <div className={isCameraOpen ? "contents md:grid md:grid-cols-2 md:gap-x-4 md:gap-y-3" : "grid grid-cols-2 gap-x-4 gap-y-3"}>
                       {visibleFields.filter((f: any) => (f.section || 'General') === currentSection).map((field: any) => renderField(field))}
                     </div>
                   ) : (

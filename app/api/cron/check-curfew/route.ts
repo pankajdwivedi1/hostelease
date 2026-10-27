@@ -212,15 +212,19 @@ export async function GET(request: NextRequest) {
     // ----------------------------------------------------
     // PHASE C: Student Curfew Attendance Reminders
     // ----------------------------------------------------
+    // ⚠️ DISABLED BY DEFAULT: this phase performs a full tenant + student + attendance scan and then
+    // fans out per-student push notifications. It is intentionally behind an explicit feature flag because
+    // the full scan is expensive and can spike CPU/RAM when the route is triggered frequently.
     let reminderNotifiedCount = 0;
     const reminderDetails: any[] = [];
     const isReminderParam = request.nextUrl.searchParams.get("phase") === "reminder";
+    const reminderFeatureEnabled = process.env.ENABLE_CURFEW_REMINDERS === "true";
 
     // 45 minutes before curfewEnd
     const reminderMinutes = Math.max(0, (endH * 60 + endM) - 45);
     const isReminderTriggerTime = currentMinutes >= reminderMinutes && currentMinutes < (endH * 60 + endM);
 
-    if ((isReminderTriggerTime || (isForced && isReminderParam))) {
+    if (reminderFeatureEnabled && (isReminderTriggerTime || (isForced && isReminderParam))) {
       const tenants = await prisma.tenant.findMany({ where: { isActive: true } });
       for (const tenant of tenants || []) {
         const rawStudents = await db.students.list({ tenantId: tenant.id });
@@ -235,7 +239,7 @@ export async function GET(request: NextRequest) {
         const presentIds = new Set((attendanceData || []).map((a: any) => String(a.studentId || a.student_id)));
 
         const pendingStudents = students.filter((s: any) => !presentIds.has(String(s._id || s.id)));
-        
+
         const notifyPromises = pendingStudents.map(async (student: any) => {
           const sId = String(student._id || student.id);
           const res = await sendPushNotification(sId, "student", "studentAttendanceReminder", {

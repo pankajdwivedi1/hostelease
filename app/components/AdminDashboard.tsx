@@ -390,11 +390,7 @@ const DeveloperTools = ({ hostels, developerPassword, students = [], refreshStud
 
   const handleUnlock = () => {
     const entered = (password || "").trim();
-    const valid = [
-      developerPassword,
-      "Pankaj1258",
-      "Pankaj852963",
-    ].filter(p => p && p !== "••••••••");
+    const valid = [developerPassword].filter(p => p && p !== "••••••••");
 
     if (valid.some(v => v === entered)) {
       setIsUnlocked(true);
@@ -2328,13 +2324,13 @@ export default function AdminDashboard({
     secondaryColor: "#1e40af"
   });
   const [isUpdatingTenant, setIsUpdatingTenant] = useState(false);
-  const [developerPassword, setDeveloperPassword] = useState("Pankaj852963");
-  const [newDeveloperPassword, setNewDeveloperPassword] = useState("Pankaj852963"); // ⚡ NEW: Default value
-  const [globalWardenPassword, setGlobalWardenPassword] = useState("warden456");
+  const [developerPassword, setDeveloperPassword] = useState("");
+  const [newDeveloperPassword, setNewDeveloperPassword] = useState("");
+  const [globalWardenPassword, setGlobalWardenPassword] = useState("");
   const [visiblePasswords, setVisiblePasswords] = useState<Set<string>>(new Set());
   const [overlapRadius, setOverlapRadius] = useState(false); // ⚡ NEW
   const [prioritizeAssignedHostel, setPrioritizeAssignedHostel] = useState(false); // ⚡ NEW
-  const [getpassPassword, setGetpassPassword] = useState("GET456"); // ⚡ NEW
+  const [getpassPassword, setGetpassPassword] = useState("");
   const [wifiWhitelist, setWifiWhitelist] = useState<any[]>([]); // ⚡ NEW: Global IP Whitelist
   const [enableManualAttendance, setEnableManualAttendance] = useState(false); // ⚡ NEW: Toggle for Manual Marking Toolbar
   const [enforceUniqueErpId, setEnforceUniqueErpId] = useState(false);
@@ -6957,6 +6953,7 @@ export default function AdminDashboard({
       return;
     }
     try {
+      await fetch("/api/auth/session", { method: "DELETE" });
       await signOut(auth);
       // ⚡ CLEAR ALL CACHES ON LOGOUT
       localStorage.removeItem("userType");
@@ -6969,6 +6966,7 @@ export default function AdminDashboard({
       router.push("/login?logout=success");
     } catch (error) {
       console.error("Logout error:", error);
+      await fetch("/api/auth/session", { method: "DELETE" }).catch(() => {});
       router.push("/login?logout=success");
     }
   };
@@ -9129,7 +9127,7 @@ export default function AdminDashboard({
                                     )}
                                     {Math.round(result.distance) > result.radius && (
                                       <span className="text-[8px] sm:text-[9.5px] md:text-[10.5px] px-1 sm:px-1.5 py-0.5 bg-indigo-50 text-indigo-600 rounded border border-indigo-100 font-bold whitespace-nowrap">
-                                        Offset Applied: -{result.appliedOffset ?? Math.min(lastCheckAccuracy, 50)}m
+                                        Offset Applied: -{result.appliedOffset ?? Math.min(lastCheckAccuracy ?? 50, 50)}m
                                       </span>
                                     )}
                                   </p>

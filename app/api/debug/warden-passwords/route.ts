@@ -8,20 +8,20 @@ export async function GET(request: NextRequest) {
     try {
         const hostels = await db.hostels.getAll();
         const settings = await db.settings.get();
-        const globalPassword = settings?.wardenPassword || "warden456";
+        const globalPasswordConfigured = !!(settings?.wardenPassword || process.env.WARDEN_LOGIN_PASSWORD);
 
         const hostelStatus = hostels.map((h: any) => ({
             name: h.name,
             id: h._id,
             hasPassword: !!h.wardenPassword,
-            passwordSet: h.wardenPassword || "not set",
+            passwordSet: !!h.wardenPassword,
             willUseGlobal: !h.wardenPassword,
-            effectivePassword: h.wardenPassword || globalPassword
+            effectivePasswordState: h.wardenPassword ? "hostel-specific" : (globalPasswordConfigured ? "global" : "not configured")
         }));
 
         return NextResponse.json({
             success: true,
-            globalPassword,
+            globalPasswordConfigured,
             hostels: hostelStatus
         });
     } catch (error: any) {

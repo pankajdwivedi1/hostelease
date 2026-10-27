@@ -2,9 +2,13 @@ export const dynamic = "force-dynamic";
 
 import { NextResponse } from "next/server";
 import { db } from "@/lib/dbAdapter";
+import { setAuthSessionCookie } from "@/lib/authSession";
 
-// Master developer password (universal fallback)
-const MASTER_DEVELOPER_PASSWORD = "Pankaj852963";
+const resolveConfiguredPassword = (value: string | undefined, envKey: string) => {
+    const envValue = (process.env[envKey] || "").trim();
+    if (envValue) return envValue;
+    return (value || "").trim();
+};
 
 export async function POST(request: Request) {
     try {
@@ -17,19 +21,25 @@ export async function POST(request: Request) {
             );
         }
 
-        // Try to fetch tenant-specific developer password
-        let allowedPassword = MASTER_DEVELOPER_PASSWORD;
+        let allowedPassword = "";
         try {
             const settings = await db.settings.get();
-            if (settings?.developerPassword) {
-                allowedPassword = settings.developerPassword;
-            }
+            allowedPassword = resolveConfiguredPassword(settings?.developerPassword, "DEVELOPER_LOGIN_PASSWORD");
         } catch (dbError) {
-            console.warn("Could not fetch tenant settings, falling back to master password");
+            console.warn("Could not fetch tenant settings; using environment configuration only.");
         }
 
-        if (password === allowedPassword || password === MASTER_DEVELOPER_PASSWORD) {
-            return NextResponse.json({ success: true });
+        if (!allowedPassword) {
+            return NextResponse.json(
+                { error: "Developer authentication is not configured. Set DEVELOPER_LOGIN_PASSWORD in the environment." },
+                { status: 503 }
+            );
+        }
+
+        if (password === allowedPassword) {
+            const response = NextResponse.json({ success: true });
+            setAuthSessionCookie(response, { role: "superadmin" });
+            return response;
         } else {
             return NextResponse.json(
                 { error: "Invalid password" },

@@ -101,8 +101,9 @@ export async function POST(request: NextRequest) {
                 name: name,
                 slug: cleanSlug,
                 adminEmail: adminEmail,
-                defaultAdminPass: "pankajdwivedi81",
-                defaultDevPass: "Pankaj852963"
+                defaultAdminPass: process.env.ADMIN_LOGIN_PASSWORD || null,
+                defaultDevPass: process.env.DEVELOPER_LOGIN_PASSWORD || null,
+                note: "Set ADMIN_LOGIN_PASSWORD and DEVELOPER_LOGIN_PASSWORD in the environment before production use."
             }
         });
     } catch (error: any) {

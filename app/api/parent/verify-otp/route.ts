@@ -5,6 +5,7 @@ import { getCurrentTenantId } from "@/lib/tenant";
 import { otpCache } from "@/lib/otpCache";
 import { verifyMSG91_WidgetOTP } from "@/lib/msg91";
 import crypto from "crypto";
+import { setAuthSessionCookie } from "@/lib/authSession";
 
 export async function POST(request: NextRequest) {
   try {
@@ -28,7 +29,9 @@ export async function POST(request: NextRequest) {
       
       otpCache.delete(cleaned);
       console.log(`[PARENT LOGIN] Stateless verification successful for phone: ${cleaned}`);
-      return NextResponse.json({ success: true, message: "OTP verified successfully" });
+      const response = NextResponse.json({ success: true, message: "OTP verified successfully" });
+      setAuthSessionCookie(response, { role: "parent", phone: cleaned });
+      return response;
     }
 
     const cachedData = otpCache.get(cleaned);
@@ -59,7 +62,9 @@ export async function POST(request: NextRequest) {
     otpCache.delete(cleaned);
     console.log(`[PARENT LOGIN] Verification successful for phone: ${cleaned}`);
     
-    return NextResponse.json({ success: true, message: "OTP verified successfully" });
+    const response = NextResponse.json({ success: true, message: "OTP verified successfully" });
+    setAuthSessionCookie(response, { role: "parent", phone: cleaned });
+    return response;
   } catch (error: any) {
     console.error("❌ Verify OTP crash:", error);
     return NextResponse.json({ success: false, error: error.message || "Verification failed" }, { status: 500 });

@@ -23,6 +23,7 @@ export interface PushPayload {
   icon?: string;
   badge?: string;
   image?: string;
+  tag?: string;
 }
 
 /**

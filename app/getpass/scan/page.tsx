@@ -56,6 +56,7 @@ export default function StudentScannerPage() {
     const [firebaseUID, setFirebaseUID] = useState<string>("");
     const [deviceId, setDeviceId] = useState<string>("");
     const [studentName, setStudentName] = useState<string>("");
+    const [sessionReady, setSessionReady] = useState<boolean>(false);
     const [isPWA, setIsPWA] = useState<boolean>(true); // assume true until checked
 
     // Calendar & Single Strip History States
@@ -96,10 +97,51 @@ export default function StudentScannerPage() {
                     console.error("Failed to parse cachedStudentData", e);
                 }
 
+                // 2. If the app session exists but the scanner route was opened before the cache was hydrated,
+                //    resolve the student from the server and restore the local session state.
+                if (!storedUID || !storedName) {
+                    const attemptedEmail = localStorage.getItem("studentEmail") || localStorage.getItem("userEmail") || "";
+                    const query = [] as string[];
+
+                    if (auth.currentUser?.uid) {
+                        query.push(`firebaseUID=${encodeURIComponent(auth.currentUser.uid)}`);
+                    }
+                    if (attemptedEmail) {
+                        query.push(`email=${encodeURIComponent(attemptedEmail)}`);
+                    }
+
+                    if (query.length > 0) {
+                        try {
+                            const res = await fetch(`/api/students?${query.join("&")}&minimal=true&_t=${Date.now()}`);
+                            if (res.ok) {
+                                const data = await res.json();
+                                const student = data?.student;
+                                if (student) {
+                                    storedUID = storedUID || student.firebaseUID || student._id || student.id || "";
+                                    storedName = storedName || student.name || "";
+                                    if (storedUID) {
+                                        localStorage.setItem("firebaseUID", storedUID);
+                                        localStorage.setItem("getpass_uid", storedUID);
+                                    }
+                                    if (storedName) {
+                                        localStorage.setItem("studentName", storedName);
+                                    }
+                                    if (student.studentStatus) {
+                                        storedStatus = student.studentStatus as "in" | "out";
+                                        localStorage.setItem("studentStatus", student.studentStatus);
+                                    }
+                                }
+                            }
+                        } catch (restoreErr) {
+                            console.warn("Failed to restore student session for QR scanner:", restoreErr);
+                        }
+                    }
+                }
+
                 if (auth.currentUser?.uid && !storedUID) {
                     storedUID = auth.currentUser.uid;
                 }
-                
+
                 const finalStatus = storedStatus || "in";
 
                 if (storedUID) {
@@ -108,6 +150,7 @@ export default function StudentScannerPage() {
                 }
                 if (storedName) setStudentName(storedName);
                 setCurrentStatus(finalStatus);
+                setSessionReady(true);
 
                 // 2. Get or generate the persistent PWA Installation ID
                 const installId = await getInstallationId();
@@ -119,6 +162,7 @@ export default function StudentScannerPage() {
 
             } catch (e) {
                 console.error("Error during init:", e);
+                setSessionReady(true);
             }
         };
         init();
@@ -200,6 +244,7 @@ export default function StudentScannerPage() {
     //   This is the only approach that avoids all timing races.
     const [startingCamera, setStartingCamera] = useState(false);
     const pendingStreamRef = useRef<MediaStream | null>(null);
+    const hasStudentIdentity = Boolean(firebaseUID || studentName);
 
     // Audio Feedback helper
     const playAudioFeedback = (action: string) => {
@@ -756,7 +801,7 @@ export default function StudentScannerPage() {
                                     opacity: startingCamera ? 0.75 : 1,
                                     cursor: startingCamera ? "wait" : "pointer",
                                 }}
-                                disabled={startingCamera || (!firebaseUID && !studentName)}
+                                disabled={startingCamera || (!hasStudentIdentity && !sessionReady)}
                             >
                                 {startingCamera
                                     ? "⏳ Starting Camera..."
@@ -765,9 +810,14 @@ export default function StudentScannerPage() {
                                         : "🏠 Scan to Check IN"}
                             </button>
 
-                            {!firebaseUID && !studentName && (
+                            {!hasStudentIdentity && sessionReady && (
                                 <p style={styles.loginWarning}>
-                                    ⚠️ Please login to the app first
+                                    ⚠️ Please log in again to continue
+                                </p>
+                            )}
+                            {!hasStudentIdentity && !sessionReady && (
+                                <p style={styles.loginWarning}>
+                                    ⏳ Loading student session...
                                 </p>
                             )}
                         </div>

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/dbAdapter";
 import { isErpField, validateErpId } from "@/lib/erpValidation";
+import { getAuthSession, isPrivilegedSession } from "@/lib/authSession";
 
 export const dynamic = "force-dynamic";
 
@@ -32,26 +33,24 @@ export async function GET(request: NextRequest) {
         // Fetch student
         const student = await db.students.getById(studentId);
 
-        // 🔒 ADMIN BYPASS: Never block admin accounts
-        if (
-            student && (
-                student.role === "admin" ||
-                (student as any).isAdmin ||
-                request.headers.get("x-admin-email")
-            )
-        ) {
-            return NextResponse.json({
-                hasBlockers: false,
-                missingFields: [],
-                enforcement: null,
-                message: "Admin account bypassed from field enforcement",
-            });
-        }
         if (!student) {
             return NextResponse.json(
                 { error: "Student not found" },
                 { status: 404 }
             );
+        }
+
+        const session = getAuthSession(request);
+        if (!isPrivilegedSession(session) && !(session?.role === "student" && session.uid === student.firebaseUID)) {
+            return NextResponse.json({ error: "You are not authorized to view this profile" }, { status: 403 });
+        }
+        if (isPrivilegedSession(session)) {
+            return NextResponse.json({
+                hasBlockers: false,
+                missingFields: [],
+                enforcement: null,
+                message: "Administrator account bypassed from field enforcement",
+            });
         }
 
         // Fetch active enforcement rules for this student's hostel
@@ -109,6 +108,28 @@ export async function GET(request: NextRequest) {
         const missingFields: any[] = [];
         const ruleUpdatedAt = enforcement.updatedAt ? new Date(enforcement.updatedAt).getTime() : 0;
 
+        const getProfileValue = (field: any) => {
+            const fieldId = (field.fieldId || field.id || field.key || "").toString();
+            const directCandidates = [
+                (student as any)[fieldId],
+                (student as any)[fieldId.toLowerCase()],
+                (student as any)[fieldId.toUpperCase()],
+                (student as any)[field.fieldLabel],
+                (student as any)[(field.fieldLabel || "").toLowerCase()],
+                (student as any).dynamicFields?.[fieldId],
+                (student as any).dynamicFields?.[fieldId.toLowerCase()],
+                (student as any).dynamicFields?.[fieldId.toUpperCase()],
+                (student as any).dynamicFields?.[(field.fieldLabel || "").toLowerCase()],
+                (student as any).dynamicFields?.[(field.fieldLabel || "").toUpperCase()],
+            ];
+            for (const candidate of directCandidates) {
+                if (candidate !== undefined && candidate !== null && String(candidate).trim() !== "") {
+                    return candidate;
+                }
+            }
+            return "";
+        };
+
         for (const field of enabledFields) {
             // ⚡ 1. CHECK SEMESTER-LEVEL TARGETING
             const fieldTargetSemesters = field.targetSemesters || (enforcement as any).targetSemesters;
@@ -147,9 +168,9 @@ export async function GET(request: NextRequest) {
             );
 
             // Check if student profile already has a value saved
-            const profileVal = (student as any)[field.fieldId] ?? student.dynamicFields?.[field.fieldId] ?? "";
+            const profileVal = getProfileValue(field);
             const isErp = isErpField(field.fieldId, field.fieldLabel);
-            const erpValid = isErp ? validateErpId(String(profileVal || ""), student.collegeName || student.college).isValid : true;
+            const erpValid = isErp ? validateErpId(String(profileVal || ""), student.collegeName || (student as any).college).isValid : true;
             const hasValueInProfile = profileVal !== null && profileVal !== undefined && String(profileVal).trim() !== "" && (!isErp || erpValid);
 
             const isProgressCompleted = !!progressRecord?.isCompleted;
@@ -167,6 +188,10 @@ export async function GET(request: NextRequest) {
             }
 
             let isBlocker = false;
+
+            if (hasValueInProfile) {
+                continue;
+            }
 
             if (field.displayMode === "on-first-incomplete") {
                 // Only block if value is genuinely missing/blank in profile

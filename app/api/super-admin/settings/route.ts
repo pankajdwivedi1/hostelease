@@ -2,6 +2,7 @@ export const dynamic = "force-dynamic";
 
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { isSuperAdminSession } from "@/lib/authSession";
 
 const DEFAULT_SETTINGS = {
     bankName: "PNB Bank",
@@ -40,6 +41,7 @@ const DEFAULT_SETTINGS = {
 
 export async function GET(request: NextRequest) {
     try {
+    if (!isSuperAdminSession(request)) return NextResponse.json({ success: false, error: "Super admin access required" }, { status: 403 });
         try {
             const row = await prisma.platformSetting.findUnique({
                 where: { id: 'boss_payment_config' }
@@ -59,6 +61,7 @@ export async function GET(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
     try {
+    if (!isSuperAdminSession(request)) return NextResponse.json({ success: false, error: "Super admin access required" }, { status: 403 });
         const settings = await request.json();
 
         await prisma.platformSetting.upsert({

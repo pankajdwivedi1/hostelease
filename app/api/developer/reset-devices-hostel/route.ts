@@ -3,14 +3,27 @@ export const dynamic = "force-dynamic";
 import { NextResponse } from "next/server";
 import { db } from "@/lib/dbAdapter";
 
+const resolveConfiguredPassword = (value: string | undefined, envKey: string) => {
+    const envValue = (process.env[envKey] || "").trim();
+    if (envValue) return envValue;
+    return (value || "").trim();
+};
+
 export async function POST(request: Request) {
     try {
         const body = await request.json();
         const { hostelName, password } = body;
 
-        // Security Check - Use the developer password
-        const DEVELOPER_PASSWORD = "Pankaj852963";
-        if (password !== DEVELOPER_PASSWORD) {
+        const settings = await db.settings.get();
+        const allowedPassword = resolveConfiguredPassword(settings?.developerPassword, "DEVELOPER_LOGIN_PASSWORD");
+        if (!allowedPassword) {
+            return NextResponse.json(
+                { error: "Developer authentication is not configured. Set DEVELOPER_LOGIN_PASSWORD in the environment." },
+                { status: 503 }
+            );
+        }
+
+        if (password !== allowedPassword) {
             return NextResponse.json(
                 { error: "Unauthorized: Invalid developer password" },
                 { status: 401 }

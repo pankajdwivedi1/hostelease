@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { isSuperAdminSession } from "@/lib/authSession";
 import {
     getBillingLedgerFromR2,
     saveBillingLedgerToR2,
@@ -48,6 +49,7 @@ async function fetchCollegeDetails(tenantId: string) {
 
 export async function GET(request: NextRequest) {
     try {
+    if (!isSuperAdminSession(request)) return NextResponse.json({ success: false, error: "Super admin access required" }, { status: 403 });
         const { searchParams } = new URL(request.url);
         const forceR2 = searchParams.get("forceR2") === "true" || searchParams.get("retrieve") === "true";
         let logs: any[] | null = null;
@@ -150,6 +152,7 @@ export async function GET(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
     try {
+    if (!isSuperAdminSession(request)) return NextResponse.json({ success: false, error: "Super admin access required" }, { status: 403 });
         const newRecord = await request.json();
 
         // Validate billingType
@@ -302,6 +305,7 @@ export async function POST(request: NextRequest) {
 
 export async function PUT(request: NextRequest) {
     try {
+    if (!isSuperAdminSession(request)) return NextResponse.json({ success: false, error: "Super admin access required" }, { status: 403 });
         const updateData = await request.json();
 
         // 0. Support custom manual reordering of the billing ledger
@@ -446,6 +450,7 @@ export async function PUT(request: NextRequest) {
 
 export async function DELETE(request: NextRequest) {
     try {
+    if (!isSuperAdminSession(request)) return NextResponse.json({ success: false, error: "Super admin access required" }, { status: 403 });
         const { searchParams } = new URL(request.url);
         let id = searchParams.get("id");
 

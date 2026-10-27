@@ -5,8 +5,13 @@ import { db } from "@/lib/dbAdapter";
 import { assertTenantActive } from "@/lib/tenant";
 import { sendMSG91_WidgetOTP, verifyMSG91_WidgetOTP } from "@/lib/msg91";
 import { otpCache } from "@/lib/otpCache";
+import { setAuthSessionCookie } from "@/lib/authSession";
 
-const DEFAULT_WARDEN_PASSWORD = "warden456";
+const resolveConfiguredPassword = (value: string | null | undefined, envKey: string) => {
+    const envValue = (process.env[envKey] || "").trim();
+    if (envValue) return envValue;
+    return (value || "").trim();
+};
 
 export async function POST(request: NextRequest) {
     try {
@@ -36,7 +41,14 @@ export async function POST(request: NextRequest) {
         // 1. Handle special GETPASS login
         if (hostelId === 'getpass') {
             const settings = await db.settings.get();
-            const getpassPassword = settings?.getpassPassword || "GET456";
+            const getpassPassword = resolveConfiguredPassword(settings?.getpassPassword, "GETPASS_LOGIN_PASSWORD");
+
+            if (!getpassPassword) {
+                return NextResponse.json(
+                    { error: "Gatepass authentication is not configured. Set GETPASS_LOGIN_PASSWORD in the environment." },
+                    { status: 503 }
+                );
+            }
 
             if (password.trim() === getpassPassword.trim()) {
                 return NextResponse.json({
@@ -64,19 +76,28 @@ export async function POST(request: NextRequest) {
 
         // 3. Fetch Global Settings & Warden Accounts
         const settings = await db.settings.get();
-        const globalPassword = settings?.wardenPassword || DEFAULT_WARDEN_PASSWORD;
+        const globalPassword = resolveConfiguredPassword(settings?.wardenPassword, "WARDEN_LOGIN_PASSWORD");
         const wardenAccounts = settings?.wardenAccounts || [];
+
+        if (!globalPassword) {
+            return NextResponse.json(
+                { error: "Warden authentication is not configured. Set WARDEN_LOGIN_PASSWORD in the environment." },
+                { status: 503 }
+            );
+        }
 
         // 4. Check for dedicated Multi-Hostel Account first
         const matchedAccount = wardenAccounts.find((acc: any) => {
             const hasHostel = acc.hostels && Array.isArray(acc.hostels) && acc.hostels.includes(hostel.name);
-            const passwordMatches = password.trim() === (acc.password || globalPassword).trim();
+            const passwordMatches = password.trim() === (resolveConfiguredPassword(acc.password, "WARDEN_LOGIN_PASSWORD") || globalPassword).trim();
             return hasHostel && passwordMatches;
         });
 
-        const validPassword = matchedAccount ? (matchedAccount.password || globalPassword) : (hostel.wardenPassword || globalPassword);
+        const validPassword = matchedAccount
+            ? (resolveConfiguredPassword(matchedAccount.password, "WARDEN_LOGIN_PASSWORD") || globalPassword)
+            : (resolveConfiguredPassword(hostel.wardenPassword, "WARDEN_LOGIN_PASSWORD") || globalPassword);
 
-        if (password.trim() !== validPassword.trim()) {
+        if (!validPassword || password.trim() !== validPassword.trim()) {
             return NextResponse.json(
                 { error: "Invalid authentication key for this hostel" },
                 { status: 401 }
@@ -139,7 +160,7 @@ export async function POST(request: NextRequest) {
 
             otpCache.delete(cacheKey);
 
-            return NextResponse.json({
+            const response = NextResponse.json({
                 success: true,
                 hostelName: matchedAccount ? matchedAccount.hostels.join(", ") : hostel.name,
                 hostelId: hostel._id,
@@ -147,6 +168,12 @@ export async function POST(request: NextRequest) {
                 wardenUsername: hostel.wardenUsername,
                 wardenPhone: cleanInputPhone
             }, { status: 200 });
+            setAuthSessionCookie(response, {
+                role: "warden",
+                phone: cleanInputPhone,
+                hostelNames: matchedAccount ? matchedAccount.hostels : [hostel.name],
+            });
+            return response;
         }
 
         // 7. Send OTP via MSG91

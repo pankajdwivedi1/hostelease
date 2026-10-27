@@ -4,6 +4,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { adminAuth } from "@/lib/firebase-admin";
 import { db } from "@/lib/dbAdapter";
 import { writeAdminAuditLog, writeHostelActivityLog } from "@/lib/auditLog";
+import { canEditStudent, getAuthSession, isPrivilegedSession } from "@/lib/authSession";
 
 export async function DELETE(
   request: NextRequest,
@@ -18,6 +19,11 @@ export async function DELETE(
         { error: "Student not found" },
         { status: 404 }
       );
+    }
+
+    const session = getAuthSession(request);
+    if (!isPrivilegedSession(session)) {
+      return NextResponse.json({ error: "Administrator access required" }, { status: 403 });
     }
 
     // Get Firebase UID for deletion from Auth
@@ -58,7 +64,7 @@ export async function DELETE(
     await db.students.delete(studentId);
 
     // 📝 AUDIT LOG: Record this sensitive action with complete restorable student snapshot
-    const adminEmail = request.headers.get("x-admin-email") || "admin";
+    const adminEmail = session?.email || session?.phone || "admin";
     const studentSnapshot = {
       ...student,
       deletedAt: new Date().toISOString(),
@@ -112,8 +118,7 @@ export async function PATCH(
 ) {
   try {
     // ⚡ NEXT.js 15+ Compatibility: params is a Promise
-    const resolvedParams = await (params as any);
-    const studentId = resolvedParams.id;
+    const { id: studentId } = await params;
     const body = await request.json();
     console.log(`PATCH Action [${body.action || "update"}] for student: ${studentId}`);
 
@@ -121,12 +126,36 @@ export async function PATCH(
       return NextResponse.json({ error: "Student ID is required" }, { status: 400 });
     }
 
+    const student = await db.students.getById(studentId);
+    if (!student) return NextResponse.json({ error: "Student not found" }, { status: 404 });
+    const session = getAuthSession(request);
+    if (!canEditStudent(session, student)) {
+      return NextResponse.json({ error: "You are not authorized to update this student" }, { status: 403 });
+    }
+
+    if (session?.role === "student") {
+      const permittedStudentFields = new Set([
+        "name", "phoneNumber", "phone_number", "dob", "category", "fatherName", "father_name",
+        "fatherNumber", "father_number", "motherName", "mother_name", "motherNumber", "mother_number",
+        "permanentAddress", "permanent_address", "homePinCode", "home_pin_code", "homeState", "home_state",
+        "erpInformation", "erpId", "erp_id", "joiningDate", "joining_date", "branch", "collegeName",
+        "college_name", "year", "semester", "section", "floorNumber", "floor_number", "localGuardianAddress",
+        "local_guardian_address", "localGuardianPhoneNumber", "local_guardian_phone_number", "profilePicture",
+        "profile_picture", "faceDescriptor", "face_descriptor", "dynamicFields", "dynamic_fields",
+      ]);
+      if (Object.keys(body).some((key) => !permittedStudentFields.has(key))) {
+        return NextResponse.json({ error: "Students may only update editable profile fields" }, { status: 403 });
+      }
+    }
+    if (session?.role === "warden" && ["hostelName", "hostel_name", "deviceId", "device_id", "webAuthnCredentials", "web_authn_credentials", "faceDescriptor", "face_descriptor", "isProfileLocked", "is_profile_locked", "studentStatus", "student_status"].some((key) => key in body)) {
+      return NextResponse.json({ error: "Wardens cannot change hostel assignment, device, biometric, profile lock, or attendance status through this route" }, { status: 403 });
+    }
+
     // ⚡ SYNC WITH FIREBASE AUTH: If email is being updated, we MUST update it in Firebase too
     if (body.email) {
       try {
-        const student = await db.students.getById(studentId);
-        const firebaseUID = student?.firebaseUID;
-        const currentEmail = student?.email;
+        const firebaseUID = student.firebaseUID;
+        const currentEmail = student.email;
 
         if (firebaseUID && body.email.toLowerCase() !== currentEmail?.toLowerCase()) {
           console.log(`[AUTH_SYNC] Updating email in Firebase for ${firebaseUID} to ${body.email}`);
@@ -140,21 +169,14 @@ export async function PATCH(
     }
 
     // 🎓 ERP ID VALIDATION & AUTO-SYNC (Bypassed for Admins & Guest accounts)
-    const isAdminRequest = Boolean(
-      request.headers.get("x-admin-email") ||
-      request.headers.get("x-admin-role") ||
-      body.isAdmin ||
-      body.operator ||
-      body.action === "adminUpdate"
-    );
+    const isAdminRequest = isPrivilegedSession(session) || session?.role === "warden";
 
     const incomingErp = body.erpInformation || body.erpId || body.erp_id;
     if (incomingErp && typeof incomingErp === 'string') {
-      const student = await db.students.getById(studentId);
-      const isGuestOrAdmin = isAdminRequest || student?.registrationId?.toUpperCase().startsWith("GUEST") || student?.role === "admin" || (student as any)?.isAdmin;
+      const isGuestOrAdmin = isAdminRequest || student?.registrationId?.toUpperCase().startsWith("GUEST") || (student as any)?.role === "admin" || (student as any)?.isAdmin;
 
       const { validateErpId } = await import("@/lib/erpValidation");
-      const validation = validateErpId(incomingErp, student?.collegeName || student?.college, { isAdmin: isGuestOrAdmin });
+      const validation = validateErpId(incomingErp, student?.collegeName || (student as any)?.college, { isAdmin: isGuestOrAdmin });
       if (!isGuestOrAdmin && !validation.isValid) {
         return NextResponse.json({ error: validation.error }, { status: 400 });
       }

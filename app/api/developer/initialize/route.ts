@@ -2,6 +2,7 @@ export const dynamic = "force-dynamic";
 
 import { NextResponse } from "next/server";
 import { db } from "@/lib/dbAdapter";
+import { setAuthSessionCookie } from "@/lib/authSession";
 
 export async function POST(request: Request) {
     try {
@@ -26,10 +27,12 @@ export async function POST(request: Request) {
         // Initialize developer password
         await db.settings.update({ developerPassword: password });
 
-        return NextResponse.json({ 
-            success: true, 
-            message: "Developer account initialized successfully" 
+        const response = NextResponse.json({
+            success: true,
+            message: "Developer account initialized successfully"
         });
+        setAuthSessionCookie(response, { role: "superadmin" });
+        return response;
     } catch (error: any) {
         console.error("Developer initialization error:", error);
         return NextResponse.json(

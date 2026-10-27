@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import crypto from "crypto";
+import { isSuperAdminSession } from "@/lib/authSession";
 
 export const dynamic = 'force-dynamic';
 export const revalidate = 0;
@@ -11,6 +12,7 @@ export const revalidate = 0;
  */
 export async function GET(request: NextRequest) {
     try {
+    if (!isSuperAdminSession(request)) return NextResponse.json({ success: false, error: "Super admin access required" }, { status: 403 });
         const url = new URL(request.url);
         const showDeleted = url.searchParams.get('deleted') === 'true';
         
@@ -140,6 +142,7 @@ export async function GET(request: NextRequest) {
  */
 export async function POST(request: NextRequest) {
     try {
+    if (!isSuperAdminSession(request)) return NextResponse.json({ success: false, error: "Super admin access required" }, { status: 403 });
         const body = await request.json();
         const { action, id } = body;
 
@@ -209,6 +212,7 @@ export async function POST(request: NextRequest) {
  */
 export async function PATCH(request: NextRequest) {
     try {
+    if (!isSuperAdminSession(request)) return NextResponse.json({ success: false, error: "Super admin access required" }, { status: 403 });
         const body = await request.json();
         const { id, is_active, subscriptionStatus, subscriptionEndDate, createdAt, contactName, contactPhone, totalHostelars, features, storageQuotaMb, name, logoUrl, logo } = body;
 
@@ -297,6 +301,7 @@ export async function PATCH(request: NextRequest) {
  */
 export async function DELETE(request: NextRequest) {
     try {
+    if (!isSuperAdminSession(request)) return NextResponse.json({ success: false, error: "Super admin access required" }, { status: 403 });
         const url = new URL(request.url);
         const id = url.searchParams.get('id');
         const purge = url.searchParams.get('purge') === 'true';

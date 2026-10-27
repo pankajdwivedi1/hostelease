@@ -2,8 +2,13 @@ import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/dbAdapter";
 import { sendMSG91_WidgetOTP, verifyMSG91_WidgetOTP } from "@/lib/msg91";
 import { otpCache } from "@/lib/otpCache";
+import { setAuthSessionCookie } from "@/lib/authSession";
 
-const DEFAULT_ADMIN_PASSWORD = "pankajdwivedi81";
+const resolveConfiguredPassword = (value: string | undefined, envKey: string) => {
+  const envValue = (process.env[envKey] || "").trim();
+  if (envValue) return envValue;
+  return (value || "").trim();
+};
 
 export async function POST(request: NextRequest) {
   try {
@@ -19,9 +24,16 @@ export async function POST(request: NextRequest) {
 
     // Fetch from DB using adapter
     const settings = await db.settings.get();
-    const dynamicPassword = settings?.adminPassword || DEFAULT_ADMIN_PASSWORD;
+    const configuredPassword = resolveConfiguredPassword(settings?.adminPassword, "ADMIN_LOGIN_PASSWORD");
 
-    if (password.trim() !== dynamicPassword.trim()) {
+    if (!configuredPassword) {
+      return NextResponse.json(
+        { error: "Admin authentication is not configured. Set ADMIN_LOGIN_PASSWORD in the environment." },
+        { status: 503 }
+      );
+    }
+
+    if (password.trim() !== configuredPassword) {
       return NextResponse.json(
         { error: "Invalid authentication key" },
         { status: 401 }
@@ -87,11 +99,13 @@ export async function POST(request: NextRequest) {
 
       otpCache.delete(cacheKey);
 
-      return NextResponse.json({
+      const response = NextResponse.json({
         success: true,
         role: "dean",
         deanPhone: cleanInputPhone
       }, { status: 200 });
+      setAuthSessionCookie(response, { role: "admin", phone: cleanInputPhone });
+      return response;
     }
 
     // Send OTP via MSG91

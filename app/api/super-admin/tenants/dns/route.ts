@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import dns from "dns";
+import { isSuperAdminSession } from "@/lib/authSession";
 
 export const dynamic = 'force-dynamic';
 
@@ -17,6 +18,7 @@ function resolveDns(hostname: string): Promise<boolean> {
 
 export async function POST(request: NextRequest) {
     try {
+    if (!isSuperAdminSession(request)) return NextResponse.json({ success: false, error: "Super admin access required" }, { status: 403 });
         const { domain } = await request.json();
         if (!domain) {
             return NextResponse.json({ success: false, error: "Domain is required" }, { status: 400 });

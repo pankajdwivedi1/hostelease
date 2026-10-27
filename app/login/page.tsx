@@ -190,6 +190,7 @@ function LoginForm() {
     checkDeveloperSetup();
 
     if (searchParams.get("logout") === "success") {
+      fetch("/api/auth/session", { method: "DELETE" }).catch(() => {});
       document.cookie = "userType=; path=/; max-age=0; SameSite=Lax";
 
       setShowLogoutToast(true);

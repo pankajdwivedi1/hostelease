@@ -1025,10 +1025,13 @@ export default function SuperAdminDashboard() {
 
     useEffect(() => {
         setIsMounted(true);
-        // Check if already authorized
-        if (localStorage.getItem("superadmin_session") === "true") {
-            setIsAuthorized(true);
-        }
+        fetch("/api/super-admin/auth", { cache: "no-store" })
+            .then((response) => response.json())
+            .then((data) => {
+                if (data.authenticated) setIsAuthorized(true);
+                else localStorage.removeItem("superadmin_session");
+            })
+            .catch(() => localStorage.removeItem("superadmin_session"));
     }, []);
 
     const getTenantDisplayUrl = (slug: string) => {
@@ -1196,13 +1199,19 @@ export default function SuperAdminDashboard() {
         return () => clearInterval(interval);
     }, [isAuthorized, isMounted, viewMode]);
 
-    const handleLogin = (e: React.FormEvent) => {
+    const handleLogin = async (e: React.FormEvent) => {
         e.preventDefault();
-        if (password === "pankaj-superadmin-2026") {
+        try {
+            const response = await fetch("/api/super-admin/auth", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ password }),
+            });
+            if (!response.ok) throw new Error("Invalid SuperAdmin Password");
             setIsAuthorized(true);
             localStorage.setItem("superadmin_session", "true");
-        } else {
-            alert("Invalid SuperAdmin Password");
+        } catch (error) {
+            alert(error instanceof Error ? error.message : "Super admin authentication failed");
         }
     };
 
@@ -1222,8 +1231,9 @@ export default function SuperAdminDashboard() {
                 setShowAddModal(false);
                 setRegistrationSuccessData({
                     ...data.tenant,
-                    defaultAdminPass: "pankajdwivedi81",
-                    defaultDevPass: "Pankaj852963"
+                    defaultAdminPass: process.env.NEXT_PUBLIC_ADMIN_LOGIN_PASSWORD || null,
+                    defaultDevPass: process.env.NEXT_PUBLIC_DEVELOPER_LOGIN_PASSWORD || null,
+                    note: "Set the login credentials in the environment before production use."
                 });
                 setNewTenant({ name: "", slug: "", adminEmail: "", contactName: "", contactPhone: "", subscriptionStatus: "trial", primaryColor: "#3b82f6" });
             } else {
@@ -1542,7 +1552,8 @@ export default function SuperAdminDashboard() {
                     </button>
 
                     <button
-                        onClick={() => {
+                        onClick={async () => {
+                            await fetch("/api/auth/session", { method: "DELETE" }).catch(() => {});
                             localStorage.removeItem("superadmin_session");
                             setIsAuthorized(false);
                         }}
@@ -2183,7 +2194,7 @@ export default function SuperAdminDashboard() {
                                         <p className="text-gray-400 text-[10px] italic font-bold">No global nodes provisioned yet.</p>
                                     </div>
                                 ) : tenants.map((tenant) => {
-                                    const selId = tenant._id || tenant.id;
+                                    const selId = tenant._id;
                                     const selSlug = tenant.slug?.toLowerCase();
                                     const selName = tenant.name?.toLowerCase().trim();
                                     const tenantBillingCount = billingLogs.filter(log => {

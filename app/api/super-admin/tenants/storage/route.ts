@@ -2,9 +2,11 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import fs from "fs";
 import path from "path";
+import { isSuperAdminSession } from "@/lib/authSession";
 
 export async function POST(request: NextRequest) {
     try {
+    if (!isSuperAdminSession(request)) return NextResponse.json({ success: false, error: "Super admin access required" }, { status: 403 });
         const { tenantId } = await request.json();
         if (!tenantId) return NextResponse.json({ success: false, error: "Missing tenantId" }, { status: 400 });
 

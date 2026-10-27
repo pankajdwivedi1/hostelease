@@ -53,7 +53,8 @@ export default function Dashboard() {
     setUserType("parent");
   };
 
-  const handleParentLogout = () => {
+  const handleParentLogout = async () => {
+    await fetch("/api/auth/session", { method: "DELETE" }).catch(() => {});
     localStorage.removeItem("userType");
     localStorage.removeItem("parentPhone");
     localStorage.removeItem("parentSelectedStudentId");
