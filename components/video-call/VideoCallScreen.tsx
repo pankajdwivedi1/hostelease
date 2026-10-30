@@ -15,7 +15,11 @@ const ICE_CONFIG: RTCConfiguration = {
     { urls: 'stun:stun1.l.google.com:19302' },
     { urls: 'stun:stun2.l.google.com:19302' },
     { urls: 'stun:stun3.l.google.com:19302' },
+    { urls: 'stun:stun4.l.google.com:19302' },
+    { urls: 'stun:stun.services.mozilla.com' },
   ],
+  bundlePolicy: 'max-bundle',
+  rtcpMuxPolicy: 'require',
 };
 
 const RING_TIMEOUT = 45000; // 45s
@@ -31,16 +35,39 @@ type CallPhase =
   | 'missed'
   | 'error';
 
-// ⚡ Smart HD Optimization: 720p at ~1.1 Mbps (Crisp clarity + low data consumption)
+// ⚡ Crystal Clear HD Quality Booster: 3.5 Mbps for sharp, unblurred video
 function boostSdpQuality(sdp: string): string {
   let modified = sdp;
-  if (!modified.includes('b=AS:')) {
+  if (modified.includes('b=AS:')) {
+    modified = modified.replace(/b=AS:\d+/g, 'b=AS:3500');
+  } else {
     modified = modified.replace(
       /m=video ([0-9]+) ([A-Z\/]+) ([0-9 ]+)/g,
-      'm=video $1 $2 $3\r\nb=AS:1100\r\nb=TIAS:1100000'
+      'm=video $1 $2 $3\r\nb=AS:3500\r\nb=TIAS:3500000'
     );
   }
+  if (modified.includes('b=TIAS:')) {
+    modified = modified.replace(/b=TIAS:\d+/g, 'b=TIAS:3500000');
+  }
   return modified;
+}
+
+// 📱 Responsive High-Clarity Camera Constraints (Native Mobile Portrait & Desktop)
+function getOptimalVideoConstraints(facing: 'user' | 'environment'): MediaTrackConstraints {
+  const isPortrait = typeof window !== 'undefined' ? window.innerHeight > window.innerWidth : true;
+  return isPortrait
+    ? {
+        facingMode: facing,
+        width: { ideal: 1080, min: 720 },
+        height: { ideal: 1920, min: 720 },
+        frameRate: { ideal: 30, min: 24 },
+      }
+    : {
+        facingMode: facing,
+        width: { ideal: 1920, min: 720 },
+        height: { ideal: 1080, min: 720 },
+        frameRate: { ideal: 30, min: 24 },
+      };
 }
 
 interface VideoCallScreenProps {
@@ -218,7 +245,7 @@ export default function VideoCallScreen({
   // Pending remote offer stored if arrived before PC ready
   const pendingOfferRef = useRef<any>(null);
 
-  // ─── Apply Bitrate Parameters ─────────────────────────────
+  // ─── Apply Crystal HD Bitrate & Codec Parameters ─────────
   const applyHdBitrate = useCallback(async (pc: RTCPeerConnection) => {
     try {
       const senders = pc.getSenders();
@@ -228,9 +255,33 @@ export default function VideoCallScreen({
         if (!parameters.encodings || parameters.encodings.length === 0) {
           parameters.encodings = [{}];
         }
-        parameters.encodings[0].maxBitrate = 1100000; // 1.1 Mbps Smart HD
+        // 3.5 Mbps for crystal clear HD video transmission
+        parameters.encodings[0].maxBitrate = 3500000;
+        parameters.encodings[0].minBitrate = 800000;
         parameters.encodings[0].maxFramerate = 30;
+        // CRITICAL: Prevents WebRTC GCC from downscaling resolution into blur
+        (parameters as any).degradationPreference = 'maintain-resolution';
         await videoSender.setParameters(parameters);
+      }
+
+      // Codec Optimization: Prioritize H.264 & VP9 for hardware accelerated sharpness
+      if ('getTransceivers' in pc && 'getCapabilities' in RTCRtpSender) {
+        const transceivers = pc.getTransceivers();
+        const videoTransceiver = transceivers.find((t) => t.sender.track && t.sender.track.kind === 'video');
+        if (videoTransceiver && 'setCodecPreferences' in videoTransceiver) {
+          const capabilities = RTCRtpSender.getCapabilities('video');
+          if (capabilities && capabilities.codecs) {
+            const preferred = ['video/H264', 'video/VP9', 'video/VP8'];
+            const sortedCodecs = [...capabilities.codecs].sort((a, b) => {
+              const aIdx = preferred.indexOf(a.mimeType);
+              const bIdx = preferred.indexOf(b.mimeType);
+              return (aIdx === -1 ? 99 : aIdx) - (bIdx === -1 ? 99 : bIdx);
+            });
+            try {
+              videoTransceiver.setCodecPreferences(sortedCodecs);
+            } catch {}
+          }
+        }
       }
     } catch {}
   }, []);
@@ -294,7 +345,7 @@ export default function VideoCallScreen({
     cleanup('ended');
   }, [postSignal, cleanup]);
 
-  // ─── Start Camera or Microphone (Smart HD 720p or HD Voice) ────────────
+  // ─── Start Camera or Microphone (Crystal HD or HD Voice) ────────────
   const startLocalStream = useCallback(async (facing: 'user' | 'environment' = 'user'): Promise<MediaStream | null> => {
     try {
       let stream: MediaStream | null = null;
@@ -310,12 +361,7 @@ export default function VideoCallScreen({
       } else {
         try {
           stream = await navigator.mediaDevices.getUserMedia({
-            video: {
-              width: { ideal: 1280, max: 1280 },
-              height: { ideal: 720, max: 720 },
-              frameRate: { ideal: 30 },
-              facingMode: facing,
-            },
+            video: getOptimalVideoConstraints(facing),
             audio: {
               echoCancellation: true,
               noiseSuppression: true,
@@ -357,11 +403,7 @@ export default function VideoCallScreen({
       }
 
       let constraints: MediaStreamConstraints = {
-        video: {
-          facingMode: { ideal: nextFacing },
-          width: { ideal: 1280, max: 1280 },
-          height: { ideal: 720, max: 720 },
-        },
+        video: getOptimalVideoConstraints(nextFacing),
         audio: false,
       };
 
@@ -380,8 +422,7 @@ export default function VideoCallScreen({
           constraints = {
             video: {
               deviceId: { exact: targetDevice.deviceId },
-              width: { ideal: 1280, max: 1280 },
-              height: { ideal: 720, max: 720 },
+              ...getOptimalVideoConstraints(nextFacing),
             },
             audio: false,
           };
@@ -701,17 +742,14 @@ export default function VideoCallScreen({
     if (!existingVideo) {
       try {
         const videoStream = await navigator.mediaDevices.getUserMedia({
-          video: {
-            width: { ideal: 1280, max: 1280 },
-            height: { ideal: 720, max: 720 },
-            facingMode: cameraFacing,
-          },
+          video: getOptimalVideoConstraints(cameraFacing),
         });
         const newTrack = videoStream.getVideoTracks()[0];
         if (newTrack) {
           stream.addTrack(newTrack);
           if (pcRef.current) {
             pcRef.current.addTrack(newTrack, stream);
+            await applyHdBitrate(pcRef.current);
           }
           if (localVideoRef.current) {
             localVideoRef.current.srcObject = stream;
