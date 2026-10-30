@@ -6,6 +6,7 @@ import crypto from 'crypto';
 import { broadcastGateEvent } from "@/lib/eventEmitter";
 import { assertTenantActive } from "@/lib/tenant";
 import { parseAsIST } from "@/lib/dateFormat";
+import { getAuthSession, unauthorizedJson } from "@/lib/authSession";
 
 /**
  * Helper: Get IST time and date strings
@@ -38,7 +39,7 @@ function getISTStrings(date: Date) {
 export async function POST(request: NextRequest) {
     try {
         const body = await request.json();
-        const { studentId, studentIds, searchId, action, userType = 'admin', requestType = 'HOME-LEAVE', reason = 'Manual Management Override', operator = 'Admin', fromDateTime, toDateTime } = body;
+        const { studentId, studentIds, searchId, action, requestType = 'HOME-LEAVE', reason = 'Manual Management Override', operator = 'Admin', fromDateTime, toDateTime } = body;
         const targetIds: string[] = studentIds || (studentId ? [studentId] : []);
 
         // 1. Subscription Guard: Block toggling student status if subscription is expired
@@ -49,17 +50,14 @@ export async function POST(request: NextRequest) {
             }
         }
 
-        // 2. Validate Authorization (Only Admin/Warden/Gatekeeper/SuperAdmin can manually toggle)
-        const role = String(userType || 'admin').toLowerCase().trim();
-        const validRoles = ['admin', 'warden', 'developer', 'gatekeeper', 'superadmin', 'dean', 'campus', 'getpass', 'super admin'];
-
-        if (!validRoles.includes(role)) {
-            console.error(`[ManualToggle] Unauthorized access attempt with role: "${role}"`);
-            return NextResponse.json(
-                { error: "Unauthorized access", role: role },
-                { status: 403 }
-            );
+        // 2. Validate Authorization from signed session only (never trust body/cookie userType)
+        const session = getAuthSession(request);
+        const allowedRoles = ['admin', 'dean', 'warden', 'superadmin', 'getpass'] as const;
+        if (!session || !allowedRoles.includes(session.role as typeof allowedRoles[number])) {
+            console.error(`[ManualToggle] Unauthorized access attempt with session role: "${session?.role || 'none'}"`);
+            return unauthorizedJson("Unauthorized access", 403);
         }
+        const userType = session.role;
 
         // 🔍 SEARCH ACTION: Just find and return student profile for verification
         if (action === 'find' && searchId) {

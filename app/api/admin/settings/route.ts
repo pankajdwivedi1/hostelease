@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/dbAdapter";
-import { cookies } from "next/headers";
 import { createCachedResponse } from "@/lib/cacheHelper";
+import { getAuthSession, isPrivilegedSession, unauthorizedJson } from "@/lib/authSession";
 
 export const dynamic = "force-dynamic";
 
@@ -23,11 +23,9 @@ export async function GET(request: NextRequest) {
         const platformConfig = platformConfigRes.status === "fulfilled" ? platformConfigRes.value : null;
         const allHostels = allHostelsRes.status === "fulfilled" ? allHostelsRes.value : [];
 
-        const cookieStore = await cookies();
-        const cookieUserType = cookieStore.get("userType")?.value;
-        const headerUserType = request.headers.get("x-user-type") || request.headers.get("user-type");
-        const userType = cookieUserType || headerUserType;
-        const isAdmin = userType === "admin" || userType === "superadmin" || userType === "dean";
+        // Only signed server sessions may see plaintext passwords (never trust client userType cookie/header)
+        const session = getAuthSession(request);
+        const isAdmin = isPrivilegedSession(session);
 
         let enforceMandatoryPush = false;
         if (platformConfig?.settings) {
@@ -87,6 +85,7 @@ export async function GET(request: NextRequest) {
             deanNotifications: settings?.deanNotifications !== false,
             parentNotifications: settings?.parentNotifications !== false,
             studentNotifications: settings?.studentNotifications !== false,
+            enableVideoVoiceCall: (settings?.notificationSettings as any)?.enableVideoVoiceCall !== false && (settings as any)?.enableVideoVoiceCall !== false,
             qrScanCooldownMinutes: settings?.qrScanCooldownMinutes !== undefined ? settings.qrScanCooldownMinutes : 5,
             enforceMandatoryPush
         }, request, 30);
@@ -102,6 +101,11 @@ export async function GET(request: NextRequest) {
 // POST - Update admin settings
 export async function POST(request: NextRequest) {
     try {
+        const session = getAuthSession(request);
+        if (!isPrivilegedSession(session)) {
+            return unauthorizedJson("Administrator access required", 403);
+        }
+
         const body = await request.json();
         const {
             locations,
@@ -202,6 +206,16 @@ export async function POST(request: NextRequest) {
         if (body.deanNotifications !== undefined) updateData.deanNotifications = body.deanNotifications;
         if (body.parentNotifications !== undefined) updateData.parentNotifications = body.parentNotifications;
         if (body.studentNotifications !== undefined) updateData.studentNotifications = body.studentNotifications;
+        if (body.enableVideoVoiceCall !== undefined) {
+            updateData.enableVideoVoiceCall = body.enableVideoVoiceCall === true;
+            const currentSettings = await db.settings.get();
+            const notifSettings = (currentSettings?.notificationSettings as any) || {};
+            updateData.notificationSettings = {
+                ...notifSettings,
+                ...(updateData.notificationSettings || {}),
+                enableVideoVoiceCall: body.enableVideoVoiceCall === true
+            };
+        }
 
         const settings = await db.settings.update(updateData);
 

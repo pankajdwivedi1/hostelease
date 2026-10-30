@@ -2,10 +2,15 @@ export const dynamic = "force-dynamic";
 
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/dbAdapter";
+import { getAuthSession, isPrivilegedSession, unauthorizedJson } from "@/lib/authSession";
 
 // GET: Fetch all warden accounts
 export async function GET(request: NextRequest) {
     try {
+        if (!isPrivilegedSession(getAuthSession(request))) {
+            return unauthorizedJson("Administrator access required", 403);
+        }
+
         const settings = await db.settings.get();
         const wardenAccounts = settings?.wardenAccounts || [];
         return NextResponse.json({ wardenAccounts }, { status: 200 });
@@ -17,6 +22,10 @@ export async function GET(request: NextRequest) {
 // POST: Add or Update a warden account
 export async function POST(request: NextRequest) {
     try {
+        if (!isPrivilegedSession(getAuthSession(request))) {
+            return unauthorizedJson("Administrator access required", 403);
+        }
+
         const body = await request.json();
         const { username, password, hostels, action, accountId } = body;
 

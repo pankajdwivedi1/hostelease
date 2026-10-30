@@ -41,16 +41,11 @@ export async function GET(request: NextRequest) {
         }
 
         const session = getAuthSession(request);
-        if (!isPrivilegedSession(session) && !(session?.role === "student" && session.uid === student.firebaseUID)) {
+        const isPrivileged = isPrivilegedSession(session) || session?.role === "warden";
+
+        // Prevent cross-student tampering if another authenticated student's session is active
+        if (session && session.role === "student" && session.uid && student.firebaseUID && session.uid !== student.firebaseUID) {
             return NextResponse.json({ error: "You are not authorized to view this profile" }, { status: 403 });
-        }
-        if (isPrivilegedSession(session)) {
-            return NextResponse.json({
-                hasBlockers: false,
-                missingFields: [],
-                enforcement: null,
-                message: "Administrator account bypassed from field enforcement",
-            });
         }
 
         // Fetch active enforcement rules for this student's hostel
@@ -148,6 +143,22 @@ export async function GET(request: NextRequest) {
                 }
             }
 
+            // ⚡ 1.5 CHECK EXCLUDED / DEACTIVATED STUDENTS
+            const fieldExcludedStudentIds = field.excludedStudentIds || (enforcement as any).excludedStudentIds;
+            if (Array.isArray(fieldExcludedStudentIds) && fieldExcludedStudentIds.length > 0) {
+                const sId = (student._id || student.id || "").toString().trim();
+                const regId = (student.registrationId || "").toString().trim().toUpperCase();
+                const email = (student.email || "").toString().trim().toLowerCase();
+                const phone = (student.phoneNumber || "").toString().trim();
+                const isExcluded = fieldExcludedStudentIds.some((targetId: string) => {
+                    const clean = (targetId || "").toString().trim();
+                    return clean === sId || clean.toUpperCase() === regId || clean.toLowerCase() === email || clean === phone;
+                });
+                if (isExcluded) {
+                    continue; // Student was specifically deactivated / excluded by admin
+                }
+            }
+
             // ⚡ 2. CHECK STUDENT-WISE TARGETING
             const fieldTargetStudentIds = field.targetStudentIds || (enforcement as any).targetStudentIds;
             if (Array.isArray(fieldTargetStudentIds) && fieldTargetStudentIds.length > 0) {
@@ -166,6 +177,11 @@ export async function GET(request: NextRequest) {
             const progressRecord = progress.find(
                 (p: any) => p.fieldId === field.fieldId
             );
+
+            // If admin explicitly exempted/deactivated this student for this field, skip
+            if (progressRecord?.exemptedByAdmin) {
+                continue;
+            }
 
             // Check if student profile already has a value saved
             const profileVal = getProfileValue(field);
@@ -188,10 +204,6 @@ export async function GET(request: NextRequest) {
             }
 
             let isBlocker = false;
-
-            if (hasValueInProfile) {
-                continue;
-            }
 
             if (field.displayMode === "on-first-incomplete") {
                 // Only block if value is genuinely missing/blank in profile

@@ -84,6 +84,16 @@ export async function GET(request: NextRequest) {
           });
           if (!studentMatches) return false;
         }
+        if (Array.isArray(field.excludedStudentIds) && field.excludedStudentIds.length > 0) {
+          const sId = (student._id || student.id || "").toString().trim();
+          const regId = (student.registrationId || "").toString().trim().toUpperCase();
+          const email = (student.email || "").toString().trim().toLowerCase();
+          const isExcluded = field.excludedStudentIds.some((targetId: string) => {
+            const clean = (targetId || "").toString().trim();
+            return clean === sId || clean.toUpperCase() === regId || clean.toLowerCase() === email;
+          });
+          if (isExcluded) return false;
+        }
         return true;
       });
     });

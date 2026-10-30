@@ -8,10 +8,19 @@ function getDatabaseUrl(): string | undefined {
   let url = process.env.DATABASE_URL;
   if (!url) return undefined;
 
-  // Optimize connection pool limits and timeouts if not explicitly set
+  const configuredLimit = Number.parseInt(process.env.DATABASE_CONNECTION_LIMIT || "10", 10);
+  const connectionLimit = Number.isFinite(configuredLimit)
+    ? Math.max(1, Math.min(configuredLimit, 30))
+    : 10;
+  const configuredPoolTimeout = Number.parseInt(process.env.DATABASE_POOL_TIMEOUT || "20", 10);
+  const poolTimeout = Number.isFinite(configuredPoolTimeout)
+    ? Math.max(1, Math.min(configuredPoolTimeout, 120))
+    : 20;
+
+  // Keep the pool configurable for deployments with different database limits.
   if (!url.includes('connection_limit=')) {
     const sep = url.includes('?') ? '&' : '?';
-    url = `${url}${sep}connection_limit=5&pool_timeout=20`;
+    url = `${url}${sep}connection_limit=${connectionLimit}&pool_timeout=${poolTimeout}`;
   }
   process.env.DATABASE_URL = url;
   return url;

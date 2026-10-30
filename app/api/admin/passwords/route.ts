@@ -2,14 +2,25 @@ export const dynamic = "force-dynamic";
 
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/dbAdapter";
+import { getAuthSession, isPrivilegedSession, isSuperAdminSession, unauthorizedJson } from "@/lib/authSession";
 
 export async function PATCH(request: NextRequest) {
     try {
+        const session = getAuthSession(request);
+        if (!isPrivilegedSession(session)) {
+            return unauthorizedJson("Administrator access required", 403);
+        }
+
         const body = await request.json();
         const { type, newPassword, deanPhone, superAdminPhone } = body;
 
         if (!type || (!newPassword && !deanPhone && !superAdminPhone)) {
             return NextResponse.json({ error: "Type and credentials are required" }, { status: 400 });
+        }
+
+        // Only superadmin may change developer/superadmin credentials
+        if ((type === "superadmin" || type === "developer") && !isSuperAdminSession(request)) {
+            return unauthorizedJson("Super admin access required", 403);
         }
 
         const updateData: any = {};

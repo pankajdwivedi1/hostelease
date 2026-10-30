@@ -18,6 +18,38 @@ export async function OPTIONS() {
   });
 }
 
+function isAllowedImageUrl(raw: string): boolean {
+  let parsed: URL;
+  try {
+    parsed = new URL(raw);
+  } catch {
+    return false;
+  }
+  if (parsed.protocol !== "https:") return false;
+
+  const host = parsed.hostname.toLowerCase();
+  const allowHosts = new Set<string>();
+
+  const addFromBase = (base?: string | null) => {
+    if (!base) return;
+    try {
+      allowHosts.add(new URL(base).hostname.toLowerCase());
+    } catch { /* ignore */ }
+  };
+
+  addFromBase(process.env.R2_PHOTOS_PUBLIC_URL);
+  addFromBase(process.env.NEXT_PUBLIC_R2_PHOTOS_PUBLIC_URL);
+  addFromBase(process.env.R2_PUBLIC_URL);
+  addFromBase(process.env.NEXT_PUBLIC_R2_PUBLIC_URL);
+  // Known public photo CDN used by this app (hostname only; no secrets)
+  allowHosts.add("pub-754ab0d29b3a43b69d79a461c85d3056.r2.dev");
+
+  if (allowHosts.has(host)) return true;
+  // Allow other Cloudflare R2 public buckets only (not arbitrary SSRF targets)
+  if (host.endsWith(".r2.dev") || host.endsWith(".r2.cloudflarestorage.com")) return true;
+  return false;
+}
+
 export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);
@@ -25,6 +57,10 @@ export async function GET(request: NextRequest) {
 
     if (!imageUrl) {
       return new NextResponse("Missing url parameter", { status: 400 });
+    }
+
+    if (!isAllowedImageUrl(imageUrl)) {
+      return new NextResponse("URL host is not allowed", { status: 403 });
     }
 
     // 1. Check in-memory RAM cache first (0ms latency response)

@@ -303,7 +303,7 @@ export async function GET(request: NextRequest) {
 
     const limitParam = searchParams.get("limit");
     const light = searchParams.get("light") === "true";
-    const options: any = { populate: studentId ? false : !light };
+    const options: any = { populate: true };
     if (limitParam) {
       options.limit = parseInt(limitParam, 10);
     }

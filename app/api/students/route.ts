@@ -6,6 +6,8 @@ import { jsonWithEtag } from "@/lib/etag";
 import { validators, validateStudentRegistration } from "@/lib/validation";
 import { getCurrentTenantId, getTenantById, assertTenantActive } from "@/lib/tenant";
 import { writeHostelActivityLog } from "@/lib/auditLog";
+import { Prisma } from "@prisma/client";
+import { getAuthSession, isPrivilegedSession, unauthorizedJson } from "@/lib/authSession";
 
 export async function POST(request: NextRequest) {
   try {
@@ -518,6 +520,15 @@ export async function GET(request: NextRequest) {
       if (cleaned.length === 12 && cleaned.startsWith("91")) {
         cleaned = cleaned.substring(2);
       }
+
+      const parentSession = getAuthSession(request);
+      const parentSessionPhone = (parentSession?.phone || "").replace(/\D/g, "").slice(-10);
+      const parentAllowed =
+        isPrivilegedSession(parentSession) ||
+        (parentSession?.role === "parent" && parentSessionPhone === cleaned.slice(-10));
+      if (!parentAllowed) {
+        return unauthorizedJson("Parent or staff authentication required", 403);
+      }
       
       const tenantId = await getCurrentTenantId();
       if (!tenantId) {
@@ -564,17 +575,28 @@ export async function GET(request: NextRequest) {
     if (firebaseUID || email) {
       let student = await (db.students as any).findOneFast({ firebaseUID: firebaseUID || undefined, email: email || undefined }, { minimal });
 
-      // ⚡ AUTOMATIC REAL UID UPGRADE & LINKING:
-      // If student is found by email and incoming firebaseUID is different or placeholder,
-      // immediately upgrade & replace the old/dummy UID with the official real Google UID!
+      // ⚡ AUTOMATIC REAL UID UPGRADE & LINKING (safe):
+      // Only allow unauthenticated upgrade when existing UID is empty/placeholder.
+      // Never let an attacker overwrite a real UID just by knowing the email.
       if (student && firebaseUID && firebaseUID.trim() && student.firebaseUID !== firebaseUID.trim()) {
-        const targetId = student.id || student._id;
-        console.log(`🔗 [AUTO_UPGRADE_UID] Upgrading student ${student.name} (${student.email}) from "${student.firebaseUID}" to official UID "${firebaseUID.trim()}"`);
-        try {
-          await db.students.update(targetId, { firebaseUID: firebaseUID.trim() });
-          student.firebaseUID = firebaseUID.trim();
-        } catch (linkErr) {
-          console.warn("⚠️ [AUTO_UPGRADE_UID] Failed to update UID in DB:", linkErr);
+        const existingUid = String(student.firebaseUID || "").trim();
+        const isPlaceholder = !existingUid || existingUid.startsWith("pending_") || existingUid.startsWith("temp_") || existingUid === "undefined";
+        const session = getAuthSession(request);
+        const mayRelink =
+          isPlaceholder ||
+          isPrivilegedSession(session) ||
+          (session?.role === "student" && session.uid === firebaseUID.trim());
+        if (mayRelink) {
+          const targetId = student.id || student._id;
+          console.log(`🔗 [AUTO_UPGRADE_UID] Upgrading student ${student.name} (${student.email}) from "${student.firebaseUID}" to official UID "${firebaseUID.trim()}"`);
+          try {
+            await db.students.update(targetId, { firebaseUID: firebaseUID.trim() });
+            student.firebaseUID = firebaseUID.trim();
+          } catch (linkErr) {
+            console.warn("⚠️ [AUTO_UPGRADE_UID] Failed to update UID in DB:", linkErr);
+          }
+        } else {
+          console.warn(`⛔ [AUTO_UPGRADE_UID] Blocked UID overwrite for ${student.email}: existing="${existingUid}" attempted="${firebaseUID.trim()}"`);
         }
       }
 
@@ -695,6 +717,20 @@ export async function GET(request: NextRequest) {
     const semester = searchParams.get("semester");
     const branch = searchParams.get("branch");
     const section = searchParams.get("section");
+    const requestedLimit = Number.parseInt(searchParams.get("limit") || "", 10);
+    const requestedOffset = Number.parseInt(searchParams.get("offset") || "", 10);
+    const listLimit = Number.isFinite(requestedLimit) && requestedLimit > 0
+      ? Math.min(requestedLimit, 1000)
+      : undefined;
+    const listOffset = Number.isFinite(requestedOffset) && requestedOffset >= 0
+      ? requestedOffset
+      : undefined;
+
+    // Roster listing requires staff session (prevents unauthenticated PII dump)
+    const listSession = getAuthSession(request);
+    if (!listSession || (!isPrivilegedSession(listSession) && listSession.role !== "warden")) {
+      return unauthorizedJson("Staff access required to list students", 403);
+    }
 
     // ⚡ BANDWIDTH FIX: Default to lightweight metadata for student lists to eliminate massive Base64 transfer
     const isFullRequested = searchParams.get("full") === "true";
@@ -702,8 +738,30 @@ export async function GET(request: NextRequest) {
 
     const students = await db.students.list(
       { search, hostelName, collegeName, semester, branch, section },
-      { light }
+      { light, includeBiometrics: !light, limit: listLimit, offset: listOffset }
     );
+
+    if (light && students.length > 0) {
+      try {
+        const { prisma } = await import("@/lib/prisma");
+        const studentIds = students.map((student: any) => student.id || student._id).filter(Boolean);
+        const vectorRows = await prisma.$queryRaw<Array<{ id: string }>>`
+          SELECT "_id" AS id
+          FROM "students"
+          WHERE "_id" IN (${Prisma.join(studentIds)})
+            AND cardinality("face_descriptor") > 0
+        `;
+        const studentsWithVectors = new Set(vectorRows.map((row) => row.id));
+        students.forEach((student: any) => {
+          student.hasVector = studentsWithVectors.has(student.id || student._id);
+        });
+      } catch (vectorStatusError) {
+        console.warn("Could not load student vector status for list:", vectorStatusError);
+        students.forEach((student: any) => {
+          student.hasVector = false;
+        });
+      }
+    }
 
     // ⚡ SYNC STATUS: Ensure 'out' status matches open gate passes for everyone in the list
     let openPasses: any[] = [];
@@ -715,10 +773,11 @@ export async function GET(request: NextRequest) {
 
       // ⚡ CONCURRENT EXECUTION: Fetch open passes and active student permissions in parallel
       const [gatePassResult, permsList] = await Promise.all([
-        db.gatePasses.list({ 
+        studentIds.length > 0 ? db.gatePasses.list({
           status: "out",
+          studentIds,
           ...(hostelName && hostelName !== "all" ? { hostelName } : {})
-        }, { limit: 500, populate: false, skipCount: true }),
+        }, { limit: studentIds.length, populate: false, skipCount: true }) : Promise.resolve({ records: [] }),
         studentIds.length > 0 ? (async () => {
           try {
             const { prisma } = await import("@/lib/prisma");

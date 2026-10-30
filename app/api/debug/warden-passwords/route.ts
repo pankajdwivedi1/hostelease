@@ -2,10 +2,15 @@ export const dynamic = "force-dynamic";
 
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/dbAdapter";
+import { isSuperAdminSession, unauthorizedJson } from "@/lib/authSession";
 
-// Diagnostic endpoint to check hostel passwords
+// Diagnostic endpoint to check hostel passwords (superadmin only; never returns password values)
 export async function GET(request: NextRequest) {
     try {
+        if (!isSuperAdminSession(request)) {
+            return unauthorizedJson("Super admin access required", 403);
+        }
+
         const hostels = await db.hostels.getAll();
         const settings = await db.settings.get();
         const globalPasswordConfigured = !!(settings?.wardenPassword || process.env.WARDEN_LOGIN_PASSWORD);

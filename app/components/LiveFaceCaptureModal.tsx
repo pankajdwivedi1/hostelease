@@ -57,6 +57,8 @@ export default function LiveFaceCaptureModal({
     const [capturedImage, setCapturedImage] = useState<string | null>(null);
     const [isProcessing, setIsProcessing] = useState(false);
     const [isSaving, setIsSaving] = useState(false);
+    const [processingStep, setProcessingStep] = useState<string>("Photo captured! Initializing AI...");
+    const [showShutterFlash, setShowShutterFlash] = useState(false);
     const [faceError, setFaceError] = useState<string | null>(null);
     const [isFaceInFrame, setIsFaceInFrame] = useState(false);
 
@@ -200,15 +202,16 @@ export default function LiveFaceCaptureModal({
         try {
             setIsProcessing(true);
             setFaceError(null);
+            setProcessingStep("Step 1/3: Analyzing face & sharpness...");
 
             // 1. Yield to let React render the scanning feedback state
-            await new Promise(resolve => setTimeout(resolve, 100));
+            await new Promise(resolve => setTimeout(resolve, 60));
 
             // 2. Load static image into memory to bypass DOM canvas lifecycle limitations on mobile
             const img = await faceMatching.loadImage(dataUrl);
 
-            // 3. Downscale the image while preserving aspect ratio (optimal 640px for neural net)
-            const maxDim = 640;
+            // 3. Downscale the image while preserving aspect ratio (optimal 520px for high-speed neural net inference on mobile)
+            const maxDim = 520;
             let aiWidth = img.width;
             let aiHeight = img.height;
             if (aiWidth > maxDim || aiHeight > maxDim) {
@@ -233,7 +236,7 @@ export default function LiveFaceCaptureModal({
 
             // Ensure SSD models are loaded
             await loadAIModels();
-            await new Promise(resolve => setTimeout(resolve, 100)); // Yield to event loop
+            await new Promise(resolve => setTimeout(resolve, 50)); // Yield to event loop
 
             // 🛡️ 1. Photo Quality & Screen Recapture Check
             const quality = faceMatching.assessPhotoQuality(aiCanvas);
@@ -244,11 +247,12 @@ export default function LiveFaceCaptureModal({
             }
 
             // 🛡️ 2. Multi-tier SSD Face Vector Extraction
+            setProcessingStep("Step 1/3: Extracting 128-D biometric vector...");
             let descriptor = await faceMatching.detectFace(aiCanvas, true, true);
             if (!descriptor || !descriptor.descriptor) {
                 descriptor = await faceMatching.detectFace(img, true, true);
             }
-            await new Promise(resolve => setTimeout(resolve, 100)); // Yield to event loop
+            await new Promise(resolve => setTimeout(resolve, 50)); // Yield to event loop
 
             if (!descriptor || !descriptor.descriptor) {
                 if (quality.isBlurry) {
@@ -314,6 +318,7 @@ export default function LiveFaceCaptureModal({
             }
 
             // 🛡️ 5. BANK-GRADE LIVE SERVER NEURAL ANTI-SPOOFING (MiniFASNetV2 ONNX Runtime)
+            setProcessingStep("Step 2/3: Verifying live physical skin...");
             try {
                 const liveRes = await fetch("/api/biometrics/verify-live", {
                     method: "POST",
@@ -340,7 +345,9 @@ export default function LiveFaceCaptureModal({
             const descriptorArray: number[] = Array.from(descriptor.descriptor as Float32Array | number[]);
 
             // 4. Save to server
+            setIsProcessing(false);
             setIsSaving(true);
+            setProcessingStep("Step 3/3: Saving profile & unlocking dashboard...");
             const saveRes = await fetch("/api/student/retake-photo", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
@@ -391,6 +398,17 @@ export default function LiveFaceCaptureModal({
     // Instant Photo Capture (5ms reaction time matching Onboarding)
     const handleCapture = async () => {
         if (!videoRef.current || isProcessing || isSaving) return;
+
+        // ⚡ Haptic feedback on supported mobile devices
+        try {
+            if (typeof navigator !== 'undefined' && 'vibrate' in navigator) {
+                navigator.vibrate([40, 30, 40]);
+            }
+        } catch (_) {}
+
+        // ⚡ Immediate visual camera flash feedback (150ms)
+        setShowShutterFlash(true);
+        setTimeout(() => setShowShutterFlash(false), 160);
 
         const video = videoRef.current;
         const width = video.videoWidth || 640;
@@ -513,23 +531,50 @@ export default function LiveFaceCaptureModal({
                                         className="w-full h-full object-cover"
                                     />
 
-                                    {/* Processing Overlay */}
+                                    {/* Camera Shutter Flash Effect */}
+                                    {showShutterFlash && (
+                                        <div className="absolute inset-0 bg-white z-30 pointer-events-none animate-out fade-out duration-150" />
+                                    )}
+
+                                    {/* Processing Overlay with Clear Dynamic Stage Spinner */}
                                     {isProcessing && (
-                                        <div className="absolute inset-0 bg-slate-950/80 backdrop-blur-sm flex flex-col items-center justify-center gap-2.5 z-20">
-                                            <div className="w-9 h-9 border-3 border-emerald-400 border-t-transparent rounded-full animate-spin"></div>
-                                            <p className="text-xs font-black text-white uppercase tracking-widest animate-pulse">
-                                                Extracting 128-D Biometric Vector...
-                                            </p>
+                                        <div className="absolute inset-0 bg-slate-950/85 backdrop-blur-md flex flex-col items-center justify-center p-6 gap-3 z-20 animate-in fade-in">
+                                            <div className="relative">
+                                                <div className="w-12 h-12 border-3 border-emerald-400 border-t-transparent rounded-full animate-spin"></div>
+                                                <div className="absolute inset-0 flex items-center justify-center text-xs font-black text-emerald-400">⚡</div>
+                                            </div>
+                                            <div className="text-center space-y-1">
+                                                <p className="text-xs font-black text-white uppercase tracking-wider">
+                                                    {processingStep}
+                                                </p>
+                                                <p className="text-[10px] font-bold text-slate-400">
+                                                    Photo captured! Generating biometric descriptor...
+                                                </p>
+                                            </div>
+                                            <div className="w-44 bg-slate-800 rounded-full h-1.5 overflow-hidden mt-1">
+                                                <div className="bg-gradient-to-r from-emerald-500 to-indigo-500 h-full w-2/3 animate-pulse rounded-full"></div>
+                                            </div>
                                         </div>
                                     )}
 
                                     {/* Saving State Overlay */}
                                     {isSaving && (
-                                        <div className="absolute inset-0 bg-slate-950/85 backdrop-blur-sm flex flex-col items-center justify-center gap-2.5 z-20">
-                                            <div className="w-9 h-9 border-3 border-indigo-400 border-t-transparent rounded-full animate-spin"></div>
-                                            <p className="text-xs font-black text-white uppercase tracking-widest animate-pulse">
-                                                Saving Profile & Unlocking...
-                                            </p>
+                                        <div className="absolute inset-0 bg-slate-950/85 backdrop-blur-md flex flex-col items-center justify-center p-6 gap-3 z-20 animate-in fade-in">
+                                            <div className="relative">
+                                                <div className="w-12 h-12 border-3 border-indigo-400 border-t-transparent rounded-full animate-spin"></div>
+                                                <div className="absolute inset-0 flex items-center justify-center text-xs font-black text-indigo-400">☁️</div>
+                                            </div>
+                                            <div className="text-center space-y-1">
+                                                <p className="text-xs font-black text-white uppercase tracking-wider">
+                                                    {processingStep}
+                                                </p>
+                                                <p className="text-[10px] font-bold text-slate-400">
+                                                    Saving profile to cloud & unlocking...
+                                                </p>
+                                            </div>
+                                            <div className="w-44 bg-slate-800 rounded-full h-1.5 overflow-hidden mt-1">
+                                                <div className="bg-gradient-to-r from-indigo-500 to-emerald-500 h-full w-full animate-pulse rounded-full"></div>
+                                            </div>
                                         </div>
                                     )}
 
@@ -593,6 +638,11 @@ export default function LiveFaceCaptureModal({
                                 </svg>
                                 <span>Capture Live Selfie</span>
                             </button>
+                        ) : (isProcessing || isSaving) ? (
+                            <div className="w-full py-3.5 bg-indigo-50 border border-indigo-200 text-indigo-700 rounded-2xl text-xs font-black uppercase tracking-wider shadow-sm flex items-center justify-center gap-2">
+                                <div className="w-4 h-4 border-2 border-indigo-600 border-t-transparent rounded-full animate-spin"></div>
+                                <span>{processingStep}</span>
+                            </div>
                         ) : faceError ? (
                             <button
                                 onClick={handleRetry}

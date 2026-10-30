@@ -1,11 +1,16 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/dbAdapter";
 import * as XLSX from "xlsx";
+import { isSuperAdminSession, unauthorizedJson } from "@/lib/authSession";
 
 export const dynamic = "force-dynamic";
 
 export async function GET(request: NextRequest) {
     try {
+        if (!isSuperAdminSession(request)) {
+            return unauthorizedJson("Super admin access required", 403);
+        }
+
         const { searchParams } = new URL(request.url);
         const format = searchParams.get("format") || "json";
 

@@ -1,16 +1,20 @@
 export const dynamic = "force-dynamic";
 
-
-import { NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/dbAdapter';
+import { isSuperAdminSession, unauthorizedJson } from '@/lib/authSession';
 
 /**
- * DATABASE TEST API
+ * DATABASE TEST API (superadmin only)
  * -----------------
  * This endpoint allows you to test data retrieval from EITHER database
  * by passing a query parameter: ?source=SUPABASE or ?source=MONGODB
  */
-export async function GET(request: Request) {
+export async function GET(request: NextRequest) {
+    if (!isSuperAdminSession(request)) {
+        return unauthorizedJson("Super admin access required", 403);
+    }
+
     const { searchParams } = new URL(request.url);
     const source = searchParams.get('source');
 

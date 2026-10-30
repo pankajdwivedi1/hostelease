@@ -1,11 +1,16 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/dbAdapter";
+import { isSuperAdminSession, unauthorizedJson } from "@/lib/authSession";
 
 export const dynamic = "force-dynamic";
 
-// Debug endpoint to check today's attendance in database
+// Debug endpoint to check today's attendance in database (superadmin only)
 export async function GET(request: NextRequest) {
     try {
+        if (!isSuperAdminSession(request)) {
+            return unauthorizedJson("Super admin access required", 403);
+        }
+
         // Get today's date in IST format (YYYY-MM-DD)
         const today = new Date().toLocaleDateString("en-IN", {
             timeZone: "Asia/Kolkata",

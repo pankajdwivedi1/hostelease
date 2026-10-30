@@ -1,7 +1,11 @@
 const mongoose = require('mongoose');
 
 async function test() {
-    const MONGO_URL = "mongodb+srv://pankaj:pankajdwivedi81@cluster0.pqvmg4l.mongodb.net/?retryWrites=true&w=majority";
+    const MONGO_URL = process.env.MONGODB_URL || process.env.DATABASE_URL;
+    if (!MONGO_URL) {
+        console.error('Set MONGODB_URL or DATABASE_URL in the environment before running this script.');
+        process.exit(1);
+    }
     console.log('Connecting...');
     try {
         await mongoose.connect(MONGO_URL, {
@@ -14,11 +18,10 @@ async function test() {
 
         const collections = await mongoose.connection.db.listCollections().toArray();
         console.log('Collections:', collections.map(c => c.name));
-
         await mongoose.disconnect();
-        console.log('Disconnected');
-    } catch (error) {
-        console.error('Connection failed:', error.message);
+    } catch (err) {
+        console.error('Connection failed:', err.message);
+        process.exit(1);
     }
 }
 

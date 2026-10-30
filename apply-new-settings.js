@@ -1,7 +1,11 @@
 const { MongoClient } = require('mongodb');
 
 async function updateSettings() {
-    const url = 'mongodb+srv://pankaj:pankajdwivedi81@cluster0.pqvmg4l.mongodb.net/?appName=Cluster0';
+    const url = process.env.MONGODB_URL || process.env.DATABASE_URL;
+    if (!url) {
+        console.error('Set MONGODB_URL or DATABASE_URL in the environment before running this script.');
+        process.exit(1);
+    }
     const client = new MongoClient(url);
 
     try {

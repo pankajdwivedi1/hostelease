@@ -3,9 +3,15 @@ export const dynamic = "force-dynamic";
 import { NextRequest, NextResponse } from "next/server";
 import { adminAuth } from "@/lib/firebase-admin";
 import { db } from "@/lib/dbAdapter";
+import { getAuthSession, isPrivilegedSession, unauthorizedJson } from "@/lib/authSession";
 
 export async function POST(request: NextRequest) {
     try {
+        const session = getAuthSession(request);
+        if (!isPrivilegedSession(session)) {
+            return unauthorizedJson("Administrator access required", 403);
+        }
+
         const { studentIds } = await request.json();
 
         if (!Array.isArray(studentIds) || studentIds.length === 0) {

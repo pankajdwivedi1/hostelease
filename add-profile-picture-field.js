@@ -3,7 +3,11 @@
 
 const mongoose = require('mongoose');
 
-const MONGODB_URL = process.env.MONGODB_URL || 'mongodb+srv://pankaj:pankajdwivedi81@cluster0.pqvmg4l.mongodb.net/?retryWrites=true&w=majority';
+const MONGODB_URL = process.env.MONGODB_URL || process.env.DATABASE_URL;
+if (!MONGODB_URL) {
+    console.error('Set MONGODB_URL or DATABASE_URL in the environment before running this script.');
+    process.exit(1);
+}
 
 const AdminSettingsSchema = new mongoose.Schema({}, { strict: false });
 const AdminSettings = mongoose.model('AdminSettings', AdminSettingsSchema, 'adminsettings');

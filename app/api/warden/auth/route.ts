@@ -51,12 +51,14 @@ export async function POST(request: NextRequest) {
             }
 
             if (password.trim() === getpassPassword.trim()) {
-                return NextResponse.json({
+                const response = NextResponse.json({
                     success: true,
                     type: 'getpass',
                     hostelName: 'GATEPASS MONITOR',
                     authorizedHostels: []
                 }, { status: 200 });
+                setAuthSessionCookie(response, { role: "getpass" });
+                return response;
             } else {
                 return NextResponse.json(
                     { error: "Invalid authentication key for GATEPASS" },

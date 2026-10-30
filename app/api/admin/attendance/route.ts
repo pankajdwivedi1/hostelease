@@ -2,11 +2,16 @@ export const dynamic = "force-dynamic";
 
 import { NextResponse, NextRequest } from "next/server";
 import { db } from "@/lib/dbAdapter";
-import { cookies } from "next/headers";
 import { createCachedResponse } from "@/lib/cacheHelper";
+import { getAuthSession, isPrivilegedSession, unauthorizedJson } from "@/lib/authSession";
 
 export async function GET(request: NextRequest) {
     try {
+        const session = getAuthSession(request);
+        if (!session || (!isPrivilegedSession(session) && session.role !== "warden")) {
+            return unauthorizedJson("Staff access required", 403);
+        }
+
         const { searchParams } = new URL(request.url);
         const date = searchParams.get("date"); // Format: YYYY-MM-DD
         const startDate = searchParams.get("startDate");
@@ -44,8 +49,13 @@ export async function GET(request: NextRequest) {
     }
 }
 
-export async function POST(request: Request) {
+export async function POST(request: NextRequest) {
     try {
+        const session = getAuthSession(request);
+        if (!session || (!isPrivilegedSession(session) && session.role !== "warden")) {
+            return unauthorizedJson("Staff access required", 403);
+        }
+
         const body = await request.json();
         const { studentIds, markedBy, action, date } = body;
 
@@ -69,8 +79,7 @@ export async function POST(request: Request) {
             return NextResponse.json({ success: true, count: result.count });
         }
 
-        const cookieStore = await cookies();
-        const userType = cookieStore.get('userType')?.value || 'admin';
+        const userType = session.role === "warden" ? "warden" : "admin";
 
         const currentTenantId = await db.getTenantIdOrThrow();
         

@@ -106,9 +106,10 @@ export function middleware(request: NextRequest) {
         pathname.startsWith('/api/tenant/config');
 
     const isExpiredCookie = request.cookies.get('tenant-expired')?.value === 'true';
-    const isSuperAdmin = request.cookies.get('userType')?.value === 'superadmin';
+    // Do not trust client-set userType cookie for expiry bypass (spoofable).
+    // Super-admin tools use exempt routes under /api/super-admin and /api/developer/auth.
 
-    if (isExpiredCookie && !isSuperAdmin && !isExemptRoute && pathname.startsWith('/api/')) {
+    if (isExpiredCookie && !isExemptRoute && pathname.startsWith('/api/')) {
         return NextResponse.json(
             {
                 error: "College subscription has ended. Please contact your college administration to renew.",

@@ -2,9 +2,14 @@ export const dynamic = "force-dynamic";
 
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/dbAdapter";
+import { isSuperAdminSession, unauthorizedJson } from "@/lib/authSession";
 
 export async function POST(request: NextRequest) {
     try {
+        if (!isSuperAdminSession(request)) {
+            return unauthorizedJson("Super admin access required", 403);
+        }
+
         const source = await db.getSource();
         const adminSettings = await db.settings.get();
         let hostelPrefixMap = adminSettings?.hostelPrefixMap || [

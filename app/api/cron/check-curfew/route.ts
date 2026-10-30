@@ -7,6 +7,17 @@ export const dynamic = "force-dynamic";
 
 export async function GET(request: NextRequest) {
   try {
+    const cronSecret = (process.env.CRON_SECRET || "").trim();
+    if (cronSecret) {
+      const authHeader = request.headers.get("authorization") || "";
+      const provided =
+        request.headers.get("x-cron-secret") ||
+        (authHeader.toLowerCase().startsWith("bearer ") ? authHeader.slice(7).trim() : "");
+      if (provided !== cronSecret) {
+        return NextResponse.json({ error: "Unauthorized cron request" }, { status: 401 });
+      }
+    }
+
     // 1. Fetch Global Settings
     let settings: any = {};
     try {

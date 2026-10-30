@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useMemo } from "react";
 import { Badge } from "@/components/ui/badge";
 import { validateErpId } from "@/lib/erpValidation";
+import { showToast, showConfirm } from "@/lib/toast";
 
 interface EnforcedField {
   fieldId: string;
@@ -346,9 +347,11 @@ const FieldEnforcementComponent: React.FC<FieldEnforcementProps> = ({
   };
 
   const deactivateAllRules = async () => {
-    if (!confirm("Are you sure you want to deactivate all field enforcement rules for all hostels? Students will not be prompted on login.")) {
-      return;
-    }
+    const confirmed = await showConfirm(
+      "Are you sure you want to deactivate all field enforcement rules for all hostels? Students will not be prompted on login."
+    );
+    if (!confirmed) return;
+
     try {
       setLoading(true);
       const tenantParam = getTenantParam();
@@ -372,10 +375,66 @@ const FieldEnforcementComponent: React.FC<FieldEnforcementProps> = ({
       setSelectedHostels([]);
       setSelectedSemester("");
       setSelectedStudentIds([]);
+      showToast("All field enforcement rules have been deactivated successfully.", "success");
       setMessage("✓ All field enforcement rules have been deactivated successfully.");
       await loadEnforcementRules();
     } catch (err: any) {
+      showToast("Failed to deactivate rules: " + err.message, "error");
       setMessage("Failed to deactivate rules: " + err.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const deactivateSelectedStudents = async () => {
+    if (selectedStudentIds.length === 0) {
+      showToast("Please select at least one student to deactivate enforcement.", "warning");
+      setMessage("Please select at least one student to deactivate enforcement.");
+      return;
+    }
+
+    const count = selectedStudentIds.length;
+    const confirmed = await showConfirm(
+      `Are you sure you want to deactivate field enforcement for ${count} selected student${count > 1 ? "s" : ""}? They will no longer be prompted or blocked on login.`
+    );
+    if (!confirmed) return;
+
+    try {
+      setLoading(true);
+      const tenantParam = getTenantParam();
+
+      const targetHostels = selectedHostels.length > 0
+        ? selectedHostels
+        : Array.from(new Set(
+            allStudents
+              .filter((st: any) => selectedStudentIds.includes((st._id || st.id || "").toString()))
+              .map((st: any) => st.hostelName)
+              .filter(Boolean)
+          ));
+
+      const response = await fetch(`/api/admin/field-enforcement${tenantParam}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "deactivateStudents",
+          hostelNames: targetHostels.length > 0 ? targetHostels : hostels,
+          studentIds: selectedStudentIds,
+        }),
+      });
+
+      const data = await response.json();
+      if (!response.ok || !data.success) {
+        throw new Error(data.error || "Failed to deactivate selected students");
+      }
+
+      setSelectedStudentIds([]);
+      showToast(`Field enforcement deactivated for ${count} student${count > 1 ? "s" : ""} successfully.`, "success");
+      setMessage(`✓ Field enforcement deactivated for ${count} student${count > 1 ? "s" : ""} successfully.`);
+      await loadEnforcementRules();
+    } catch (err: any) {
+      console.error("Error deactivating selected students:", err);
+      showToast("Failed to deactivate selected students: " + err.message, "error");
+      setMessage("Failed to deactivate selected students: " + err.message);
     } finally {
       setLoading(false);
     }
@@ -466,10 +525,12 @@ const FieldEnforcementComponent: React.FC<FieldEnforcementProps> = ({
           ? `for ${selectedSemester === "all" ? "all semesters" : `Semester ${selectedSemester}`}`
           : "hostel-wide";
 
+      showToast(`Field enforcement rules applied to ${selectedHostels.length} hostel(s) ${studentScopeText}`, "success");
       setMessage(`✓ Field enforcement rules applied to ${selectedHostels.length} hostel(s) ${studentScopeText}`);
-    } catch (error) {
+    } catch (error: any) {
       console.error("Error applying rules:", error);
-      setMessage("Error applying rules");
+      showToast(error.message || "Error applying rules", "error");
+      setMessage("Error applying rules: " + (error.message || ""));
     } finally {
       setLoading(false);
     }
@@ -566,17 +627,29 @@ const FieldEnforcementComponent: React.FC<FieldEnforcementProps> = ({
 
           {/* Step 1: Hostel & Semester Selection */}
           <div className="bg-white rounded-lg sm:rounded-xl p-3 sm:p-5 border border-slate-200">
-            <div className="flex items-center justify-between gap-2 mb-2.5 sm:mb-3.5">
+            <div className="flex items-center justify-between gap-2 mb-2.5 sm:mb-3.5 flex-wrap">
               <h3 className="text-[10px] sm:text-xs font-bold text-slate-900">
                 STEP 1: SELECT HOSTELS & SEMESTER
               </h3>
-              <button
-                onClick={deactivateAllRules}
-                disabled={loading}
-                className="px-2 py-0.5 sm:px-2.5 sm:py-1 bg-red-50 text-red-600 hover:bg-red-100 border border-red-200 rounded-md sm:rounded-lg text-[8px] sm:text-[10px] font-bold transition flex items-center gap-1"
-              >
-                🚫 Deactivate All Enforcement
-              </button>
+              <div className="flex items-center gap-1.5 flex-wrap">
+                {selectedStudentIds.length > 0 && (
+                  <button
+                    onClick={deactivateSelectedStudents}
+                    disabled={loading}
+                    className="px-2 py-0.5 sm:px-2.5 sm:py-1 bg-amber-500 hover:bg-amber-600 active:scale-95 text-white rounded-md sm:rounded-lg text-[8px] sm:text-[10px] font-bold transition flex items-center gap-1 shadow-xs animate-in fade-in"
+                    title={`Deactivate enforcement for only the ${selectedStudentIds.length} checked student(s)`}
+                  >
+                    <span>🚫 Deactivate Selected ({selectedStudentIds.length})</span>
+                  </button>
+                )}
+                <button
+                  onClick={deactivateAllRules}
+                  disabled={loading}
+                  className="px-2 py-0.5 sm:px-2.5 sm:py-1 bg-red-50 text-red-600 hover:bg-red-100 border border-red-200 rounded-md sm:rounded-lg text-[8px] sm:text-[10px] font-bold transition flex items-center gap-1"
+                >
+                  🚫 Deactivate All Enforcement
+                </button>
+              </div>
             </div>
 
             {/* Controls Bar: Hostel Dropdown + Semester Dropdown side-by-side on mobile & desktop */}
@@ -713,6 +786,18 @@ const FieldEnforcementComponent: React.FC<FieldEnforcementProps> = ({
                       >
                         <span>⚠️</span>
                         <span>Select Invalid ERP ({invalidErpStudentIds.length})</span>
+                      </button>
+                    )}
+                    {selectedStudentIds.length > 0 && (
+                      <button
+                        type="button"
+                        onClick={deactivateSelectedStudents}
+                        disabled={loading}
+                        className="px-2.5 py-1 bg-amber-500 hover:bg-amber-600 active:scale-95 text-white rounded-md text-[9px] sm:text-[10px] font-bold transition flex items-center gap-1 shadow-xs animate-in fade-in"
+                        title={`Deactivate enforcement for only the ${selectedStudentIds.length} checked student(s)`}
+                      >
+                        <span>🚫</span>
+                        <span>Deactivate Selected ({selectedStudentIds.length})</span>
                       </button>
                     )}
                     <span className="px-2.5 py-1 bg-indigo-600 text-white rounded-md text-[9px] sm:text-[10px] font-bold shadow-xs">

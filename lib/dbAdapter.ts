@@ -1148,7 +1148,7 @@ export const db = {
                 tenantId: true,
                 createdAt: true,
                 updatedAt: true,
-                faceDescriptor: true,
+                ...(options.includeBiometrics ? { faceDescriptor: true } : {}),
             };
 
 
@@ -2092,6 +2092,8 @@ export const db = {
             // ⚡ DIRECT INDEXED SEEK: Use direct indexed columns on gate_passes instead of heavy OR joins
             if (filter.studentId) {
                 whereClause.studentId = filter.studentId;
+            } else if (Array.isArray(filter.studentIds) && filter.studentIds.length > 0) {
+                whereClause.studentId = { in: filter.studentIds.map(String) };
             } else if (filter.registrationId) {
                 whereClause.registrationId = { equals: filter.registrationId, mode: 'insensitive' };
             } else if (filter.firebaseUID) {

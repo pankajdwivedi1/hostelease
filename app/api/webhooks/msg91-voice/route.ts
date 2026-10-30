@@ -5,6 +5,17 @@ export const dynamic = "force-dynamic";
 
 export async function POST(request: NextRequest) {
   try {
+    const webhookSecret = (process.env.MSG91_WEBHOOK_SECRET || "").trim();
+    if (webhookSecret) {
+      const provided =
+        request.headers.get("x-webhook-secret") ||
+        request.headers.get("x-msg91-secret") ||
+        "";
+      if (provided !== webhookSecret) {
+        return NextResponse.json({ error: "Unauthorized webhook" }, { status: 401 });
+      }
+    }
+
     const body = await request.json();
     const { status, phone, leaveId } = body;
 

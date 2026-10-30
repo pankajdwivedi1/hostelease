@@ -1231,9 +1231,9 @@ export default function SuperAdminDashboard() {
                 setShowAddModal(false);
                 setRegistrationSuccessData({
                     ...data.tenant,
-                    defaultAdminPass: process.env.NEXT_PUBLIC_ADMIN_LOGIN_PASSWORD || null,
-                    defaultDevPass: process.env.NEXT_PUBLIC_DEVELOPER_LOGIN_PASSWORD || null,
-                    note: "Set the login credentials in the environment before production use."
+                    defaultAdminPass: data.defaultAdminPass || null,
+                    defaultDevPass: data.defaultDevPass || null,
+                    note: "Set ADMIN_LOGIN_PASSWORD / DEVELOPER_LOGIN_PASSWORD in the server environment (never NEXT_PUBLIC_*)."
                 });
                 setNewTenant({ name: "", slug: "", adminEmail: "", contactName: "", contactPhone: "", subscriptionStatus: "trial", primaryColor: "#3b82f6" });
             } else {

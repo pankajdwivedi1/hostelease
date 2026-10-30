@@ -2351,6 +2351,7 @@ export default function AdminDashboard({
   const [deanNotifications, setDeanNotifications] = useState(true);
   const [parentNotifications, setParentNotifications] = useState(true);
   const [studentNotifications, setStudentNotifications] = useState(true);
+  const [enableVideoVoiceCall, setEnableVideoVoiceCall] = useState(true);
   const [selectedPermissionIds, setSelectedPermissionIds] = useState<string[]>([]);
   const [isDeletingPermissions, setIsDeletingPermissions] = useState(false);
   const [isHidingPermissions, setIsHidingPermissions] = useState(false);
@@ -3855,6 +3856,7 @@ export default function AdminDashboard({
           if (settingsData.deanNotifications !== undefined) setDeanNotifications(settingsData.deanNotifications);
           if (settingsData.parentNotifications !== undefined) setParentNotifications(settingsData.parentNotifications);
           if (settingsData.studentNotifications !== undefined) setStudentNotifications(settingsData.studentNotifications);
+          if (settingsData.enableVideoVoiceCall !== undefined) setEnableVideoVoiceCall(settingsData.enableVideoVoiceCall !== false);
           if (settingsData.leaveApprovalMethod) setLeaveApprovalMethod(settingsData.leaveApprovalMethod);
           if (settingsData.wifiWhitelist) setWifiWhitelist(settingsData.wifiWhitelist);
           if (settingsData.enableManualAttendance !== undefined) setEnableManualAttendance(settingsData.enableManualAttendance);
@@ -3933,6 +3935,7 @@ export default function AdminDashboard({
       deanNotifications: setDeanNotifications,
       parentNotifications: setParentNotifications,
       studentNotifications: setStudentNotifications,
+      enableVideoVoiceCall: setEnableVideoVoiceCall,
     };
     if (setterMap[key]) setterMap[key](value);
 
@@ -6139,7 +6142,11 @@ export default function AdminDashboard({
           url.searchParams.set("hostelName", activeHostelFilter);
       }
 
-      const response = await fetch(url.toString(), { cache: "no-store" });
+      const userTypeHeader = (typeof window !== "undefined" ? localStorage.getItem("userType") : null) || "admin";
+      const response = await fetch(url.toString(), {
+        cache: "no-store",
+        headers: { "x-user-type": userTypeHeader },
+      });
       const data = await response.json();
 
       // Handle both success and error responses
@@ -6424,28 +6431,33 @@ export default function AdminDashboard({
 
   const handleToggleProfileLock = async (studentId: string, currentStatus: boolean) => {
     try {
+      const userTypeHeader = (typeof window !== "undefined" ? localStorage.getItem("userType") : null) || "admin";
       const response = await fetch(`/api/students/${studentId}`, {
         method: "PATCH",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          "x-user-type": userTypeHeader,
+        },
         body: JSON.stringify({ isProfileLocked: !currentStatus }),
       });
 
-      if (!response.ok) throw new Error("Failed to update lock status");
+      const data = await response.json().catch(() => null);
 
-      const data = await response.json();
-      if (data.success) {
-        // Update local state
-        setStudents(prev => prev.map(s => s.id === studentId ? { ...s, isProfileLocked: !currentStatus } : s));
-        if (selectedStudent && selectedStudent.id === studentId) {
-          setSelectedStudent({ ...selectedStudent, isProfileLocked: !currentStatus });
-        }
-        alert(`Profile ${!currentStatus ? 'Locked' : 'Unlocked'} successfully!`);
-        // 🔄 REFRESH CACHE
-        fetchStudents(true);
+      if (!response.ok || !data?.success) {
+        throw new Error(data?.error || "Failed to update lock status");
       }
-    } catch (error) {
+
+      // Update local state
+      setStudents(prev => prev.map(s => s.id === studentId ? { ...s, isProfileLocked: !currentStatus } : s));
+      if (selectedStudent && selectedStudent.id === studentId) {
+        setSelectedStudent({ ...selectedStudent, isProfileLocked: !currentStatus });
+      }
+      alert(`Profile ${!currentStatus ? 'Locked' : 'Unlocked'} successfully!`);
+      // 🔄 REFRESH CACHE
+      fetchStudents(true);
+    } catch (error: any) {
       console.error("Error toggling profile lock:", error);
-      alert("Failed to update profile lock status");
+      alert(error.message || "Failed to update profile lock status");
     }
   };
 
@@ -8502,17 +8514,21 @@ export default function AdminDashboard({
   const handleLockStudentProfile = async (studentId: string, lock: boolean) => {
     if (!await showConfirm(`Are you sure you want to ${lock ? "lock" : "unlock"} this student's profile?`)) return;
     try {
+      const userTypeHeader = (typeof window !== "undefined" ? localStorage.getItem("userType") : null) || "admin";
       const res = await fetch(`/api/students/${studentId}`, {
         method: "PATCH",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          "x-user-type": userTypeHeader,
+        },
         body: JSON.stringify({ isProfileLocked: lock })
       });
-      const data = await res.json();
-      if (data.success) {
+      const data = await res.json().catch(() => null);
+      if (data?.success) {
         showToast(`Profile ${lock ? "locked" : "unlocked"} successfully!`, "success");
         setStudents(prev => prev.map(s => s.id === studentId ? { ...s, isProfileLocked: lock } : s));
       } else {
-        showToast("Error updating profile lock: " + data.error, "error");
+        showToast("Error updating profile lock: " + (data?.error || "Request failed"), "error");
       }
     } catch (e: any) {
       showToast("Error locking profile: " + e.message, "error");
@@ -19521,6 +19537,30 @@ export default function AdminDashboard({
                               type="checkbox"
                               checked={studentNotifications}
                               onChange={(e) => handleToggleDeveloperSetting('studentNotifications', e.target.checked)}
+                              className="sr-only peer"
+                            />
+                            <div className="w-11 h-6 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-indigo-600"></div>
+                          </label>
+                        </div>
+
+                        {/* Enable Video / Voice Calling Master Switch */}
+                        <div className="bg-white p-4 rounded-2xl border-2 border-slate-100 flex items-center justify-between shadow-sm hover:border-indigo-100 transition-all">
+                          <div className="flex items-center gap-3">
+                            <div className="p-2 bg-purple-50 rounded-lg text-purple-600">
+                              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                              </svg>
+                            </div>
+                            <div>
+                              <h3 className="text-xs sm:text-sm font-bold text-slate-900">Enable video/voice call</h3>
+                              <p className="text-[10px] text-slate-500 font-medium mt-0.5">Master toggle to show or hide the "Make Call" button on all student dashboards</p>
+                            </div>
+                          </div>
+                          <label className="relative inline-flex items-center cursor-pointer">
+                            <input
+                              type="checkbox"
+                              checked={enableVideoVoiceCall}
+                              onChange={(e) => handleToggleDeveloperSetting('enableVideoVoiceCall', e.target.checked)}
                               className="sr-only peer"
                             />
                             <div className="w-11 h-6 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-indigo-600"></div>

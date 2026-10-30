@@ -32,19 +32,15 @@ export async function GET(
             );
         }
 
-        // Return public student information
+        // Return minimal public student information (no email/phone/room PII)
         return NextResponse.json({
             success: true,
             student: {
                 name: student.name,
-                email: student.email,
-                phoneNumber: student.phoneNumber,
                 collegeName: student.collegeName,
                 branch: student.branch,
                 section: student.section,
                 hostelName: student.hostelName,
-                roomNumber: student.roomNumber,
-                erpInformation: student.erpInformation,
                 registrationId: student.registrationId,
                 profilePicture: student.profilePicture,
                 studentStatus: student.studentStatus

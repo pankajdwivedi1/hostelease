@@ -1,12 +1,20 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/dbAdapter";
 import { createCachedResponse } from "@/lib/cacheHelper";
+import { getAuthSession, isPrivilegedSession, unauthorizedJson } from "@/lib/authSession";
 
 export const dynamic = "force-dynamic";
+
+function redactHostelSecrets(h: any, revealSecrets: boolean) {
+    if (revealSecrets) return h;
+    const { wardenPassword, ...rest } = h || {};
+    return { ...rest, wardenPassword: wardenPassword ? "••••••••" : "" };
+}
 
 // GET - Fetch all hostels
 export async function GET(request: NextRequest) {
     try {
+        const revealSecrets = isPrivilegedSession(getAuthSession(request));
         let hostels: any[] = [];
         try {
             hostels = await db.hostels.getAll();
@@ -26,10 +34,10 @@ export async function GET(request: NextRequest) {
         console.log("=== API GET HOSTELS ===", hostels.length);
         const mappedHostels = hostels.map((h: any) => {
             const n = (h.name || '').toUpperCase();
-            if (n.includes("GUEST") || n.includes("GHB")) {
-                return { ...h, name: "GHB Hostel" };
-            }
-            return h;
+            const normalized = (n.includes("GUEST") || n.includes("GHB"))
+                ? { ...h, name: "GHB Hostel" }
+                : h;
+            return redactHostelSecrets(normalized, revealSecrets);
         });
         return createCachedResponse({ success: true, hostels: mappedHostels }, request, 60);
     } catch (error: any) {
@@ -47,6 +55,10 @@ export async function GET(request: NextRequest) {
 // POST - Create or update hostel
 export async function POST(request: NextRequest) {
     try {
+        if (!isPrivilegedSession(getAuthSession(request))) {
+            return unauthorizedJson("Administrator access required", 403);
+        }
+
         const body = await request.json();
         const {
             id,
@@ -135,6 +147,10 @@ export async function POST(request: NextRequest) {
 // DELETE - Delete a hostel
 export async function DELETE(request: NextRequest) {
     try {
+        if (!isPrivilegedSession(getAuthSession(request))) {
+            return unauthorizedJson("Administrator access required", 403);
+        }
+
         const { searchParams } = new URL(request.url);
         const id = searchParams.get("id");
         if (!id) throw new Error("ID is required");

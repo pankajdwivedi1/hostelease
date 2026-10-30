@@ -28,6 +28,7 @@ import {
     isAndroidNativeApp,
 } from "@/lib/hardwarePlugin";
 import { isErpField, resolveCollegeAndErpPrefix, validateErpId } from "@/lib/erpValidation";
+import VideoCallButton from "@/components/video-call/VideoCallButton";
 
 interface Permission {
     _id: string;
@@ -474,6 +475,7 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
     const [isMarkingAttendance, setIsMarkingAttendance] = useState(false);
     const [isOnCampusWifi, setIsOnCampusWifi] = useState<boolean | null>(null); // null = checking, true = on campus wifi, false = not on wifi
     const [attendanceWindow, setAttendanceWindow] = useState({ start: "21:00", end: "22:00" });
+    const [enableVideoVoiceCall, setEnableVideoVoiceCall] = useState(true);
 
     // ⚡ REQUEST DEDUPLICATION & FOCUS THROTTLE REFS
     const settingsCacheRef = useRef<{ data: any; ts: number } | null>(null);
@@ -1730,6 +1732,7 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
                 if (data.overlapRadius !== undefined) setOverlapRadius(data.overlapRadius);
                 if (data.prioritizeAssignedHostel !== undefined) setPrioritizeAssignedHostel(data.prioritizeAssignedHostel);
                 if (data.enforceMandatoryPush !== undefined) setEnforceMandatoryPush(data.enforceMandatoryPush === true);
+                if (data.enableVideoVoiceCall !== undefined) setEnableVideoVoiceCall(data.enableVideoVoiceCall !== false);
                 return;
             }
 
@@ -1746,6 +1749,7 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
                 if (data.overlapRadius !== undefined) setOverlapRadius(data.overlapRadius);
                 if (data.prioritizeAssignedHostel !== undefined) setPrioritizeAssignedHostel(data.prioritizeAssignedHostel);
                 if (data.enforceMandatoryPush !== undefined) setEnforceMandatoryPush(data.enforceMandatoryPush === true);
+                if (data.enableVideoVoiceCall !== undefined) setEnableVideoVoiceCall(data.enableVideoVoiceCall !== false);
             }
         } catch (e) {
             console.warn("Silent fallback: Error fetching system settings:", e);
@@ -6045,6 +6049,13 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
                                 </button>
                             </div>
 
+                            {/* 📹 VIDEO CALL TO FRIEND (Controlled by Super Admin Setting) */}
+                            {enableVideoVoiceCall && (
+                                <div className="mt-2 sm:mt-3">
+                                    <VideoCallButton currentStudent={studentProfile} />
+                                </div>
+                            )}
+
 
                             {showFeeDetailsModal && (
                                 <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm animate-in fade-in">
@@ -7349,7 +7360,7 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
 
                             {/* ⚡ DYNAMIC FIELD ENFORCEMENT MODAL - Blocks all actions until fields are filled */}
                             {showFieldEnforcementModal && enforcedMissingFields.length > 0 && (
-                                <div className="fixed inset-0 z-[110] flex items-center justify-center p-4 bg-slate-900/95 backdrop-blur-xl animate-in fade-in zoom-in duration-300">
+                                <div className="fixed inset-0 z-[150] flex items-center justify-center p-4 bg-slate-900/95 backdrop-blur-xl animate-in fade-in zoom-in duration-300">
                                     <div className="bg-white rounded-3xl w-full max-w-md shadow-2xl overflow-hidden border border-white/20 max-h-[90vh] flex flex-col">
                                         {/* Header */}
                                         <div className={`p-6 pb-4 text-center ${enforcementConfig?.notificationPriority === 'critical'
@@ -8610,11 +8621,18 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
                                 {currentNotification.message}
                             </p>
                             <button
-                                onClick={() => handleAcknowledge(currentNotification._id)}
+                                onClick={async () => {
+                                    await handleAcknowledge(currentNotification._id);
+                                    checkFieldEnforcement();
+                                }}
                                 disabled={isAcknowledging}
                                 className={`w-full h-12 rounded-xl text-white font-bold transition-all active:scale-95 ${currentNotification.priority === 'critical' ? 'bg-red-600 hover:bg-red-700' : currentNotification.priority === 'urgent' ? 'bg-orange-600 hover:bg-orange-700' : 'bg-blue-600 hover:bg-blue-700'} disabled:opacity-50`}
                             >
-                                {isAcknowledging ? 'Acknowledging...' : 'I have Read & Acknowledged'}
+                                {isAcknowledging ? 'Acknowledging...' : (
+                                    currentNotification.message?.includes('Action Required')
+                                        ? 'Fill Required Fields Now →'
+                                        : 'I have Read & Acknowledged'
+                                )}
                             </button>
                         </div>
                     </div>

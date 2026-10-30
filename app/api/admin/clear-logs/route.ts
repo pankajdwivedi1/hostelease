@@ -2,9 +2,15 @@ export const dynamic = "force-dynamic";
 
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/dbAdapter";
+import { getAuthSession, isPrivilegedSession, unauthorizedJson } from "@/lib/authSession";
 
 export async function POST(request: NextRequest) {
     try {
+        const session = getAuthSession(request);
+        if (!isPrivilegedSession(session)) {
+            return unauthorizedJson("Administrator access required", 403);
+        }
+
         const url = new URL(request.url);
         const type = url.searchParams.get("type") || "gatepass";
         const beforeDateStr = url.searchParams.get("beforeDate");
