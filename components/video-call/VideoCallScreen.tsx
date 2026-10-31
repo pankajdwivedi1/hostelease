@@ -35,38 +35,38 @@ type CallPhase =
   | 'missed'
   | 'error';
 
-// ⚡ Crystal Clear HD Quality Booster: 3.5 Mbps for sharp, unblurred video
+// ⚡ Calibrated HD Quality Booster: 1.6 Mbps for sharp, unblurred, lag-free video without overheating
 function boostSdpQuality(sdp: string): string {
   let modified = sdp;
   if (modified.includes('b=AS:')) {
-    modified = modified.replace(/b=AS:\d+/g, 'b=AS:3500');
+    modified = modified.replace(/b=AS:\d+/g, 'b=AS:1600');
   } else {
     modified = modified.replace(
       /m=video ([0-9]+) ([A-Z\/]+) ([0-9 ]+)/g,
-      'm=video $1 $2 $3\r\nb=AS:3500\r\nb=TIAS:3500000'
+      'm=video $1 $2 $3\r\nb=AS:1600\r\nb=TIAS:1600000'
     );
   }
   if (modified.includes('b=TIAS:')) {
-    modified = modified.replace(/b=TIAS:\d+/g, 'b=TIAS:3500000');
+    modified = modified.replace(/b=TIAS:\d+/g, 'b=TIAS:1600000');
   }
   return modified;
 }
 
-// 📱 Responsive High-Clarity Camera Constraints (Native Mobile Portrait & Desktop)
+// 📱 Calibrated Mobile Portrait Constraints (Sharp, Cool CPU, Natural In-Hand Framing)
 function getOptimalVideoConstraints(facing: 'user' | 'environment'): MediaTrackConstraints {
   const isPortrait = typeof window !== 'undefined' ? window.innerHeight > window.innerWidth : true;
   return isPortrait
     ? {
         facingMode: facing,
-        width: { ideal: 1080, min: 720 },
-        height: { ideal: 1920, min: 720 },
-        frameRate: { ideal: 30, min: 24 },
+        width: { ideal: 720, max: 720 },
+        height: { ideal: 1280, max: 1280 },
+        frameRate: { ideal: 30, max: 30 },
       }
     : {
         facingMode: facing,
-        width: { ideal: 1920, min: 720 },
-        height: { ideal: 1080, min: 720 },
-        frameRate: { ideal: 30, min: 24 },
+        width: { ideal: 1280, max: 1280 },
+        height: { ideal: 720, max: 720 },
+        frameRate: { ideal: 30, max: 30 },
       };
 }
 
@@ -240,12 +240,13 @@ export default function VideoCallScreen({
   const ringTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const durationRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const pollFallbackRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const heartbeatRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const isCleanedUp = useRef(false);
 
   // Pending remote offer stored if arrived before PC ready
   const pendingOfferRef = useRef<any>(null);
 
-  // ─── Apply Crystal HD Bitrate & Codec Parameters ─────────
+  // ─── Apply Calibrated HD Bitrate & Hardware Codec Parameters ───
   const applyHdBitrate = useCallback(async (pc: RTCPeerConnection) => {
     try {
       const senders = pc.getSenders();
@@ -255,23 +256,23 @@ export default function VideoCallScreen({
         if (!parameters.encodings || parameters.encodings.length === 0) {
           parameters.encodings = [{}];
         }
-        // 3.5 Mbps for crystal clear HD video transmission
-        parameters.encodings[0].maxBitrate = 3500000;
-        parameters.encodings[0].minBitrate = 800000;
+        // 1.6 Mbps: Retina-sharp clarity, zero overheating, zero network choking
+        parameters.encodings[0].maxBitrate = 1600000;
+        parameters.encodings[0].minBitrate = 250000;
         parameters.encodings[0].maxFramerate = 30;
-        // CRITICAL: Prevents WebRTC GCC from downscaling resolution into blur
-        (parameters as any).degradationPreference = 'maintain-resolution';
+        // Balanced adaptation ensures fluid 30fps without freezing or buffer backlog
+        (parameters as any).degradationPreference = 'balanced';
         await videoSender.setParameters(parameters);
       }
 
-      // Codec Optimization: Prioritize H.264 & VP9 for hardware accelerated sharpness
+      // Codec Optimization: Prioritize H.264 & VP8 for hardware accelerated sharpness with zero phone heating
       if ('getTransceivers' in pc && 'getCapabilities' in RTCRtpSender) {
         const transceivers = pc.getTransceivers();
         const videoTransceiver = transceivers.find((t) => t.sender.track && t.sender.track.kind === 'video');
         if (videoTransceiver && 'setCodecPreferences' in videoTransceiver) {
           const capabilities = RTCRtpSender.getCapabilities('video');
           if (capabilities && capabilities.codecs) {
-            const preferred = ['video/H264', 'video/VP9', 'video/VP8'];
+            const preferred = ['video/H264', 'video/VP8', 'video/VP9'];
             const sortedCodecs = [...capabilities.codecs].sort((a, b) => {
               const aIdx = preferred.indexOf(a.mimeType);
               const bIdx = preferred.indexOf(b.mimeType);
@@ -314,6 +315,7 @@ export default function VideoCallScreen({
       if (ringTimeoutRef.current) clearTimeout(ringTimeoutRef.current);
       if (durationRef.current) clearInterval(durationRef.current);
       if (pollFallbackRef.current) clearInterval(pollFallbackRef.current);
+      if (heartbeatRef.current) clearInterval(heartbeatRef.current);
 
       if (localStreamRef.current) {
         localStreamRef.current.getTracks().forEach((t) => t.stop());
@@ -486,13 +488,29 @@ export default function VideoCallScreen({
         if (remoteVideoRef.current && event.streams[0]) {
           remoteVideoRef.current.srcObject = event.streams[0];
           remoteVideoRef.current.volume = isLoudspeaker ? 1.0 : 0.28;
-          remoteVideoRef.current.play().catch(() => {});
+          const playPromise = remoteVideoRef.current.play();
+          if (playPromise !== undefined) {
+            playPromise.catch(() => {
+              // Mobile Autoplay bypass: render video immediately even if browser restricts audio autoplay
+              if (remoteVideoRef.current) {
+                remoteVideoRef.current.muted = true;
+                remoteVideoRef.current.play().catch(() => {});
+              }
+            });
+          }
           setRemoteConnected(true);
           setPhase('active');
           stopRingbackTone();
 
           if (!durationRef.current) {
             durationRef.current = setInterval(() => setCallDuration((d) => d + 1), 1000);
+          }
+
+          // ⚡ Mobile NAT & Carrier Keep-Alive: prevents call from cutting off after 2-3 minutes
+          if (!heartbeatRef.current) {
+            heartbeatRef.current = setInterval(() => {
+              postSignal('ping', { t: Date.now() });
+            }, 20000);
           }
         }
       };
@@ -507,8 +525,23 @@ export default function VideoCallScreen({
         }
       };
 
+      let disconnectTimer: ReturnType<typeof setTimeout> | null = null;
       pc.onconnectionstatechange = () => {
-        if (pc.connectionState === 'disconnected' || pc.connectionState === 'failed') {
+        if (pc.connectionState === 'disconnected') {
+          // ⚡ Auto-Reconnect Grace Window: cell towers / network handoffs won't drop the call
+          if (!disconnectTimer) {
+            disconnectTimer = setTimeout(() => {
+              if (pc.connectionState === 'disconnected' || pc.connectionState === 'failed') {
+                cleanup('ended');
+              }
+            }, 10000);
+          }
+        } else if (pc.connectionState === 'connected') {
+          if (disconnectTimer) {
+            clearTimeout(disconnectTimer);
+            disconnectTimer = null;
+          }
+        } else if (pc.connectionState === 'failed') {
           cleanup('ended');
         }
       };
@@ -818,16 +851,32 @@ export default function VideoCallScreen({
         if (e.touches[0]) handleDragMove(e.touches[0].clientX, e.touches[0].clientY);
       }}
       onTouchEnd={handleDragEnd}
+      onClick={() => {
+        if (remoteVideoRef.current) {
+          if (remoteVideoRef.current.muted) {
+            remoteVideoRef.current.muted = false;
+          }
+          if (remoteVideoRef.current.paused) {
+            remoteVideoRef.current.play().catch(() => {});
+          }
+        }
+      }}
     >
-      {/* Remote Video (Full Screen Background) */}
-      <video
-        ref={remoteVideoRef}
-        autoPlay
-        playsInline
-        className={`absolute inset-0 w-full h-full object-cover transition-opacity duration-300 ${
-          remoteConnected && callType === 'video' ? 'opacity-100' : 'opacity-0'
-        }`}
-      />
+      {/* Remote Video: Natural In-Hand Framing (Not oversized, 100% full view of head & shoulders) */}
+      <div className="absolute inset-0 flex items-center justify-center bg-slate-950 overflow-hidden pointer-events-none">
+        <video
+          ref={remoteVideoRef}
+          autoPlay
+          playsInline
+          className={`w-full h-full object-contain transition-opacity duration-300 ${
+            remoteConnected && callType === 'video' ? 'opacity-100' : 'opacity-0'
+          }`}
+          style={{
+            maxHeight: '100dvh',
+            maxWidth: '100vw',
+          }}
+        />
+      </div>
 
       {/* Voice Call Screen OR Video Call Ringing/Connecting Screen */}
       {(callType === 'voice' || !remoteConnected) && (

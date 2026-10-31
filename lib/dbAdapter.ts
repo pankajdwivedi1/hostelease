@@ -2121,26 +2121,36 @@ export const db = {
                 whereClause.hostelName = { equals: filter.hostelName, mode: 'insensitive' };
             }
 
-            if (filter.startDate || filter.endDate) {
+            if (filter.startDate || filter.endDate || filter.startTime || filter.endTime) {
                 const dateCondition: any = {};
-                if (filter.startDate) {
-                    const s = filter.startDate.includes('T') 
+                const todayIso = new Date().toISOString().split('T')[0];
+                const sDate = filter.startDate || todayIso;
+                const eDate = filter.endDate || sDate;
+
+                if (filter.startDate || filter.startTime) {
+                    const sTime = filter.startTime ? `${filter.startTime}:00` : '00:00:00';
+                    const s = filter.startDate && filter.startDate.includes('T') 
                         ? new Date(filter.startDate) 
-                        : new Date(`${filter.startDate}T00:00:00+05:30`);
+                        : new Date(`${sDate}T${sTime}+05:30`);
                     if (!isNaN(s.getTime())) {
                         dateCondition.gte = s;
                     }
                 }
-                if (filter.endDate) {
-                    const e = filter.endDate.includes('T') 
+                if (filter.endDate || filter.endTime) {
+                    const eTime = filter.endTime ? `${filter.endTime}:59.999` : '23:59:59.999';
+                    const e = filter.endDate && filter.endDate.includes('T') 
                         ? new Date(filter.endDate) 
-                        : new Date(`${filter.endDate}T23:59:59.999+05:30`);
+                        : new Date(`${eDate}T${eTime}+05:30`);
                     if (!isNaN(e.getTime())) {
                         dateCondition.lte = e;
                     }
                 }
                 if (dateCondition.gte || dateCondition.lte) {
-                    whereClause.checkOutTime = dateCondition;
+                    const timeField = filter.timeMode === 'in' ? 'checkInTime' : 'checkOutTime';
+                    whereClause[timeField] = dateCondition;
+                    if (filter.timeMode === 'in') {
+                        whereClause.status = 'in';
+                    }
                 }
             }
 
@@ -2148,6 +2158,13 @@ export const db = {
                 whereClause.student = {
                     ...(whereClause.student || {}),
                     collegeName: { equals: filter.collegeName, mode: 'insensitive' }
+                };
+            }
+
+            if (filter.semester && filter.semester !== 'all') {
+                whereClause.student = {
+                    ...(whereClause.student || {}),
+                    semester: { contains: filter.semester.trim(), mode: 'insensitive' }
                 };
             }
 
@@ -2172,7 +2189,7 @@ export const db = {
 
             const take = options.limit || 100;
             const skip = options.offset !== undefined ? options.offset : (options.page ? (options.page - 1) * take : undefined);
-            let sortField = options.sortField || 'checkOutTime';
+            let sortField = options.sortField || (filter.timeMode === 'in' ? 'checkInTime' : 'checkOutTime');
             if (sortField === 'check_in_time') sortField = 'checkInTime';
             if (sortField === 'check_out_time') sortField = 'checkOutTime';
             if (sortField === 'updated_at') sortField = 'updatedAt';

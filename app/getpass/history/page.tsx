@@ -42,11 +42,15 @@ export default function OutingHistoryPage() {
         const { startDate, endDate } = getInitialDateFilters();
         return {
             collegeName: "all",
+            semester: "all",
             hostelName: "all",
             status: "all",
             type: "all",
             startDate,
             endDate,
+            timeMode: "out" as "out" | "in",
+            startTime: "",
+            endTime: "",
             search: ""
         };
     });
@@ -74,6 +78,7 @@ export default function OutingHistoryPage() {
         { id: "phone", label: "Mobile", width: 15 },
         { id: "regId", label: "Reg. ID", width: 16 },
         { id: "erpId", label: "ERP ID", width: 16 },
+        { id: "semester", label: "Semester", width: 12 },
         { id: "hostel", label: "Hostel", width: 22 },
         { id: "room", label: "Room", width: 10 },
         { id: "outDate", label: "Out Date", width: 14 },
@@ -127,6 +132,7 @@ export default function OutingHistoryPage() {
     };
 
     const colleges = ["OIST", "OCT", "OCP", "OPM", "OIPR"];
+    const semesters = ["1ST SEM", "2ND SEM", "3RD SEM", "4TH SEM", "5TH SEM", "6TH SEM", "7TH SEM", "8TH SEM"];
 
     const formatDateDDMMYYYY = (dateVal: any) => {
         if (!dateVal) return "--:--";
@@ -211,11 +217,15 @@ export default function OutingHistoryPage() {
                 page: pageNo.toString(),
                 limit: "50",
                 collegeName: filters.collegeName,
+                semester: filters.semester,
                 hostelName: filters.hostelName,
                 status: filters.status,
                 type: filters.type,
                 startDate: filters.startDate,
                 endDate: filters.endDate,
+                timeMode: filters.timeMode,
+                startTime: filters.startTime,
+                endTime: filters.endTime,
                 search: filters.search
             });
 
@@ -347,11 +357,15 @@ export default function OutingHistoryPage() {
             const params = new URLSearchParams({
                 limit: "10000",
                 collegeName: filters.collegeName,
+                semester: filters.semester,
                 hostelName: filters.hostelName,
                 status: filters.status,
                 type: filters.type,
                 startDate: filters.startDate,
                 endDate: filters.endDate,
+                timeMode: filters.timeMode,
+                startTime: filters.startTime,
+                endTime: filters.endTime,
                 search: filters.search
             });
 
@@ -527,6 +541,7 @@ export default function OutingHistoryPage() {
                         case "phone": return r.phoneNumber || r.phone || "";
                         case "regId": return r.registrationId || "";
                         case "erpId": return r.erpId || "";
+                        case "semester": return r.semester || "";
                         case "hostel": return formatHostelDisplay(r.hostelName);
                         case "room": return r.roomNumber || "";
                         case "outDate": return formatDateDDMMYYYY(r.checkOutISTDate || r.checkOutTime);
@@ -620,24 +635,25 @@ export default function OutingHistoryPage() {
     return (
         <div className="min-h-screen bg-[#0d1117] text-white font-sans selection:bg-blue-500/30">
             {/* Header */}
-            <div className="sticky top-0 z-50 bg-[#0d1117]/80 backdrop-blur-xl border-b border-[rgba(255,255,255,0.05)] px-4 sm:px-6 py-3 sm:py-4 flex items-center justify-between">
-                <div className="flex items-center gap-3 sm:gap-4">
+            <div className="sticky top-0 z-50 bg-[#0d1117]/80 backdrop-blur-xl border-b border-[rgba(255,255,255,0.05)] px-2.5 sm:px-6 py-1.5 sm:py-4 flex items-center justify-between">
+                <div className="flex items-center gap-2 sm:gap-4">
                     <button
                         onClick={() => router.push('/getpass')}
-                        className="p-2 sm:p-2.5 rounded-xl bg-white/5 border border-white/10 hover:bg-white/10 transition-all group"
+                        className="p-1 sm:p-2.5 rounded-lg sm:rounded-xl bg-white/5 border border-white/10 hover:bg-white/10 transition-all group"
+                        title="Back"
                     >
-                        <span className="text-lg sm:text-xl group-hover:-translate-x-1 transition-transform inline-block">←</span>
+                        <span className="text-sm sm:text-xl group-hover:-translate-x-1 transition-transform inline-block">←</span>
                     </button>
                     <div>
-                        <h1 className="text-lg sm:text-xl font-black m-0 flex items-center gap-2">
-                            <span className="inline">📜</span> Outing History
+                        <h1 className="text-sm sm:text-xl font-black m-0 flex items-center gap-1.5 sm:gap-2">
+                            <span className="text-sm sm:text-base">📜</span> Outing History
                             <span className="hidden md:inline-block text-[10px] bg-blue-500/10 text-blue-400 px-2 py-0.5 rounded-full border border-blue-500/20 uppercase tracking-tighter">Database Archives</span>
                         </h1>
-                        <p className="text-[10px] sm:text-[11px] text-white/40 m-0 mt-0.5 font-medium uppercase tracking-widest">Student Logs</p>
+                        <p className="text-[8px] sm:text-[11px] text-white/40 m-0 mt-0.5 font-medium uppercase tracking-widest">Student Logs</p>
                     </div>
                 </div>
 
-                <div className="flex items-center gap-4 sm:gap-10">
+                <div className="flex items-center gap-2 sm:gap-10">
                     <div className="hidden sm:flex items-center gap-6 border-l border-white/5 pl-8">
                         <button 
                             onClick={() => setFilters(f => ({ ...f, type: f.type === 'outing' ? 'all' : 'outing' }))}
@@ -667,128 +683,285 @@ export default function OutingHistoryPage() {
                     <button
                         onClick={handleExportPreview}
                         disabled={isExporting}
-                        className={`flex items-center gap-3 px-5 py-2.5 rounded-xl text-[11px] font-black uppercase tracking-widest transition-all active:scale-95 disabled:opacity-50 shadow-lg ${filters.type === 'outing' ? 'bg-[#00ff881a] border border-[#00ff884d] text-[#00ff88] hover:bg-[#00ff8826]' : filters.type === 'leave' ? 'bg-blue-500/20 border border-blue-500/40 text-blue-300 hover:bg-blue-500/30' : 'bg-white/5 border border-white/10 text-white/80 hover:bg-white/10 hover:text-white'}`}
+                        className={`flex items-center gap-1.5 sm:gap-3 px-2.5 sm:px-5 py-1.5 sm:py-2.5 rounded-lg sm:rounded-xl text-[9px] sm:text-[11px] font-black uppercase tracking-wider sm:tracking-widest transition-all active:scale-95 disabled:opacity-50 shadow-lg ${filters.type === 'outing' ? 'bg-[#00ff881a] border border-[#00ff884d] text-[#00ff88] hover:bg-[#00ff8826]' : filters.type === 'leave' ? 'bg-blue-500/20 border border-blue-500/40 text-blue-300 hover:bg-blue-500/30' : 'bg-white/5 border border-white/10 text-white/80 hover:bg-white/10 hover:text-white'}`}
                     >
                         {isExporting ? (
-                            <div className={`w-4 h-4 border-2 rounded-full animate-spin ${filters.type === 'outing' ? 'border-[#00ff88] border-t-transparent' : filters.type === 'leave' ? 'border-blue-400 border-t-transparent' : 'border-white/40 border-t-transparent'}`} />
+                            <div className={`w-3.5 h-3.5 sm:w-4 sm:h-4 border-2 rounded-full animate-spin ${filters.type === 'outing' ? 'border-[#00ff88] border-t-transparent' : filters.type === 'leave' ? 'border-blue-400 border-t-transparent' : 'border-white/40 border-t-transparent'}`} />
                         ) : (
-                            <span>📥</span>
+                            <span className="text-[10px] sm:text-xs">📥</span>
                         )}
                         Export {filters.type === 'outing' ? 'Passes' : filters.type === 'leave' ? 'Leaves' : 'All'}
                     </button>
                 </div>
             </div>
 
-            {/* ── Mobile-only Stats Bar (Daily Pass / Leave Logs / Total Logs) ── */}
+            {/* ── Mobile-only Stats Bar (Daily Pass / Leave Logs / Total Logs - Compact Tab Size & Font) ── */}
             <div className="sm:hidden flex items-stretch w-full bg-[#0a0a0f] border-b border-white/5">
                 <button
                     onClick={() => setFilters(f => ({ ...f, type: f.type === 'outing' ? 'all' : 'outing' }))}
-                    className={`flex-1 flex flex-col items-center justify-center py-2.5 gap-0.5 transition-all ${filters.type === 'outing' ? 'bg-[#00ff8810] border-b-2 border-[#00ff88]' : 'border-b-2 border-transparent'}`}
+                    className={`flex-1 flex flex-col items-center justify-center py-1.5 gap-0.5 transition-all ${filters.type === 'outing' ? 'bg-[#00ff8810] border-b-2 border-[#00ff88]' : 'border-b-2 border-transparent'}`}
                 >
-                    <span className={`text-[8px] font-black uppercase tracking-widest leading-none ${filters.type === 'outing' ? 'text-[#00ff88]' : 'text-white/30'}`}>Daily Pass</span>
-                    <span className={`text-sm font-black tabular-nums leading-tight ${filters.type === 'outing' ? 'text-[#00ff88]' : 'text-white'}`}>{pagination.passCount}</span>
+                    <span className={`text-[7px] font-black uppercase tracking-wider leading-none ${filters.type === 'outing' ? 'text-[#00ff88]' : 'text-white/30'}`}>Daily Pass</span>
+                    <span className={`text-xs font-black tabular-nums leading-tight ${filters.type === 'outing' ? 'text-[#00ff88]' : 'text-white'}`}>{pagination.passCount}</span>
                 </button>
 
                 <div className="w-px bg-white/10 self-stretch" />
 
                 <button
                     onClick={() => setFilters(f => ({ ...f, type: f.type === 'leave' ? 'all' : 'leave' }))}
-                    className={`flex-1 flex flex-col items-center justify-center py-2.5 gap-0.5 transition-all ${filters.type === 'leave' ? 'bg-blue-500/10 border-b-2 border-blue-400' : 'border-b-2 border-transparent'}`}
+                    className={`flex-1 flex flex-col items-center justify-center py-1.5 gap-0.5 transition-all ${filters.type === 'leave' ? 'bg-blue-500/10 border-b-2 border-blue-400' : 'border-b-2 border-transparent'}`}
                 >
-                    <span className={`text-[8px] font-black uppercase tracking-widest leading-none ${filters.type === 'leave' ? 'text-blue-400' : 'text-white/30'}`}>Leave Logs</span>
-                    <span className={`text-sm font-black tabular-nums leading-tight ${filters.type === 'leave' ? 'text-blue-400' : 'text-white'}`}>{pagination.leaveCount}</span>
+                    <span className={`text-[7px] font-black uppercase tracking-wider leading-none ${filters.type === 'leave' ? 'text-blue-400' : 'text-white/30'}`}>Leave Logs</span>
+                    <span className={`text-xs font-black tabular-nums leading-tight ${filters.type === 'leave' ? 'text-blue-400' : 'text-white'}`}>{pagination.leaveCount}</span>
                 </button>
 
                 <div className="w-px bg-white/10 self-stretch" />
 
                 <button
                     onClick={() => setFilters(f => ({ ...f, type: 'all' }))}
-                    className={`flex-1 flex flex-col items-center justify-center py-2.5 gap-0.5 transition-all ${filters.type === 'all' ? 'bg-white/5 border-b-2 border-white/30' : 'border-b-2 border-transparent'}`}
+                    className={`flex-1 flex flex-col items-center justify-center py-1.5 gap-0.5 transition-all ${filters.type === 'all' ? 'bg-white/5 border-b-2 border-white/30' : 'border-b-2 border-transparent'}`}
                 >
-                    <span className={`text-[8px] font-black uppercase tracking-widest leading-none ${filters.type === 'all' ? 'text-white/60' : 'text-white/20'}`}>Total Logs</span>
-                    <span className={`text-sm font-black tabular-nums leading-tight ${filters.type === 'all' ? 'text-white' : 'text-white/40'}`}>{pagination.total}</span>
+                    <span className={`text-[7px] font-black uppercase tracking-wider leading-none ${filters.type === 'all' ? 'text-white/60' : 'text-white/20'}`}>Total Logs</span>
+                    <span className={`text-xs font-black tabular-nums leading-tight ${filters.type === 'all' ? 'text-white' : 'text-white/40'}`}>{pagination.total}</span>
                 </button>
             </div>
 
-            <div className="max-w-[1600px] mx-auto p-4 sm:p-6 flex flex-col gap-6">
+            <div className="max-w-[1600px] mx-auto p-2 sm:p-6 flex flex-col gap-3 sm:gap-6">
                 {/* Filters Section */}
-                <div className="grid grid-cols-2 lg:grid-cols-6 gap-3 sm:gap-4 p-4 sm:p-5 bg-[#0a0a0f] border border-white/5 rounded-2xl shadow-2xl">
-                    <div className="flex flex-col gap-1.5">
-                        <label className="text-[10px] text-white/40 font-black uppercase tracking-widest ml-1 truncate">College</label>
+                <div className="grid grid-cols-2 md:grid-cols-4 xl:grid-cols-8 gap-2 sm:gap-4 p-2.5 sm:p-5 bg-[#0a0a0f] border border-white/5 rounded-xl sm:rounded-2xl shadow-2xl">
+                    {/* 1. College */}
+                    <div className="flex flex-row items-center sm:flex-col sm:items-start gap-1 sm:gap-1.5">
+                        <label className="text-[7.5px] sm:text-[10px] text-white/40 font-black uppercase tracking-wider sm:tracking-widest shrink-0 w-[40px] sm:w-auto whitespace-nowrap ml-0.5 sm:ml-1">
+                            College
+                        </label>
                         <select
                             name="collegeName"
                             value={filters.collegeName}
                             onChange={handleFilterChange}
-                            className="bg-[#121421] border border-white/10 rounded-xl px-2.5 sm:px-4 py-2.5 text-[12px] sm:text-sm focus:outline-none focus:border-blue-500/50 transition-all appearance-none cursor-pointer"
+                            className="flex-1 min-w-0 w-full bg-[#121421] border border-white/10 rounded-md sm:rounded-xl px-1.5 sm:px-4 py-1 sm:py-2.5 text-[9.5px] sm:text-sm focus:outline-none focus:border-blue-500/50 transition-all appearance-none cursor-pointer truncate"
                         >
                             <option value="all">All Colleges</option>
                             {colleges.map(c => <option key={c} value={c}>{c}</option>)}
                         </select>
                     </div>
 
-                    <div className="flex flex-col gap-1.5">
-                        <label className="text-[10px] text-white/40 font-black uppercase tracking-widest ml-1 truncate">Select Hostel</label>
+                    {/* 2. Select Semester (Blue Pen Marking) */}
+                    <div className="flex flex-row items-center sm:flex-col sm:items-start gap-1 sm:gap-1.5">
+                        <label className="text-[7.5px] sm:text-[10px] text-white/40 font-black uppercase tracking-wider sm:tracking-widest shrink-0 w-[40px] sm:w-auto whitespace-nowrap ml-0.5 sm:ml-1">
+                            <span className="sm:hidden">Sem</span>
+                            <span className="hidden sm:inline">Select Semester</span>
+                        </label>
+                        <select
+                            name="semester"
+                            value={filters.semester}
+                            onChange={handleFilterChange}
+                            className="flex-1 min-w-0 w-full bg-[#121421] border border-white/10 rounded-md sm:rounded-xl px-1.5 sm:px-4 py-1 sm:py-2.5 text-[9.5px] sm:text-sm focus:outline-none focus:border-blue-500/50 transition-all appearance-none cursor-pointer truncate"
+                        >
+                            <option value="all">All Semesters</option>
+                            {semesters.map(s => <option key={s} value={s}>{s}</option>)}
+                        </select>
+                    </div>
+
+                    {/* 3. Select Hostel */}
+                    <div className="flex flex-row items-center sm:flex-col sm:items-start gap-1 sm:gap-1.5">
+                        <label className="text-[7.5px] sm:text-[10px] text-white/40 font-black uppercase tracking-wider sm:tracking-widest shrink-0 w-[40px] sm:w-auto whitespace-nowrap ml-0.5 sm:ml-1">
+                            <span className="sm:hidden">Hostel</span>
+                            <span className="hidden sm:inline">Select Hostel</span>
+                        </label>
                         <select
                             name="hostelName"
                             value={filters.hostelName}
                             onChange={handleFilterChange}
-                            className="bg-[#121421] border border-white/10 rounded-xl px-2.5 sm:px-4 py-2.5 text-[12px] sm:text-sm focus:outline-none focus:border-blue-500/50 transition-all appearance-none cursor-pointer"
+                            className="flex-1 min-w-0 w-full bg-[#121421] border border-white/10 rounded-md sm:rounded-xl px-1.5 sm:px-4 py-1 sm:py-2.5 text-[9.5px] sm:text-sm focus:outline-none focus:border-blue-500/50 transition-all appearance-none cursor-pointer truncate"
                         >
                             <option value="all">All Hostels</option>
                             {hostelsList.map(h => <option key={h._id} value={h.name}>{formatHostelDisplay(h.name)}</option>)}
                         </select>
                     </div>
 
-                    <div className="flex flex-col gap-1.5">
-                        <label className="text-[10px] text-white/40 font-black uppercase tracking-widest ml-1 truncate">Out Since</label>
+                    {/* 4. Status */}
+                    <div className="flex flex-row items-center sm:flex-col sm:items-start gap-1 sm:gap-1.5 col-span-1">
+                        <label className="text-[7.5px] sm:text-[10px] text-white/40 font-black uppercase tracking-wider sm:tracking-widest shrink-0 w-[40px] sm:w-auto whitespace-nowrap ml-0.5 sm:ml-1">
+                            Status
+                        </label>
+                        <select
+                            name="status"
+                            value={filters.status}
+                            onChange={handleFilterChange}
+                            className="flex-1 min-w-0 w-full bg-[#121421] border border-white/10 rounded-md sm:rounded-xl px-1.5 sm:px-4 py-1 sm:py-2.5 text-[9.5px] sm:text-sm focus:outline-none focus:border-blue-500/50 transition-all appearance-none cursor-pointer truncate"
+                        >
+                            <option value="all">All Moves</option>
+                            <option value="out">Still Out</option>
+                            <option value="in">Returned</option>
+                        </select>
+                    </div>
+
+                    {/* 5. Out Since */}
+                    <div className="flex flex-row items-center sm:flex-col sm:items-start gap-1 sm:gap-1.5 col-span-1">
+                        <label className="text-[7.5px] sm:text-[10px] text-white/40 font-black uppercase tracking-wider sm:tracking-widest shrink-0 w-[40px] sm:w-auto whitespace-nowrap ml-0.5 sm:ml-1">
+                            <span className="sm:hidden">Since</span>
+                            <span className="hidden sm:inline">Out Since</span>
+                        </label>
                         <input
                             type="date"
                             name="startDate"
                             value={filters.startDate}
                             onChange={handleFilterChange}
-                            className="bg-[#121421] border border-white/10 rounded-xl px-2.5 sm:px-4 py-2.5 text-[12px] sm:text-sm focus:outline-none focus:border-blue-500/50 transition-all font-mono"
+                            className="flex-1 min-w-0 w-full bg-[#121421] border border-white/10 rounded-md sm:rounded-xl px-1 sm:px-4 py-1 sm:py-2.5 text-[9.5px] sm:text-sm focus:outline-none focus:border-blue-500/50 transition-all font-mono"
                         />
                     </div>
 
-                    <div className="flex flex-col gap-1.5">
-                        <label className="text-[10px] text-white/40 font-black uppercase tracking-widest ml-1 truncate">Out Until</label>
+                    {/* 6. Out Until */}
+                    <div className="flex flex-row items-center sm:flex-col sm:items-start gap-1 sm:gap-1.5 col-span-1">
+                        <label className="text-[7.5px] sm:text-[10px] text-white/40 font-black uppercase tracking-wider sm:tracking-widest shrink-0 w-[40px] sm:w-auto whitespace-nowrap ml-0.5 sm:ml-1">
+                            <span className="sm:hidden">Until</span>
+                            <span className="hidden sm:inline">Out Until</span>
+                        </label>
                         <input
                             type="date"
                             name="endDate"
                             value={filters.endDate}
                             onChange={handleFilterChange}
-                            className="bg-[#121421] border border-white/10 rounded-xl px-2.5 sm:px-4 py-2.5 text-[12px] sm:text-sm focus:outline-none focus:border-blue-500/50 transition-all font-mono"
+                            className="flex-1 min-w-0 w-full bg-[#121421] border border-white/10 rounded-md sm:rounded-xl px-1 sm:px-4 py-1 sm:py-2.5 text-[9.5px] sm:text-sm focus:outline-none focus:border-blue-500/50 transition-all font-mono"
                         />
                     </div>
 
-                    <div className="flex flex-col gap-1.5">
-                        <label className="text-[10px] text-white/40 font-black uppercase tracking-widest ml-1 truncate">Search ID</label>
+                    {/* 7. Select Time (Compact col-span-1 with decreased size) */}
+                    <div className="flex flex-row items-center sm:flex-col sm:items-stretch gap-1 sm:gap-1.5 col-span-1">
+                        {/* Mobile: Vertical Stack (OUT on top, IN directly below) */}
+                        <div className="flex sm:hidden flex-col gap-0.5 shrink-0 w-[40px] ml-0.5">
+                            <button
+                                type="button"
+                                onClick={() => setFilters(f => ({ ...f, timeMode: 'out' }))}
+                                className={`w-full py-0.5 rounded text-[7.5px] font-black uppercase tracking-wider transition-all leading-none text-center ${
+                                    filters.timeMode !== 'in'
+                                        ? 'bg-blue-600 text-white shadow-sm ring-1 ring-blue-400/50'
+                                        : 'bg-white/5 border border-white/10 text-white/50 hover:text-white'
+                                }`}
+                                title="Out Time"
+                            >
+                                OUT
+                            </button>
+                            <button
+                                type="button"
+                                onClick={() => setFilters(f => ({ ...f, timeMode: 'in', status: f.status === 'out' ? 'all' : f.status }))}
+                                className={`w-full py-0.5 rounded text-[7.5px] font-black uppercase tracking-wider transition-all leading-none text-center ${
+                                    filters.timeMode === 'in'
+                                        ? 'bg-emerald-600 text-white shadow-sm ring-1 ring-emerald-400/50'
+                                        : 'bg-white/5 border border-white/10 text-white/50 hover:text-white'
+                                }`}
+                                title="Return Time"
+                            >
+                                IN
+                            </button>
+                        </div>
+
+                        {/* Desktop: Horizontal Header with Label + [Out] [In] Toggle + Clear Button */}
+                        <div className="hidden sm:flex items-center justify-between ml-1 gap-1">
+                            <div className="flex items-center gap-1.5">
+                                <label className="text-[10px] text-white/40 font-black uppercase tracking-widest truncate">
+                                    {filters.timeMode === 'in' ? 'Return Time' : 'Out Time'}
+                                </label>
+                                <div className="flex items-center bg-white/5 p-0.5 rounded border border-white/10">
+                                    <button
+                                        type="button"
+                                        onClick={() => setFilters(f => ({ ...f, timeMode: 'out' }))}
+                                        className={`px-1.5 py-0.5 rounded text-[7.5px] font-black uppercase transition-all ${
+                                            filters.timeMode !== 'in' ? 'bg-blue-600 text-white' : 'text-white/40 hover:text-white'
+                                        }`}
+                                        title="Out Time"
+                                    >
+                                        Out
+                                    </button>
+                                    <button
+                                        type="button"
+                                        onClick={() => setFilters(f => ({ ...f, timeMode: 'in', status: f.status === 'out' ? 'all' : f.status }))}
+                                        className={`px-1.5 py-0.5 rounded text-[7.5px] font-black uppercase transition-all ${
+                                            filters.timeMode === 'in' ? 'bg-emerald-600 text-white' : 'text-white/40 hover:text-white'
+                                        }`}
+                                        title="Return Time"
+                                    >
+                                        In
+                                    </button>
+                                </div>
+                            </div>
+                            {(filters.startTime || filters.endTime) && (
+                                <button
+                                    type="button"
+                                    onClick={() => setFilters(f => ({ ...f, startTime: "", endTime: "" }))}
+                                    className="text-[8.5px] text-red-400 hover:text-red-300 font-bold uppercase transition-colors px-1 py-0.5 rounded hover:bg-red-500/10"
+                                    title="Clear time"
+                                >
+                                    ✕
+                                </button>
+                            )}
+                        </div>
+                        <div className={`flex-1 min-w-0 w-full h-[30px] sm:h-auto grid grid-cols-2 gap-0.5 bg-[#121421] border rounded-md sm:rounded-xl p-0.5 sm:p-1.5 transition-all ${
+                            filters.timeMode === 'in' ? 'border-emerald-500/30 focus-within:border-emerald-500/60' : 'border-white/10 focus-within:border-blue-500/50'
+                        }`}>
+                            <div 
+                                className="flex flex-col min-w-0 flex-1 cursor-pointer justify-center"
+                                onClick={(e) => {
+                                    const input = e.currentTarget.querySelector('input');
+                                    try { input?.showPicker?.(); } catch (err) {}
+                                }}
+                            >
+                                <span className={`text-[5.5px] sm:text-[7px] uppercase font-black px-0.5 leading-none ${filters.timeMode === 'in' ? 'text-emerald-400/70' : 'text-white/40'}`}>From</span>
+                                <input
+                                    type="time"
+                                    name="startTime"
+                                    value={filters.startTime || ""}
+                                    onChange={handleFilterChange}
+                                    onClick={(e) => {
+                                        e.stopPropagation();
+                                        try { e.currentTarget.showPicker?.(); } catch (err) {}
+                                    }}
+                                    aria-label="From Time"
+                                    className="w-full bg-transparent text-[8.5px] sm:text-xs text-white focus:outline-none font-mono font-bold px-0.5 py-0 cursor-pointer min-w-0 leading-none"
+                                />
+                            </div>
+                            <div 
+                                className="flex flex-col min-w-0 flex-1 border-l border-white/10 pl-0.5 sm:pl-1 cursor-pointer justify-center"
+                                onClick={(e) => {
+                                    const input = e.currentTarget.querySelector('input');
+                                    try { input?.showPicker?.(); } catch (err) {}
+                                }}
+                            >
+                                <span className={`text-[5.5px] sm:text-[7px] uppercase font-black px-0.5 leading-none ${filters.timeMode === 'in' ? 'text-emerald-400/70' : 'text-white/40'}`}>To</span>
+                                <input
+                                    type="time"
+                                    name="endTime"
+                                    value={filters.endTime || ""}
+                                    onChange={handleFilterChange}
+                                    onClick={(e) => {
+                                        e.stopPropagation();
+                                        try { e.currentTarget.showPicker?.(); } catch (err) {}
+                                    }}
+                                    aria-label="To Time"
+                                    className="w-full bg-transparent text-[8.5px] sm:text-xs text-white focus:outline-none font-mono font-bold px-0.5 py-0 cursor-pointer min-w-0 leading-none"
+                                />
+                            </div>
+                        </div>
+                    </div>
+
+                    {/* 8. Search ID (Box size matching FROM and TO box size) */}
+                    <div className="flex flex-row items-center sm:flex-col sm:items-start gap-1 sm:gap-1.5 col-span-1">
+                        <label className="text-[7.5px] sm:text-[10px] text-white/40 font-black uppercase tracking-wider sm:tracking-widest shrink-0 w-[40px] sm:w-auto whitespace-nowrap ml-0.5 sm:ml-1">
+                            <span className="sm:hidden">Search</span>
+                            <span className="hidden sm:inline">Search ID</span>
+                        </label>
                         <input
                             type="text"
                             name="search"
-                            placeholder="ERP / Reg. ID"
+                            placeholder="ERP / Reg"
                             value={filters.search}
                             onChange={handleFilterChange}
-                            className="bg-[#121421] border border-white/10 rounded-xl px-2.5 sm:px-4 py-2.5 text-[12px] sm:text-sm focus:outline-none focus:border-blue-500/50 transition-all placeholder:text-white/20"
+                            className="flex-1 min-w-0 w-full h-[30px] sm:h-auto bg-[#121421] border border-white/10 rounded-md sm:rounded-xl px-2 sm:px-4 py-0 sm:py-2.5 text-[9.5px] sm:text-sm focus:outline-none focus:border-blue-500/50 transition-all placeholder:text-white/20 truncate"
                         />
                     </div>
 
-                    <div className="flex flex-col gap-1.5">
-                        <label className="text-[10px] text-white/40 font-black uppercase tracking-widest ml-1 truncate">Status</label>
-                        <select
-                            name="status"
-                            value={filters.status}
-                            onChange={handleFilterChange}
-                            className="bg-[#121421] border border-white/10 rounded-xl px-2.5 sm:px-4 py-2.5 text-[12px] sm:text-sm focus:outline-none focus:border-blue-500/50 transition-all appearance-none cursor-pointer"
-                        >
-                            <option value="all">All Movements</option>
-                            <option value="out">Still Outside</option>
-                            <option value="in">Returned Back</option>
-                        </select>
-                    </div>
-
                     {/* Quick Date Presets & Filter Reset */}
-                    <div className="col-span-2 lg:col-span-6 flex flex-wrap items-center justify-between gap-2 pt-3 border-t border-white/5">
+                    <div className="col-span-2 md:col-span-4 xl:col-span-8 flex flex-wrap items-center justify-between gap-2 pt-3 border-t border-white/5">
                         <div className="flex items-center gap-1.5 flex-wrap">
                             <span className="text-[10px] text-white/40 font-bold uppercase tracking-wider mr-1">Quick Range:</span>
                             <button
@@ -835,16 +1008,31 @@ export default function OutingHistoryPage() {
                             >
                                 All Time
                             </button>
+
+                            {/* Reset Filters on Mobile (Directly right side of All Time) */}
+                            {(filters.startDate || filters.endDate || filters.startTime || filters.endTime || filters.collegeName !== "all" || filters.semester !== "all" || filters.hostelName !== "all" || filters.status !== "all" || filters.type !== "all" || filters.search) && (
+                                <button
+                                    type="button"
+                                    onClick={() => {
+                                        const { startDate, endDate } = getInitialDateFilters();
+                                        setFilters({ collegeName: "all", semester: "all", hostelName: "all", status: "all", type: "all", startDate, endDate, timeMode: "out", startTime: "", endTime: "", search: "" });
+                                    }}
+                                    className="sm:hidden text-[10px] text-red-400 hover:text-red-300 font-bold uppercase tracking-wider flex items-center gap-1 transition-colors px-2 py-1 bg-red-500/10 hover:bg-red-500/20 rounded-lg border border-red-500/20"
+                                >
+                                    <span>✕</span> Reset Filters
+                                </button>
+                            )}
                         </div>
 
-                        {(filters.startDate || filters.endDate || filters.collegeName !== "all" || filters.hostelName !== "all" || filters.status !== "all" || filters.type !== "all" || filters.search) && (
+                        {/* Reset Filters on Desktop (Kept on far right) */}
+                        {(filters.startDate || filters.endDate || filters.startTime || filters.endTime || filters.collegeName !== "all" || filters.semester !== "all" || filters.hostelName !== "all" || filters.status !== "all" || filters.type !== "all" || filters.search) && (
                             <button
                                 type="button"
                                 onClick={() => {
                                     const { startDate, endDate } = getInitialDateFilters();
-                                    setFilters({ collegeName: "all", hostelName: "all", status: "all", type: "all", startDate, endDate, search: "" });
+                                    setFilters({ collegeName: "all", semester: "all", hostelName: "all", status: "all", type: "all", startDate, endDate, timeMode: "out", startTime: "", endTime: "", search: "" });
                                 }}
-                                className="text-[10px] text-red-400 hover:text-red-300 font-bold uppercase tracking-wider flex items-center gap-1 transition-colors px-2 py-1 bg-red-500/10 hover:bg-red-500/20 rounded-lg border border-red-500/20"
+                                className="hidden sm:flex text-[10px] text-red-400 hover:text-red-300 font-bold uppercase tracking-wider items-center gap-1 transition-colors px-2 py-1 bg-red-500/10 hover:bg-red-500/20 rounded-lg border border-red-500/20"
                             >
                                 <span>✕</span> Reset Filters
                             </button>
@@ -862,76 +1050,84 @@ export default function OutingHistoryPage() {
                     ) : records.length > 0 ? (
                         <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-3 pb-8">
                             {records.map((record) => (
-                                <div key={record._id} className="flex flex-col sm:flex-row justify-between items-start sm:items-center py-3 px-3 bg-[#121421]/90 rounded-2xl border border-white/5 transition-all hover:bg-[#161a29]/90 hover:border-blue-500/20 group gap-2.5">
-                                    <div className="flex items-center gap-3 w-full">
-                                        <div className="min-w-0 flex-1">
-                                            <div className="flex items-center gap-1.5 flex-wrap">
-                                                <p
-                                                    onClick={() => fetchStudentProfile(record.studentId, record)}
-                                                    className="text-sm font-bold text-white m-0 cursor-pointer hover:text-blue-400 transition-colors leading-tight truncate"
-                                                >
-                                                    {record.studentName}
-                                                </p>
-                                                {(() => {
-                                                    const isLeaveRecord = String(record.type || '').toLowerCase().includes('leave') || String(record.type || '').toLowerCase() === 'hleave';
-                                                    return (
-                                                        <span className={`px-1.5 py-0.5 rounded-md text-[8px] font-black uppercase tracking-widest border transition-all flex items-center gap-1 shrink-0 ${isLeaveRecord
-                                                            ? "bg-amber-500/20 text-amber-400 border-amber-500/30"
-                                                            : "bg-blue-500/20 text-blue-400 border-blue-500/30"
-                                                            }`}>
-                                                            <span className="text-[9px]">{isLeaveRecord ? "🏠" : "🎫"}</span>
-                                                            <span>{isLeaveRecord ? "HOME-LEAVE" : "GATE-PASS"}</span>
-                                                        </span>
-                                                    );
-                                                })()}
-                                            </div>
-                                            <p className="text-[10px] text-white/70 mt-1 font-medium truncate uppercase tracking-tighter">
-                                                {formatHostelDisplay(record.hostelName)} • Room {record.roomNumber}
-                                            </p>
-                                            <p className="text-[9px] text-blue-400 font-medium truncate uppercase tracking-tighter mt-0.5">
-                                                {record.registrationId}
-                                            </p>
-                                        </div>
+                                <div key={record._id} className="flex flex-col justify-between py-2.5 px-3 bg-[#121421]/90 rounded-2xl border border-white/5 transition-all hover:bg-[#161a29]/90 hover:border-blue-500/20 group gap-1.5">
+                                    {/* Row 1: Full-width Student Name + GATE-PASS Badge (No Truncation) */}
+                                    <div className="flex items-center gap-2 min-w-0 flex-nowrap w-full">
+                                        <p
+                                            onClick={() => fetchStudentProfile(record.studentId, record)}
+                                            className="text-sm font-bold text-white m-0 cursor-pointer hover:text-blue-400 transition-colors leading-tight truncate min-w-0"
+                                        >
+                                            {record.studentName}
+                                        </p>
+                                        {(() => {
+                                            const isLeaveRecord = String(record.type || '').toLowerCase().includes('leave') || String(record.type || '').toLowerCase() === 'hleave';
+                                            return (
+                                                <span className={`px-1.5 py-0.5 rounded-md text-[8px] font-black uppercase tracking-widest border transition-all flex items-center gap-1 shrink-0 ${isLeaveRecord
+                                                    ? "bg-amber-500/20 text-amber-400 border-amber-500/30"
+                                                    : "bg-blue-500/20 text-blue-400 border-blue-500/30"
+                                                    }`}>
+                                                    <span className="text-[9px]">{isLeaveRecord ? "🏠" : "🎫"}</span>
+                                                    <span>{isLeaveRecord ? "HOME-LEAVE" : "GATE-PASS"}</span>
+                                                </span>
+                                            );
+                                        })()}
                                     </div>
 
-                                    <div className="flex justify-between items-center w-full sm:w-auto gap-3 sm:gap-5 pt-2.5 sm:pt-0 border-t border-white/5 sm:border-0">
-                                        <div className="flex flex-col items-start sm:items-end gap-1 flex-1">
-                                            <div className="flex flex-col items-start sm:items-end">
-                                                <div className="flex items-center gap-1.5 whitespace-nowrap">
-                                                    <span className="text-[8px] text-white/70 font-black uppercase tracking-tighter">Out:</span>
-                                                    <span className="text-[10px] font-bold text-white tabular-nums">{formatISTTimeAMPM(record.checkOutISTTime, record.checkOutTime)}</span>
-                                                    <span className="text-white/10 text-[10px]">|</span>
-                                                    <span className="text-[10px] text-white/40 font-bold tabular-nums whitespace-nowrap">{formatDateDDMMYYYY(record.checkOutISTDate || record.checkOutTime)}</span>
-                                                </div>
-                                            </div>
-
-                                            {record.status === 'in' || record.status === 'auto-resolved' ? (
-                                                <div className="flex flex-col items-start sm:items-end mt-0.5">
-                                                    <div className="flex items-center gap-1.5 whitespace-nowrap">
-                                                        <span className="text-[8px] text-white/70 font-black uppercase tracking-tighter">In:</span>
-                                                        <span className="text-[10px] font-bold text-green-400 tabular-nums">{formatISTTimeAMPM(record.checkInISTTime || record.checkOutISTTime, record.checkInTime || record.checkOutTime)}</span>
-                                                        <span className="text-white/10 text-[10px]">|</span>
-                                                        <span className="text-[10px] text-white/40 font-bold tabular-nums whitespace-nowrap">{formatDateDDMMYYYY(record.checkInISTDate || record.checkInTime || record.checkOutISTDate)}</span>
-                                                    </div>
-                                                    {(String(record.type || '').toLowerCase().includes('leave') || String(record.type || '').toLowerCase() === 'hleave') && (
-                                                        <div className="flex items-center gap-1 mt-1">
-                                                            <span className="text-[7px] bg-blue-500/10 text-blue-400 px-1.5 py-0.5 rounded border border-blue-500/20 font-black uppercase tracking-tighter">🏠 HOME-LEAVE</span>
-                                                        </div>
-                                                    )}
-                                                </div>
-                                            ) : (
-                                                <div className="flex items-center gap-2 animate-pulse mt-1">
-                                                    <span className="w-1.5 h-1.5 rounded-full bg-red-500"></span>
-                                                    <span className="text-[8px] text-red-400 font-bold uppercase tracking-widest">Currently Out</span>
-                                                </div>
-                                            )}
+                                    {/* Rows 2 & 3: Left side has Hostel/Room and Reg/Sem; Right side has OUT line and IN line + Duration */}
+                                    <div className="flex items-center justify-between w-full gap-1 sm:gap-2 pt-1 border-t border-white/5">
+                                        {/* Left Side: Row 2 (Hostel • Room) and Row 3 (Reg • Sem) */}
+                                        <div className="min-w-0 flex flex-col justify-center gap-0.5 flex-1 pr-1">
+                                            <p className="text-[9px] sm:text-[10px] text-white/70 font-medium truncate uppercase tracking-tighter">
+                                                {formatHostelDisplay(record.hostelName)} • Room {record.roomNumber}
+                                            </p>
+                                            <p className="text-[8px] sm:text-[9px] text-blue-400 font-medium truncate uppercase tracking-tighter flex items-center gap-1 sm:gap-1.5">
+                                                <span>{record.registrationId}</span>
+                                                {record.semester && (
+                                                    <>
+                                                        <span className="text-white/20">•</span>
+                                                        <span className="text-white/60 font-semibold">{record.semester}</span>
+                                                    </>
+                                                )}
+                                            </p>
                                         </div>
 
-                                        <div className="min-w-[65px] flex flex-col items-center justify-center px-2 py-1 bg-white/5 rounded-xl border border-white/5">
-                                            <span className="text-[7px] text-white/70 font-black uppercase tracking-widest mb-0.5">Duration</span>
-                                            <span className={`text-[9px] font-black tabular-nums ${record.status === 'out' ? 'text-red-400' : 'text-blue-400'}`}>
-                                                {formatDuration(record.durationMinutes)}
-                                            </span>
+                                        {/* Vertical Separator Line (same as blue mark pen) */}
+                                        <div className="w-px h-5 sm:h-6 bg-white/10 shrink-0 mx-0.5" />
+
+                                        {/* Right Side: Row 2 right (OUT line) and Row 3 right (IN line) + DURATION box */}
+                                        <div className="flex items-center gap-1.5 sm:gap-3 shrink-0">
+                                            <div className="flex flex-col items-end gap-0.5">
+                                                {/* OUT Line (Right of Hostel • Room) */}
+                                                <div className="flex items-center gap-1 sm:gap-1.5 whitespace-nowrap">
+                                                    <span className="text-[7.5px] sm:text-[8px] text-white/70 font-black uppercase tracking-tighter">Out:</span>
+                                                    <span className="text-[9px] sm:text-[10px] font-bold text-white tabular-nums">{formatISTTimeAMPM(record.checkOutISTTime, record.checkOutTime)}</span>
+                                                    <span className="text-white/10 text-[9px] sm:text-[10px]">|</span>
+                                                    <span className="text-[9px] sm:text-[10px] text-white/40 font-bold tabular-nums whitespace-nowrap">{formatDateDDMMYYYY(record.checkOutISTDate || record.checkOutTime)}</span>
+                                                </div>
+
+                                                {/* IN Line (Right of Reg • Sem) */}
+                                                {record.status === 'in' || record.status === 'auto-resolved' ? (
+                                                    <div className="flex items-center gap-1 sm:gap-1.5 whitespace-nowrap">
+                                                        <span className="text-[7.5px] sm:text-[8px] text-white/70 font-black uppercase tracking-tighter">In:</span>
+                                                        <span className="text-[9px] sm:text-[10px] font-bold text-green-400 tabular-nums">{formatISTTimeAMPM(record.checkInISTTime || record.checkOutISTTime, record.checkInTime || record.checkOutTime)}</span>
+                                                        <span className="text-white/10 text-[9px] sm:text-[10px]">|</span>
+                                                        <span className="text-[9px] sm:text-[10px] text-white/40 font-bold tabular-nums whitespace-nowrap">{formatDateDDMMYYYY(record.checkInISTDate || record.checkInTime || record.checkOutISTDate)}</span>
+                                                    </div>
+                                                ) : (
+                                                    <div className="flex items-center gap-1 sm:gap-1.5 animate-pulse">
+                                                        <span className="w-1.5 h-1.5 rounded-full bg-red-500"></span>
+                                                        <span className="text-[7.5px] sm:text-[8px] text-red-400 font-bold uppercase tracking-widest">Currently Out</span>
+                                                    </div>
+                                                )}
+                                            </div>
+
+                                            {/* DURATION Box */}
+                                            <div className="min-w-[48px] sm:min-w-[62px] flex flex-col items-center justify-center px-1 sm:px-2 py-0.5 sm:py-1 bg-white/5 rounded-lg sm:rounded-xl border border-white/5">
+                                                <span className="text-[6.5px] sm:text-[7px] text-white/70 font-black uppercase tracking-widest mb-0.5">Duration</span>
+                                                <span className={`text-[8.5px] sm:text-[9px] font-black tabular-nums ${record.status === 'out' ? 'text-red-400' : 'text-blue-400'}`}>
+                                                    {formatDuration(record.durationMinutes)}
+                                                </span>
+                                            </div>
                                         </div>
                                     </div>
                                 </div>
@@ -945,7 +1141,7 @@ export default function OutingHistoryPage() {
                             <button
                                 onClick={() => {
                                     const { startDate, endDate } = getInitialDateFilters();
-                                    setFilters({ collegeName: "all", hostelName: "all", status: "all", type: "all", startDate, endDate, search: "" });
+                                    setFilters({ collegeName: "all", semester: "all", hostelName: "all", status: "all", type: "all", startDate, endDate, timeMode: "out", startTime: "", endTime: "", search: "" });
                                 }}
                                 className="mt-6 px-6 py-2.5 rounded-xl bg-blue-600 font-bold text-sm transition-all hover:bg-blue-500 active:scale-95"
                             >
@@ -1383,10 +1579,16 @@ export default function OutingHistoryPage() {
                 .no-scrollbar::-webkit-scrollbar {
                     display: none;
                 }
-                input[type="date"]::-webkit-calendar-picker-indicator {
-                    filter: invert(1);
-                    opacity: 0.5;
-                    cursor: pointer;
+                input[type="date"]::-webkit-calendar-picker-indicator,
+                input[type="time"]::-webkit-calendar-picker-indicator {
+                    filter: invert(1) brightness(1.5) !important;
+                    opacity: 0.9 !important;
+                    cursor: pointer !important;
+                    transition: opacity 0.2s ease;
+                }
+                input[type="date"]::-webkit-calendar-picker-indicator:hover,
+                input[type="time"]::-webkit-calendar-picker-indicator:hover {
+                    opacity: 1 !important;
                 }
             `}</style>
         </div>

@@ -24,10 +24,14 @@ export async function GET(request: NextRequest) {
         const erpId = searchParams.get("erpId");
         const registrationId = searchParams.get("registrationId");
         const collegeName = searchParams.get("collegeName");
+        const semester = searchParams.get("semester");
         const search = searchParams.get("search");
         const type = searchParams.get("type");
         const startDate = searchParams.get("startDate");
         const endDate = searchParams.get("endDate");
+        const startTime = searchParams.get("startTime");
+        const endTime = searchParams.get("endTime");
+        const timeMode = searchParams.get("timeMode") || "out";
         const limit = parseInt(searchParams.get("limit") || "50");
         const page = parseInt(searchParams.get("page") || "1");
 
@@ -66,6 +70,10 @@ export async function GET(request: NextRequest) {
         if (search) filters.search = search;
         if (startDate) filters.startDate = startDate;
         if (endDate) filters.endDate = endDate;
+        if (semester && semester !== "all") filters.semester = semester;
+        if (startTime) filters.startTime = startTime;
+        if (endTime) filters.endTime = endTime;
+        if (timeMode) filters.timeMode = timeMode;
 
         const populateParam = searchParams.get("populate");
         const populate = populateParam === "false" ? false : true;
@@ -86,22 +94,31 @@ export async function GET(request: NextRequest) {
                     if (filters.status && filters.status !== 'all') statsWhere.status = filters.status;
 
                     // ⚡ SYNC STATS TO DATE RANGE: Ensure Daily Pass and Leave counts match the selected date filters (e.g. Last 7 Days, Today, This Month, All Time)
-                    if (filters.startDate || filters.endDate) {
+                    if (filters.startDate || filters.endDate || filters.startTime || filters.endTime) {
                         const dateCondition: any = {};
-                        if (filters.startDate) {
-                            const s = filters.startDate.includes('T') 
+                        const todayIso = new Date().toISOString().split('T')[0];
+                        const sDate = filters.startDate || todayIso;
+                        const eDate = filters.endDate || sDate;
+                        if (filters.startDate || filters.startTime) {
+                            const sTime = filters.startTime ? `${filters.startTime}:00` : '00:00:00';
+                            const s = filters.startDate && filters.startDate.includes('T') 
                                 ? new Date(filters.startDate) 
-                                : new Date(`${filters.startDate}T00:00:00+05:30`);
+                                : new Date(`${sDate}T${sTime}+05:30`);
                             if (!isNaN(s.getTime())) dateCondition.gte = s;
                         }
-                        if (filters.endDate) {
-                            const e = filters.endDate.includes('T') 
+                        if (filters.endDate || filters.endTime) {
+                            const eTime = filters.endTime ? `${filters.endTime}:59.999` : '23:59:59.999';
+                            const e = filters.endDate && filters.endDate.includes('T') 
                                 ? new Date(filters.endDate) 
-                                : new Date(`${filters.endDate}T23:59:59.999+05:30`);
+                                : new Date(`${eDate}T${eTime}+05:30`);
                             if (!isNaN(e.getTime())) dateCondition.lte = e;
                         }
                         if (dateCondition.gte || dateCondition.lte) {
-                            statsWhere.checkOutTime = dateCondition;
+                            const timeField = filters.timeMode === 'in' ? 'checkInTime' : 'checkOutTime';
+                            statsWhere[timeField] = dateCondition;
+                            if (filters.timeMode === 'in') {
+                                statsWhere.status = 'in';
+                            }
                         }
                     }
 
@@ -109,6 +126,13 @@ export async function GET(request: NextRequest) {
                         statsWhere.student = {
                             ...(statsWhere.student || {}),
                             collegeName: { equals: filters.collegeName, mode: 'insensitive' }
+                        };
+                    }
+
+                    if (filters.semester && filters.semester !== 'all') {
+                        statsWhere.student = {
+                            ...(statsWhere.student || {}),
+                            semester: { contains: filters.semester.trim(), mode: 'insensitive' }
                         };
                     }
 
@@ -134,7 +158,22 @@ export async function GET(request: NextRequest) {
             })()
         ]);
 
-        const { records, total } = historyRes;
+        let { records, total } = historyRes;
+        if (filters.startTime || filters.endTime) {
+            const [startH, startM] = (filters.startTime || '00:00').split(':').map(Number);
+            const [endH, endM] = (filters.endTime || '23:59').split(':').map(Number);
+            const startMins = (isNaN(startH) ? 0 : startH) * 60 + (isNaN(startM) ? 0 : startM);
+            const endMins = (isNaN(endH) ? 23 : endH) * 60 + (isNaN(endM) ? 59 : endM);
+
+            const targetField = filters.timeMode === 'in' ? 'checkInTime' : 'checkOutTime';
+            records = (records || []).filter((r: any) => {
+                const t = r[targetField];
+                if (!t) return false;
+                const d = new Date(t);
+                const istMins = ((d.getUTCHours() * 60 + d.getUTCMinutes() + 330) % 1440);
+                return istMins >= startMins && istMins <= endMins;
+            });
+        }
         let leaveCount = 0;
         let passCount = 0;
         (typeCounts || []).forEach((tc: any) => {
