@@ -146,7 +146,7 @@ export async function DELETE(request: NextRequest) {
                     // proceed if getById fails
                 }
             }
-            await db.notifications.deleteMany({ _id: id });
+            await db.notifications.deleteMany({ id });
             return NextResponse.json({ success: true, message: "Notification deleted" });
         }
 

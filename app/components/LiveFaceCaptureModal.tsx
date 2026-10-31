@@ -301,6 +301,16 @@ export default function LiveFaceCaptureModal({
                 return;
             }
 
+            // 🛡️ 3.1 Background & Ambient Lighting Gatekeeper (Rejects dark room / pitch-black background)
+            if (descriptor.detection?.box) {
+                const bgQuality = faceMatching.assessBackgroundLighting(aiCanvas, descriptor.detection.box);
+                if (bgQuality.isDarkBackground) {
+                    setFaceError(bgQuality.reason || "Dark or black background detected! Please turn on room lights and stand in front of a bright or well-lit wall to retake your photo.");
+                    setIsProcessing(false);
+                    return;
+                }
+            }
+
             // 🛡️ 4. Anti-Spoof Screen Verification (Client Heuristics)
             if (descriptor.detection?.box) {
                 const spoofCheck = faceMatching.detectMobileScreenDisplay(aiCanvas, descriptor.detection.box);

@@ -248,19 +248,6 @@ export async function POST(request: NextRequest) {
             tag: `enforcement_${Date.now()}`
           };
 
-          // Also create an in-app notification in notification inbox
-          await db.notifications.create({
-            senderId: "admin",
-            senderRole: "admin",
-            senderHostel: normalizedHostelName,
-            targetType: (Array.isArray(targetStudentIds) && targetStudentIds.length > 0) ? "individual" : "hostel",
-            targetHostel: normalizedHostelName,
-            targetStudentId: (Array.isArray(targetStudentIds) && targetStudentIds.length === 1) ? targetStudentIds[0] : null,
-            message: `⚠️ Action Required: Please update your ${fieldNames} in your student profile.`,
-            priority: notificationPriority === "critical" ? "critical" : (notificationPriority === "high" ? "high" : "normal"),
-            expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000)
-          }).catch(() => {});
-
           if (Array.isArray(targetStudentIds) && targetStudentIds.length > 0) {
             for (const sId of targetStudentIds) {
               if (!sId) continue;

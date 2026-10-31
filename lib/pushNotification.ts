@@ -261,3 +261,134 @@ export async function sendPushNotification(
     return { success: false, error: error.message };
   }
 }
+
+
+/**
+ * ⚡ FAST BULK NOTIFICATION FOR PARENTS
+ * Batches phone lookups and active PushSubscription queries in a single indexed query.
+ */
+export async function sendBulkPushToParents(
+  students: Array<{
+    id: string;
+    name: string;
+    fatherNumber?: string | null;
+    motherNumber?: string | null;
+    profilePicture?: string | null;
+  }>,
+  notificationType: string,
+  payloadTemplate: {
+    title: string;
+    bodyTemplate: string;
+    url?: string;
+  }
+): Promise<{ success: boolean; notifiedCount: number; error?: string }> {
+  try {
+    // 0. Super Admin global overrides check
+    const isGloballyEnabled = await isNotificationEnabledGlobally(notificationType);
+    if (!isGloballyEnabled) {
+      console.log(`Push Notification [${notificationType}] is blocked globally by Super Admin settings.`);
+      return { success: true, notifiedCount: 0 };
+    }
+
+    // 1. Check parentNotifications master switch
+    const settings = await db.settings.get();
+    if (settings?.parentNotifications === false) {
+      console.log(`Push Notification for parent blocked: parentNotifications is disabled.`);
+      return { success: true, notifiedCount: 0 };
+    }
+
+    const notifSettings = settings?.notificationSettings || {};
+    if (notifSettings[notificationType] === false) {
+      console.log(`Push Notification [${notificationType}] is disabled in college settings.`);
+      return { success: true, notifiedCount: 0 };
+    }
+
+    // 2. Build candidate phone numbers and map to student info
+    const phoneToStudent = new Map<string, any>();
+    for (const s of students) {
+      const f = s.fatherNumber ? String(s.fatherNumber).replace(/\D/g, "").slice(-10) : "";
+      const m = s.motherNumber ? String(s.motherNumber).replace(/\D/g, "").slice(-10) : "";
+      if (f && f.length >= 7) {
+        phoneToStudent.set(f, s);
+        if (s.fatherNumber) phoneToStudent.set(String(s.fatherNumber).trim(), s);
+      }
+      if (m && m.length >= 7) {
+        phoneToStudent.set(m, s);
+        if (s.motherNumber) phoneToStudent.set(String(s.motherNumber).trim(), s);
+      }
+    }
+
+    const candidateUserIds = Array.from(phoneToStudent.keys());
+    if (candidateUserIds.length === 0) {
+      return { success: true, notifiedCount: 0 };
+    }
+
+    // 3. Batch query subscriptions in ONE single database query
+    const allSubs = await prisma.pushSubscription.findMany({
+      where: {
+        userId: { in: candidateUserIds },
+        userType: "parent"
+      }
+    });
+
+    if (!allSubs || allSubs.length === 0) {
+      console.log(`No active parent subscriptions found for ${students.length} students.`);
+      return { success: true, notifiedCount: 0 };
+    }
+
+    // 4. Deduplicate by push endpoint
+    const uniqueSubsMap = new Map<string, any>();
+    for (const sub of allSubs) {
+      const endpoint = (sub.subscription as any)?.endpoint;
+      if (endpoint && !uniqueSubsMap.has(endpoint)) {
+        uniqueSubsMap.set(endpoint, sub);
+      }
+    }
+
+    const subscriptions = Array.from(uniqueSubsMap.values());
+    console.log(`⚡ Dispatching bulk [${notificationType}] to ${subscriptions.length} registered parent devices...`);
+
+    let notifiedCount = 0;
+    const pushPromises = subscriptions.map(async (subRecord: any) => {
+      const student = phoneToStudent.get(subRecord.userId);
+      const studentName = student?.name || "your ward";
+      const studentPhoto = student?.profilePicture;
+      const body = payloadTemplate.bodyTemplate.replace(/\{name\}/g, studentName);
+
+      try {
+        await webpush.sendNotification(
+          subRecord.subscription as any,
+          JSON.stringify({
+            title: payloadTemplate.title,
+            body,
+            url: payloadTemplate.url || "/",
+            icon: studentPhoto || "/icons/icon-192x192.png",
+            badge: "/icons/icon-72x72.png",
+            image: studentPhoto || undefined,
+            tag: "hosteleaze_parent_absent_" + Date.now()
+          }),
+          {
+            TTL: 86400,
+            urgency: "high"
+          }
+        );
+        notifiedCount++;
+      } catch (err: any) {
+        if (err.statusCode === 410 || err.statusCode === 404) {
+          const endpoint = (subRecord.subscription as any)?.endpoint;
+          if (endpoint) {
+            await db.pushSubscription.deleteMany({ endpoint }).catch(() => {});
+          }
+        } else {
+          console.error("Bulk parent push error:", err.message);
+        }
+      }
+    });
+
+    await Promise.all(pushPromises);
+    return { success: true, notifiedCount };
+  } catch (error: any) {
+    console.error("Error in sendBulkPushToParents:", error);
+    return { success: false, notifiedCount: 0, error: error.message };
+  }
+}

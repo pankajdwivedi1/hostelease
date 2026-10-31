@@ -26,30 +26,46 @@ export async function POST(request: NextRequest) {
     }
 
     // Normalize target phone number with country code (defaults 10-digit numbers to 91 for India)
-    const normalizePhoneWithCountry = (num: string) => {
+    const normalizePhoneWithCountry = (num: string | null | undefined) => {
       if (!num) return "";
-      let c = num.replace(/\D/g, "");
+      let c = String(num).replace(/\D/g, "");
       if (c.length === 10) return "91" + c;
       return c;
     };
 
     const targetNormalized = normalizePhoneWithCountry(cleaned);
     const coreDigits = cleaned.length >= 10 ? cleaned.slice(-10) : cleaned;
+    const spaceFormatted = coreDigits.length === 10 ? `${coreDigits.slice(0, 5)} ${coreDigits.slice(5)}` : coreDigits;
 
     // ⚡ FAST QUERY: Search directly using unified dbAdapter (Railway PostgreSQL / Prisma)
-    const students = await db.students.list({ search: coreDigits });
+    let students = await db.students.list({ search: coreDigits });
+    if (!students || students.length === 0) {
+      students = await db.students.list({ search: spaceFormatted });
+    }
 
     let matchedStudent = null;
     let studentName = "";
 
+    const cleanDbPhone = (num: string | null | undefined) => {
+      if (!num) return "";
+      return String(num).replace(/\D/g, "");
+    };
+
     if (students && students.length > 0) {
       for (const s of students) {
         if (!s) continue;
-        const fatherNorm = normalizePhoneWithCountry(s.fatherNumber);
-        const motherNorm = normalizePhoneWithCountry(s.motherNumber);
-        const lgNorm = normalizePhoneWithCountry(s.localGuardianPhoneNumber);
+        const fatherClean = cleanDbPhone(s.fatherNumber);
+        const motherClean = cleanDbPhone(s.motherNumber);
+        const lgClean = cleanDbPhone(s.localGuardianPhoneNumber);
 
-        if (fatherNorm === targetNormalized || motherNorm === targetNormalized || lgNorm === targetNormalized) {
+        if (
+          fatherClean.endsWith(coreDigits) ||
+          motherClean.endsWith(coreDigits) ||
+          lgClean.endsWith(coreDigits) ||
+          normalizePhoneWithCountry(s.fatherNumber) === targetNormalized ||
+          normalizePhoneWithCountry(s.motherNumber) === targetNormalized ||
+          normalizePhoneWithCountry(s.localGuardianPhoneNumber) === targetNormalized
+        ) {
           matchedStudent = s;
           studentName = s.name;
           break;

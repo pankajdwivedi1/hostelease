@@ -4407,7 +4407,7 @@ export default function AdminDashboard({
     canvasOrImg: HTMLCanvasElement | HTMLImageElement
   ): Promise<{ valid: boolean; descriptor?: number[]; error?: string; score?: number }> => {
     try {
-      const { assessPhotoQuality, assessFacialLandmarkSharpness, detectFace, loadFaceApiModels, detectMobileScreenDisplay } = await import("@/lib/faceMatching");
+      const { assessPhotoQuality, assessFacialLandmarkSharpness, assessBackgroundLighting, detectFace, loadFaceApiModels, detectMobileScreenDisplay } = await import("@/lib/faceMatching");
       
       // 🛡️ 1. Photo Quality & Re-Capture Check
       const quality = assessPhotoQuality(canvasOrImg);
@@ -4458,6 +4458,17 @@ export default function AdminDashboard({
           error: featureQuality.reason || `Photo is too blurry (Sharpness: ${featureQuality.sharpnessScore}%). Eyebrows, eyelids, and lips must be sharp.`,
           score: featureQuality.sharpnessScore
         };
+      }
+
+      // 🛡️ 3.1 Background & Ambient Lighting Gatekeeper
+      if (res.detection?.box) {
+        const bgQuality = assessBackgroundLighting(canvasOrImg, res.detection.box);
+        if (bgQuality.isDarkBackground) {
+          return {
+            valid: false,
+            error: bgQuality.reason || "Dark or black background detected! Please turn on room lights and stand in front of a bright or well-lit wall to retake your photo."
+          };
+        }
       }
 
       if (res.detection?.box) {
@@ -4724,15 +4735,20 @@ export default function AdminDashboard({
           date: selectedDate
         })
       });
-      const data = await res.json();
+      let data: any = {};
+      try {
+        data = await res.json();
+      } catch (jsonErr) {
+        throw new Error(`Server returned status ${res.status} (${res.statusText || "Request Timeout"}). Please try again.`);
+      }
       if (data.success) {
         showToast(`Web Push Alerts sent to ${data.notifiedCount} registered parents!`, "success");
       } else {
-        alert("Failed to send alerts: " + (data.error || "Unknown error"));
+        showToast("Failed to send alerts: " + (data.error || "Unknown error"), "error");
       }
     } catch (e: any) {
       console.error(e);
-      alert("Error: " + (e.message || "Network error"));
+      showToast("Error: " + (e.message || "Network error"), "error");
     } finally {
       setIsNotifyingAbsentees(false);
     }
@@ -4753,15 +4769,20 @@ export default function AdminDashboard({
           customMessage: "⚠️ Parent Alert: Your ward {name} has been absent from daily night curfew attendance for 3+ consecutive days. Please contact the hostel administration."
         })
       });
-      const data = await res.json();
+      let data: any = {};
+      try {
+        data = await res.json();
+      } catch (jsonErr) {
+        throw new Error(`Server returned status ${res.status} (${res.statusText || "Request Timeout"}). Please try again.`);
+      }
       if (data.success) {
         showToast(`Web Push anomaly alerts sent to ${data.notifiedCount} parents!`, "success");
       } else {
-        alert("Failed to send alerts: " + (data.error || "Unknown error"));
+        showToast("Failed to send alerts: " + (data.error || "Unknown error"), "error");
       }
     } catch (e: any) {
       console.error(e);
-      alert("Error: " + (e.message || "Network error"));
+      showToast("Error: " + (e.message || "Network error"), "error");
     } finally {
       setIsNotifyingAnomalies(false);
     }

@@ -85,6 +85,7 @@ export default function OnboardingPage() {
   const [isCameraOpen, setIsCameraOpen] = useState(false);
   const [isCameraStarting, setIsCameraStarting] = useState(false);
   const [isFaceProcessing, setIsFaceProcessing] = useState(false);
+  const [processingStep, setProcessingStep] = useState<string>("📸 Photo captured! Analyzing face & sharpness...");
 
   const [showOtpModal, setShowOtpModal] = useState(false);
   const [otp, setOtp] = useState("");
@@ -116,6 +117,9 @@ export default function OnboardingPage() {
 
 
   useEffect(() => {
+    // ⚡ Pre-warm SSD Face AI models in the background immediately on page load
+    loadAIModels().catch(() => {});
+
     // ⚡ Safe LocalStorage Hydration
     const cached = localStorage.getItem('cachedFormBuilderConfig');
     if (cached) {
@@ -879,6 +883,9 @@ export default function OnboardingPage() {
     canvasOrImg: HTMLCanvasElement | HTMLImageElement
   ): Promise<{ valid: boolean; descriptor?: number[]; error?: string; score?: number; dataUrl?: string }> => {
     try {
+      setProcessingStep("📸 Photo captured! Analyzing face & sharpness...");
+      await new Promise(resolve => setTimeout(resolve, 60));
+
       // 🛡️ 1. Photo Quality & Re-Capture Check
       const quality = faceMatching.assessPhotoQuality(canvasOrImg);
       if (quality.isPhotoOfPhoto) {
@@ -889,9 +896,33 @@ export default function OnboardingPage() {
         };
       }
 
-      // 🛡️ 2. Load SSD Models and Run Detection
+      // 🛡️ 2. Load SSD Models and Run Detection with 520px optimized neural resolution (matching LiveFaceCaptureModal)
+      setProcessingStep("Step 1/3: Extracting 128-D biometric vector...");
       await loadAIModels();
-      const res = await faceMatching.detectFace(canvasOrImg, true, true);
+      await new Promise(resolve => setTimeout(resolve, 40));
+
+      const maxDim = 520;
+      let imgW = (canvasOrImg as any).videoWidth || (canvasOrImg as any).naturalWidth || canvasOrImg.width || 640;
+      let imgH = (canvasOrImg as any).videoHeight || (canvasOrImg as any).naturalHeight || canvasOrImg.height || 480;
+      let aiWidth = imgW;
+      let aiHeight = imgH;
+      if (aiWidth > maxDim || aiHeight > maxDim) {
+        if (aiWidth > aiHeight) {
+          aiHeight = Math.round((aiHeight / aiWidth) * maxDim);
+          aiWidth = maxDim;
+        } else {
+          aiWidth = Math.round((aiWidth / aiHeight) * maxDim);
+          aiHeight = maxDim;
+        }
+      }
+
+      const aiCanvas = document.createElement("canvas");
+      aiCanvas.width = aiWidth;
+      aiCanvas.height = aiHeight;
+      const aiCtx = aiCanvas.getContext("2d");
+      aiCtx?.drawImage(canvasOrImg, 0, 0, aiWidth, aiHeight);
+
+      const res = await faceMatching.detectFace(aiCanvas, true, true);
       if (!res || !res.descriptor) {
         if (quality.isBlurry) {
           return {
@@ -907,7 +938,10 @@ export default function OnboardingPage() {
       }
 
       // 🛡️ 3. Strict Facial Landmark Sharpness & Lens Fog / Smudge Gatekeeper
-      const featureQuality = faceMatching.assessFacialLandmarkSharpness(canvasOrImg, res.landmarks, res.detection?.box);
+      setProcessingStep("Step 2/3: Checking camera lens clarity & lighting...");
+      await new Promise(resolve => setTimeout(resolve, 40));
+
+      const featureQuality = faceMatching.assessFacialLandmarkSharpness(aiCanvas, res.landmarks, res.detection?.box);
       if (featureQuality.isSideFace) {
         return {
           valid: false,
@@ -930,8 +964,19 @@ export default function OnboardingPage() {
         };
       }
 
+      // 🛡️ 3.1 Background & Ambient Lighting Gatekeeper (Rejects dark room / pitch-black background)
       if (res.detection?.box) {
-        const spoof = faceMatching.detectMobileScreenDisplay(canvasOrImg, res.detection.box);
+        const bgQuality = faceMatching.assessBackgroundLighting(aiCanvas, res.detection.box);
+        if (bgQuality.isDarkBackground) {
+          return {
+            valid: false,
+            error: bgQuality.reason || "Dark or black background detected! Please turn on room lights and stand in front of a bright or well-lit wall to retake your photo."
+          };
+        }
+      }
+
+      if (res.detection?.box) {
+        const spoof = faceMatching.detectMobileScreenDisplay(aiCanvas, res.detection.box);
         if (spoof.isSpoof) {
           return { valid: false, error: spoof.reason || "Digital display / screen spoof detected! Please take a real live photo." };
         }
@@ -940,32 +985,15 @@ export default function OnboardingPage() {
         return { valid: false, error: "Failed to extract complete 128-D face vector." };
       }
 
-      // 🛡️ 4. Generate normalized 640px dataUrl from canvasOrImg
-      let targetCanvas: HTMLCanvasElement;
-      if (canvasOrImg instanceof HTMLCanvasElement) {
-        targetCanvas = canvasOrImg;
-      } else {
-        targetCanvas = document.createElement("canvas");
-        const maxDim = 640;
-        let nw = (canvasOrImg as HTMLImageElement).naturalWidth || 640;
-        let nh = (canvasOrImg as HTMLImageElement).naturalHeight || 480;
-        if (nw > maxDim || nh > maxDim) {
-          if (nw > nh) {
-            nh = Math.round((nh / nw) * maxDim);
-            nw = maxDim;
-          } else {
-            nw = Math.round((nw / nh) * maxDim);
-            nh = maxDim;
-          }
-        }
-        targetCanvas.width = nw;
-        targetCanvas.height = nh;
-        const ctx = targetCanvas.getContext("2d");
-        ctx?.drawImage(canvasOrImg, 0, 0, nw, nh);
-      }
-      const dataUrl = targetCanvas.toDataURL("image/jpeg", 0.90);
+      // 🛡️ 4. Generate normalized dataUrl from original canvas (high quality for profile photo)
+      const dataUrl = canvasOrImg instanceof HTMLCanvasElement
+        ? canvasOrImg.toDataURL("image/jpeg", 0.90)
+        : aiCanvas.toDataURL("image/jpeg", 0.90);
 
       // 🛡️ 5. BANK-GRADE LIVE SERVER NEURAL ANTI-SPOOFING (MiniFASNetV2 ONNX Runtime)
+      setProcessingStep("Step 3/3: Verifying physical human liveness...");
+      await new Promise(resolve => setTimeout(resolve, 40));
+
       try {
         if (dataUrl && dataUrl.startsWith("data:image/")) {
           const liveRes = await fetch("/api/biometrics/verify-live", {
@@ -978,8 +1006,8 @@ export default function OnboardingPage() {
                 y: res.detection.box.y,
                 width: res.detection.box.width,
                 height: res.detection.box.height,
-                canvasWidth: targetCanvas.width,
-                canvasHeight: targetCanvas.height
+                canvasWidth: aiCanvas.width,
+                canvasHeight: aiCanvas.height
               } : undefined,
               descriptor: Array.from(res.descriptor)
             })
@@ -1470,9 +1498,11 @@ export default function OnboardingPage() {
                             />
 
                             {isFaceProcessing && (
-                              <div className="absolute inset-0 flex flex-col items-center justify-center bg-black/60 backdrop-blur-sm z-30">
-                                <div className="w-8 h-8 border-3 border-white border-t-transparent rounded-full animate-spin mb-2"></div>
-                                <span className="text-[10px] text-white font-black uppercase tracking-widest">Checking liveness…</span>
+                              <div className="absolute inset-0 flex flex-col items-center justify-center bg-black/80 backdrop-blur-md z-30 p-4 text-center">
+                                <div className="w-10 h-10 border-3 border-blue-400 border-t-transparent rounded-full animate-spin mb-3 shadow-lg"></div>
+                                <span className="text-[11px] md:text-xs text-white font-black tracking-wide px-4 py-2 bg-black/60 border border-white/10 rounded-2xl shadow-xl">
+                                  {processingStep}
+                                </span>
                               </div>
                             )}
                           </div>

@@ -1062,6 +1062,25 @@ export const db = {
 
             const whereClause: any = {};
             if (tenantId) whereClause.tenantId = tenantId;
+            if (filter.id) {
+                if (Array.isArray(filter.id)) {
+                    whereClause.id = { in: filter.id };
+                } else if (filter.id.$in) {
+                    whereClause.id = { in: filter.id.$in };
+                } else if (filter.id.in) {
+                    whereClause.id = { in: filter.id.in };
+                } else {
+                    whereClause.id = filter.id;
+                }
+            }
+            if (filter._id) {
+                const idVal = filter._id.$in || filter._id.in || filter._id;
+                if (Array.isArray(idVal)) {
+                    whereClause.id = { in: idVal };
+                } else {
+                    whereClause.id = idVal;
+                }
+            }
 
             if (filter.hostelName) {
                 if (typeof filter.hostelName === 'string') {
@@ -1091,6 +1110,9 @@ export const db = {
 
             if (filter.gatepassSearch || filter.search) {
                 const searchStr = String(filter.gatepassSearch || filter.search).trim();
+                const cleanDigits = searchStr.replace(/\D/g, '');
+                const spaceDigits = cleanDigits.length === 10 ? `${cleanDigits.slice(0, 5)} ${cleanDigits.slice(5)}` : null;
+
                 whereClause.OR = [
                     { registrationId: { equals: searchStr, mode: 'insensitive' } },
                     { erpId: { equals: searchStr, mode: 'insensitive' } },
@@ -1104,7 +1126,15 @@ export const db = {
                     { erpInformation: { contains: searchStr, mode: 'insensitive' } },
                     { phoneNumber: { contains: searchStr } },
                     { email: { contains: searchStr, mode: 'insensitive' } },
-                    { roomNumber: { contains: searchStr, mode: 'insensitive' } }
+                    { roomNumber: { contains: searchStr, mode: 'insensitive' } },
+                    { fatherNumber: { contains: searchStr } },
+                    { motherNumber: { contains: searchStr } },
+                    { localGuardianPhoneNumber: { contains: searchStr } },
+                    ...(spaceDigits ? [
+                        { fatherNumber: { contains: spaceDigits } },
+                        { motherNumber: { contains: spaceDigits } },
+                        { localGuardianPhoneNumber: { contains: spaceDigits } }
+                    ] : [])
                 ];
             }
 
@@ -2543,8 +2573,22 @@ export const db = {
         },
 
         deleteMany: async (filter: any) => {
-            await prisma.notification.deleteMany({ where: filter });
-            return true;
+            const whereClause: any = {};
+            if (filter.id) whereClause.id = filter.id;
+            if (filter._id) whereClause.id = filter._id;
+            if (filter.createdAt) {
+                if (filter.createdAt.$lt) whereClause.createdAt = { lt: filter.createdAt.$lt };
+                else if (filter.createdAt.lt) whereClause.createdAt = { lt: filter.createdAt.lt };
+                else whereClause.createdAt = filter.createdAt;
+            }
+            if (filter.targetStudentId) {
+                if (filter.targetStudentId.$in) whereClause.targetStudentId = { in: filter.targetStudentId.$in };
+                else if (filter.targetStudentId.in) whereClause.targetStudentId = { in: filter.targetStudentId.in };
+                else whereClause.targetStudentId = filter.targetStudentId;
+            }
+            if (filter.targetHostel) whereClause.targetHostel = filter.targetHostel;
+            if (filter.message) whereClause.message = filter.message;
+            return await prisma.notification.deleteMany({ where: whereClause });
         }
     },
 

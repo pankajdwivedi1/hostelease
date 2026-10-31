@@ -1769,7 +1769,7 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
                 const active = data.notifications.filter((n: any) => {
                     if (currentDismissed.includes(n._id)) return false;
                     const ackList = n.acknowledgedBy || [];
-                    const isAcked = ackList.some((ack: any) => ack.studentId === studentProfile._id);
+                    const isAcked = ackList.some((ack: any) => { const ackId = typeof ack === "string" ? ack : (ack?.studentId || ack?.id); return ackId === studentProfile?._id || ackId === studentProfile?.id; });
                     if (isAcked) return false;
                     const count = showCounts[n._id] || 0;
                     if (count >= 2) return false;
@@ -2659,7 +2659,7 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
 
                             // Check DB acknowledgment
                             const ackList = n.acknowledgedBy || [];
-                            const isAcked = ackList.some((ack: any) => ack.studentId === studentProfile._id);
+                            const isAcked = ackList.some((ack: any) => { const ackId = typeof ack === "string" ? ack : (ack?.studentId || ack?.id); return ackId === studentProfile?._id || ackId === studentProfile?.id; });
                             if (isAcked) return false;
 
                             // Cap at 2 displays

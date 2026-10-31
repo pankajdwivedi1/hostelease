@@ -535,14 +535,28 @@ export async function GET(request: NextRequest) {
         return NextResponse.json({ error: "Tenant context not found" }, { status: 400 });
       }
 
-      const students = await db.students.list({ search: cleaned });
+      const coreDigits = cleaned.length >= 10 ? cleaned.slice(-10) : cleaned;
+      const spaceFormatted = coreDigits.length === 10 ? `${coreDigits.slice(0, 5)} ${coreDigits.slice(5)}` : coreDigits;
 
-      const cleanDbPhone = (num: string) => num ? num.replace(/\D/g, "").replace(/^91/, "") : "";
+      let students = await db.students.list({ search: coreDigits });
+      if (!students || students.length === 0) {
+        students = await db.students.list({ search: spaceFormatted });
+      }
+
+      const cleanDbPhone = (num: string | null | undefined) => {
+        if (!num) return "";
+        return String(num).replace(/\D/g, "");
+      };
+
       const matchedList = students?.filter((s: any) => {
         const fatherClean = cleanDbPhone(s.fatherNumber);
         const motherClean = cleanDbPhone(s.motherNumber);
         const lgClean = cleanDbPhone(s.localGuardianPhoneNumber);
-        return fatherClean === cleaned || motherClean === cleaned || lgClean === cleaned;
+        return (
+          fatherClean.endsWith(coreDigits) ||
+          motherClean.endsWith(coreDigits) ||
+          lgClean.endsWith(coreDigits)
+        );
       }) || [];
 
       if (matchedList.length === 0) {

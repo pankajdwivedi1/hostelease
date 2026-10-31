@@ -731,7 +731,7 @@ export default function OutingHistoryPage() {
                 <div className="grid grid-cols-2 md:grid-cols-4 xl:grid-cols-8 gap-2 sm:gap-4 p-2.5 sm:p-5 bg-[#0a0a0f] border border-white/5 rounded-xl sm:rounded-2xl shadow-2xl">
                     {/* 1. College */}
                     <div className="flex flex-row items-center sm:flex-col sm:items-start gap-1 sm:gap-1.5">
-                        <label className="text-[7.5px] sm:text-[10px] text-white/40 font-black uppercase tracking-wider sm:tracking-widest shrink-0 w-[40px] sm:w-auto whitespace-nowrap ml-0.5 sm:ml-1">
+                        <label className="text-[10px] text-white/40 font-bold uppercase tracking-wider sm:tracking-widest shrink-0 w-[48px] sm:w-auto whitespace-nowrap ml-0.5 sm:ml-1">
                             College
                         </label>
                         <select
@@ -747,7 +747,7 @@ export default function OutingHistoryPage() {
 
                     {/* 2. Select Semester (Blue Pen Marking) */}
                     <div className="flex flex-row items-center sm:flex-col sm:items-start gap-1 sm:gap-1.5">
-                        <label className="text-[7.5px] sm:text-[10px] text-white/40 font-black uppercase tracking-wider sm:tracking-widest shrink-0 w-[40px] sm:w-auto whitespace-nowrap ml-0.5 sm:ml-1">
+                        <label className="text-[10px] text-white/40 font-bold uppercase tracking-wider sm:tracking-widest shrink-0 w-[48px] sm:w-auto whitespace-nowrap ml-0.5 sm:ml-1">
                             <span className="sm:hidden">Sem</span>
                             <span className="hidden sm:inline">Select Semester</span>
                         </label>
@@ -764,7 +764,7 @@ export default function OutingHistoryPage() {
 
                     {/* 3. Select Hostel */}
                     <div className="flex flex-row items-center sm:flex-col sm:items-start gap-1 sm:gap-1.5">
-                        <label className="text-[7.5px] sm:text-[10px] text-white/40 font-black uppercase tracking-wider sm:tracking-widest shrink-0 w-[40px] sm:w-auto whitespace-nowrap ml-0.5 sm:ml-1">
+                        <label className="text-[10px] text-white/40 font-bold uppercase tracking-wider sm:tracking-widest shrink-0 w-[48px] sm:w-auto whitespace-nowrap ml-0.5 sm:ml-1">
                             <span className="sm:hidden">Hostel</span>
                             <span className="hidden sm:inline">Select Hostel</span>
                         </label>
@@ -781,7 +781,7 @@ export default function OutingHistoryPage() {
 
                     {/* 4. Status */}
                     <div className="flex flex-row items-center sm:flex-col sm:items-start gap-1 sm:gap-1.5 col-span-1">
-                        <label className="text-[7.5px] sm:text-[10px] text-white/40 font-black uppercase tracking-wider sm:tracking-widest shrink-0 w-[40px] sm:w-auto whitespace-nowrap ml-0.5 sm:ml-1">
+                        <label className="text-[10px] text-white/40 font-bold uppercase tracking-wider sm:tracking-widest shrink-0 w-[48px] sm:w-auto whitespace-nowrap ml-0.5 sm:ml-1">
                             Status
                         </label>
                         <select
@@ -798,7 +798,7 @@ export default function OutingHistoryPage() {
 
                     {/* 5. Out Since */}
                     <div className="flex flex-row items-center sm:flex-col sm:items-start gap-1 sm:gap-1.5 col-span-1">
-                        <label className="text-[7.5px] sm:text-[10px] text-white/40 font-black uppercase tracking-wider sm:tracking-widest shrink-0 w-[40px] sm:w-auto whitespace-nowrap ml-0.5 sm:ml-1">
+                        <label className="text-[10px] text-white/40 font-bold uppercase tracking-wider sm:tracking-widest shrink-0 w-[48px] sm:w-auto whitespace-nowrap ml-0.5 sm:ml-1">
                             <span className="sm:hidden">Since</span>
                             <span className="hidden sm:inline">Out Since</span>
                         </label>
@@ -813,7 +813,7 @@ export default function OutingHistoryPage() {
 
                     {/* 6. Out Until */}
                     <div className="flex flex-row items-center sm:flex-col sm:items-start gap-1 sm:gap-1.5 col-span-1">
-                        <label className="text-[7.5px] sm:text-[10px] text-white/40 font-black uppercase tracking-wider sm:tracking-widest shrink-0 w-[40px] sm:w-auto whitespace-nowrap ml-0.5 sm:ml-1">
+                        <label className="text-[10px] text-white/40 font-bold uppercase tracking-wider sm:tracking-widest shrink-0 w-[48px] sm:w-auto whitespace-nowrap ml-0.5 sm:ml-1">
                             <span className="sm:hidden">Until</span>
                             <span className="hidden sm:inline">Out Until</span>
                         </label>
@@ -829,11 +829,11 @@ export default function OutingHistoryPage() {
                     {/* 7. Select Time (Compact col-span-1 with decreased size) */}
                     <div className="flex flex-row items-center sm:flex-col sm:items-stretch gap-1 sm:gap-1.5 col-span-1">
                         {/* Mobile: Vertical Stack (OUT on top, IN directly below) */}
-                        <div className="flex sm:hidden flex-col gap-0.5 shrink-0 w-[40px] ml-0.5">
+                        <div className="flex sm:hidden flex-col gap-0.5 shrink-0 w-[48px] ml-0.5">
                             <button
                                 type="button"
                                 onClick={() => setFilters(f => ({ ...f, timeMode: 'out' }))}
-                                className={`w-full py-0.5 rounded text-[7.5px] font-black uppercase tracking-wider transition-all leading-none text-center ${
+                                className={`w-full py-0.5 rounded text-[10px] font-bold uppercase tracking-wider transition-all leading-none text-center ${
                                     filters.timeMode !== 'in'
                                         ? 'bg-blue-600 text-white shadow-sm ring-1 ring-blue-400/50'
                                         : 'bg-white/5 border border-white/10 text-white/50 hover:text-white'
@@ -845,7 +845,7 @@ export default function OutingHistoryPage() {
                             <button
                                 type="button"
                                 onClick={() => setFilters(f => ({ ...f, timeMode: 'in', status: f.status === 'out' ? 'all' : f.status }))}
-                                className={`w-full py-0.5 rounded text-[7.5px] font-black uppercase tracking-wider transition-all leading-none text-center ${
+                                className={`w-full py-0.5 rounded text-[10px] font-bold uppercase tracking-wider transition-all leading-none text-center ${
                                     filters.timeMode === 'in'
                                         ? 'bg-emerald-600 text-white shadow-sm ring-1 ring-emerald-400/50'
                                         : 'bg-white/5 border border-white/10 text-white/50 hover:text-white'
@@ -946,7 +946,7 @@ export default function OutingHistoryPage() {
 
                     {/* 8. Search ID (Box size matching FROM and TO box size) */}
                     <div className="flex flex-row items-center sm:flex-col sm:items-start gap-1 sm:gap-1.5 col-span-1">
-                        <label className="text-[7.5px] sm:text-[10px] text-white/40 font-black uppercase tracking-wider sm:tracking-widest shrink-0 w-[40px] sm:w-auto whitespace-nowrap ml-0.5 sm:ml-1">
+                        <label className="text-[10px] text-white/40 font-bold uppercase tracking-wider sm:tracking-widest shrink-0 w-[48px] sm:w-auto whitespace-nowrap ml-0.5 sm:ml-1">
                             <span className="sm:hidden">Search</span>
                             <span className="hidden sm:inline">Search ID</span>
                         </label>

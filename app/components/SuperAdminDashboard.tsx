@@ -35,8 +35,12 @@ import {
     ArrowUpDown,
     GripVertical,
     Bell,
-    Receipt
+    Receipt,
+    Eye,
+    EyeOff,
+    ScanFace
 } from "lucide-react";
+import BossFaceModal from "./BossFaceModal";
 import { generateOfficialInvoicePDF } from "@/lib/invoicePdfGenerator";
 import { formatToDDMMYYYY, formatDateDDMMYYYY, formatDateTimeDDMMYYYY } from "@/lib/dateFormat";
 
@@ -562,6 +566,20 @@ export default function SuperAdminDashboard() {
     const [isAuthorized, setIsAuthorized] = useState(false);
     const [isMounted, setIsMounted] = useState(false);
     const [password, setPassword] = useState("");
+    const [showFaceModal, setShowFaceModal] = useState(false);
+    const [faceModalMode, setFaceModalMode] = useState<"login" | "enroll">("login");
+    const [hasFaceEnrolled, setHasFaceEnrolled] = useState(false);
+
+    const getDesktopDeviceId = () => {
+        if (typeof window === "undefined") return "";
+        let id = localStorage.getItem("boss_desktop_device_id");
+        if (!id) {
+            id = "desktop_" + Math.random().toString(36).substring(2, 12) + "_" + Date.now().toString(36);
+            localStorage.setItem("boss_desktop_device_id", id);
+        }
+        return id;
+    };
+    const [showPassword, setShowPassword] = useState(false);
 
     const [editingTenant, setEditingTenant] = useState<Tenant | null>(null);
     const [deletingTenant, setDeletingTenant] = useState<Tenant | null>(null);
@@ -1205,7 +1223,7 @@ export default function SuperAdminDashboard() {
             const response = await fetch("/api/super-admin/auth", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ password }),
+                body: JSON.stringify({ password: password.trim() }),
             });
             if (!response.ok) throw new Error("Invalid SuperAdmin Password");
             setIsAuthorized(true);
@@ -1447,7 +1465,7 @@ export default function SuperAdminDashboard() {
     if (!isAuthorized) {
         return (
             <div className="min-h-screen bg-[#050510] flex items-center justify-center p-6 bg-[radial-gradient(circle_at_top,_var(--tw-gradient-stops))] from-blue-900/20 via-black to-black">
-                <div className="w-full max-w-md space-y-8 text-center animate-in fade-in zoom-in duration-500">
+                <div className="w-full max-w-md space-y-6 text-center animate-in fade-in zoom-in duration-500">
                     <div className="relative inline-block">
                         <div className="w-20 h-20 bg-blue-600/20 rounded-2xl flex items-center justify-center border border-blue-500/30 mx-auto shadow-2xl shadow-blue-500/20">
                             <ShieldCheck className="w-10 h-10 text-blue-400" />
@@ -1458,30 +1476,91 @@ export default function SuperAdminDashboard() {
                     </div>
 
                     <div>
-                        <h1 className="text-3xl font-black text-white tracking-tighter uppercase mb-2">Hosteleaze HQ</h1>
-                        <p className="text-gray-400 text-sm font-bold tracking-widest uppercase">Global Multi-Tenant Hub</p>
+                        <h1 className="text-2xl sm:text-3xl font-black text-white tracking-tighter uppercase mb-1">Hosteleaze Boss Control</h1>
+                        <p className="text-gray-400 text-xs font-bold tracking-widest uppercase">Biometric & Hardware Protected</p>
                     </div>
 
-                    <form onSubmit={handleLogin} className="space-y-4">
-                        <input
-                            type="password"
-                            value={password}
-                            onChange={(e) => setPassword(e.target.value)}
-                            suppressHydrationWarning
-                            className="w-full bg-white/5 border border-white/10 p-4 rounded-xl text-white font-bold text-center tracking-[0.4em] focus:ring-2 focus:ring-blue-500/40 outline-none transition-all placeholder:tracking-normal placeholder:font-medium placeholder:text-gray-600"
-                            placeholder="HQ AUTH KEY"
-                            autoFocus
-                        />
-                        <button 
-                            suppressHydrationWarning
-                            className="w-full bg-blue-600 text-white font-black py-4 rounded-xl shadow-xl shadow-blue-600/20 uppercase tracking-widest hover:bg-blue-700 active:scale-95 transition-all"
+                    {/* Primary Option: Boss Face Scan (Any Device) */}
+                    <div className="p-5 rounded-3xl bg-blue-950/20 border border-blue-500/30 shadow-xl text-center space-y-3">
+                        <div className="flex items-center justify-center gap-2 text-blue-400 font-black text-xs uppercase tracking-wider">
+                            <ScanFace className="w-4 h-4" />
+                            <span>Boss Face ID Unlock</span>
+                        </div>
+                        <p className="text-[11px] text-gray-300 font-medium">
+                            Authorized for Dr. Pankaj Dwivedi on <strong>ANY device</strong> (Mobile & Desktop).
+                        </p>
+                        <button
+                            type="button"
+                            onClick={() => {
+                                setFaceModalMode("login");
+                                setShowFaceModal(true);
+                            }}
+                            className="w-full bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white font-black py-3.5 rounded-2xl shadow-lg shadow-blue-600/30 uppercase tracking-widest text-xs flex items-center justify-center gap-2 active:scale-95 transition-all cursor-pointer"
                         >
-                            Authorize Entry
+                            <ScanFace className="w-4 h-4" />
+                            <span>Scan Face to Open</span>
                         </button>
-                    </form>
+                    </div>
 
-                    <p className="text-[10px] text-gray-600 uppercase font-black tracking-widest">Restricted Access • Boss Portal</p>
+                    {/* Secondary Option: Password (Desktop Only) */}
+                    <div className="p-5 rounded-3xl bg-white/5 border border-white/10 text-center space-y-3">
+                        <div className="flex items-center justify-center gap-1.5 text-gray-400 font-black text-[11px] uppercase tracking-wider">
+                            <span>🔑 Master Password</span>
+                            <span className="text-[9px] px-2 py-0.5 rounded-md bg-amber-500/20 text-amber-300 border border-amber-500/30">Desktop Only</span>
+                        </div>
+
+                        <form onSubmit={handleLogin} className="space-y-3">
+                            <div className="relative">
+                                <input
+                                    type={showPassword ? "text" : "password"}
+                                    value={password}
+                                    onChange={(e) => setPassword(e.target.value)}
+                                    autoCapitalize="none"
+                                    autoCorrect="off"
+                                    autoComplete="off"
+                                    spellCheck={false}
+                                    suppressHydrationWarning
+                                    className="w-full bg-black/40 border border-white/10 p-3.5 pr-12 rounded-xl text-white font-bold text-center tracking-[0.3em] focus:ring-2 focus:ring-blue-500/40 outline-none transition-all placeholder:tracking-normal placeholder:font-medium placeholder:text-gray-600 text-sm"
+                                    placeholder="MASTER PASSWORD"
+                                />
+                                <button
+                                    type="button"
+                                    onClick={() => setShowPassword(!showPassword)}
+                                    className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-400 hover:text-white transition-colors p-1"
+                                    title={showPassword ? "Hide password" : "Show password"}
+                                >
+                                    {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                                </button>
+                            </div>
+                            <button 
+                                suppressHydrationWarning
+                                className="w-full bg-white/10 hover:bg-white/20 text-white font-black py-3 rounded-xl uppercase tracking-widest text-xs active:scale-95 transition-all cursor-pointer border border-white/10"
+                            >
+                                Unlock via Desktop
+                            </button>
+                        </form>
+                    </div>
+
+                    <p className="text-[10px] text-gray-500 uppercase font-black tracking-widest">
+                        Restricted Access • Hosteleaze Boss Control
+                    </p>
                 </div>
+
+                <BossFaceModal
+                    isOpen={showFaceModal}
+                    mode={faceModalMode}
+                    onClose={() => setShowFaceModal(false)}
+                    onSuccess={() => {
+                        setShowFaceModal(false);
+                        if (faceModalMode === "login") {
+                            setIsAuthorized(true);
+                            localStorage.setItem("superadmin_session", "true");
+                        } else {
+                            setHasFaceEnrolled(true);
+                            showToast("Boss Face ID successfully enrolled!", "success");
+                        }
+                    }}
+                />
             </div>
         );
     }
@@ -1513,6 +1592,22 @@ export default function SuperAdminDashboard() {
                         <span>Pulse: {globalStats?.totalActiveTraffic || 0} <span className="text-[7px] sm:text-[8px] font-bold opacity-60 italic">Att/M</span></span>
                     </div>
 
+                    <button
+                        type="button"
+                        onClick={() => {
+                            setFaceModalMode("enroll");
+                            setShowFaceModal(true);
+                        }}
+                        className={`h-7 sm:h-11 px-2.5 sm:px-4 rounded-lg sm:rounded-xl flex items-center gap-1.5 text-[8px] sm:text-xs font-black uppercase tracking-wider sm:tracking-widest shadow-xs transition-all cursor-pointer ${
+                            hasFaceEnrolled 
+                                ? "bg-blue-50 text-blue-700 border border-blue-200 hover:bg-blue-100" 
+                                : "bg-amber-50 text-amber-700 border border-amber-200 hover:bg-amber-100 animate-pulse"
+                        }`}
+                        title="Enroll or Update Boss Face ID"
+                    >
+                        <ScanFace className="w-3.5 h-3.5 shrink-0" />
+                        <span>{hasFaceEnrolled ? "Boss Face Active" : "Enroll Face ID"}</span>
+                    </button>
                     <LiveDbSwitch />
                     <SyncDbButton />
                     <GenerateEmbeddingsButton />
@@ -4593,6 +4688,23 @@ export default function SuperAdminDashboard() {
                     </div>
                 );
             })()}
+
+            {/* Boss Face Modal for Enrollment & Auth */}
+            <BossFaceModal
+                isOpen={showFaceModal}
+                mode={faceModalMode}
+                onClose={() => setShowFaceModal(false)}
+                onSuccess={() => {
+                    setShowFaceModal(false);
+                    if (faceModalMode === "login") {
+                        setIsAuthorized(true);
+                        localStorage.setItem("superadmin_session", "true");
+                    } else {
+                        setHasFaceEnrolled(true);
+                        showToast("Boss Face ID successfully enrolled and active on all devices!", "success");
+                    }
+                }}
+            />
         </div>
     );
 }

@@ -490,6 +490,137 @@ export function assessPhotoQuality(
  * - Beard / Jawline hair texture
  * - Smudged / Foggy camera lens haze (Dark channel prior & dynamic contrast)
  */
+
+/**
+ * Optical Background & Ambient Lighting Quality Analyzer
+ * Inspects peripheral background zones (top-left corner, top-right corner, upper side margins, and above-head area)
+ * to detect dark rooms, pitch-black backgrounds, or underexposed settings.
+ * Specifically excludes face, hair, and clothing to prevent false positives on students with black hair or dark shirts.
+ */
+export function assessBackgroundLighting(
+    inputElement: HTMLVideoElement | HTMLCanvasElement | HTMLImageElement,
+    box?: { x: number; y: number; width: number; height: number }
+): {
+    isDarkBackground: boolean;
+    avgBackgroundLuminance: number;
+    darkPixelRatio: number;
+    reason?: string;
+} {
+    try {
+        if (!inputElement) {
+            return { isDarkBackground: false, avgBackgroundLuminance: 128, darkPixelRatio: 0 };
+        }
+
+        const width = (inputElement as HTMLVideoElement).videoWidth || inputElement.width || 0;
+        const height = (inputElement as HTMLVideoElement).videoHeight || inputElement.height || 0;
+
+        if (width === 0 || height === 0) {
+            return { isDarkBackground: false, avgBackgroundLuminance: 128, darkPixelRatio: 0 };
+        }
+
+        // Draw onto lightweight sample canvas (160x120) for instant zero-latency analysis
+        const sampleW = 160;
+        const sampleH = Math.max(1, Math.round((height / width) * sampleW));
+        const canvas = document.createElement('canvas');
+        canvas.width = sampleW;
+        canvas.height = sampleH;
+
+        const ctx = canvas.getContext('2d', { willReadFrequently: true });
+        if (!ctx) {
+            return { isDarkBackground: false, avgBackgroundLuminance: 128, darkPixelRatio: 0 };
+        }
+
+        ctx.drawImage(inputElement, 0, 0, sampleW, sampleH);
+        const imgData = ctx.getImageData(0, 0, sampleW, sampleH);
+        const data = imgData.data;
+
+        // Scale face bounding box to sample canvas coordinates
+        const scaleX = sampleW / width;
+        const scaleY = sampleH / height;
+
+        let faceX = 0, faceY = 0, faceW = 0, faceH = 0;
+        if (box) {
+            faceX = box.x * scaleX;
+            faceY = box.y * scaleY;
+            faceW = box.width * scaleX;
+            faceH = box.height * scaleY;
+        } else {
+            faceX = sampleW * 0.25;
+            faceY = sampleH * 0.20;
+            faceW = sampleW * 0.50;
+            faceH = sampleH * 0.50;
+        }
+
+        // Define student exclusion zone:
+        // Head with hair extends ~25% above face box and ~15% to sides.
+        const excludeLeft = Math.max(0, faceX - faceW * 0.15);
+        const excludeRight = Math.min(sampleW, faceX + faceW * 1.15);
+        const excludeTop = Math.max(0, faceY - faceH * 0.25);
+        // Only sample upper 65% of frame (above shoulders/chest) to avoid dark clothes or shirts
+        const maxSampleY = Math.min(sampleH, Math.floor(sampleH * 0.65));
+
+        let totalBgPixels = 0;
+        let sumLuminance = 0;
+        let darkPixelCount = 0;      // Lum < 48 (dark room / black shadow)
+        let pitchBlackCount = 0;     // Lum < 30 (pitch black)
+
+        for (let y = 0; y < maxSampleY; y++) {
+            for (let x = 0; x < sampleW; x++) {
+                // If pixel falls inside the student's head/face zone, skip it
+                if (x >= excludeLeft && x <= excludeRight && y >= excludeTop) {
+                    continue;
+                }
+
+                const idx = (y * sampleW + x) * 4;
+                const r = data[idx];
+                const g = data[idx + 1];
+                const b = data[idx + 2];
+                // ITU-R BT.601 standard perceived luminance
+                const lum = 0.299 * r + 0.587 * g + 0.114 * b;
+
+                sumLuminance += lum;
+                totalBgPixels++;
+
+                if (lum < 48) darkPixelCount++;
+                if (lum < 30) pitchBlackCount++;
+            }
+        }
+
+        if (totalBgPixels < 30) {
+            return { isDarkBackground: false, avgBackgroundLuminance: 128, darkPixelRatio: 0 };
+        }
+
+        const avgBackgroundLuminance = Math.round(sumLuminance / totalBgPixels);
+        const darkPixelRatio = darkPixelCount / totalBgPixels;
+        const pitchBlackRatio = pitchBlackCount / totalBgPixels;
+
+        // Reject if:
+        // 1. Average background brightness is below 45 (dark room / black wall)
+        // 2. Over 65% of background pixels are dark (< 48) AND avg brightness < 60
+        // 3. Over 50% of background pixels are pitch-black (< 30)
+        const isDarkBackground = (
+            avgBackgroundLuminance < 45 ||
+            (darkPixelRatio > 0.65 && avgBackgroundLuminance < 60) ||
+            pitchBlackRatio > 0.50
+        );
+
+        let reason = "";
+        if (isDarkBackground) {
+            reason = "Dark or black background detected! Please turn on room lights and stand in front of a bright or well-lit wall to retake your photo.";
+        }
+
+        return {
+            isDarkBackground,
+            avgBackgroundLuminance,
+            darkPixelRatio: Math.round(darkPixelRatio * 100),
+            reason: reason || undefined
+        };
+    } catch (err) {
+        console.error("Background lighting analysis error:", err);
+        return { isDarkBackground: false, avgBackgroundLuminance: 128, darkPixelRatio: 0 };
+    }
+}
+
 export function assessFacialLandmarkSharpness(
     inputElement: HTMLVideoElement | HTMLCanvasElement | HTMLImageElement,
     landmarks?: any,
