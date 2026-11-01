@@ -211,10 +211,10 @@ export default function VideoCallScreen({
 
     // 1. Adjust volume immediate attenuation/boost
     if (remoteVideoRef.current) {
-      remoteVideoRef.current.volume = nextMode ? 1.0 : 0.35;
+      remoteVideoRef.current.volume = nextMode ? 1.0 : 0.28;
     }
 
-    // 2. Output Device routing via setSinkId if supported (PC / External Headsets)
+    // 2. Output Device routing via setSinkId if supported
     try {
       const el = remoteVideoRef.current as any;
       if (el && typeof el.setSinkId === 'function') {
@@ -234,9 +234,6 @@ export default function VideoCallScreen({
               return (
                 lbl.includes('earpiece') ||
                 lbl.includes('receiver') ||
-                lbl.includes('headphone') ||
-                lbl.includes('headset') ||
-                lbl.includes('bluetooth') ||
                 lbl.includes('phone') ||
                 lbl.includes('internal')
               );
@@ -254,7 +251,7 @@ export default function VideoCallScreen({
     }
 
     // 3. User feedback toast
-    const label = nextMode ? '🔊 Loudspeaker (Full Volume)' : '🔉 Quiet Mode (35% Volume)';
+    const label = nextMode ? '🔊 Loudspeaker ON (Loud)' : '🔈 Ear Speaker ON (Normal)';
     setSpeakerNotice(label);
     if (noticeTimeoutRef.current) clearTimeout(noticeTimeoutRef.current);
     noticeTimeoutRef.current = setTimeout(() => {
@@ -1047,25 +1044,22 @@ export default function VideoCallScreen({
                   ? 'bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-300 border-emerald-500/40 shadow-emerald-950/40'
                   : 'bg-blue-500/20 hover:bg-blue-500/30 text-blue-300 border-blue-500/40 shadow-blue-950/40'
               }`}
-              title={isLoudspeaker ? 'Currently Loudspeaker (Tap for Soft Volume)' : 'Currently Soft Volume (Tap for Loudspeaker)'}
+              title={isLoudspeaker ? 'Currently Loudspeaker (Tap to switch to Ear Speaker)' : 'Currently Ear Speaker (Tap to switch to Loudspeaker)'}
             >
               {isLoudspeaker ? (
                 <>
                   <Volume2 className="w-5 h-5 text-emerald-400 animate-pulse" />
-                  <span>🔊 Loudspeaker (100%)</span>
+                  <span>🔊 Loudspeaker (Loud)</span>
                 </>
               ) : (
                 <>
                   <Volume1 className="w-5 h-5 text-blue-400" />
-                  <span>🔉 Soft Volume (35%)</span>
+                  <span>🔈 Ear Speaker (Small)</span>
                 </>
               )}
             </button>
-            <span className="text-[10px] text-slate-400 font-medium text-center max-w-[220px]">
-              {isLoudspeaker ? 'Loud Audio • Tap for Soft/Private' : 'Soft Audio • Tap for Loudspeaker'}
-            </span>
-            <span className="text-[9px] text-slate-500 font-normal text-center mt-0.5">
-              💡 For private ear audio, connect Bluetooth earbuds or earphones
+            <span className="text-[10px] text-slate-400 font-medium">
+              {isLoudspeaker ? 'Sound on Loudspeaker (Tap for Ear Speaker)' : 'Sound on Ear Speaker (Tap for Loudspeaker)'}
             </span>
           </div>
 
@@ -1188,7 +1182,7 @@ export default function VideoCallScreen({
                   ? 'bg-emerald-600 text-white shadow-emerald-900/50 border-2 border-emerald-400'
                   : 'bg-blue-600 text-white shadow-blue-900/50 border-2 border-blue-400'
               }`}
-              title={isLoudspeaker ? 'Loudspeaker (100%) - Tap for Soft (35%)' : 'Soft Volume (35%) - Tap for Loudspeaker'}
+              title={isLoudspeaker ? 'Loudspeaker is ON (Tap for Ear Speaker)' : 'Ear Speaker is ON (Tap for Loudspeaker)'}
             >
               {isLoudspeaker ? (
                 <Volume2 className="w-5 h-5 sm:w-6 sm:h-6" />
