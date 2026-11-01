@@ -41,11 +41,7 @@ export function middleware(request: NextRequest) {
     // When visiting root '/' on main domain without explicit ?tenant= parameter or existing cookie,
     // do NOT set default tenant cookie so landing page loads for new visitors.
     if (isMainDomain && pathname === '/' && !tenantParam && !tenantCookie) {
-        const requestHeaders = new Headers(request.headers);
-        requestHeaders.set('x-url', request.url);
-        return NextResponse.next({
-            request: { headers: requestHeaders },
-        });
+        return NextResponse.next();
     }
 
     let tenantSlug = 'default';
@@ -120,13 +116,7 @@ export function middleware(request: NextRequest) {
         );
     }
 
-    const requestHeaders = new Headers(request.headers);
-    requestHeaders.set('x-tenant-slug', tenantSlug);
-    requestHeaders.set('x-url', request.url);
-
-    const response = NextResponse.next({
-        request: { headers: requestHeaders },
-    });
+    const response = NextResponse.next();
 
     // Persist valid slugs in a cookie only if not already set (prevents redundant Set-Cookie headers that break CDN caching)
     if (tenantSlug && tenantSlug !== 'default' && tenantCookie !== tenantSlug) {

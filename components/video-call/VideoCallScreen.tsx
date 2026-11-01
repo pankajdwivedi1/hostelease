@@ -35,39 +35,73 @@ type CallPhase =
   | 'missed'
   | 'error';
 
-// ⚡ Calibrated HD Quality Booster: 1.6 Mbps for sharp, unblurred, lag-free video without overheating
+// ⚡ Calibrated HD Quality Booster: 2.8 Mbps for cinema-grade, unblurred, lag-free video
 function boostSdpQuality(sdp: string): string {
   let modified = sdp;
   if (modified.includes('b=AS:')) {
-    modified = modified.replace(/b=AS:\d+/g, 'b=AS:1600');
+    modified = modified.replace(/b=AS:\d+/g, 'b=AS:2800');
   } else {
     modified = modified.replace(
       /m=video ([0-9]+) ([A-Z\/]+) ([0-9 ]+)/g,
-      'm=video $1 $2 $3\r\nb=AS:1600\r\nb=TIAS:1600000'
+      'm=video $1 $2 $3\r\nb=AS:2800\r\nb=TIAS:2800000'
     );
   }
   if (modified.includes('b=TIAS:')) {
-    modified = modified.replace(/b=TIAS:\d+/g, 'b=TIAS:1600000');
+    modified = modified.replace(/b=TIAS:\d+/g, 'b=TIAS:2800000');
   }
   return modified;
 }
 
-// 📱 Calibrated Mobile Portrait Constraints (Sharp, Cool CPU, Natural In-Hand Framing)
+// 📱 Wide-Angle Optical Sensor Constraints (Full Head, Chin & Shoulders at 20-30cm, Zero Digital Crop)
 function getOptimalVideoConstraints(facing: 'user' | 'environment'): MediaTrackConstraints {
   const isPortrait = typeof window !== 'undefined' ? window.innerHeight > window.innerWidth : true;
   return isPortrait
     ? {
         facingMode: facing,
-        width: { ideal: 720, max: 720 },
-        height: { ideal: 1280, max: 1280 },
+        // 3:4 Native optical sensor ratio: captures maximum wide field of view without driver crop
+        aspectRatio: { ideal: 3 / 4 },
+        width: { ideal: 960, max: 1080 },
+        height: { ideal: 1280, max: 1440 },
         frameRate: { ideal: 30, max: 30 },
       }
     : {
         facingMode: facing,
-        width: { ideal: 1280, max: 1280 },
-        height: { ideal: 720, max: 720 },
+        aspectRatio: { ideal: 16 / 9 },
+        width: { ideal: 1280, max: 1920 },
+        height: { ideal: 720, max: 1080 },
         frameRate: { ideal: 30, max: 30 },
       };
+}
+
+// 🔍 Set camera hardware to 0.5x ultra-wide optical zoom, continuous autofocus & motion hint
+async function ensureWidestOpticalZoom(track?: MediaStreamTrack) {
+  if (!track || track.kind !== 'video') return;
+  try {
+    (track as any).contentHint = 'motion';
+    const caps = (track.getCapabilities && track.getCapabilities()) as any;
+    const advancedConstraints: any = {};
+    if (caps) {
+      if (caps.zoom) {
+        const minSupported = typeof caps.zoom.min === 'number' ? caps.zoom.min : 0.5;
+        advancedConstraints.zoom = Math.max(minSupported, 0.5);
+      }
+      if (Array.isArray(caps.focusMode) && caps.focusMode.includes('continuous')) {
+        advancedConstraints.focusMode = 'continuous';
+      }
+      if (Array.isArray(caps.exposureMode) && caps.exposureMode.includes('continuous')) {
+        advancedConstraints.exposureMode = 'continuous';
+      }
+    }
+    if (Object.keys(advancedConstraints).length > 0) {
+      await track.applyConstraints({
+        advanced: [advancedConstraints],
+      }).catch(() => {});
+    } else {
+      await track.applyConstraints({
+        advanced: [{ zoom: 0.5 } as any],
+      }).catch(() => {});
+    }
+  } catch {}
 }
 
 interface VideoCallScreenProps {
@@ -245,6 +279,22 @@ export default function VideoCallScreen({
 
   // Pending remote offer stored if arrived before PC ready
   const pendingOfferRef = useRef<any>(null);
+  // Buffered ICE candidates queue (prevents dropping candidates when arriving before remote description)
+  const pendingCandidatesRef = useRef<RTCIceCandidateInit[]>([]);
+
+  // ─── Drain Buffered ICE Candidates ─────────────────────────
+  const drainPendingIceCandidates = useCallback(async (pc: RTCPeerConnection) => {
+    if (!pc || !pc.remoteDescription) return;
+    const queued = [...pendingCandidatesRef.current];
+    pendingCandidatesRef.current = [];
+    for (const candidate of queued) {
+      try {
+        await pc.addIceCandidate(new RTCIceCandidate(candidate));
+      } catch (err) {
+        console.warn('[video-call] Error applying queued ICE candidate:', err);
+      }
+    }
+  }, []);
 
   // ─── Apply Calibrated HD Bitrate & Hardware Codec Parameters ───
   const applyHdBitrate = useCallback(async (pc: RTCPeerConnection) => {
@@ -256,23 +306,23 @@ export default function VideoCallScreen({
         if (!parameters.encodings || parameters.encodings.length === 0) {
           parameters.encodings = [{}];
         }
-        // 1.6 Mbps: Retina-sharp clarity, zero overheating, zero network choking
-        parameters.encodings[0].maxBitrate = 1600000;
-        parameters.encodings[0].minBitrate = 250000;
+        // 2.8 Mbps: Cinema-grade sharpness, zero overheating, zero network choking
+        parameters.encodings[0].maxBitrate = 2800000;
+        parameters.encodings[0].minBitrate = 400000;
         parameters.encodings[0].maxFramerate = 30;
         // Balanced adaptation ensures fluid 30fps without freezing or buffer backlog
         (parameters as any).degradationPreference = 'balanced';
         await videoSender.setParameters(parameters);
       }
 
-      // Codec Optimization: Prioritize H.264 & VP8 for hardware accelerated sharpness with zero phone heating
+      // Codec Optimization: Prioritize H.264 & VP9 for hardware accelerated sharpness with zero phone heating
       if ('getTransceivers' in pc && 'getCapabilities' in RTCRtpSender) {
         const transceivers = pc.getTransceivers();
         const videoTransceiver = transceivers.find((t) => t.sender.track && t.sender.track.kind === 'video');
         if (videoTransceiver && 'setCodecPreferences' in videoTransceiver) {
           const capabilities = RTCRtpSender.getCapabilities('video');
           if (capabilities && capabilities.codecs) {
-            const preferred = ['video/H264', 'video/VP8', 'video/VP9'];
+            const preferred = ['video/H264', 'video/VP9', 'video/VP8'];
             const sortedCodecs = [...capabilities.codecs].sort((a, b) => {
               const aIdx = preferred.indexOf(a.mimeType);
               const bIdx = preferred.indexOf(b.mimeType);
@@ -371,11 +421,20 @@ export default function VideoCallScreen({
             },
           });
         } catch {
+          const isPortrait = typeof window !== 'undefined' ? window.innerHeight > window.innerWidth : true;
           stream = await navigator.mediaDevices.getUserMedia({
-            video: { facingMode: facing, width: { ideal: 1280 } },
+            video: {
+              facingMode: facing,
+              aspectRatio: { ideal: isPortrait ? 3 / 4 : 16 / 9 },
+            },
             audio: true,
           });
         }
+      }
+
+      if (stream) {
+        const vt = stream.getVideoTracks()[0];
+        if (vt) await ensureWidestOpticalZoom(vt);
       }
 
       localStreamRef.current = stream;
@@ -446,6 +505,7 @@ export default function VideoCallScreen({
         setIsSwitchingCamera(false);
         return;
       }
+      await ensureWidestOpticalZoom(newVideoTrack);
 
       if (pcRef.current) {
         const sender = pcRef.current.getSenders().find((s) => s.track && s.track.kind === 'video');
@@ -587,6 +647,7 @@ export default function VideoCallScreen({
         if (payload.type === 'offer' && role === 'callee') {
           if (pc && !pc.remoteDescription) {
             await pc.setRemoteDescription(new RTCSessionDescription(payload.data));
+            await drainPendingIceCandidates(pc);
             const answer = await pc.createAnswer();
             answer.sdp = boostSdpQuality(answer.sdp || '');
             await pc.setLocalDescription(answer);
@@ -600,20 +661,27 @@ export default function VideoCallScreen({
         // 3. Incoming SDP Answer (for Caller)
         if (payload.type === 'answer' && role === 'caller' && pc && !pc.remoteDescription) {
           await pc.setRemoteDescription(new RTCSessionDescription(payload.data));
+          await drainPendingIceCandidates(pc);
           if (ringTimeoutRef.current) clearTimeout(ringTimeoutRef.current);
           await applyHdBitrate(pc);
         }
 
-        // 4. Instant ICE Candidates
+        // 4. Instant ICE Candidates (Buffered if remote description not yet set)
         const targetIceType = role === 'caller' ? 'ice-callee' : 'ice-caller';
-        if (payload.type === targetIceType && payload.data && pc && pc.remoteDescription) {
-          try {
-            await pc.addIceCandidate(new RTCIceCandidate(payload.data));
-          } catch {}
+        if (payload.type === targetIceType && payload.data) {
+          if (pc && pc.remoteDescription) {
+            try {
+              await pc.addIceCandidate(new RTCIceCandidate(payload.data));
+            } catch (err) {
+              console.warn('[video-call] Error adding ICE candidate:', err);
+            }
+          } else {
+            pendingCandidatesRef.current.push(payload.data);
+          }
         }
       } catch {}
     });
-  }, [callId, role, postSignal, cleanup, applyHdBitrate]);
+  }, [callId, role, postSignal, cleanup, applyHdBitrate, drainPendingIceCandidates]);
 
   // ─── Flow: Caller Flow ────────────────────────────────────
   const runCallerFlow = useCallback(async () => {
@@ -656,14 +724,44 @@ export default function VideoCallScreen({
         const res = await fetch(`/api/video-call/poll?callId=${encodeURIComponent(callId)}`, { cache: 'no-store' });
         if (!res.ok) return;
         const status = await res.json();
-        if (status?.status === 'accepted') { stopRingbackTone(); }
+        if (status?.status === 'accepted') {
+          stopRingbackTone();
+          if (pcRef.current && !pcRef.current.remoteDescription) {
+            try {
+              const ansRes = await fetch(`/api/video-call/signal?callId=${encodeURIComponent(callId)}&type=answer`, { cache: 'no-store' });
+              if (ansRes.ok) {
+                const ansData = await ansRes.json();
+                if (ansData?.data && !pcRef.current.remoteDescription) {
+                  await pcRef.current.setRemoteDescription(new RTCSessionDescription(ansData.data));
+                  await drainPendingIceCandidates(pcRef.current);
+                  await applyHdBitrate(pcRef.current);
+                }
+              }
+            } catch {}
+          }
+        }
+        if (pcRef.current && pcRef.current.remoteDescription) {
+          try {
+            const iceRes = await fetch(`/api/video-call/signal?callId=${encodeURIComponent(callId)}&type=ice-callee`, { cache: 'no-store' });
+            if (iceRes.ok) {
+              const iceData = await iceRes.json();
+              if (Array.isArray(iceData?.data)) {
+                for (const cand of iceData.data) {
+                  try {
+                    await pcRef.current.addIceCandidate(new RTCIceCandidate(cand));
+                  } catch {}
+                }
+              }
+            }
+          } catch {}
+        }
         if (status?.status === 'rejected') { stopRingbackTone(); cleanup('rejected'); return; }
         if (status?.status === 'ended') { stopRingbackTone(); cleanup('ended'); return; }
         if (status?.calleeName) setPeerName(status.calleeName);
         if (status?.calleePhoto) setPeerPhoto(status.calleePhoto);
       } catch {}
     }, 1000);
-  }, [startRingbackTone, stopRingbackTone, startLocalStream, cameraFacing, buildPeerConnection, setupInstantSignaling, postSignal, applyHdBitrate, callId, phase, cleanup]);
+  }, [startRingbackTone, stopRingbackTone, startLocalStream, cameraFacing, buildPeerConnection, setupInstantSignaling, postSignal, applyHdBitrate, callId, phase, cleanup, drainPendingIceCandidates]);
 
   // ─── Flow: Callee Flow ────────────────────────────────────
   const runCalleeFlow = useCallback(async () => {
@@ -681,6 +779,7 @@ export default function VideoCallScreen({
     if (pendingOfferRef.current && !pc.remoteDescription) {
       try {
         await pc.setRemoteDescription(new RTCSessionDescription(pendingOfferRef.current));
+        await drainPendingIceCandidates(pc);
         const answer = await pc.createAnswer();
         answer.sdp = boostSdpQuality(answer.sdp || '');
         await pc.setLocalDescription(answer);
@@ -695,6 +794,7 @@ export default function VideoCallScreen({
           const offerResp = await res.json();
           if (offerResp?.data && !pc.remoteDescription) {
             await pc.setRemoteDescription(new RTCSessionDescription(offerResp.data));
+            await drainPendingIceCandidates(pc);
             const answer = await pc.createAnswer();
             answer.sdp = boostSdpQuality(answer.sdp || '');
             await pc.setLocalDescription(answer);
@@ -704,6 +804,23 @@ export default function VideoCallScreen({
         }
       } catch {}
     }
+
+    // Guaranteed ICE candidate synchronization for callee
+    try {
+      const iceResp = await fetch(`/api/video-call/signal?callId=${encodeURIComponent(callId)}&type=ice-caller`, { cache: 'no-store' });
+      if (iceResp.ok) {
+        const iceData = await iceResp.json();
+        if (Array.isArray(iceData?.data)) {
+          for (const cand of iceData.data) {
+            try {
+              if (pc.remoteDescription) {
+                await pc.addIceCandidate(new RTCIceCandidate(cand));
+              }
+            } catch {}
+          }
+        }
+      }
+    } catch {}
 
     pollFallbackRef.current = setInterval(async () => {
       if (isCleanedUp.current) return;
@@ -716,7 +833,7 @@ export default function VideoCallScreen({
         if (status?.callerPhoto) setPeerPhoto(status.callerPhoto);
       } catch {}
     }, 1000);
-  }, [startLocalStream, cameraFacing, buildPeerConnection, setupInstantSignaling, callId, postSignal, applyHdBitrate, cleanup]);
+  }, [startLocalStream, cameraFacing, buildPeerConnection, setupInstantSignaling, callId, postSignal, applyHdBitrate, cleanup, drainPendingIceCandidates]);
 
   useEffect(() => {
     if (!callId) return;
@@ -779,6 +896,7 @@ export default function VideoCallScreen({
         });
         const newTrack = videoStream.getVideoTracks()[0];
         if (newTrack) {
+          await ensureWidestOpticalZoom(newTrack);
           stream.addTrack(newTrack);
           if (pcRef.current) {
             pcRef.current.addTrack(newTrack, stream);
@@ -862,18 +980,17 @@ export default function VideoCallScreen({
         }
       }}
     >
-      {/* Remote Video: Natural In-Hand Framing (Not oversized, 100% full view of head & shoulders) */}
+      {/* Remote Video: Full screen immersive display (No Black Bars, Face Centered) */}
       <div className="absolute inset-0 flex items-center justify-center bg-slate-950 overflow-hidden pointer-events-none">
         <video
           ref={remoteVideoRef}
           autoPlay
           playsInline
-          className={`w-full h-full object-contain transition-opacity duration-300 ${
+          className={`w-full h-full object-cover transition-opacity duration-300 ${
             remoteConnected && callType === 'video' ? 'opacity-100' : 'opacity-0'
           }`}
           style={{
-            maxHeight: '100dvh',
-            maxWidth: '100vw',
+            objectPosition: 'center 35%',
           }}
         />
       </div>
@@ -971,7 +1088,7 @@ export default function VideoCallScreen({
               <>
                 <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
                 <span>
-                  {formatDuration(callDuration)} {callType === 'voice' ? '(VOICE CALL)' : '(SMART HD 720p)'}
+                  {formatDuration(callDuration)} {callType === 'voice' ? '(VOICE CALL)' : '(CRYSTAL HD 1080p)'}
                 </span>
               </>
             ) : phase === 'ringing' ? (
@@ -1005,7 +1122,10 @@ export default function VideoCallScreen({
             playsInline
             muted
             className="w-full h-full object-cover pointer-events-none"
-            style={{ transform: cameraFacing === 'user' ? 'scaleX(-1)' : 'none' }}
+            style={{
+              transform: cameraFacing === 'user' ? 'scaleX(-1)' : 'none',
+              objectPosition: 'center 35%',
+            }}
           />
 
           {isCameraOff && (

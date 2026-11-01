@@ -163,6 +163,21 @@ export async function sendPushNotification(
       if (cleanPhone.length >= 10) candidateUserIds.add(cleanPhone.slice(-10));
     }
 
+    if (userType === "student" && userId) {
+      try {
+        const student = await db.students.getById(userId);
+        if (student) {
+          if (student.phoneNumber) {
+            const clean = String(student.phoneNumber).replace(/\D/g, "");
+            if (clean.length >= 10) candidateUserIds.add(clean.slice(-10));
+          }
+          if (student.registrationId) candidateUserIds.add(String(student.registrationId));
+          if (student._id) candidateUserIds.add(String(student._id));
+          if (student.id) candidateUserIds.add(String(student.id));
+        }
+      } catch {}
+    }
+
     if (userType === "dean" || userId === "admin") {
       candidateUserIds.add("admin");
       const bankDetails: any = settings?.universityBankDetails || {};
