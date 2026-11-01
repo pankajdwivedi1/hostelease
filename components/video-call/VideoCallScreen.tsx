@@ -35,19 +35,19 @@ type CallPhase =
   | 'missed'
   | 'error';
 
-// ⚡ Calibrated HD Quality Booster: 2.8 Mbps for cinema-grade, unblurred, lag-free video
+// ⚡ Calibrated HD Quality Booster: 1.8 Mbps sweet-spot for lag-free video with low data consumption
 function boostSdpQuality(sdp: string): string {
   let modified = sdp;
   if (modified.includes('b=AS:')) {
-    modified = modified.replace(/b=AS:\d+/g, 'b=AS:2800');
+    modified = modified.replace(/b=AS:\d+/g, 'b=AS:1800');
   } else {
     modified = modified.replace(
       /m=video ([0-9]+) ([A-Z\/]+) ([0-9 ]+)/g,
-      'm=video $1 $2 $3\r\nb=AS:2800\r\nb=TIAS:2800000'
+      'm=video $1 $2 $3\r\nb=AS:1800\r\nb=TIAS:1800000'
     );
   }
   if (modified.includes('b=TIAS:')) {
-    modified = modified.replace(/b=TIAS:\d+/g, 'b=TIAS:2800000');
+    modified = modified.replace(/b=TIAS:\d+/g, 'b=TIAS:1800000');
   }
   return modified;
 }
@@ -306,8 +306,8 @@ export default function VideoCallScreen({
         if (!parameters.encodings || parameters.encodings.length === 0) {
           parameters.encodings = [{}];
         }
-        // 2.8 Mbps: Cinema-grade sharpness, zero overheating, zero network choking
-        parameters.encodings[0].maxBitrate = 2800000;
+        // 1.8 Mbps: Calibrated sweet spot - motion-clarity, cool phone & low data consumption
+        parameters.encodings[0].maxBitrate = 1800000;
         parameters.encodings[0].minBitrate = 400000;
         parameters.encodings[0].maxFramerate = 30;
         // Balanced adaptation ensures fluid 30fps without freezing or buffer backlog
@@ -1088,7 +1088,7 @@ export default function VideoCallScreen({
               <>
                 <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
                 <span>
-                  {formatDuration(callDuration)} {callType === 'voice' ? '(VOICE CALL)' : '(CRYSTAL HD 1080p)'}
+                  {formatDuration(callDuration)} {callType === 'voice' ? '(VOICE CALL)' : '(SMART HD)'}
                 </span>
               </>
             ) : phase === 'ringing' ? (
