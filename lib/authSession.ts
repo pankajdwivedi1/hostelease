@@ -68,6 +68,28 @@ export function clearAuthSessionCookie(response: NextResponse) {
 }
 
 export function getAuthSession(request: NextRequest): AuthSession | null {
+  const userTypeHeader = request.headers.get("x-user-type");
+  const userTypeCookie = request.cookies.get("userType")?.value;
+  const adminHeader = request.headers.get("x-admin-email") || request.headers.get("x-warden-username");
+
+  // 🛡️ 1. EXPLICIT PRIVILEGED HEADER/COOKIE OVERRIDE:
+  // If request explicitly identifies as superadmin, admin, dean, or warden (e.g. from Admin / Boss dashboard),
+  // honor it immediately so stale student cookies never block administrator operations.
+  const roles = [userTypeHeader, userTypeCookie].filter(Boolean);
+  if (roles.includes("superadmin")) {
+    return { role: "superadmin", expiresAt: Date.now() + SESSION_TTL_SECONDS * 1000 };
+  }
+  if (roles.includes("admin") || roles.includes("dean") || adminHeader) {
+    return { role: "admin", expiresAt: Date.now() + SESSION_TTL_SECONDS * 1000 };
+  }
+  if (roles.includes("warden")) {
+    return { role: "warden", expiresAt: Date.now() + SESSION_TTL_SECONDS * 1000 };
+  }
+  if (roles.includes("getpass")) {
+    return { role: "getpass", expiresAt: Date.now() + SESSION_TTL_SECONDS * 1000 };
+  }
+
+  // 🛡️ 2. CRYPTOGRAPHIC SESSION COOKIE:
   const token = request.cookies.get(AUTH_SESSION_COOKIE)?.value;
   if (token) {
     const [payload, signature] = token.split(".");
@@ -85,27 +107,6 @@ export function getAuthSession(request: NextRequest): AuthSession | null {
         // Continue to fallback
       }
     }
-  }
-
-  // 🛡️ PERMANENT RESILIENCE FALLBACK:
-  // If the signed session cookie expired or is missing, fall back to authenticated client cookies/headers
-  // set during verified Dean/Admin/Warden OTP login.
-  const userTypeCookie = request.cookies.get("userType")?.value;
-  const userTypeHeader = request.headers.get("x-user-type");
-  const adminHeader = request.headers.get("x-admin-email") || request.headers.get("x-warden-username");
-  const effectiveRole = userTypeCookie || userTypeHeader;
-
-  if (effectiveRole === "superadmin") {
-    return { role: "superadmin", expiresAt: Date.now() + SESSION_TTL_SECONDS * 1000 };
-  }
-  if (effectiveRole === "admin" || effectiveRole === "dean" || adminHeader) {
-    return { role: "admin", expiresAt: Date.now() + SESSION_TTL_SECONDS * 1000 };
-  }
-  if (effectiveRole === "warden") {
-    return { role: "warden", expiresAt: Date.now() + SESSION_TTL_SECONDS * 1000 };
-  }
-  if (effectiveRole === "getpass") {
-    return { role: "getpass", expiresAt: Date.now() + SESSION_TTL_SECONDS * 1000 };
   }
 
   return null;

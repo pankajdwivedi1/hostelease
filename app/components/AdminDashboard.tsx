@@ -1423,6 +1423,27 @@ const CACHE_KEYS = {
 };
 const CACHE_DURATION = 1800000; // ⚡ CACHE ENABLED: 30-minute TTL to save bandwidth across tab switches
 
+// Strictly isolate cache to the main OGI tenant. All other tenants (e.g., opened from Boss Control) stop caching completely.
+const isOgiTenantSession = () => {
+  if (typeof window === "undefined") return true;
+  try {
+    const urlParam = new URLSearchParams(window.location.search).get("tenant");
+    if (urlParam) {
+      return urlParam.toLowerCase() === "ogi";
+    }
+    const proxyTenant = sessionStorage.getItem("bossProxyTenant");
+    if (proxyTenant && proxyTenant.toLowerCase() !== "ogi") {
+      return false;
+    }
+    const cookieMatch = document.cookie.match(/(?:^|;\s*)tenant-slug=([^;]+)/);
+    if (cookieMatch && cookieMatch[1] && decodeURIComponent(cookieMatch[1]).toLowerCase() !== "ogi") {
+      return false;
+    }
+    return true;
+  } catch (e) {}
+  return true;
+};
+
 const DEFAULT_UNDERTAKING_TEXT = `I, {name}, S/o / D/o {parent}, student of {college} (Email: {email}, Mobile: {phone}), hereby undertake that I shall abide by the following terms and conditions governing my stay in the hostel:
 1. I shall maintain discipline, decorum, and good conduct at all times within the hostel premises and shall not indulge in any act of indiscipline or misconduct.
 2. I shall not leave the hostel premises without obtaining prior permission from the competent authority, wherever applicable.
@@ -1530,7 +1551,20 @@ export default function AdminDashboard({
   const [filter, setFilter] = useState<"all" | "allowed" | "rejected" | "pending" | "hidden">("all");
   const [statusFilter, setStatusFilter] = useState<"all" | "in" | "out">("all");
 
-  const [permissions, setPermissions] = useState<Permission[]>([]);
+  const [permissions, setPermissions] = useState<Permission[]>(() => {
+    if (typeof window !== "undefined") {
+      try {
+        if (isOgiTenantSession()) {
+          const cached = sessionStorage.getItem("hosteleaze_permissions_cache") || localStorage.getItem("hosteleaze_permissions_cache");
+          if (cached) {
+            const parsed = JSON.parse(cached);
+            if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+          }
+        }
+      } catch (e) {}
+    }
+    return [];
+  });
   const consentVideoUrls = useMemo(
     () => permissions.map((p) => p.parentConsentUrl),
     [permissions]
@@ -1541,20 +1575,33 @@ export default function AdminDashboard({
   const [isShowingAllPermissions, setIsShowingAllPermissions] = useState(false);
   const [isLoadingAllPermissions, setIsLoadingAllPermissions] = useState(false);
   const [isPermissionsLoading, setIsPermissionsLoading] = useState(false);
-  const [totalPermissionsCount, setTotalPermissionsCount] = useState(0);
+  const [totalPermissionsCount, setTotalPermissionsCount] = useState<number>(() => {
+    if (typeof window !== "undefined") {
+      try {
+        if (isOgiTenantSession()) {
+          const cached = localStorage.getItem("hosteleaze_permissions_total");
+          if (cached) return parseInt(cached, 10);
+        }
+      } catch (e) {}
+    }
+    return 0;
+  });
   const [students, setStudents] = useState<StudentDetails[]>(() => {
     if (typeof window !== "undefined") {
       try {
-        const cached = localStorage.getItem(CACHE_KEYS.STUDENTS);
-        if (cached) {
-          const parsed = JSON.parse(cached);
-          if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+        if (isOgiTenantSession()) {
+          const cached = localStorage.getItem(CACHE_KEYS.STUDENTS);
+          if (cached) {
+            const parsed = JSON.parse(cached);
+            if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+          }
         }
       } catch (e) {}
     }
     return [];
   });
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(false);
+  const [isSyncingData, setIsSyncingData] = useState(false);
   const [selectedStudent, setSelectedStudent] = useState<StudentDetails | null>(null);
   const [showAllStudents, setShowAllStudents] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
@@ -1581,10 +1628,12 @@ export default function AdminDashboard({
   const [hostels, setHostels] = useState<Array<{ _id: string; id?: string; name: string; attendanceMode?: 'strict' | 'gps-only' | 'biometric' }>>(() => {
     if (typeof window !== "undefined") {
       try {
-        const cached = localStorage.getItem(CACHE_KEYS.HOSTELS);
-        if (cached) {
-          const parsed = JSON.parse(cached);
-          if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+        if (isOgiTenantSession()) {
+          const cached = localStorage.getItem(CACHE_KEYS.HOSTELS);
+          if (cached) {
+            const parsed = JSON.parse(cached);
+            if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+          }
         }
       } catch (e) {}
     }
@@ -2107,6 +2156,137 @@ export default function AdminDashboard({
     }
   }, []);
 
+  // Web Push Notification State & Toggle for Dean / Warden
+  const [isNotificationEnabled, setIsNotificationEnabled] = useState<boolean>(false);
+  const [isTogglingNotification, setIsTogglingNotification] = useState<boolean>(false);
+
+  useEffect(() => {
+    let isMounted = true;
+    const checkNotificationStatus = async () => {
+      if (typeof window === "undefined" || !("Notification" in window) || !("serviceWorker" in navigator)) {
+        if (isMounted) setIsNotificationEnabled(false);
+        return;
+      }
+
+      if (Notification.permission !== "granted") {
+        if (isMounted) setIsNotificationEnabled(false);
+        if (!sessionStorage.getItem("notif_prompted_once")) {
+          sessionStorage.setItem("notif_prompted_once", "true");
+          setTimeout(() => {
+            showToast("🔔 Notifications are OFF. Tap the bell icon to enable leave alerts.", "info");
+          }, 1500);
+        }
+        return;
+      }
+
+      try {
+        const reg = await navigator.serviceWorker.ready;
+        const sub = await reg.pushManager.getSubscription();
+        if (isMounted) {
+          const hasActiveSub = !!sub;
+          setIsNotificationEnabled(hasActiveSub);
+          if (!hasActiveSub && !sessionStorage.getItem("notif_prompted_once")) {
+            sessionStorage.setItem("notif_prompted_once", "true");
+            setTimeout(() => {
+              showToast("🔔 Notifications are OFF. Tap the bell icon to enable leave alerts.", "info");
+            }, 1500);
+          }
+        }
+      } catch (e) {
+        if (isMounted) setIsNotificationEnabled(false);
+      }
+    };
+    checkNotificationStatus();
+    return () => { isMounted = false; };
+  }, []);
+
+  const handleToggleNotification = async () => {
+    if (typeof window === "undefined" || !("Notification" in window) || !("serviceWorker" in navigator)) {
+      showToast("Push notifications are not supported in this browser.", "warning");
+      return;
+    }
+
+    if (isTogglingNotification) return;
+    setIsTogglingNotification(true);
+
+    try {
+      const reg = await navigator.serviceWorker.ready;
+      const existingSub = await reg.pushManager.getSubscription();
+
+      if (isNotificationEnabled && existingSub) {
+        // TURN OFF NOTIFICATIONS
+        const endpoint = existingSub.endpoint;
+        await existingSub.unsubscribe();
+        try {
+          await fetch("/api/push-subscription", {
+            method: "DELETE",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ endpoint })
+          });
+        } catch (delErr) {
+          console.warn("Failed to delete push subscription on server:", delErr);
+        }
+        setIsNotificationEnabled(false);
+        showToast("🔕 Notifications stopped.", "info");
+      } else {
+        // TURN ON NOTIFICATIONS
+        if (Notification.permission === "denied") {
+          showToast("Notifications are blocked in your browser! Please tap the 🔒 icon in the address bar to Allow notifications.", "warning");
+          setIsTogglingNotification(false);
+          return;
+        }
+
+        let permission = Notification.permission;
+        if (permission !== "granted") {
+          permission = await Notification.requestPermission();
+        }
+
+        if (permission !== "granted") {
+          showToast("Please enable notifications to receive leave alerts.", "warning");
+          setIsNotificationEnabled(false);
+          setIsTogglingNotification(false);
+          return;
+        }
+
+        const type = localStorage.getItem("userType");
+        const storedWarden = localStorage.getItem("wardenUsername") || sessionStorage.getItem("wardenUsername");
+        const storedDeanPhone = localStorage.getItem("deanPhone") || sessionStorage.getItem("deanPhone");
+        const storedWardenPhone = localStorage.getItem("wardenPhone") || sessionStorage.getItem("wardenPhone");
+
+        let mappedType: "student" | "parent" | "warden" | "dean" = "dean";
+        let userId = "admin";
+        let phone = "";
+
+        if (isWarden || type === "warden") {
+          mappedType = "warden";
+          userId = storedWarden || (wardenHostelName ? `${wardenHostelName.toLowerCase().replace(/ /g, "_")}_warden` : "warden");
+          phone = storedWardenPhone || "";
+        } else {
+          mappedType = "dean";
+          userId = "admin";
+          phone = storedDeanPhone || "";
+        }
+
+        const { registerPushNotifications } = await import("@/lib/pushRegister");
+        await registerPushNotifications(userId, mappedType, phone);
+
+        const newSub = await reg.pushManager.getSubscription();
+        if (newSub) {
+          setIsNotificationEnabled(true);
+          showToast("🔔 Notifications started! You will now receive leave alerts.", "success");
+        } else {
+          setIsNotificationEnabled(false);
+          showToast("Could not subscribe to notifications. Please try again.", "error");
+        }
+      }
+    } catch (err: any) {
+      console.error("Error toggling notification:", err);
+      showToast(err?.message || "Failed to toggle notifications", "error");
+    } finally {
+      setIsTogglingNotification(false);
+    }
+  };
+
 
   
   // ⚡ DELETED auto-show Effect to follow user preference for manual button trigger
@@ -2313,6 +2493,7 @@ export default function AdminDashboard({
   const [activeSettingsTab, setActiveSettingsTab] = useState<"general" | "rooms" | "form" | "password" | "bank" | "system" | "audit" | "superadmin" | "subscription" | "notification">("general");
   const [tenantFormData, setTenantFormData] = useState({
     name: "",
+    slug: "",
     logo: "",
     address: "",
     email: "",
@@ -3550,7 +3731,12 @@ export default function AdminDashboard({
   const fetchHostelLocations = async () => {
     try {
       setIsLocationsLoading(true);
-      const response = await fetch("/api/admin/locations", { cache: "no-store" });
+      const targetSlug = isOgiTenantSession() ? "ogi" : (new URLSearchParams(window.location.search).get("tenant") || "ogi").toLowerCase();
+      const userTypeHeader = (typeof window !== "undefined" ? localStorage.getItem("userType") : null) || "superadmin";
+      const response = await fetch(`/api/admin/locations?tenant=${targetSlug}`, {
+        cache: "no-store",
+        headers: { "x-user-type": userTypeHeader }
+      });
       if (!response.ok) {
         throw new Error(`Failed to fetch locations: ${response.status} ${response.statusText}`);
       }
@@ -3571,7 +3757,12 @@ export default function AdminDashboard({
   // Fetch Attendance Time Settings
   const fetchAttendanceTimeSettings = async () => {
     try {
-      const response = await fetch("/api/admin/settings", { cache: "no-store" });
+      const targetSlug = isOgiTenantSession() ? "ogi" : (new URLSearchParams(window.location.search).get("tenant") || "ogi").toLowerCase();
+      const userTypeHeader = (typeof window !== "undefined" ? localStorage.getItem("userType") : null) || "superadmin";
+      const response = await fetch(`/api/admin/settings?tenant=${targetSlug}`, {
+        cache: "no-store",
+        headers: { "x-user-type": userTypeHeader }
+      });
       if (!response.ok) return;
       const data = await response.json();
       if (data && data.success) {
@@ -3730,12 +3921,18 @@ export default function AdminDashboard({
 
   const fetchTenantConfig = async () => {
     try {
-      const res = await fetch("/api/admin/tenant", { cache: "no-store" });
+      const targetSlug = isOgiTenantSession() ? "ogi" : (new URLSearchParams(window.location.search).get("tenant") || "ogi").toLowerCase();
+      const userTypeHeader = (typeof window !== "undefined" ? localStorage.getItem("userType") : null) || "superadmin";
+      const res = await fetch(`/api/admin/tenant?tenant=${targetSlug}`, {
+        cache: "no-store",
+        headers: { "x-user-type": userTypeHeader }
+      });
       if (!res.ok) return;
       const data = await res.json();
       if (data.success && data.tenant) {
         setTenantFormData({
           name: data.tenant.name || "",
+          slug: data.tenant.slug || "",
           logo: data.tenant.logo || "",
           address: data.tenant.address || "",
           email: data.tenant.email || "",
@@ -3755,7 +3952,8 @@ export default function AdminDashboard({
   const handleUpdateTenantConfig = async () => {
     try {
       setIsUpdatingTenant(true);
-      const res = await fetch("/api/admin/tenant", {
+      const targetSlug = isOgiTenantSession() ? "ogi" : (new URLSearchParams(window.location.search).get("tenant") || "ogi").toLowerCase();
+      const res = await fetch(`/api/admin/tenant?tenant=${targetSlug}`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(tenantFormData)
@@ -3784,8 +3982,9 @@ export default function AdminDashboard({
       await fetchTenantConfig();
 
       // Fetch Registration Fields Config
-      const userTypeHeader = (typeof window !== "undefined" ? localStorage.getItem("userType") : null) || "admin";
-      const settingsRes = await fetch("/api/admin/settings", {
+      const targetSlug = isOgiTenantSession() ? "ogi" : (new URLSearchParams(window.location.search).get("tenant") || "ogi").toLowerCase();
+      const userTypeHeader = (typeof window !== "undefined" ? localStorage.getItem("userType") : null) || "superadmin";
+      const settingsRes = await fetch(`/api/admin/settings?tenant=${targetSlug}`, {
         cache: "no-store",
         headers: { "x-user-type": userTypeHeader }
       });
@@ -3868,7 +4067,10 @@ export default function AdminDashboard({
 
       // Fetch Hostels (with warden/room info)
       try {
-        const hostelsRes = await fetch("/api/admin/hostels", { cache: "no-store" });
+        const hostelsRes = await fetch(`/api/admin/hostels?tenant=${targetSlug}`, { 
+          cache: "no-store",
+          headers: { "x-user-type": userTypeHeader }
+        });
         if (hostelsRes.ok) {
           const hostelsData = await hostelsRes.json();
           if (hostelsData.success && Array.isArray(hostelsData.hostels) && hostelsData.hostels.length > 0) {
@@ -5398,7 +5600,11 @@ export default function AdminDashboard({
 
   const fetchBankSettings = async () => {
     try {
-      const res = await fetch("/api/admin/settings");
+      const targetSlug = isOgiTenantSession() ? "ogi" : (new URLSearchParams(window.location.search).get("tenant") || "ogi").toLowerCase();
+      const userTypeHeader = (typeof window !== "undefined" ? localStorage.getItem("userType") : null) || "superadmin";
+      const res = await fetch(`/api/admin/settings?tenant=${targetSlug}`, {
+        headers: { "x-user-type": userTypeHeader }
+      });
       if (!res.ok) return;
       const data = await res.json();
       if (data.success) {
@@ -5982,48 +6188,58 @@ export default function AdminDashboard({
 
   const fetchHostels = async (forceRefresh = false) => {
     try {
-      // 1. Initial fast display from cache (prevents blank/stutter on load)
-      const cached = localStorage.getItem(CACHE_KEYS.HOSTELS);
-      if (cached) {
-        try {
-          const parsed = JSON.parse(cached);
-          if (Array.isArray(parsed) && parsed.length > 0) {
-            setHostels(parsed);
-            setHostelsConfig(parsed);
+      // 1. Initial fast display from cache (prevents blank/stutter on load) - OGI only
+      if (isOgiTenantSession()) {
+        const cached = localStorage.getItem(CACHE_KEYS.HOSTELS);
+        if (cached) {
+          try {
+            const parsed = JSON.parse(cached);
+            if (Array.isArray(parsed) && parsed.length > 0) {
+              setHostels(parsed);
+              setHostelsConfig(parsed);
+            }
+          } catch (e) {
+            localStorage.removeItem(CACHE_KEYS.HOSTELS);
           }
-        } catch (e) {
-          localStorage.removeItem(CACHE_KEYS.HOSTELS);
         }
       }
+
+      const targetSlug = isOgiTenantSession() ? "ogi" : (new URLSearchParams(window.location.search).get("tenant") || "ogi").toLowerCase();
+      const userTypeHeader = (typeof window !== "undefined" ? localStorage.getItem("userType") : null) || "superadmin";
 
       // 2. ALWAYS query live server database with no-store to keep settings 100% synchronized
       const [adminRes, publicRes] = await Promise.allSettled([
-        fetch("/api/admin/hostels", { cache: "no-store" }),
-        fetch("/api/hostels", { cache: "no-store" })
+        fetch(`/api/admin/hostels?tenant=${targetSlug}`, { cache: "no-store", headers: { "x-user-type": userTypeHeader } }),
+        fetch(`/api/hostels?tenant=${targetSlug}`, { cache: "no-store", headers: { "x-user-type": userTypeHeader } })
       ]);
 
       let freshHostels: any[] = [];
+      let foundFresh = false;
       if (adminRes.status === 'fulfilled' && adminRes.value.ok) {
         const aData = await adminRes.value.json();
-        if (aData.success && Array.isArray(aData.hostels) && aData.hostels.length > 0) {
+        if (aData.success && Array.isArray(aData.hostels)) {
           freshHostels = aData.hostels;
+          foundFresh = true;
         }
       }
 
-      if (freshHostels.length === 0 && publicRes.status === 'fulfilled' && publicRes.value.ok) {
+      if (!foundFresh && publicRes.status === 'fulfilled' && publicRes.value.ok) {
         const pData = await publicRes.value.json();
-        if (Array.isArray(pData.hostels) && pData.hostels.length > 0) {
+        if (Array.isArray(pData.hostels)) {
           freshHostels = pData.hostels;
+          foundFresh = true;
         }
       }
 
-      if (freshHostels.length > 0) {
+      if (foundFresh) {
         setHostels(freshHostels);
         setHostelsConfig(freshHostels);
-        try {
-          localStorage.setItem(CACHE_KEYS.HOSTELS, JSON.stringify(freshHostels));
-        } catch (e) {
-          console.warn("Failed to cache hostels");
+        if (isOgiTenantSession() && freshHostels.length > 0) {
+          try {
+            localStorage.setItem(CACHE_KEYS.HOSTELS, JSON.stringify(freshHostels));
+          } catch (e) {
+            console.warn("Failed to cache hostels");
+          }
         }
       }
     } catch (error) {
@@ -6042,28 +6258,26 @@ export default function AdminDashboard({
 
   const fetchStudents = async (forceRefresh = false) => {
     try {
-      // 1. Immediately read from cache first for instant display
-      const cached = localStorage.getItem(CACHE_KEYS.STUDENTS);
-      const timestamp = localStorage.getItem(CACHE_KEYS.TIMESTAMP);
       let hasCache = false;
 
-      if (cached) {
-        try {
-          const parsed = JSON.parse(cached);
-          if (Array.isArray(parsed) && parsed.length > 0) {
-            setStudents(parsed);
-            hasCache = true;
-          }
-        } catch (e) {
-          console.warn("Error parsing student cache", e);
-        }
-      }
+      // 1. Immediately read from cache first for instant display (OGI only)
+      if (isOgiTenantSession()) {
+        const cached = localStorage.getItem(CACHE_KEYS.STUDENTS);
+        const timestamp = localStorage.getItem(CACHE_KEYS.TIMESTAMP);
 
-      // ⚡ BANDWIDTH OPTIMIZATION: If cache is fresh (< 5 mins) and not force-refreshing, skip redundant network call
-      const CACHE_TTL_MS = 5 * 60 * 1000;
-      const isCacheFresh = timestamp && (Date.now() - parseInt(timestamp, 10)) < CACHE_TTL_MS;
-      if (hasCache && isCacheFresh && !forceRefresh) {
-        return;
+        if (cached) {
+          try {
+            const parsed = JSON.parse(cached);
+            if (Array.isArray(parsed) && parsed.length > 0) {
+              setStudents(parsed);
+              hasCache = true;
+            }
+          } catch (e) {
+            console.warn("Error parsing student cache", e);
+          }
+        }
+
+        // ⚡ STALE-WHILE-REVALIDATE: Display from cache instantly in 0ms, but ALWAYS fetch live server database in background
       }
 
       // If we don't have cache, show loading spinner. Otherwise, fetch in the background silently.
@@ -6071,8 +6285,14 @@ export default function AdminDashboard({
         setStudentsLoading(true);
       }
       // ⚡ OPTIMIZED: Fetch lightweight data (no big images) to save bandwidth
+      const userTypeHeader = (typeof window !== "undefined" ? localStorage.getItem("userType") : null) || "superadmin";
+      const targetSlug = isOgiTenantSession() ? "ogi" : (new URLSearchParams(window.location.search).get("tenant") || "ogi").toLowerCase();
       const url = new URL("/api/students?light=true", window.location.origin);
-      const response = await fetch(url.href);
+      url.searchParams.set("tenant", targetSlug);
+      const response = await fetch(url.href, {
+        cache: "no-store",
+        headers: { "x-user-type": userTypeHeader },
+      });
       if (!response.ok) throw new Error(`Failed to fetch students: ${response.status}`);
       const data = await response.json();
       if (data.students) {
@@ -6124,11 +6344,13 @@ export default function AdminDashboard({
         setStudents(formattedStudents);
         setLastUpdated(new Date());
 
-        try {
-          localStorage.setItem(CACHE_KEYS.STUDENTS, JSON.stringify(formattedStudents));
-          localStorage.setItem(CACHE_KEYS.TIMESTAMP, Date.now().toString());
-        } catch (e) {
-          console.warn("Failed to cache students", e);
+        if (isOgiTenantSession()) {
+          try {
+            localStorage.setItem(CACHE_KEYS.STUDENTS, JSON.stringify(formattedStudents));
+            localStorage.setItem(CACHE_KEYS.TIMESTAMP, Date.now().toString());
+          } catch (e) {
+            console.warn("Failed to cache students", e);
+          }
         }
       }
     } catch (error) {
@@ -6138,7 +6360,7 @@ export default function AdminDashboard({
     }
   };
 
-  const fetchPermissions = async (statusArg?: string, forceRefresh = false, fetchAll = false, targetHostel?: string) => {
+  const fetchPermissions = async (statusArg?: string, forceRefresh = false, fetchAll = false, targetHostel?: string): Promise<boolean> => {
     if (fetchAll) {
       setIsLoadingAllPermissions(true);
     } else {
@@ -6151,6 +6373,8 @@ export default function AdminDashboard({
       const limitQuery = fetchAll ? '' : '&limit=5';
       
       const url = new URL(`/api/permissions?light=true&status=${status}${limitQuery}`, window.location.origin);
+      const targetSlug = isOgiTenantSession() ? "ogi" : (new URLSearchParams(window.location.search).get("tenant") || "ogi").toLowerCase();
+      url.searchParams.set("tenant", targetSlug);
       
       // ⚡ WARDEN FILTER: Automatically scope permissions to warden's assigned hostels
       if (isWarden) {
@@ -6163,28 +6387,51 @@ export default function AdminDashboard({
           url.searchParams.set("hostelName", activeHostelFilter);
       }
 
-      const userTypeHeader = (typeof window !== "undefined" ? localStorage.getItem("userType") : null) || "admin";
+      const userTypeHeader = (typeof window !== "undefined" ? localStorage.getItem("userType") : null) || (title === "Super Admin Dashboard" ? "superadmin" : "admin");
       const response = await fetch(url.toString(), {
         cache: "no-store",
+        credentials: "include",
         headers: { "x-user-type": userTypeHeader },
       });
       const data = await response.json();
 
       // Handle both success and error responses
-      if (data.permissions !== undefined) {
+      if (data.permissions !== undefined && response.ok) {
         const list = Array.isArray(data.permissions) ? data.permissions : [];
         setPermissions(list);
         setTotalPermissionsCount(data.total || list.length);
         setIsShowingAllPermissions(fetchAll);
+
+        if (isOgiTenantSession() && list.length > 0) {
+          try {
+            sessionStorage.setItem("hosteleaze_permissions_cache", JSON.stringify(list));
+            localStorage.setItem("hosteleaze_permissions_cache", JSON.stringify(list));
+            if (data.total) {
+              localStorage.setItem("hosteleaze_permissions_total", String(data.total));
+            }
+          } catch (e) {}
+        }
+        return true;
       } else if (!response.ok) {
-        console.warn(`Permissions API returned status ${response.status}`);
-        setPermissions([]);
-        setTotalPermissionsCount(0);
-        setIsShowingAllPermissions(false);
+        console.warn(`Permissions API returned status ${response.status}`, data);
+        // 🛡️ PRESERVE EXISTING CACHE ON NETWORK/AUTH ERROR: Do not wipe UI to empty
+        if (permissions.length === 0 && typeof window !== "undefined") {
+          const cached = sessionStorage.getItem("hosteleaze_permissions_cache") || localStorage.getItem("hosteleaze_permissions_cache");
+          if (cached) {
+            try {
+              const parsed = JSON.parse(cached);
+              if (Array.isArray(parsed) && parsed.length > 0) {
+                setPermissions(parsed);
+              }
+            } catch (e) {}
+          }
+        }
+        return false;
       }
+      return false;
     } catch (error) {
       console.warn("Silent fallback: Error fetching permissions:", error);
-      setPermissions([]); // Set empty array on error
+      return false;
     } finally {
       setIsPermissionsLoading(false);
       if (fetchAll) {
@@ -6195,7 +6442,10 @@ export default function AdminDashboard({
 
   const fetchAttendanceSummary = async () => {
     try {
+      const targetSlug = isOgiTenantSession() ? "ogi" : (new URLSearchParams(window.location.search).get("tenant") || "ogi").toLowerCase();
+      const userTypeHeader = (typeof window !== "undefined" ? localStorage.getItem("userType") : null) || "superadmin";
       const url = new URL(`/api/admin/attendance-summary?date=${selectedDate}`, window.location.origin);
+      url.searchParams.set("tenant", targetSlug);
       
       // ⚡ WARDEN FILTER: Automatically scope summary stats to warden's assigned hostels
       if (isWarden) {
@@ -6205,7 +6455,9 @@ export default function AdminDashboard({
           }
       }
 
-      const response = await fetch(url.href);
+      const response = await fetch(url.href, {
+        headers: { "x-user-type": userTypeHeader }
+      });
       if (!response.ok) return;
       const data = await response.json();
       if (data.success) {
@@ -6237,8 +6489,13 @@ export default function AdminDashboard({
       const activeFilter = currentTab === "rooms" ? "all" : attendanceHostelFilter;
       
       // Fetch default attendance logs and render instantly
+      const targetSlug = isOgiTenantSession() ? "ogi" : (new URLSearchParams(window.location.search).get("tenant") || "ogi").toLowerCase();
+      const userTypeHeader = (typeof window !== "undefined" ? localStorage.getItem("userType") : null) || "superadmin";
       const logsUrl = new URL(`/api/admin/attendance?date=${selectedDate}&hostelName=${activeFilter}`, window.location.origin);
-      const logsRes = await fetch(logsUrl.href);
+      logsUrl.searchParams.set("tenant", targetSlug);
+      const logsRes = await fetch(logsUrl.href, {
+        headers: { "x-user-type": userTypeHeader }
+      });
 
       if (logsRes.ok) {
         const logsData = await logsRes.json();
@@ -6334,7 +6591,12 @@ export default function AdminDashboard({
 
   const fetchAdminNotifications = async () => {
     try {
-      const response = await fetch("/api/admin/notifications", { cache: "no-store" });
+      const targetSlug = isOgiTenantSession() ? "ogi" : (new URLSearchParams(window.location.search).get("tenant") || "ogi").toLowerCase();
+      const userTypeHeader = (typeof window !== "undefined" ? localStorage.getItem("userType") : null) || "superadmin";
+      const response = await fetch(`/api/admin/notifications?tenant=${targetSlug}`, {
+        cache: "no-store",
+        headers: { "x-user-type": userTypeHeader }
+      });
       if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
       const data = await response.json();
       if (data.success) {
@@ -6603,14 +6865,24 @@ export default function AdminDashboard({
 
   useEffect(() => {
     const loadData = () => {
-      setLoading(true);
+      if (typeof window !== "undefined") {
+        const urlTenant = new URLSearchParams(window.location.search).get("tenant");
+        if (!urlTenant || urlTenant.toLowerCase() === "ogi") {
+          const cookieMatch = document.cookie.match(/(?:^|;\s*)tenant-slug=([^;]+)/);
+          if (!cookieMatch || cookieMatch[1].toLowerCase() !== "ogi") {
+            document.cookie = "tenant-slug=ogi; path=/; max-age=15552000; SameSite=Lax";
+            document.cookie = "tenant-expired=false; path=/; max-age=15552000; SameSite=Lax";
+            try {
+              sessionStorage.removeItem("bossProxySession");
+              localStorage.setItem("lastTenantSlug", "ogi");
+              localStorage.removeItem("bossImpersonatedTenant");
+            } catch (e) {}
+          }
+        }
+      }
 
-      setStudentsLoading(true);
-      fetchAttendanceSummary()
-        .finally(() => {
-            setLoading(false);
-            setStudentsLoading(false);
-        });
+      // Fetch attendance summary asynchronously in the background so it never freezes the UI
+      fetchAttendanceSummary();
 
       // Fetch students, hostels, notifications, and settings immediately on load
       fetchStudents();
@@ -6618,9 +6890,8 @@ export default function AdminDashboard({
       fetchAdminNotifications();
       fetchBankSettings();
 
-      if (currentTab === 'permissions') {
-        fetchPermissions('all'); 
-      }
+      // Always fetch permissions fresh from the server on load
+      fetchPermissions('all', true);
     };
 
     loadData();
@@ -6639,6 +6910,12 @@ export default function AdminDashboard({
       fetchPermissions("all", true);
     }
   }, [allowBulkPermissionManagement]);
+
+  useEffect(() => {
+    if (showAllStudents && students.length === 0 && !studentsLoading) {
+      fetchStudents(true);
+    }
+  }, [showAllStudents, students.length, studentsLoading]);
 
   useEffect(() => {
     // ⚡ INSTANT TAB SWITCH: Fetch attendance summary and logs only when viewing attendance or rooms
@@ -6669,17 +6946,19 @@ export default function AdminDashboard({
     }
   }, [currentTab, paymentStatusFilter, paymentSearch]);
 
-  // Load cached students list immediately on mount for zero-latency tab transitions
+  // Load cached students list immediately on mount for zero-latency tab transitions (OGI only)
   useEffect(() => {
-    const cached = localStorage.getItem(CACHE_KEYS.STUDENTS);
-    if (cached) {
-      try {
-        const parsed = JSON.parse(cached);
-        if (parsed && parsed.length > 0) {
-          setStudents(parsed);
+    if (isOgiTenantSession()) {
+      const cached = localStorage.getItem(CACHE_KEYS.STUDENTS);
+      if (cached) {
+        try {
+          const parsed = JSON.parse(cached);
+          if (parsed && parsed.length > 0) {
+            setStudents(parsed);
+          }
+        } catch (e) {
+          console.warn("Failed to load cached students on mount", e);
         }
-      } catch (e) {
-        console.warn("Failed to load cached students on mount", e);
       }
     }
   }, []);
@@ -6724,9 +7003,11 @@ export default function AdminDashboard({
                 return s;
               });
 
-              try {
-                localStorage.setItem(CACHE_KEYS.STUDENTS, JSON.stringify(updated));
-              } catch (e) {}
+              if (isOgiTenantSession()) {
+                try {
+                  localStorage.setItem(CACHE_KEYS.STUDENTS, JSON.stringify(updated));
+                } catch (e) {}
+              }
 
               return updated;
             });
@@ -8048,7 +8329,14 @@ export default function AdminDashboard({
     return permissions.filter((p) => {
       const student = (typeof p.studentId === "object" && p.studentId !== null)
         ? p.studentId
-        : (p.student || (p as any).students || (students.find(s => (s.id || (s as any)._id) === p.studentId)) || null);
+        : (p.student || (p as any).students || (students.find(s => (s.id || (s as any)._id) === p.studentId)) || {
+            name: p.name || "Student",
+            hostelName: p.hostelName || "",
+            roomNumber: p.roomNumber || "",
+            registrationId: p.registrationId || "",
+            email: p.email || "",
+            phoneNumber: p.phoneNumber || p.parentMobile || "",
+          });
       if (!student) return false;
 
       const isCancelled = p.status === 'cancelled' || p.wardenStatus === 'cancelled' || p.deanStatus === 'cancelled';
@@ -8817,19 +9105,74 @@ export default function AdminDashboard({
         <div className="p-4 md:p-6 space-y-4 md:space-y-6">
           {!showAllStudents ? (
             <>
+              {/* Super Admin Node Impersonation Active Banner - Visible only when viewed from Boss Control */}
+              {((typeof window !== "undefined" && sessionStorage.getItem("bossProxySession") === "true") || userType === "superadmin") && tenantFormData.slug && tenantFormData.slug !== 'ogi' && (
+                <div className="bg-slate-900 text-white p-3 sm:p-4 rounded-xl sm:rounded-2xl flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 shadow-lg border border-slate-700 animate-in fade-in">
+                  <div className="flex items-center gap-2.5">
+                    <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-pulse shrink-0"></span>
+                    <div>
+                      <p className="text-[10px] font-black uppercase tracking-wider text-blue-400">Boss Proxy Active</p>
+                      <p className="text-xs sm:text-sm font-black text-white">
+                        Connected to: <span className="text-emerald-400">{tenantFormData.name || tenantFormData.slug.toUpperCase()}</span> ({tenantFormData.slug})
+                      </p>
+                    </div>
+                  </div>
+                  <div>
+                    <button
+                      onClick={() => {
+                        document.cookie = "tenant-slug=ogi; path=/; max-age=15552000; SameSite=Lax";
+                        try {
+                          sessionStorage.removeItem("bossProxySession");
+                          localStorage.setItem("lastTenantSlug", "ogi");
+                          localStorage.removeItem("bossImpersonatedTenant");
+                        } catch (e) {}
+                        window.close();
+                        setTimeout(() => {
+                          if (!window.closed) {
+                            window.location.href = "/superadmin";
+                          }
+                        }, 250);
+                      }}
+                      className="px-4 py-2 bg-rose-600 hover:bg-rose-700 text-white rounded-xl text-xs font-black uppercase tracking-wider transition-all shadow-md active:scale-95 cursor-pointer whitespace-nowrap flex items-center gap-1.5"
+                    >
+                      ✕ Close Window
+                    </button>
+                  </div>
+                </div>
+              )}
+
               <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
                 <div className="flex justify-between items-start w-full md:w-auto">
                   <div>
-                    <h1 className="text-lg md:text-xl font-bold text-foreground leading-tight tracking-tight">
-                      {dashboardTitle.includes("Dashboard") ? (
-                        <>
-                          <span>{dashboardTitle.replace(" Dashboard", "")} </span>
-                          <span className="text-slate-800">Dashboard</span>
-                        </>
-                      ) : (
-                        <span>{dashboardTitle}</span>
-                      )}
-                    </h1>
+                    <div className="flex items-center gap-1.5">
+                      <h1 className="text-lg md:text-xl font-bold text-foreground leading-tight tracking-tight">
+                        {dashboardTitle.includes("Dashboard") ? (
+                          <>
+                            <span>{dashboardTitle.replace(" Dashboard", "")} </span>
+                            <span className="text-slate-800">Dashboard</span>
+                          </>
+                        ) : (
+                          <span>{dashboardTitle}</span>
+                        )}
+                      </h1>
+                      {/* Notification Bell Toggle Icon (Mobile) */}
+                      <button
+                        onClick={handleToggleNotification}
+                        disabled={isTogglingNotification}
+                        title={isNotificationEnabled ? "Notifications are ON (Tap to Stop)" : "Notifications are OFF (Tap to Start)"}
+                        className={`md:hidden inline-flex items-center justify-center w-5 h-5 rounded-full border border-solid transition-all active:scale-90 shadow-sm cursor-pointer shrink-0 ${
+                          isNotificationEnabled
+                            ? "bg-amber-100/90 border-amber-300 shadow-[0_0_6px_rgba(245,158,11,0.35)] opacity-100"
+                            : "bg-gray-100/80 border-gray-200 text-gray-400 opacity-40 grayscale"
+                        }`}
+                      >
+                        {isTogglingNotification ? (
+                          <div className="w-2.5 h-2.5 border-2 border-amber-600/30 border-t-amber-600 rounded-full animate-spin" />
+                        ) : (
+                          <span className="text-[11px] leading-none select-none">🔔</span>
+                        )}
+                      </button>
+                    </div>
                     <div className="flex items-center gap-2 mt-1">
                       {studentsLoading ? (
                         <span className="h-4 w-4 animate-spin rounded-full border-2 border-gray-300 border-t-blue-600"></span>
@@ -8926,29 +9269,40 @@ export default function AdminDashboard({
 
                   {title === "Super Admin Dashboard" && (
                     <button
-                      onClick={() => {
-                        // ⚡ FORCE REFRESH: Clear ALL caches (localStorage + sessionStorage)
-                        // so we always get fresh data from Supabase
-                        localStorage.removeItem(CACHE_KEYS.STUDENTS);
-                        localStorage.removeItem(CACHE_KEYS.HOSTELS);
-                        localStorage.removeItem(CACHE_KEYS.TIMESTAMP);
-                        sessionStorage.removeItem('hosteleaze_permissions_cache');
-                        fetchPermissions(undefined, true);
-                        fetchHostels(true);
-                        fetchAttendanceSummary();
-                        fetchStudents(true);
-                        if (currentTab === 'attendance' || currentTab === 'rooms') fetchAttendanceLogs();
-                        if (currentTab === 'messaging') fetchAdminNotifications();
-                        if (currentTab === 'payments') {
-                          fetchAdminPayments();
-                          fetchBankSettings();
+                      onClick={async () => {
+                        if (isSyncingData) return;
+                        setIsSyncingData(true);
+                        try {
+                          const results = await Promise.allSettled([
+                            fetchPermissions(undefined, true),
+                            fetchStudents(true),
+                            fetchHostels(true),
+                            fetchAttendanceSummary(),
+                            (currentTab === 'attendance' || currentTab === 'rooms') ? fetchAttendanceLogs() : Promise.resolve(),
+                            currentTab === 'messaging' ? fetchAdminNotifications() : Promise.resolve(),
+                            currentTab === 'payments' ? Promise.all([fetchAdminPayments(), fetchBankSettings()]) : Promise.resolve()
+                          ]);
+
+                          const permRes = results[0];
+                          if (permRes.status === 'fulfilled' && permRes.value === false) {
+                            showToast("Sync warning: Could not refresh permissions from server.", "warning");
+                          } else {
+                            localStorage.removeItem(CACHE_KEYS.TIMESTAMP);
+                            setLastUpdated(new Date());
+                            showToast("Data synced from server!", "success");
+                          }
+                        } catch (err) {
+                          console.error("Sync data error:", err);
+                          showToast("Sync failed. Please check network connection.", "error");
+                        } finally {
+                          setIsSyncingData(false);
                         }
-                        setLastUpdated(new Date());
-                        showToast("Data synced from server!", "success");
                       }}
-                      className="flex-1 md:flex-none flex items-center justify-center gap-2 px-3 py-2 bg-gray-50 text-gray-700 border border-gray-200 rounded-lg text-[10px] font-bold uppercase tracking-tight hover:bg-gray-100 transition-all whitespace-nowrap active:scale-95"
+                      disabled={isSyncingData}
+                      className="flex-1 md:flex-none flex items-center justify-center gap-2 px-3 py-2 bg-gray-50 text-gray-700 border border-gray-200 rounded-lg text-[10px] font-bold uppercase tracking-tight hover:bg-gray-100 transition-all whitespace-nowrap active:scale-95 disabled:opacity-60 cursor-pointer"
                     >
-                      🔄 Sync Data
+                      <span className={`text-xs ${isSyncingData ? 'animate-spin inline-block' : 'inline-block'}`}>🔄</span>
+                      <span>{isSyncingData ? "Syncing..." : "Sync Data"}</span>
                     </button>
                   )}
 
@@ -8971,7 +9325,7 @@ export default function AdminDashboard({
                   <button
                     onClick={() => {
                         setShowAllStudents(true);
-                        if (students.length === 0) fetchStudents();
+                        if (students.length === 0) fetchStudents(true);
                     }}
                     className="flex-1 md:flex-none px-4 py-2 rounded-lg bg-blue-600 text-background font-medium transition-colors hover:bg-blue-700 text-sm whitespace-nowrap"
                   >
@@ -9029,20 +9383,20 @@ export default function AdminDashboard({
 
                   <div className="bg-white pl-3 pr-1 py-3 md:p-6 rounded-2xl border border-dashed border-gray-300 font-mono text-[10.5px] sm:text-[13px] md:text-sm shadow-sm">
                     {/* Mobile: "YOU HAVE ADDED X LOCATIONS" with compact "🔍 Test Current Location Proximity" on its right side */}
-                    <div className="sm:hidden flex items-center justify-between gap-1.5 pb-2.5 mb-2.5 border-b border-dashed border-gray-200">
-                      <p className="font-bold text-gray-600 tracking-wider uppercase text-[9.5px] leading-tight">
+                    <div className="sm:hidden flex items-center justify-between gap-1 pb-2 mb-2 border-b border-dashed border-gray-200">
+                      <p className="font-bold text-gray-600 tracking-tight uppercase text-[8px] leading-tight whitespace-nowrap">
                         YOU HAVE ADDED {hostelLocations.length} LOCATION{hostelLocations.length !== 1 ? "S" : ""}
                       </p>
                       <button
                         onClick={() => getAccurateLocation('test')}
                         disabled={isLocationChecking}
-                        className="px-2 py-1 bg-indigo-50 text-indigo-700 rounded-lg font-bold border border-indigo-100 hover:bg-indigo-100 transition-all shadow-sm active:scale-95 disabled:opacity-80 text-[9px] flex items-center gap-1 shrink-0 whitespace-nowrap"
+                        className="px-1.5 py-0.5 bg-indigo-50 text-indigo-700 rounded-lg font-bold border border-indigo-100 hover:bg-indigo-100 transition-all shadow-sm active:scale-95 disabled:opacity-80 text-[8px] flex items-center gap-1 shrink-0 whitespace-nowrap"
                         title="Test Current Location Proximity"
                       >
                         {isLocationChecking ? (
                           <div className="flex items-center gap-1">
-                            <div className="w-3 h-3 border-2 border-indigo-600/20 border-t-indigo-600 rounded-full animate-spin" />
-                            <span className="text-[8px] uppercase tracking-wider font-bold">Locking... {gpsAccuracy ? `${gpsAccuracy}m` : ''}</span>
+                            <div className="w-2.5 h-2.5 border-2 border-indigo-600/20 border-t-indigo-600 rounded-full animate-spin" />
+                            <span className="text-[7.5px] uppercase tracking-wider font-bold">Locking... {gpsAccuracy ? `${gpsAccuracy}m` : ''}</span>
                           </div>
                         ) : (
                           "🔍 Test Current Location Proximity"
@@ -9422,7 +9776,7 @@ export default function AdminDashboard({
                   </div>
 
                   <div ref={permissionsContainerRef} className="space-y-3">
-                    {loading || isPermissionsLoading ? (
+                    {(isPermissionsLoading && permissions.length === 0) ? (
                       <div className="flex flex-col items-center justify-center py-12 gap-3 bg-white/40 rounded-2xl border border-gray-100 shadow-sm animate-pulse">
                         <div className="h-8 w-8 animate-spin rounded-full border-2 border-gray-300 border-t-blue-600"></div>
                         <p className="text-blue-600 font-bold text-sm">Loading permissions... Please wait</p>

@@ -26,6 +26,38 @@ export function middleware(request: NextRequest) {
         }
     }
 
+    // ⚡ API ROUTE PASSTHROUGH & EXPIRY GUARD:
+    // API endpoints must never have tenant cookies set or be converted into HTML 404s
+    if (pathname.startsWith('/api/')) {
+        const isExemptRoute =
+            pathname.startsWith('/api/developer/auth') ||
+            pathname.startsWith('/api/super-admin') ||
+            pathname.startsWith('/api/superadmin') ||
+            pathname.startsWith('/api/admin/active-db') ||
+            pathname.startsWith('/api/admin/subscription-status') ||
+            pathname.startsWith('/api/admin/create-razorpay-order') ||
+            pathname.startsWith('/api/admin/verify-razorpay-payment') ||
+            pathname.startsWith('/api/admin/submit-direct-payment') ||
+            pathname.startsWith('/api/admin/upload-payment-proof') ||
+            pathname.startsWith('/api/admin/billing-history') ||
+            pathname.startsWith('/api/admin/auth') ||
+            pathname.startsWith('/api/bootstrap') ||
+            pathname.startsWith('/api/tenant/config');
+
+        const isExpiredCookie = request.cookies.get('tenant-expired')?.value === 'true';
+        if (isExpiredCookie && !isExemptRoute) {
+            return NextResponse.json(
+                {
+                    error: "College subscription has ended. Please contact your college administration to renew.",
+                    isExpired: true,
+                    blockedByMiddleware: true
+                },
+                { status: 403 }
+            );
+        }
+        return NextResponse.next();
+    }
+
     const tenantParam = url.searchParams.get('tenant');
     const tenantCookie = request.cookies.get('tenant-slug')?.value;
 

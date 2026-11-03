@@ -3,6 +3,7 @@ import { Lora } from "next/font/google";
 import "./globals.css";
 import InstallPWA from "./components/InstallPWA";
 import TenantGuard from "./components/TenantGuard";
+import MaintenanceGuard from "./components/MaintenanceGuard";
 import { AuthProvider } from "./components/AuthProvider";
 import AppBootstrap from "./components/AppBootstrap";
 import AppUpdateChecker from "./components/AppUpdateChecker";
@@ -115,9 +116,11 @@ export default function RootLayout({
         <AppBootstrap />
         <AppUpdateChecker />
         <AuthProvider>
-          <TenantGuard>
-            {children}
-          </TenantGuard>
+          <MaintenanceGuard>
+            <TenantGuard>
+              {children}
+            </TenantGuard>
+          </MaintenanceGuard>
         </AuthProvider>
       </body>
     </html>

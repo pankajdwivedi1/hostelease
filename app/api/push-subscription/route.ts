@@ -71,3 +71,20 @@ export async function POST(request: NextRequest) {
     );
   }
 }
+
+export async function DELETE(request: NextRequest) {
+  try {
+    const body = await request.json();
+    const { endpoint } = body;
+    if (endpoint) {
+      await db.pushSubscription.deleteMany({ endpoint });
+    }
+    return NextResponse.json({ success: true, message: "Subscription removed successfully" });
+  } catch (error: any) {
+    console.error("Error deleting push subscription:", error);
+    return NextResponse.json(
+      { error: error.message || "Failed to delete push subscription" },
+      { status: 500 }
+    );
+  }
+}

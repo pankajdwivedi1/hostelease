@@ -81,3 +81,31 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Authentication failed" }, { status: 400 });
   }
 }
+
+export async function DELETE(request: NextRequest) {
+  try {
+    const { getAuthSession } = await import("@/lib/authSession");
+    if (getAuthSession(request)?.role !== "superadmin") {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
+    const authRecord = await prisma.platformSetting.findUnique({
+      where: { id: "boss_superadmin_auth" }
+    });
+    const authSettings = (authRecord?.settings as any) || {};
+    delete authSettings.desktopDeviceId;
+    delete authSettings.desktopBoundAt;
+
+    await prisma.platformSetting.upsert({
+      where: { id: "boss_superadmin_auth" },
+      update: { settings: authSettings },
+      create: { id: "boss_superadmin_auth", settings: authSettings }
+    });
+
+    console.log("🔒 [SuperAdmin] Authorized desktop binding has been unbound/reset.");
+    return NextResponse.json({ success: true, message: "Authorized desktop unbound successfully" });
+  } catch (err: any) {
+    console.error("SuperAdmin Auth DELETE error:", err);
+    return NextResponse.json({ error: "Failed to unbind desktop" }, { status: 500 });
+  }
+}

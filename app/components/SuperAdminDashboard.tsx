@@ -38,7 +38,9 @@ import {
     Receipt,
     Eye,
     EyeOff,
-    ScanFace
+    ScanFace,
+    Laptop,
+    Wrench
 } from "lucide-react";
 import BossFaceModal from "./BossFaceModal";
 import { generateOfficialInvoicePDF } from "@/lib/invoicePdfGenerator";
@@ -149,7 +151,7 @@ const LiveDbSwitch = () => {
             onClick={toggle}
             disabled={loading}
             title={`Current Active DB: ${source}. Click to switch to ${source === 'RAILWAY' ? 'SUPABASE' : 'RAILWAY'}`}
-            className={`h-7 sm:h-11 px-2 sm:px-4 rounded-lg sm:rounded-xl text-[8px] sm:text-xs font-black uppercase tracking-wider sm:tracking-widest transition-all border shadow-xs active:scale-95 flex items-center gap-1 sm:gap-1.5 justify-center w-full sm:w-auto ${
+            className={`h-7 sm:h-11 px-2 sm:px-4 rounded-lg sm:rounded-xl text-[10px] sm:text-xs font-black uppercase tracking-wider sm:tracking-widest transition-all border shadow-xs active:scale-95 flex items-center gap-1 sm:gap-1.5 justify-center text-center w-full sm:w-auto ${
                 source === 'RAILWAY'
                     ? 'bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100'
                     : 'bg-orange-50 text-orange-700 border-orange-200 hover:bg-orange-100'
@@ -207,12 +209,12 @@ const SyncDbButton = () => {
     };
 
     return (
-        <div className="relative inline-block text-left">
+        <div className="relative w-full sm:w-auto flex justify-center">
             <button
                 onClick={() => setShowModal(!showModal)}
                 disabled={syncing}
                 title="Sync data between Railway and Supabase PostgreSQL"
-                className="h-7 sm:h-11 px-2 sm:px-4 bg-purple-50 text-purple-700 border border-purple-200 hover:bg-purple-100 rounded-lg sm:rounded-xl text-[8px] sm:text-xs font-black uppercase tracking-wider sm:tracking-widest transition-all shadow-xs active:scale-95 flex items-center gap-1 sm:gap-1.5 justify-center w-full sm:w-auto"
+                className="h-7 sm:h-11 px-2 sm:px-4 bg-purple-50 text-purple-700 border border-purple-200 hover:bg-purple-100 rounded-lg sm:rounded-xl text-[10px] sm:text-xs font-black uppercase tracking-wider sm:tracking-widest transition-all shadow-xs active:scale-95 flex items-center gap-1 sm:gap-1.5 justify-center text-center w-full sm:w-auto"
             >
                 <Zap className="w-2.5 h-2.5 sm:w-3.5 sm:h-3.5 text-purple-600 animate-pulse" />
                 <span>{syncing ? 'Syncing...' : 'Sync DB'}</span>
@@ -428,7 +430,7 @@ const GenerateEmbeddingsButton = () => {
             onClick={handleGenerateEmbeddings}
             disabled={isGenerating}
             title="Pre-calculate 128-D face embeddings for all students to enable instant <30ms verification"
-            className="h-7 sm:h-11 px-2 sm:px-4 bg-emerald-50 text-emerald-700 border border-emerald-200 hover:bg-emerald-100 rounded-lg sm:rounded-xl text-[8px] sm:text-xs font-black uppercase tracking-wider sm:tracking-widest transition-all shadow-xs active:scale-95 flex items-center gap-1 sm:gap-1.5 justify-center w-full sm:w-auto"
+            className="h-7 sm:h-11 px-2 sm:px-4 bg-emerald-50 text-emerald-700 border border-emerald-200 hover:bg-emerald-100 rounded-lg sm:rounded-xl text-[10px] sm:text-xs font-black uppercase tracking-wider sm:tracking-widest transition-all shadow-xs active:scale-95 flex items-center gap-1 sm:gap-1.5 justify-center text-center w-full sm:w-auto"
         >
             {isGenerating ? (
                 <>
@@ -569,6 +571,7 @@ export default function SuperAdminDashboard() {
     const [showFaceModal, setShowFaceModal] = useState(false);
     const [faceModalMode, setFaceModalMode] = useState<"login" | "enroll">("login");
     const [hasFaceEnrolled, setHasFaceEnrolled] = useState(false);
+    const [isDesktopBound, setIsDesktopBound] = useState(false);
 
     const getDesktopDeviceId = () => {
         if (typeof window === "undefined") return "";
@@ -580,6 +583,7 @@ export default function SuperAdminDashboard() {
         return id;
     };
     const [showPassword, setShowPassword] = useState(false);
+    const [showDesktopPasswordForm, setShowDesktopPasswordForm] = useState(false);
 
     const [editingTenant, setEditingTenant] = useState<Tenant | null>(null);
     const [deletingTenant, setDeletingTenant] = useState<Tenant | null>(null);
@@ -592,6 +596,14 @@ export default function SuperAdminDashboard() {
     const [broadcastMessage, setBroadcastMessage] = useState("");
     const [broadcastType, setBroadcastType] = useState<"info"|"warning"|"alert">("info");
     const [isBroadcasting, setIsBroadcasting] = useState(false);
+
+    const [showMaintenanceModal, setShowMaintenanceModal] = useState(false);
+    const [isSavingMaintenance, setIsSavingMaintenance] = useState(false);
+    const [maintenanceConfig, setMaintenanceConfig] = useState({
+        enabled: false,
+        message: "",
+        estimatedTime: ""
+    });
 
     const [showPaymentSettingsModal, setShowPaymentSettingsModal] = useState(false);
     const [isSavingPaymentSettings, setIsSavingPaymentSettings] = useState(false);
@@ -1048,6 +1060,8 @@ export default function SuperAdminDashboard() {
             .then((data) => {
                 if (data.authenticated) setIsAuthorized(true);
                 else localStorage.removeItem("superadmin_session");
+                if (data.hasFaceEnrolled) setHasFaceEnrolled(true);
+                if (data.isDesktopBound) setIsDesktopBound(true);
             })
             .catch(() => localStorage.removeItem("superadmin_session"));
     }, []);
@@ -1198,10 +1212,55 @@ export default function SuperAdminDashboard() {
         }
     };
 
+    const fetchMaintenanceSettings = async () => {
+        try {
+            const res = await fetch("/api/super-admin/maintenance");
+            const data = await res.json();
+            if (data.success) {
+                setMaintenanceConfig({
+                    enabled: Boolean(data.enabled),
+                    message: data.message || "",
+                    estimatedTime: data.estimatedTime || ""
+                });
+            }
+        } catch (err) {
+            console.error("Failed to fetch maintenance config", err);
+        }
+    };
+
+    const handleSaveMaintenance = async (e?: React.FormEvent) => {
+        if (e) e.preventDefault();
+        setIsSavingMaintenance(true);
+        try {
+            const res = await fetch("/api/super-admin/maintenance", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify(maintenanceConfig)
+            });
+            const data = await res.json();
+            if (data.success) {
+                showToast(
+                    maintenanceConfig.enabled
+                        ? "🚨 Platform-wide Maintenance Mode is now ACTIVE!"
+                        : "✅ Maintenance Mode turned OFF. All services restored.",
+                    "success"
+                );
+                setShowMaintenanceModal(false);
+            } else {
+                showToast(data.error || "Failed to update maintenance mode", "error");
+            }
+        } catch (err: any) {
+            showToast("Error updating maintenance mode: " + err.message, "error");
+        } finally {
+            setIsSavingMaintenance(false);
+        }
+    };
+
     useEffect(() => {
         if (isAuthorized && isMounted) {
             fetchTenants();
             fetchPaymentSettings();
+            fetchMaintenanceSettings();
             fetchAuditLogs();
             fetchBillingLedger();
         }
@@ -1220,13 +1279,21 @@ export default function SuperAdminDashboard() {
     const handleLogin = async (e: React.FormEvent) => {
         e.preventDefault();
         try {
+            const deviceId = getDesktopDeviceId();
             const response = await fetch("/api/super-admin/auth", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ password: password.trim() }),
+                body: JSON.stringify({ 
+                    password: password.trim(),
+                    deviceId: deviceId
+                }),
             });
-            if (!response.ok) throw new Error("Invalid SuperAdmin Password");
+            const data = await response.json();
+            if (!response.ok) {
+                throw new Error(data.error || "Invalid SuperAdmin Password");
+            }
             setIsAuthorized(true);
+            setIsDesktopBound(true);
             localStorage.setItem("superadmin_session", "true");
         } catch (error) {
             alert(error instanceof Error ? error.message : "Super admin authentication failed");
@@ -1467,8 +1534,8 @@ export default function SuperAdminDashboard() {
             <div className="min-h-screen bg-[#050510] flex items-center justify-center p-6 bg-[radial-gradient(circle_at_top,_var(--tw-gradient-stops))] from-blue-900/20 via-black to-black">
                 <div className="w-full max-w-md space-y-6 text-center animate-in fade-in zoom-in duration-500">
                     <div className="relative inline-block">
-                        <div className="w-20 h-20 bg-blue-600/20 rounded-2xl flex items-center justify-center border border-blue-500/30 mx-auto shadow-2xl shadow-blue-500/20">
-                            <ShieldCheck className="w-10 h-10 text-blue-400" />
+                        <div className="w-20 h-20 rounded-2xl overflow-hidden border border-blue-500/30 mx-auto shadow-2xl shadow-blue-500/20 bg-black flex items-center justify-center">
+                            <img src="/uvw_logo.jpg" alt="UVW Logo" className="w-full h-full object-cover" />
                         </div>
                         <div className="absolute -top-2 -right-2 w-6 h-6 bg-red-500 rounded-full flex items-center justify-center border-4 border-[#050510] animate-pulse">
                             <div className="w-1.5 h-1.5 bg-white rounded-full"></div>
@@ -1476,69 +1543,92 @@ export default function SuperAdminDashboard() {
                     </div>
 
                     <div>
+                        <p className="text-xs sm:text-sm font-black text-blue-400 uppercase tracking-widest mb-1.5">
+                            Welcome Dr. Pankaj Dwivedi
+                        </p>
                         <h1 className="text-2xl sm:text-3xl font-black text-white tracking-tighter uppercase mb-1">Hosteleaze Boss Control</h1>
                         <p className="text-gray-400 text-xs font-bold tracking-widest uppercase">Biometric & Hardware Protected</p>
                     </div>
 
-                    {/* Primary Option: Boss Face Scan (Any Device) */}
-                    <div className="p-5 rounded-3xl bg-blue-950/20 border border-blue-500/30 shadow-xl text-center space-y-3">
+                    {/* Unified Security Access Card: Side-by-Side Action Buttons */}
+                    <div className="p-4 sm:p-5 rounded-3xl bg-blue-950/20 border border-blue-500/30 shadow-2xl shadow-blue-500/10 text-center space-y-3.5">
                         <div className="flex items-center justify-center gap-2 text-blue-400 font-black text-xs uppercase tracking-wider">
                             <ScanFace className="w-4 h-4" />
-                            <span>Boss Face ID Unlock</span>
-                        </div>
-                        <p className="text-[11px] text-gray-300 font-medium">
-                            Authorized for Dr. Pankaj Dwivedi on <strong>ANY device</strong> (Mobile & Desktop).
-                        </p>
-                        <button
-                            type="button"
-                            onClick={() => {
-                                setFaceModalMode("login");
-                                setShowFaceModal(true);
-                            }}
-                            className="w-full bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white font-black py-3.5 rounded-2xl shadow-lg shadow-blue-600/30 uppercase tracking-widest text-xs flex items-center justify-center gap-2 active:scale-95 transition-all cursor-pointer"
-                        >
-                            <ScanFace className="w-4 h-4" />
-                            <span>Scan Face to Open</span>
-                        </button>
-                    </div>
-
-                    {/* Secondary Option: Password (Desktop Only) */}
-                    <div className="p-5 rounded-3xl bg-white/5 border border-white/10 text-center space-y-3">
-                        <div className="flex items-center justify-center gap-1.5 text-gray-400 font-black text-[11px] uppercase tracking-wider">
-                            <span>🔑 Master Password</span>
-                            <span className="text-[9px] px-2 py-0.5 rounded-md bg-amber-500/20 text-amber-300 border border-amber-500/30">Desktop Only</span>
+                            <span>Boss Security Access</span>
                         </div>
 
-                        <form onSubmit={handleLogin} className="space-y-3">
-                            <div className="relative">
-                                <input
-                                    type={showPassword ? "text" : "password"}
-                                    value={password}
-                                    onChange={(e) => setPassword(e.target.value)}
-                                    autoCapitalize="none"
-                                    autoCorrect="off"
-                                    autoComplete="off"
-                                    spellCheck={false}
-                                    suppressHydrationWarning
-                                    className="w-full bg-black/40 border border-white/10 p-3.5 pr-12 rounded-xl text-white font-bold text-center tracking-[0.3em] focus:ring-2 focus:ring-blue-500/40 outline-none transition-all placeholder:tracking-normal placeholder:font-medium placeholder:text-gray-600 text-sm"
-                                    placeholder="MASTER PASSWORD"
-                                />
-                                <button
-                                    type="button"
-                                    onClick={() => setShowPassword(!showPassword)}
-                                    className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-400 hover:text-white transition-colors p-1"
-                                    title={showPassword ? "Hide password" : "Show password"}
-                                >
-                                    {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                                </button>
-                            </div>
-                            <button 
-                                suppressHydrationWarning
-                                className="w-full bg-white/10 hover:bg-white/20 text-white font-black py-3 rounded-xl uppercase tracking-widest text-xs active:scale-95 transition-all cursor-pointer border border-white/10"
+                        {/* Side-by-Side Split Buttons */}
+                        <div className="grid grid-cols-2 gap-2">
+                            {/* Left Button: Scan Face */}
+                            <button
+                                type="button"
+                                onClick={() => {
+                                    setFaceModalMode("login");
+                                    setShowFaceModal(true);
+                                }}
+                                className="w-full bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white font-black py-3 px-2 rounded-xl shadow-lg shadow-blue-600/30 uppercase tracking-wider text-[10px] sm:text-xs flex items-center justify-center gap-1.5 active:scale-95 transition-all cursor-pointer"
                             >
-                                Unlock via Desktop
+                                <ScanFace className="w-3.5 h-3.5 sm:w-4 sm:h-4 shrink-0" />
+                                <span className="truncate">Scan Face to Open</span>
                             </button>
-                        </form>
+
+                            {/* Right Button: Unlock by Desktop */}
+                            <button
+                                type="button"
+                                onClick={() => setShowDesktopPasswordForm(!showDesktopPasswordForm)}
+                                className={`w-full py-3 px-2 rounded-xl font-black uppercase tracking-wider text-[10px] sm:text-xs flex items-center justify-center gap-1.5 active:scale-95 transition-all cursor-pointer border ${
+                                    showDesktopPasswordForm
+                                        ? 'bg-amber-500/20 text-amber-300 border-amber-500/40 shadow-md'
+                                        : 'bg-white/5 hover:bg-white/10 text-gray-300 hover:text-white border-white/10'
+                                }`}
+                            >
+                                <Laptop className="w-3.5 h-3.5 sm:w-4 sm:h-4 shrink-0 text-amber-400" />
+                                <span className="truncate">Unlock by Desktop</span>
+                            </button>
+                        </div>
+
+                        {/* Collapsible Master Password Form (Opens when 'Unlock by Desktop' is clicked) */}
+                        {showDesktopPasswordForm && (
+                            <form onSubmit={handleLogin} className="pt-3 border-t border-blue-500/20 space-y-3 animate-in fade-in duration-300">
+                                <div className="flex items-center justify-between text-[10px] text-gray-400 font-bold uppercase tracking-wider px-1">
+                                    <span className="flex items-center gap-1 text-amber-400 font-black">
+                                        <Lock className="w-3 h-3" /> Master Password
+                                    </span>
+                                    <span className="text-[9px] px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-300 border border-amber-500/30 font-black">
+                                        Desktop Only
+                                    </span>
+                                </div>
+                                <div className="relative">
+                                    <input
+                                        type={showPassword ? "text" : "password"}
+                                        value={password}
+                                        onChange={(e) => setPassword(e.target.value)}
+                                        autoCapitalize="none"
+                                        autoCorrect="off"
+                                        autoComplete="off"
+                                        spellCheck={false}
+                                        suppressHydrationWarning
+                                        className="w-full bg-black/60 border border-white/15 p-3 pr-10 rounded-xl text-white font-bold text-center tracking-[0.3em] focus:ring-2 focus:ring-blue-500/40 outline-none transition-all placeholder:tracking-normal placeholder:font-medium placeholder:text-gray-500 text-xs sm:text-sm"
+                                        placeholder="MASTER PASSWORD"
+                                        autoFocus
+                                    />
+                                    <button
+                                        type="button"
+                                        onClick={() => setShowPassword(!showPassword)}
+                                        className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-white transition-colors p-1"
+                                        title={showPassword ? "Hide password" : "Show password"}
+                                    >
+                                        {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                                    </button>
+                                </div>
+                                <button 
+                                    suppressHydrationWarning
+                                    className="w-full bg-white/10 hover:bg-white/20 text-white font-black py-2.5 rounded-xl uppercase tracking-widest text-xs active:scale-95 transition-all cursor-pointer border border-white/10"
+                                >
+                                    Unlock via Desktop
+                                </button>
+                            </form>
+                        )}
                     </div>
 
                     <p className="text-[10px] text-gray-500 uppercase font-black tracking-widest">
@@ -1587,9 +1677,9 @@ export default function SuperAdminDashboard() {
                 </div>
 
                 <div className="grid grid-cols-2 sm:flex sm:flex-wrap sm:items-center gap-1.5 sm:gap-2 w-full sm:w-auto">
-                    <div className="h-7 sm:h-11 px-2 sm:px-4 bg-emerald-50 text-emerald-700 border border-emerald-200 rounded-lg sm:rounded-xl flex items-center gap-1 sm:gap-1.5 text-[8px] sm:text-xs font-black uppercase tracking-wider sm:tracking-widest shadow-xs justify-center w-full sm:w-auto">
+                    <div className="h-7 sm:h-11 px-2 sm:px-4 bg-emerald-50 text-emerald-700 border border-emerald-200 rounded-lg sm:rounded-xl flex items-center gap-1 sm:gap-1.5 text-[10px] sm:text-xs font-black uppercase tracking-wider sm:tracking-widest shadow-xs justify-center text-center w-full sm:w-auto">
                         <span className="w-1.5 h-1.5 bg-emerald-500 rounded-full animate-pulse shrink-0"></span>
-                        <span>Pulse: {globalStats?.totalActiveTraffic || 0} <span className="text-[7px] sm:text-[8px] font-bold opacity-60 italic">Att/M</span></span>
+                        <span>Pulse: {globalStats?.totalActiveTraffic || 0} <span className="text-[8.5px] sm:text-[8px] font-bold opacity-60 italic">Att/M</span></span>
                     </div>
 
                     <button
@@ -1598,7 +1688,7 @@ export default function SuperAdminDashboard() {
                             setFaceModalMode("enroll");
                             setShowFaceModal(true);
                         }}
-                        className={`h-7 sm:h-11 px-2.5 sm:px-4 rounded-lg sm:rounded-xl flex items-center gap-1.5 text-[8px] sm:text-xs font-black uppercase tracking-wider sm:tracking-widest shadow-xs transition-all cursor-pointer ${
+                        className={`h-7 sm:h-11 px-2.5 sm:px-4 rounded-lg sm:rounded-xl flex items-center justify-center text-center gap-1.5 text-[10px] sm:text-xs font-black uppercase tracking-wider sm:tracking-widest shadow-xs transition-all cursor-pointer w-full sm:w-auto ${
                             hasFaceEnrolled 
                                 ? "bg-blue-50 text-blue-700 border border-blue-200 hover:bg-blue-100" 
                                 : "bg-amber-50 text-amber-700 border border-amber-200 hover:bg-amber-100 animate-pulse"
@@ -1608,43 +1698,34 @@ export default function SuperAdminDashboard() {
                         <ScanFace className="w-3.5 h-3.5 shrink-0" />
                         <span>{hasFaceEnrolled ? "Boss Face Active" : "Enroll Face ID"}</span>
                     </button>
-                    <LiveDbSwitch />
-                    <SyncDbButton />
-                    <GenerateEmbeddingsButton />
-
-                    <button
-                        onClick={async () => {
-                            const doubleCheck = await showPrompt("⚠️ WARNING: This will trigger a full database migration from MongoDB to Supabase. This should ONLY be run once.\n\nTo confirm, type the word \"MIGRATE\" below:");
-                            if (doubleCheck !== "MIGRATE") {
-                                showToast("Migration aborted.", "warning");
-                                return;
-                            }
-
-                            try {
-                                const res = await fetch('/api/admin/migrate-db', { method: 'POST' });
-                                const data = await res.json();
-                                if (data.success) {
-                                    showToast(data.message || "Migration completed successfully!", "success");
-                                    await fetch('/api/super-admin/audit-logs', {
-                                        method: 'POST',
-                                        headers: { 'Content-Type': 'application/json' },
-                                        body: JSON.stringify({
-                                            action: "DATABASE_MIGRATION",
-                                            details: "Triggered database data migration to Supabase successfully",
-                                            user: "Super Admin"
-                                        })
-                                    });
-                                } else {
-                                    showToast("Migration breakdown: " + data.error, "error");
+                    {isDesktopBound && (
+                        <button
+                            type="button"
+                            onClick={async () => {
+                                const confirmReset = confirm("Unbind this desktop? After unbinding, the next laptop/desktop to log in with the password will become the authorized device.");
+                                if (!confirmReset) return;
+                                try {
+                                    const res = await fetch("/api/super-admin/auth", { method: "DELETE" });
+                                    const d = await res.json();
+                                    if (res.ok) {
+                                        setIsDesktopBound(false);
+                                        localStorage.removeItem("boss_desktop_device_id");
+                                        showToast("Desktop unbound. Next desktop password login will rebind.", "success");
+                                    } else {
+                                        showToast(d.error || "Failed to unbind desktop", "error");
+                                    }
+                                } catch {
+                                    showToast("Failed to unbind desktop", "error");
                                 }
-                            } catch (e: any) {
-                                showToast("Critical Error: " + e.message, "error");
-                            }
-                        }}
-                        className="h-7 sm:h-11 px-2 sm:px-4 bg-purple-50 text-purple-700 border border-purple-200 rounded-lg sm:rounded-xl text-[8px] sm:text-xs font-black uppercase tracking-wider sm:tracking-widest hover:bg-purple-100 transition-all shadow-xs active:scale-95 flex items-center gap-1 sm:gap-1.5 justify-center w-full sm:w-auto"
-                    >
-                        🚀 Migration
-                    </button>
+                            }}
+                            className="h-7 sm:h-11 px-2.5 sm:px-4 rounded-lg sm:rounded-xl flex items-center justify-center text-center gap-1.5 text-[10px] sm:text-xs font-black uppercase tracking-wider sm:tracking-widest bg-slate-50 text-slate-700 border border-slate-200 hover:bg-slate-100 transition-all cursor-pointer shadow-xs w-full sm:w-auto"
+                            title="Click to unbind or change authorized laptop"
+                        >
+                            <Laptop className="w-3.5 h-3.5 shrink-0 text-emerald-600" />
+                            <span>Laptop Bound</span>
+                        </button>
+                    )}
+                    {/* Obsolete buttons (LiveDbSwitch, SyncDbButton, GenerateEmbeddingsButton, Migration) removed for clean production header */}
 
                     <button
                         onClick={async () => {
@@ -1652,7 +1733,7 @@ export default function SuperAdminDashboard() {
                             localStorage.removeItem("superadmin_session");
                             setIsAuthorized(false);
                         }}
-                        className="h-7 sm:h-11 px-2 sm:px-4 bg-rose-50 hover:bg-rose-100 text-rose-600 border border-rose-200/50 rounded-lg sm:rounded-xl font-black flex items-center gap-1 sm:gap-1.5 transition-all active:scale-95 text-[8px] sm:text-xs uppercase tracking-wider sm:tracking-widest justify-center w-full sm:w-auto"
+                        className="h-7 sm:h-11 px-2 sm:px-4 bg-rose-50 hover:bg-rose-100 text-rose-600 border border-rose-200/50 rounded-lg sm:rounded-xl font-black flex items-center gap-1 sm:gap-1.5 transition-all active:scale-95 text-[10px] sm:text-xs uppercase tracking-wider sm:tracking-widest justify-center text-center w-full sm:w-auto"
                     >
                         <LogOut className="w-2.5 h-2.5 sm:w-3.5 sm:h-3.5 text-rose-500" />
                         <span>Log Out</span>
@@ -1660,7 +1741,7 @@ export default function SuperAdminDashboard() {
 
                     <button
                         onClick={() => setShowAddModal(true)}
-                        className="h-8 sm:h-11 col-span-2 sm:col-auto px-3 sm:px-6 bg-blue-600 hover:bg-blue-700 text-white rounded-lg sm:rounded-xl font-black flex items-center gap-1.5 transition-all shadow-md shadow-blue-500/20 active:scale-95 text-[9px] sm:text-xs uppercase tracking-wider sm:tracking-widest justify-center w-full sm:w-auto"
+                        className="h-8 sm:h-11 col-span-2 sm:col-auto px-3 sm:px-6 bg-blue-600 hover:bg-blue-700 text-white rounded-lg sm:rounded-xl font-black flex items-center gap-1.5 transition-all shadow-md shadow-blue-500/20 active:scale-95 text-[11px] sm:text-xs uppercase tracking-wider sm:tracking-widest justify-center text-center w-full sm:w-auto"
                     >
                         <Plus className="w-3 h-3 sm:w-4 sm:h-4" />
                         <span className="whitespace-nowrap">Provision Node</span>
@@ -1704,7 +1785,7 @@ export default function SuperAdminDashboard() {
             })()}
 
             <div className="px-3 sm:px-8 pt-3 sm:pt-8">
-                <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-1.5 sm:gap-4">
+                <div className="grid grid-cols-6 lg:grid-cols-5 gap-1.5 sm:gap-4">
                     {[
                         { icon: Users, label: "Total Students", value: tenants.reduce((acc, t) => acc + (t.studentCount || 0), 0), sub: "Across nodes", trend: "+12.4%", color: "blue" },
                         { icon: Zap, label: "Active Nodes", value: globalStats?.revenueSummary?.active || 0, sub: "Subscribed", trend: "Stable", color: "amber" },
@@ -1725,22 +1806,42 @@ export default function SuperAdminDashboard() {
                             trend: `${((tenants.reduce((acc, t) => acc + (t.storageBytes || 0), 0) / (10 * 1024 * 1024 * 1024)) * 100).toFixed(2)}% of 10GB`,
                             color: "purple"
                         }
-                    ].map((stat, i, arr) => (
-                        <div key={i} className={`bg-white p-2 sm:p-7 rounded-xl sm:rounded-[32px] border border-gray-100 shadow-2xs hover:shadow-xl hover:shadow-gray-200/40 transition-all duration-500 group ${
-                            i === arr.length - 1 ? 'col-span-2 sm:col-span-1' : ''
+                    ].map((stat, i) => (
+                        <div key={i} className={`bg-white p-1.5 sm:p-7 rounded-xl border-2 border-dotted border-blue-400 hover:border-blue-600 shadow-2xs hover:shadow-xl hover:shadow-blue-500/10 transition-all duration-500 group ${
+                            i < 3 ? 'col-span-2 lg:col-span-1' : 'col-span-3 lg:col-span-1'
                         }`}>
-                            <div className="flex justify-between items-center mb-1.5 sm:mb-4">
-                                <div className={`w-5 h-5 sm:w-12 sm:h-12 rounded-md sm:rounded-2xl flex items-center justify-center bg-${stat.color}-50 text-${stat.color}-600 group-hover:bg-${stat.color}-600 group-hover:text-white transition-colors`}>
-                                    <stat.icon className="w-2.5 h-2.5 sm:w-6 sm:h-6" />
+                            {/* Mobile Layout: Number & Trend Badge Straight Inline */}
+                            <div className="sm:hidden w-full">
+                                <div className="flex items-center justify-between gap-1 w-full">
+                                    <div className="flex items-center gap-1.5 min-w-0">
+                                        <div className={`w-5.5 h-5.5 rounded-md flex items-center justify-center bg-${stat.color}-50 text-${stat.color}-600 shrink-0`}>
+                                            <stat.icon className="w-3 h-3" />
+                                        </div>
+                                        <h3 className="text-xs font-black text-gray-900 leading-none tracking-tight truncate">{stat.value}</h3>
+                                    </div>
+                                    {/* Trend Badge: Straight in line with number */}
+                                    <div className={`text-[6.5px] font-black px-1 py-0.5 rounded-md bg-${stat.color}-50 text-${stat.color}-600 uppercase tracking-tighter leading-none shrink-0`}>
+                                        {stat.trend}
+                                    </div>
                                 </div>
-                                <div className={`text-[6px] sm:text-[10px] font-black px-1 py-0.5 sm:px-2 sm:py-1 rounded sm:rounded-lg bg-${stat.color}-50 text-${stat.color}-600 uppercase tracking-tighter leading-none`}>
-                                    {stat.trend}
-                                </div>
+                                <p className="text-[6.5px] text-gray-400 font-bold uppercase tracking-wider truncate mt-1">{stat.label}</p>
                             </div>
-                            <div>
-                                <h3 className="text-xs sm:text-3xl font-black text-gray-900 leading-none tracking-tight sm:tracking-tighter">{stat.value}</h3>
-                                <p className="text-[6.5px] sm:text-[10px] text-gray-400 font-bold uppercase tracking-wider sm:tracking-widest mt-0.5">{stat.label}</p>
-                                <p className="hidden sm:block text-[8px] sm:text-[9px] text-gray-300 font-medium italic mt-2 truncate">{stat.sub}</p>
+
+                            {/* Desktop Layout: Spacious Card */}
+                            <div className="hidden sm:block w-full">
+                                <div className="flex justify-between items-center mb-4">
+                                    <div className={`w-12 h-12 rounded-2xl flex items-center justify-center bg-${stat.color}-50 text-${stat.color}-600 group-hover:bg-${stat.color}-600 group-hover:text-white transition-colors`}>
+                                        <stat.icon className="w-6 h-6" />
+                                    </div>
+                                    <div className={`text-[10px] font-black px-2 py-1 rounded-lg bg-${stat.color}-50 text-${stat.color}-600 uppercase tracking-tighter leading-none`}>
+                                        {stat.trend}
+                                    </div>
+                                </div>
+                                <div>
+                                    <h3 className="text-3xl font-black text-gray-900 leading-none tracking-tighter">{stat.value}</h3>
+                                    <p className="text-[10px] text-gray-400 font-bold uppercase tracking-widest mt-1">{stat.label}</p>
+                                    <p className="text-[9px] text-gray-300 font-medium italic mt-2 truncate">{stat.sub}</p>
+                                </div>
                             </div>
                         </div>
                     ))}
@@ -1754,25 +1855,48 @@ export default function SuperAdminDashboard() {
                 <div className="lg:col-span-12 flex flex-col md:flex-row md:items-center justify-between gap-2.5 sm:gap-3 mb-2 sm:mb-8 mt-2 sm:mt-12 border-t border-gray-100 pt-3 sm:pt-12">
                     <div className="flex items-center gap-2 sm:gap-3">
                         <Activity className="w-4 h-4 sm:w-5 sm:h-5 text-blue-600" />
-                        <h2 className="text-sm sm:text-xl font-black text-gray-900 uppercase tracking-tight sm:tracking-tighter">Infrastructure Control</h2>
+                        <h2 className="text-base sm:text-xl font-black text-gray-900 uppercase tracking-tight sm:tracking-tighter">Infrastructure Control</h2>
                     </div>
 
                     <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-1.5 sm:gap-1 bg-gray-100 p-1.5 rounded-xl sm:rounded-2xl border border-gray-200 w-full sm:w-auto">
                         {/* Line 1 on Mobile: Config Actions */}
-                        <div className="grid grid-cols-2 sm:flex sm:items-center gap-1.5 sm:gap-1 w-full sm:w-auto">
+                        <div className="grid grid-cols-4 sm:flex sm:items-center gap-1 sm:gap-1 w-full sm:w-auto">
                             <button 
                                 onClick={() => setShowPaymentSettingsModal(true)}
-                                className="px-2.5 sm:px-4 py-1.5 sm:py-2 rounded-lg sm:rounded-xl text-[8px] sm:text-[10px] font-black uppercase tracking-tight sm:tracking-widest transition-all bg-emerald-50 text-emerald-700 hover:bg-emerald-100 border border-emerald-200/80 flex items-center justify-center gap-1 whitespace-nowrap active:scale-95 shadow-xs w-full sm:w-auto"
+                                className="px-1.5 sm:px-4 py-1.5 sm:py-2 rounded-lg sm:rounded-xl text-[8.5px] sm:text-[10px] font-black uppercase tracking-tight sm:tracking-widest transition-all bg-emerald-50 text-emerald-700 hover:bg-emerald-100 border border-emerald-200/80 flex items-center justify-center gap-1 whitespace-nowrap active:scale-95 shadow-xs w-full sm:w-auto"
                             >
                                 <CreditCard className="w-2.5 h-2.5 sm:w-3.5 sm:h-3.5 shrink-0 text-emerald-600" />
-                                <span>Payment Config</span>
+                                <span className="hidden sm:inline">Payment Config</span>
+                                <span className="sm:hidden">Payment</span>
                             </button>
                             <button 
                                 onClick={() => setShowNotificationSettingsModal(true)}
-                                className="px-2.5 sm:px-4 py-1.5 sm:py-2 rounded-lg sm:rounded-xl text-[8px] sm:text-[10px] font-black uppercase tracking-tight sm:tracking-widest transition-all bg-amber-50 text-amber-800 hover:bg-amber-100 border border-amber-200/80 flex items-center justify-center gap-1 whitespace-nowrap active:scale-95 shadow-xs w-full sm:w-auto"
+                                className="px-1.5 sm:px-4 py-1.5 sm:py-2 rounded-lg sm:rounded-xl text-[8.5px] sm:text-[10px] font-black uppercase tracking-tight sm:tracking-widest transition-all bg-amber-50 text-amber-800 hover:bg-amber-100 border border-amber-200/80 flex items-center justify-center gap-1 whitespace-nowrap active:scale-95 shadow-xs w-full sm:w-auto"
                             >
                                 <Bell className="w-2.5 h-2.5 sm:w-3.5 sm:h-3.5 shrink-0 text-amber-600" />
-                                <span>Rules & Alerts</span>
+                                <span className="hidden sm:inline">Rules & Alerts</span>
+                                <span className="sm:hidden">Rules</span>
+                            </button>
+                            <button 
+                                onClick={() => setShowBroadcastModal(true)}
+                                className="px-1.5 sm:px-4 py-1.5 sm:py-2 rounded-lg sm:rounded-xl text-[8.5px] sm:text-[10px] font-black uppercase tracking-tight sm:tracking-widest transition-all bg-indigo-50 text-indigo-700 hover:bg-indigo-100 border border-indigo-200/80 flex items-center justify-center gap-1 whitespace-nowrap active:scale-95 shadow-xs w-full sm:w-auto"
+                            >
+                                <ArrowUpRight className="w-2.5 h-2.5 sm:w-3.5 sm:h-3.5 shrink-0 text-indigo-600" />
+                                <span className="hidden sm:inline">Global Alert</span>
+                                <span className="sm:hidden">Broadcast</span>
+                            </button>
+                            <button 
+                                onClick={() => setShowMaintenanceModal(true)}
+                                className={`px-1.5 sm:px-3.5 py-1.5 sm:py-2 rounded-lg sm:rounded-xl text-[8.5px] sm:text-[10px] font-black uppercase tracking-tight sm:tracking-widest transition-all border flex items-center justify-center gap-1 whitespace-nowrap active:scale-95 shadow-xs w-full sm:w-auto ${
+                                    maintenanceConfig.enabled
+                                        ? 'bg-rose-50 text-rose-700 hover:bg-rose-100 border-rose-300 ring-2 ring-rose-500/30 animate-pulse'
+                                        : 'bg-slate-50 text-slate-700 hover:bg-slate-100 border-slate-200'
+                                }`}
+                                title="Master Platform Maintenance Switch"
+                            >
+                                <Wrench className={`w-2.5 h-2.5 sm:w-3.5 sm:h-3.5 shrink-0 ${maintenanceConfig.enabled ? 'text-rose-600' : 'text-slate-500'}`} />
+                                <span className="hidden sm:inline">Maintenance: {maintenanceConfig.enabled ? 'ACTIVE' : 'OFF'}</span>
+                                <span className="sm:hidden">{maintenanceConfig.enabled ? 'Maint: ON' : 'Maint: OFF'}</span>
                             </button>
                         </div>
 
@@ -1782,38 +1906,38 @@ export default function SuperAdminDashboard() {
                         <div className="grid grid-cols-5 sm:flex sm:items-center gap-1 w-full sm:w-auto bg-gray-200/50 sm:bg-transparent p-0.5 sm:p-0 rounded-lg sm:rounded-none">
                             <button 
                                 onClick={() => setViewMode('active')}
-                                className={`px-1 sm:px-4 py-1.5 sm:py-2 rounded-md sm:rounded-xl text-[7.5px] sm:text-[10px] font-black uppercase tracking-tight sm:tracking-widest transition-all whitespace-nowrap text-center ${viewMode === 'active' ? 'bg-white text-blue-600 shadow-xs border border-gray-200' : 'text-gray-500 hover:text-gray-700'}`}
+                                className={`px-1 sm:px-4 py-1.5 sm:py-2 rounded-md sm:rounded-xl text-[9.5px] sm:text-[10px] font-black uppercase tracking-tight sm:tracking-widest transition-all whitespace-nowrap text-center ${viewMode === 'active' ? 'bg-white text-blue-600 shadow-xs border border-gray-200' : 'text-gray-500 hover:text-gray-700'}`}
                             >
                                 <span className="sm:hidden">Active</span>
                                 <span className="hidden sm:inline">Active Nodes</span>
                             </button>
                             <button 
                                 onClick={() => setViewMode('recycle')}
-                                className={`px-1 sm:px-4 py-1.5 sm:py-2 rounded-md sm:rounded-xl text-[7.5px] sm:text-[10px] font-black uppercase tracking-tight sm:tracking-widest transition-all whitespace-nowrap text-center ${viewMode === 'recycle' ? 'bg-white text-red-600 shadow-xs border border-gray-200' : 'text-gray-500 hover:text-red-500'}`}
+                                className={`px-1 sm:px-4 py-1.5 sm:py-2 rounded-md sm:rounded-xl text-[9.5px] sm:text-[10px] font-black uppercase tracking-tight sm:tracking-widest transition-all whitespace-nowrap text-center ${viewMode === 'recycle' ? 'bg-white text-red-600 shadow-xs border border-gray-200' : 'text-gray-500 hover:text-red-500'}`}
                             >
                                 <span className="sm:hidden">Trash</span>
                                 <span className="hidden sm:inline">Recycle Bin</span>
                             </button>
                             <button 
                                 onClick={() => setViewMode('audit')}
-                                className={`px-1 sm:px-4 py-1.5 sm:py-2 rounded-md sm:rounded-xl text-[7.5px] sm:text-[10px] font-black uppercase tracking-tight sm:tracking-widest transition-all whitespace-nowrap text-center ${viewMode === 'audit' ? 'bg-white text-purple-600 shadow-xs border border-gray-200' : 'text-gray-500 hover:text-purple-500'}`}
+                                className={`px-1 sm:px-4 py-1.5 sm:py-2 rounded-md sm:rounded-xl text-[9.5px] sm:text-[10px] font-black uppercase tracking-tight sm:tracking-widest transition-all whitespace-nowrap text-center ${viewMode === 'audit' ? 'bg-white text-purple-600 shadow-xs border border-gray-200' : 'text-gray-500 hover:text-purple-500'}`}
                             >
                                 <span className="sm:hidden">Audit</span>
                                 <span className="hidden sm:inline">Audit Logs</span>
                             </button>
                             <button 
                                 onClick={() => setViewMode('billing')}
-                                className={`px-1 sm:px-4 py-1.5 sm:py-2 rounded-md sm:rounded-xl text-[7.5px] sm:text-[10px] font-black uppercase tracking-tight sm:tracking-widest transition-all whitespace-nowrap text-center ${viewMode === 'billing' ? 'bg-white text-emerald-600 shadow-xs border border-gray-200' : 'text-gray-500 hover:text-emerald-500'}`}
+                                className={`px-1 sm:px-4 py-1.5 sm:py-2 rounded-md sm:rounded-xl text-[9.5px] sm:text-[10px] font-black uppercase tracking-tight sm:tracking-widest transition-all whitespace-nowrap text-center ${viewMode === 'billing' ? 'bg-white text-emerald-600 shadow-xs border border-gray-200' : 'text-gray-500 hover:text-emerald-500'}`}
                             >
                                 <span className="sm:hidden">Billing</span>
                                 <span className="hidden sm:inline">Billing Ledger</span>
                             </button>
                             <button 
                                 onClick={() => setViewMode('expired')}
-                                className={`px-1 sm:px-4 py-1.5 sm:py-2 rounded-md sm:rounded-xl text-[7.5px] sm:text-[10px] font-black uppercase tracking-tight sm:tracking-widest transition-all whitespace-nowrap flex items-center justify-center gap-0.5 sm:gap-1 ${viewMode === 'expired' ? 'bg-white text-rose-600 shadow-xs border border-gray-200' : 'text-gray-500 hover:text-rose-500'}`}
+                                className={`px-1 sm:px-4 py-1.5 sm:py-2 rounded-md sm:rounded-xl text-[9.5px] sm:text-[10px] font-black uppercase tracking-tight sm:tracking-widest transition-all whitespace-nowrap flex items-center justify-center gap-0.5 sm:gap-1 ${viewMode === 'expired' ? 'bg-white text-rose-600 shadow-xs border border-gray-200' : 'text-gray-500 hover:text-rose-500'}`}
                             >
                                 {globalStats?.revenueSummary?.expired > 0 && viewMode !== 'expired' && (
-                                    <span className="w-3 h-3 sm:w-4 sm:h-4 rounded-full bg-rose-500 text-white text-[6.5px] sm:text-[7px] font-black flex items-center justify-center shrink-0">{globalStats.revenueSummary.expired}</span>
+                                    <span className="w-3 h-3 sm:w-4 sm:h-4 rounded-full bg-rose-500 text-white text-[7.5px] sm:text-[7px] font-black flex items-center justify-center shrink-0">{globalStats.revenueSummary.expired}</span>
                                 )}
                                 <span>Expired</span>
                             </button>
@@ -1824,17 +1948,17 @@ export default function SuperAdminDashboard() {
                 <div className="lg:col-span-12 space-y-4 sm:space-y-6">
                     <div className="flex items-center justify-between">
                          <div className="flex items-center gap-2 sm:gap-3">
-                            <p className="text-[8.5px] sm:text-[10px] font-black text-gray-400 uppercase tracking-wider sm:tracking-[0.2em]">
+                            <p className="text-[10.5px] sm:text-[10px] font-black text-gray-400 uppercase tracking-wider sm:tracking-[0.2em]">
                                 {viewMode === 'active' ? 'Operational Hub' : viewMode === 'recycle' ? 'Trash Registry' : viewMode === 'audit' ? 'HQ Security Logs' : viewMode === 'expired' ? '⚠️ Expired Subscriptions' : 'Subscription Billing Ledger'}
                             </p>
                          </div>
                          <div className="flex gap-2">
-                             <div className="px-2.5 sm:px-3 py-1 bg-white rounded-md sm:rounded-lg border border-gray-100 text-[8px] sm:text-[9px] font-black text-gray-400 uppercase tracking-wider sm:tracking-widest">
+                             <div className="px-2.5 sm:px-3 py-1 bg-white rounded-md sm:rounded-lg border border-gray-100 text-[10px] sm:text-[9px] font-black text-gray-400 uppercase tracking-wider sm:tracking-widest">
                                 {viewMode === 'active' ? `Total Active Nodes: ${tenants.length}` : viewMode === 'recycle' ? `Deleted Nodes: ${tenants.length}` : viewMode === 'audit' ? `Audit Records: ${auditLogs.length}` : viewMode === 'expired' ? `Expired Nodes: ${tenants.length}` : `Ledger Transactions: ${billingLogs.length}`}
                              </div>
                          </div>
                     </div>
-                    <div className="bg-white sm:bg-transparent rounded-[32px] sm:rounded-none overflow-hidden">
+                    <div className="w-full">
                         {viewMode === 'billing' ? (
                             <div className="bg-white p-3.5 sm:p-8 rounded-2xl sm:rounded-[36px] border border-slate-100 shadow-xs sm:shadow-sm">
                                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 sm:gap-4 mb-4 sm:mb-6">
@@ -2303,7 +2427,7 @@ export default function SuperAdminDashboard() {
                                     }).length;
 
                                     return (
-                                    <div key={tenant._id} className="bg-white rounded-2xl sm:rounded-[32px] p-3.5 sm:p-6 shadow-xs sm:shadow-sm border border-slate-100 hover:shadow-2xl hover:shadow-blue-500/10 hover:-translate-y-1 transition-all duration-300 flex flex-col group">
+                                    <div key={tenant._id} className="bg-white rounded-xl sm:rounded-xl p-2.5 sm:px-3 sm:py-3.5 shadow-xs sm:shadow-sm border-2 border-dotted border-blue-400 hover:border-blue-600 hover:shadow-2xl hover:shadow-blue-500/10 hover:-translate-y-1 transition-all duration-300 flex flex-col group">
                                         <div className="flex items-start justify-between gap-2 sm:gap-3">
                                             <div className="flex items-start gap-1.5 sm:gap-2.5 min-w-0 flex-1">
                                                 {(tenant.logoUrl || tenant.logo) && (
@@ -2314,7 +2438,7 @@ export default function SuperAdminDashboard() {
                                                 <div className="flex flex-col min-w-0 flex-1">
                                                     {/* College Name: single line so (OGI) stays right next to name */}
                                                     <h3 
-                                                        className="font-black text-gray-900 uppercase tracking-tight text-[10px] sm:text-xs md:text-sm leading-tight truncate whitespace-nowrap"
+                                                        className="font-black text-gray-900 uppercase tracking-tight text-[11px] sm:text-[11px] md:text-[13px] leading-tight truncate whitespace-nowrap"
                                                         title={tenant.name}
                                                     >
                                                         {tenant.name}
@@ -2322,7 +2446,7 @@ export default function SuperAdminDashboard() {
 
                                                     {/* Row 2: Active Tab & Subscription History Tab side-by-side */}
                                                     <div className="flex items-center gap-1.5 flex-wrap mt-0.5 sm:mt-1">
-                                                        <span className={`text-[6.5px] sm:text-[7px] font-black uppercase tracking-widest px-1.5 py-0.5 rounded border select-none leading-none shrink-0 ${
+                                                        <span className={`text-[8.5px] sm:text-[6.5px] font-black uppercase tracking-widest px-1.5 py-0.5 rounded border select-none leading-none shrink-0 ${
                                                             tenant.subscriptionStatus === 'trial' ? 'bg-indigo-50 text-indigo-600 border-indigo-100' :
                                                             tenant.subscriptionStatus === 'active' ? 'bg-emerald-50 text-emerald-600 border-emerald-100' :
                                                             tenant.subscriptionStatus === 'expired' ? 'bg-rose-50 text-rose-600 border-rose-100' :
@@ -2335,13 +2459,13 @@ export default function SuperAdminDashboard() {
                                                         <button
                                                             type="button"
                                                             onClick={() => setSelectedSubscriptionTenant(tenant)}
-                                                            className="flex items-center gap-1 px-1.5 py-0.5 bg-blue-50/90 hover:bg-blue-100 active:scale-95 text-blue-700 border border-blue-200/80 rounded text-[6.5px] sm:text-[7.5px] font-black uppercase tracking-wider transition-all cursor-pointer shrink-0 shadow-2xs group"
+                                                            className="flex items-center gap-1 px-1.5 py-0.5 bg-blue-50/90 hover:bg-blue-100 active:scale-95 text-blue-700 border border-blue-200/80 rounded text-[8.5px] sm:text-[6.5px] font-black uppercase tracking-wider transition-all cursor-pointer shrink-0 shadow-2xs group"
                                                             title={`View subscription & billing history for ${tenant.name}`}
                                                         >
                                                             <Receipt className="w-2.5 h-2.5 text-blue-600 shrink-0" />
                                                             <span>Subscription History</span>
                                                             {tenantBillingCount > 0 && (
-                                                                <span className="text-[6px] sm:text-[6.5px] bg-white px-1 py-0.2 rounded border border-blue-200 text-blue-600 font-extrabold group-hover:bg-blue-600 group-hover:text-white transition-colors">
+                                                                <span className="text-[8px] sm:text-[6px] bg-white px-1 py-0.2 rounded border border-blue-200 text-blue-600 font-extrabold group-hover:bg-blue-600 group-hover:text-white transition-colors">
                                                                     {tenantBillingCount}
                                                                 </span>
                                                             )}
@@ -2353,204 +2477,73 @@ export default function SuperAdminDashboard() {
                                                     </div>
 
                                                     {/* Email */}
-                                                    <p className="text-[8px] sm:text-[9px] text-slate-400 font-bold italic opacity-70 break-all mt-0.5">{tenant.adminEmail}</p>
+                                                    <p className="text-[10px] sm:text-[8px] text-slate-400 font-bold italic opacity-70 break-all mt-0.5">{tenant.adminEmail}</p>
                                                 </div>
                                             </div>
 
-                                            {/* Circled Operational Tab: Decreased tab & font size on mobile */}
-                                            {viewMode === 'active' ? (
-                                                <button
-                                                    onClick={() => toggleTenantStatus(tenant._id, tenant.isActive)}
-                                                    className={`shrink-0 text-[6.5px] sm:text-[8px] font-black uppercase tracking-wider sm:tracking-widest flex items-center gap-1 sm:gap-1.5 px-1.5 py-0.5 sm:px-2 sm:py-1 rounded-md sm:rounded-lg border transition-colors cursor-pointer ${tenant.isActive ? 'text-emerald-600 border-emerald-100 bg-emerald-50 hover:bg-emerald-100' : 'text-red-500 border-red-100 bg-red-50 hover:bg-red-100'}`}
-                                                >
-                                                    <div className={`w-1 h-1 sm:w-1.5 sm:h-1.5 rounded-full ${tenant.isActive ? 'bg-emerald-500 shadow-emerald-500 shadow-sm' : 'bg-red-500 animate-pulse'}`}></div>
-                                                    {tenant.isActive ? 'OPERATIONAL' : 'OFFLINE'}
-                                                </button>
-                                            ) : (
-                                                <div className="shrink-0 text-[6.5px] sm:text-[8px] font-black text-red-500/60 uppercase tracking-wider sm:tracking-widest px-1.5 py-0.5 sm:px-2 sm:py-1 bg-red-50/50 rounded-md sm:rounded-lg border border-red-100/50">
-                                                    Deleted
-                                                </div>
-                                            )}
-                                        </div>
-                                        <div className="mt-3 flex flex-col gap-2.5 border-t border-slate-100 pt-3 w-full">
-                                            {/* Badges Row (Students, Healthy, Subscription) */}
-                                            <div className={`grid ${tenant.subscriptionEndDate ? 'grid-cols-3' : 'grid-cols-2'} gap-1.5 w-full`}>
-                                                <div className="flex items-center justify-center gap-1 px-2 py-1 bg-blue-50 border border-blue-100 rounded-lg w-full">
-                                                    <Users className="w-2.5 h-2.5 text-blue-500 shrink-0" />
-                                                    <span className="text-[9px] font-black text-blue-700">{(tenant.studentCount || 0).toLocaleString()} Students</span>
-                                                </div>
-                                                {/* Health Score */}
-                                                {(() => {
-                                                    const score = tenant.healthScore ?? 0;
-                                                    const color = score >= 70 ? 'emerald' : score >= 40 ? 'amber' : 'rose';
-                                                    const label = score >= 70 ? 'Healthy' : score >= 40 ? 'Fair' : 'Critical';
-                                                    return (
-                                                        <div className={`flex items-center justify-center gap-1 px-2 py-1 bg-${color}-50 border border-${color}-100 rounded-lg w-full`}>
-                                                            <span className={`text-[9px] font-black text-${color}-700`}>{label} {score}%</span>
-                                                        </div>
-                                                    );
-                                                })()}
-                                                {/* Subscription Period Badge */}
-                                                {tenant.subscriptionEndDate && (() => {
-                                                    const now = new Date();
-                                                    const rawEnd = new Date(tenant.subscriptionEndDate);
-                                                    const istDateStr = !isNaN(rawEnd.getTime()) ? rawEnd.toLocaleDateString("en-CA", { timeZone: "Asia/Kolkata" }) : "";
-                                                    const endOfDay = istDateStr ? new Date(`${istDateStr}T23:59:59.999+05:30`) : rawEnd;
-                                                    const diffTime = endOfDay.getTime() - now.getTime();
-                                                    const daysRemaining = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-                                                    
-                                                    if (daysRemaining < 0) {
-                                                        return (
-                                                            <div className="flex items-center justify-center gap-1 px-2 py-1 bg-rose-50 border border-rose-100 rounded-lg w-full">
-                                                                <Clock className="w-2.5 h-2.5 text-rose-500 shrink-0" />
-                                                                <span className="text-[9px] font-black text-rose-700">Expired ({Math.abs(daysRemaining)}d ago)</span>
-                                                            </div>
-                                                        );
-                                                    } else if (daysRemaining <= 7) {
-                                                        return (
-                                                            <div className="flex items-center justify-center gap-1 px-2 py-1 bg-amber-50 border border-amber-100 rounded-lg animate-pulse w-full">
-                                                                <Clock className="w-2.5 h-2.5 text-amber-500 shrink-0" />
-                                                                <span className="text-[9px] font-black text-amber-700">{daysRemaining} Days Left</span>
-                                                            </div>
-                                                        );
-                                                    } else {
-                                                        return (
-                                                            <div className="flex items-center justify-center gap-1 px-2 py-1 bg-emerald-50 border border-emerald-100 rounded-lg w-full">
-                                                                <Clock className="w-2.5 h-2.5 text-emerald-500 shrink-0" />
-                                                                <span className="text-[9px] font-black text-emerald-700">{daysRemaining} Days Left</span>
-                                                            </div>
-                                                        );
-                                                    }
-                                                })()}
-                                            </div>
-
-                                            {/* Contact Details - Justified Left & Right */}
-                                            <div className="flex items-center justify-between gap-1 text-[7.5px] sm:text-[9px] font-bold text-slate-600 w-full min-w-0">
-                                                {tenant.contactName && (
-                                                    <div className="flex items-center gap-1 min-w-0 shrink truncate">
-                                                        <span className="text-slate-400 uppercase tracking-wider text-[6.5px] sm:text-[7.5px] font-black shrink-0">Contact:</span>
-                                                        <span className="text-slate-700 truncate" title={tenant.contactName}>{tenant.contactName}</span>
-                                                    </div>
-                                                )}
-                                                {tenant.contactPhone && (
-                                                    <div className="flex items-center gap-1 shrink-0">
-                                                        <span className="text-slate-400 uppercase tracking-wider text-[6.5px] sm:text-[7.5px] font-black shrink-0">Phone:</span>
-                                                        <span className="text-slate-700 font-mono text-[7.5px] sm:text-[9px]">{tenant.contactPhone}</span>
-                                                    </div>
-                                                )}
-                                                {tenant.totalHostelars && (
-                                                    <div className="flex items-center gap-1 shrink-0">
-                                                        <span className="text-slate-400 uppercase tracking-wider text-[6.5px] sm:text-[7.5px] font-black shrink-0">Hostelars:</span>
-                                                        <span className="text-slate-700">{tenant.totalHostelars}</span>
-                                                    </div>
-                                                )}
-                                                {!tenant.contactName && !tenant.contactPhone && !tenant.totalHostelars && (
-                                                    <p className="text-[7.5px] sm:text-[9px] text-slate-400 italic">No college details provided.</p>
-                                                )}
-                                            </div>
-
-
-                                        </div>
-
-                                        {/* Start Date & End Date (Full Width Row) */}
-                                        <div className="mt-3 flex justify-between items-center text-xs font-bold text-gray-700 border-t border-slate-100 pt-3 w-full">
-                                            <div>
-                                                <p className="text-[6.5px] font-black text-slate-400 uppercase tracking-widest">Start Date</p>
-                                                <p className="text-[10px] font-extrabold text-left">{tenant.createdAt ? formatDateDDMMYYYY(tenant.createdAt) : "N/A"}</p>
-                                            </div>
-                                            <div className="h-4 w-px bg-slate-200" />
-                                            <div className="text-right">
-                                                <p className="text-[6.5px] font-black text-slate-400 uppercase tracking-widest">End Date</p>
-                                                <p className="text-[10px] font-extrabold text-right">{tenant.subscriptionEndDate ? formatDateDDMMYYYY(tenant.subscriptionEndDate) : "Unlimited"}</p>
-                                            </div>
-                                        </div>
-
-                                        <div className="mt-auto flex flex-col gap-4">
-                                            {tenant.renewalStatus === 'pending' && (
-                                                <div className="glowing-border-blue p-3 text-[10px] font-bold text-amber-900 space-y-0.5">
-                                                    <div className="relative z-10 space-y-0.5">
-                                                        <span className="uppercase text-[8px] tracking-wider font-black text-amber-700 block">Renewal Requested</span>
-                                                        <div className="flex justify-between items-center font-mono">
-                                                            <span className="select-all font-extrabold">UTR: {tenant.renewalUtr}</span>
-                                                            <span className="text-[8px] text-amber-600 font-sans">
-                                                                {tenant.renewalSubmittedAt ? formatDateTimeDDMMYYYY(tenant.renewalSubmittedAt) : "N/A"}
-                                                            </span>
-                                                        </div>
-                                                    </div>
-                                                </div>
-                                            )}
-
-                                            <div className="flex items-center gap-2 bg-slate-900 text-white p-2 rounded-xl">
-                                                <Globe className="w-3 h-3 text-blue-400 shrink-0" />
-                                                <a 
-                                                    href={getTenantUrl(tenant.slug)} 
-                                                    target="_blank" 
-                                                    rel="noopener noreferrer" 
-                                                    className="text-[10px] font-bold tracking-tight truncate flex-1 hover:text-blue-400 hover:underline transition-colors"
-                                                >
-                                                    {getTenantDisplayUrl(tenant.slug)}
-                                                </a>
-                                                <div className="flex items-center gap-1.5 shrink-0">
-                                                    {(() => {
-                                                        const status = dnsStatus[tenant.slug];
-                                                        if (status === 'checking') {
-                                                            return (
-                                                                <div className="flex items-center gap-1 px-1.5 py-0.5 bg-white/10 rounded-lg text-amber-400 animate-pulse animate-duration-1000" title="Resolving DNS...">
-                                                                    <Clock className="w-2.5 h-2.5" />
-                                                                </div>
-                                                            );
-                                                        } else if (status === 'resolved') {
-                                                            return (
-                                                                <div className="flex items-center gap-1 px-1.5 py-0.5 bg-emerald-500/20 rounded-lg text-emerald-400 border border-emerald-500/30" title="🟢 DNS Resolved">
-                                                                    <CheckCircle2 className="w-2.5 h-2.5" />
-                                                                </div>
-                                                            );
-                                                        } else {
-                                                            return (
-                                                                <button 
-                                                                    onClick={() => checkTenantDns(tenant.slug, true)}
-                                                                    className="flex items-center gap-1 px-1.5 py-0.5 bg-red-500/20 rounded-lg text-red-400 border border-red-500/30 cursor-pointer hover:bg-red-500/30 transition-all" 
-                                                                    title="🔴 DNS Unresolved (Click to retry)"
-                                                                >
-                                                                    <AlertCircle className="w-2.5 h-2.5" />
-                                                                </button>
-                                                            );
-                                                        }
-                                                    })()}
-                                                    <button 
-                                                        onClick={() => handleCalculateStorage(tenant._id)}
-                                                        disabled={calculatingStorageFor === tenant._id}
-                                                        className="flex items-center gap-1 px-1.5 py-0.5 bg-white/10 hover:bg-white/20 transition-all rounded-lg cursor-pointer disabled:opacity-50" 
-                                                        title="Click to calculate exact storage from database"
+                                            {/* Circled Operational Tab & Action Icons (Shifted to top right gap area) */}
+                                            <div className="flex flex-col items-end gap-1 shrink-0">
+                                                {viewMode === 'active' ? (
+                                                    <button
+                                                        onClick={() => toggleTenantStatus(tenant._id, tenant.isActive)}
+                                                        className={`shrink-0 text-[8.5px] sm:text-[7px] font-black uppercase tracking-wider sm:tracking-widest flex items-center gap-1 sm:gap-1.5 px-1.5 py-0.5 sm:px-2 sm:py-1 rounded-md sm:rounded-lg border transition-colors cursor-pointer ${tenant.isActive ? 'text-emerald-600 border-emerald-100 bg-emerald-50 hover:bg-emerald-100' : 'text-red-500 border-red-100 bg-red-50 hover:bg-red-100'}`}
                                                     >
-                                                        {calculatingStorageFor === tenant._id ? (
-                                                            <Loader2 className="w-2.5 h-2.5 text-indigo-400 animate-spin" />
-                                                        ) : (
-                                                            <Database className="w-2.5 h-2.5 text-indigo-400" />
-                                                        )}
-                                                        <span className="text-[8px] font-black">
-                                                            {tenant.storageBytes !== null && tenant.storageBytes !== undefined ? `${(tenant.storageBytes / (1024 * 1024)).toFixed(2)}MB` : "CALCULATE"}
-                                                        </span>
+                                                        <div className={`w-1 h-1 sm:w-1.5 sm:h-1.5 rounded-full ${tenant.isActive ? 'bg-emerald-500 shadow-emerald-500 shadow-sm' : 'bg-red-500 animate-pulse'}`}></div>
+                                                        {tenant.isActive ? 'OPERATIONAL' : 'OFFLINE'}
                                                     </button>
-                                                    <div className="flex items-center gap-1 px-1.5 py-0.5 bg-white/10 rounded-lg" title="Active Connections">
-                                                        <Activity className="w-2.5 h-2.5 text-emerald-400" />
-                                                        <span className="text-[8px] font-black">{tenant.liveTraffic || 0}</span>
+                                                ) : (
+                                                    <div className="shrink-0 text-[8.5px] sm:text-[7px] font-black text-red-500/60 uppercase tracking-wider sm:tracking-widest px-1.5 py-0.5 sm:px-2 sm:py-1 bg-red-50/50 rounded-md sm:rounded-lg border border-red-100/50">
+                                                        Deleted
                                                     </div>
+                                                )}
+
+                                                {/* Action Icons: Settings & Trash shifted here */}
+                                                <div className="flex items-center gap-1">
+                                                    {viewMode === 'active' ? (
+                                                        <>
+                                                            <button 
+                                                                onClick={() => setEditingTenant(tenant)} 
+                                                                className="w-5.5 h-5.5 sm:w-6.5 sm:h-6.5 bg-slate-50 hover:bg-slate-100 text-slate-400 hover:text-slate-600 border border-slate-200/80 rounded-md flex items-center justify-center active:scale-95 transition-all cursor-pointer shadow-2xs"
+                                                                title={`Settings for ${tenant.name}`}
+                                                            >
+                                                                <Settings className="w-2.5 h-2.5 sm:w-3 sm:h-3" />
+                                                            </button>
+                                                            <button 
+                                                                onClick={() => setSoftDeletingTenant(tenant)} 
+                                                                className="w-5.5 h-5.5 sm:w-6.5 sm:h-6.5 bg-red-50 hover:bg-red-100 text-red-500/70 hover:text-red-600 border border-red-100 rounded-md flex items-center justify-center active:scale-95 transition-all cursor-pointer shadow-2xs"
+                                                                title={`Delete ${tenant.name}`}
+                                                            >
+                                                                <Trash2 className="w-2.5 h-2.5 sm:w-3 sm:h-3" />
+                                                            </button>
+                                                        </>
+                                                    ) : (
+                                                        <button 
+                                                            onClick={() => setDeletingTenant(tenant)} 
+                                                            className="w-5.5 h-5.5 sm:w-6.5 sm:h-6.5 bg-red-50 hover:bg-red-100 text-red-600 border border-red-100 rounded-md flex items-center justify-center active:scale-95 transition-all cursor-pointer shadow-2xs"
+                                                            title={`Permanently Delete ${tenant.name}`}
+                                                        >
+                                                            <Trash2 className="w-2.5 h-2.5 sm:w-3 sm:h-3" />
+                                                        </button>
+                                                    )}
                                                 </div>
                                             </div>
-
-                                            {/* Storage Quota Progress Bar */}
+                                        </div>
+                                        <div className="mt-2 sm:mt-2.5 flex flex-col gap-1.5 sm:gap-2 border-t border-slate-100 pt-1.5 sm:pt-2 w-full">
+                                            {/* Storage Quota Progress Bar (Shifted above Badges row) */}
                                             {tenant.storageBytes !== null && tenant.storageBytes !== undefined && (() => {
                                                 const quotaMb = tenant.storageQuotaMb || 100;
                                                 const quotaBytes = quotaMb * 1024 * 1024;
                                                 const percent = ((tenant.storageBytes / quotaBytes) * 100);
                                                 return (
-                                                    <div className="px-1 space-y-1">
-                                                        <div className="flex justify-between items-center text-[7px] font-black uppercase text-slate-400 tracking-wider">
-                                                            <span>Storage Quota</span>
+                                                    <div className="w-full space-y-0.5">
+                                                        <div className="flex justify-between items-center text-[8.5px] sm:text-[6.5px] font-black uppercase text-slate-400 tracking-wider">
+                                                            <span className="flex items-center gap-1">
+                                                                <Database className="w-2 h-2 text-indigo-400 shrink-0" />
+                                                                <span>Storage Quota</span>
+                                                            </span>
                                                             <span>{percent.toFixed(1)}% of {quotaMb}MB</span>
                                                         </div>
-                                                        <div className="w-full h-1.5 bg-slate-100 rounded-full overflow-hidden border border-slate-200/50">
+                                                        <div className="w-full h-1 bg-slate-100 rounded-full overflow-hidden border border-slate-200/50">
                                                             <div 
                                                                 className={`h-full rounded-full transition-all duration-500 ${
                                                                     (tenant.storageBytes / quotaBytes) > 0.8 ? 'bg-red-500 animate-pulse' :
@@ -2564,28 +2557,203 @@ export default function SuperAdminDashboard() {
                                                 );
                                             })()}
 
-                                            <div className="flex gap-2">
+                                            {/* Badges Row: Content-adjusted text-wise tabs */}
+                                            <div className="flex items-center gap-1 w-full">
+                                                {/* Tab 1: Students */}
+                                                <div className="flex-1 min-w-0 flex items-center justify-center gap-1 px-1 py-0.5 bg-blue-50 border border-blue-100 rounded-md h-5.5 sm:h-6" title={`${(tenant.studentCount || 0).toLocaleString()} Students`}>
+                                                    <Users className="w-2.5 h-2.5 text-blue-500 shrink-0" />
+                                                    <span className="text-[8.5px] sm:text-[6.5px] font-black text-blue-700 truncate">{(tenant.studentCount || 0).toLocaleString()} Students</span>
+                                                </div>
+
+                                                {/* Tab 2: Health Score */}
+                                                {(() => {
+                                                    const score = tenant.healthScore ?? 0;
+                                                    const color = score >= 70 ? 'emerald' : score >= 40 ? 'amber' : 'rose';
+                                                    const label = score >= 70 ? 'Healthy' : score >= 40 ? 'Fair' : 'Critical';
+                                                    return (
+                                                        <div className={`shrink-0 flex items-center justify-center gap-1 px-1.5 py-0.5 bg-${color}-50 border border-${color}-100 rounded-md h-5.5 sm:h-6`} title={`Health: ${label} ${score}%`}>
+                                                            <span className={`text-[8.5px] sm:text-[6.5px] font-black text-${color}-700 whitespace-nowrap`}>{label} {score}%</span>
+                                                        </div>
+                                                    );
+                                                })()}
+
+                                                {/* Tab 3: Subscription Period Badge */}
+                                                {(() => {
+                                                    if (!tenant.subscriptionEndDate) {
+                                                        return (
+                                                            <div className="flex-1 min-w-0 flex items-center justify-center gap-1 px-1 py-0.5 bg-emerald-50 border border-emerald-100 rounded-md h-5.5 sm:h-6">
+                                                                <Clock className="w-2.5 h-2.5 text-emerald-500 shrink-0" />
+                                                                <span className="text-[8.5px] sm:text-[6.5px] font-black text-emerald-700 truncate">Unlimited</span>
+                                                            </div>
+                                                        );
+                                                    }
+                                                    const now = new Date();
+                                                    const rawEnd = new Date(tenant.subscriptionEndDate);
+                                                    const istDateStr = !isNaN(rawEnd.getTime()) ? rawEnd.toLocaleDateString("en-CA", { timeZone: "Asia/Kolkata" }) : "";
+                                                    const endOfDay = istDateStr ? new Date(`${istDateStr}T23:59:59.999+05:30`) : rawEnd;
+                                                    const diffTime = endOfDay.getTime() - now.getTime();
+                                                    const daysRemaining = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+                                                    
+                                                    if (daysRemaining < 0) {
+                                                        return (
+                                                            <div className="flex-1 min-w-0 flex items-center justify-center gap-1 px-1 py-0.5 bg-rose-50 border border-rose-100 rounded-md h-5.5 sm:h-6" title={`Expired ${Math.abs(daysRemaining)} days ago`}>
+                                                                <Clock className="w-2.5 h-2.5 text-rose-500 shrink-0" />
+                                                                <span className="text-[8.5px] sm:text-[6.5px] font-black text-rose-700 truncate">Expired ({Math.abs(daysRemaining)}d)</span>
+                                                            </div>
+                                                        );
+                                                    } else if (daysRemaining <= 7) {
+                                                        return (
+                                                            <div className="flex-1 min-w-0 flex items-center justify-center gap-1 px-1 py-0.5 bg-amber-50 border border-amber-100 rounded-md animate-pulse h-5.5 sm:h-6" title={`${daysRemaining} Days Left`}>
+                                                                <Clock className="w-2.5 h-2.5 text-amber-500 shrink-0" />
+                                                                <span className="text-[8.5px] sm:text-[6.5px] font-black text-amber-700 truncate">{daysRemaining} Days Left</span>
+                                                            </div>
+                                                        );
+                                                    } else {
+                                                        return (
+                                                            <div className="flex-1 min-w-0 flex items-center justify-center gap-1 px-1 py-0.5 bg-emerald-50 border border-emerald-100 rounded-md h-5.5 sm:h-6" title={`${daysRemaining} Days Left`}>
+                                                                <Clock className="w-2.5 h-2.5 text-emerald-500 shrink-0" />
+                                                                <span className="text-[8.5px] sm:text-[6.5px] font-black text-emerald-700 truncate">{daysRemaining} Days Left</span>
+                                                            </div>
+                                                        );
+                                                    }
+                                                })()}
+
+                                                {/* Tab 4: Shifted Marked Items (DNS, Storage MB, Live Traffic) - Text-wise fitted */}
+                                                <div className="shrink-0 flex items-center justify-center gap-1 px-1.5 py-0.5 bg-slate-900 text-white rounded-md shadow-2xs h-5.5 sm:h-6 whitespace-nowrap">
+                                                    {(() => {
+                                                        const status = dnsStatus[tenant.slug];
+                                                        if (status === 'checking') {
+                                                            return (
+                                                                <div className="flex items-center text-amber-400 animate-pulse shrink-0" title="Resolving DNS...">
+                                                                    <Clock className="w-2 h-2 sm:w-2.5 sm:h-2.5" />
+                                                                </div>
+                                                            );
+                                                        } else if (status === 'resolved') {
+                                                            return (
+                                                                <div className="flex items-center text-emerald-400 shrink-0" title="🟢 DNS Resolved">
+                                                                    <CheckCircle2 className="w-2 h-2 sm:w-2.5 sm:h-2.5" />
+                                                                </div>
+                                                            );
+                                                        } else {
+                                                            return (
+                                                                <button 
+                                                                    onClick={() => checkTenantDns(tenant.slug, true)}
+                                                                    className="flex items-center text-red-400 cursor-pointer hover:text-red-300 transition-colors shrink-0" 
+                                                                    title="🔴 DNS Unresolved (Click to retry)"
+                                                                >
+                                                                    <AlertCircle className="w-2 h-2 sm:w-2.5 sm:h-2.5" />
+                                                                </button>
+                                                            );
+                                                        }
+                                                    })()}
+                                                    <button 
+                                                        onClick={() => handleCalculateStorage(tenant._id)}
+                                                        disabled={calculatingStorageFor === tenant._id}
+                                                        className="flex items-center gap-0.5 hover:text-indigo-300 transition-colors cursor-pointer disabled:opacity-50 shrink-0" 
+                                                        title="Click to calculate exact storage from database"
+                                                    >
+                                                        {calculatingStorageFor === tenant._id ? (
+                                                            <Loader2 className="w-2 h-2 sm:w-2.5 sm:h-2.5 text-indigo-400 animate-spin shrink-0" />
+                                                        ) : (
+                                                            <Database className="w-2 h-2 sm:w-2.5 sm:h-2.5 text-indigo-400 shrink-0" />
+                                                        )}
+                                                        <span className="text-[8.5px] sm:text-[6.5px] font-black whitespace-nowrap">
+                                                            {tenant.storageBytes !== null && tenant.storageBytes !== undefined ? `${(tenant.storageBytes / (1024 * 1024)).toFixed(2)}MB` : "CALC"}
+                                                        </span>
+                                                    </button>
+                                                    <div className="flex items-center gap-0.5 shrink-0" title="Active Connections">
+                                                        <Activity className="w-2 h-2 sm:w-2.5 sm:h-2.5 text-emerald-400" />
+                                                        <span className="text-[8.5px] sm:text-[6.5px] font-black whitespace-nowrap">{tenant.liveTraffic || 0}</span>
+                                                    </div>
+                                                </div>
+                                            </div>
+
+                                            {/* Contact Details - Justified Left & Right */}
+                                            <div className="flex items-center justify-between gap-1 text-[9px] sm:text-[8px] font-bold text-slate-600 w-full min-w-0">
+                                                {tenant.contactName && (
+                                                    <div className="flex items-center gap-1 min-w-0 shrink truncate">
+                                                        <span className="text-slate-400 uppercase tracking-wider text-[8.5px] sm:text-[6.5px] font-black shrink-0">Contact:</span>
+                                                        <span className="text-slate-700 truncate" title={tenant.contactName}>{tenant.contactName}</span>
+                                                    </div>
+                                                )}
+                                                {tenant.contactPhone && (
+                                                    <div className="flex items-center gap-1 shrink-0">
+                                                        <span className="text-slate-400 uppercase tracking-wider text-[8.5px] sm:text-[6.5px] font-black shrink-0">Phone:</span>
+                                                        <span className="text-slate-700 font-mono text-[9px] sm:text-[8px]">{tenant.contactPhone}</span>
+                                                    </div>
+                                                )}
+                                                {tenant.totalHostelars && (
+                                                    <div className="flex items-center gap-1 shrink-0">
+                                                        <span className="text-slate-400 uppercase tracking-wider text-[8.5px] sm:text-[6.5px] font-black shrink-0">Hostelars:</span>
+                                                        <span className="text-slate-700">{tenant.totalHostelars}</span>
+                                                    </div>
+                                                )}
+                                                {!tenant.contactName && !tenant.contactPhone && !tenant.totalHostelars && (
+                                                    <p className="text-[9px] sm:text-[8px] text-slate-400 italic">No college details provided.</p>
+                                                )}
+                                            </div>
+
+
+                                        </div>
+
+                                        {/* Renewal Alert (if pending) */}
+                                        {tenant.renewalStatus === 'pending' && (
+                                            <div className="mt-1.5 sm:mt-2 glowing-border-blue p-2 sm:p-2.5 text-[11px] sm:text-[9px] font-bold text-amber-900 space-y-0.5">
+                                                <div className="relative z-10 space-y-0.5">
+                                                    <span className="uppercase text-[9.5px] sm:text-[7.5px] tracking-wider font-black text-amber-700 block">Renewal Requested</span>
+                                                    <div className="flex justify-between items-center font-mono text-[10px] sm:text-[10px]">
+                                                        <span className="select-all font-extrabold">UTR: {tenant.renewalUtr}</span>
+                                                        <span className="text-[9.5px] sm:text-[7.5px] text-amber-600 font-sans">
+                                                            {tenant.renewalSubmittedAt ? formatDateTimeDDMMYYYY(tenant.renewalSubmittedAt) : "N/A"}
+                                                        </span>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        )}
+
+                                        {/* Dates & Action Row: Side-by-side on mobile, stacked just below on desktop */}
+                                        <div className="mt-1.5 sm:mt-2.5 flex flex-row sm:flex-col items-center sm:items-stretch justify-between sm:justify-start gap-1.5 sm:gap-2.5 border-t border-slate-100 pt-1.5 sm:pt-2.5 w-full">
+                                            {/* Row 1: Start Date & End Date */}
+                                            <div className="flex items-center gap-2 sm:gap-3 shrink-0">
+                                                <div>
+                                                    <p className="text-[8px] sm:text-[6px] font-black text-slate-400 uppercase tracking-widest">Start Date</p>
+                                                    <p className="text-[11px] sm:text-[9px] font-extrabold text-left">{tenant.createdAt ? formatDateDDMMYYYY(tenant.createdAt) : "N/A"}</p>
+                                                </div>
+                                                <div className="h-3 sm:h-4 w-px bg-slate-200" />
+                                                <div>
+                                                    <p className="text-[8px] sm:text-[6px] font-black text-slate-400 uppercase tracking-widest">End Date</p>
+                                                    <p className="text-[11px] sm:text-[9px] font-extrabold text-left">{tenant.subscriptionEndDate ? formatDateDDMMYYYY(tenant.subscriptionEndDate) : "Unlimited"}</p>
+                                                </div>
+                                            </div>
+
+                                            {/* Row 2 on Desktop (Moved just below dates into red box area): Tenant Link Tab & Sign In Tab */}
+                                            <div className="flex items-center gap-1 sm:gap-1.5 shrink-0 sm:shrink ml-auto sm:ml-0 min-w-0 max-w-[58%] sm:max-w-none sm:w-full">
+                                                <div className="flex-1 min-w-0 flex items-center gap-1 sm:gap-2 bg-slate-900 text-white px-1.5 sm:px-2.5 py-1 sm:py-1.5 rounded-md sm:rounded-xl h-6.5 sm:h-8.5 min-w-0">
+                                                    <Globe className="w-2.5 h-2.5 sm:w-3.5 sm:h-3.5 text-blue-400 shrink-0" />
+                                                    <a 
+                                                        href={getTenantUrl(tenant.slug)} 
+                                                        target="_blank" 
+                                                        rel="noopener noreferrer" 
+                                                        className="text-[9px] sm:text-[8.5px] font-bold tracking-tight truncate hover:text-blue-400 hover:underline transition-colors"
+                                                    >
+                                                        {getTenantDisplayUrl(tenant.slug)}
+                                                    </a>
+                                                </div>
+
                                                 {viewMode === 'active' ? (
-                                                    <>
-                                                        <button onClick={() => handleImpersonateAdmin(tenant.slug)} className="flex-1 bg-blue-600 text-white h-9 rounded-xl flex items-center justify-center gap-2 font-black text-[9px] uppercase tracking-widest active:scale-95 transition-all shadow-lg shadow-blue-500/10">
-                                                            <LogIn className="w-3.5 h-3.5" /> Sign In
-                                                        </button>
-                                                        <button onClick={() => setEditingTenant(tenant)} className="w-9 h-9 bg-slate-50 text-slate-400 border border-slate-100 rounded-xl flex items-center justify-center active:scale-95 transition-all">
-                                                            <Settings className="w-3.5 h-3.5" />
-                                                        </button>
-                                                        <button onClick={() => setSoftDeletingTenant(tenant)} className="w-9 h-9 bg-red-50 text-red-500/60 border border-red-100 rounded-xl flex items-center justify-center active:scale-95 transition-all">
-                                                            <Trash2 className="w-3.5 h-3.5" />
-                                                        </button>
-                                                    </>
+                                                    <button 
+                                                        onClick={() => handleImpersonateAdmin(tenant.slug)} 
+                                                        className="shrink-0 h-6.5 sm:h-8.5 px-2 sm:px-3.5 bg-blue-600 hover:bg-blue-700 text-white rounded-md sm:rounded-xl flex items-center justify-center gap-1 sm:gap-1.5 font-black text-[8px] sm:text-[8px] uppercase tracking-wider active:scale-95 transition-all shadow-md shadow-blue-500/10 cursor-pointer whitespace-nowrap"
+                                                    >
+                                                        <LogIn className="w-2.5 h-2.5 sm:w-3.5 sm:h-3.5" /> Sign In
+                                                    </button>
                                                 ) : (
-                                                    <>
-                                                        <button onClick={() => handleRestore(tenant._id)} className="flex-1 bg-blue-600 text-white h-9 rounded-xl flex items-center justify-center gap-2 font-black text-[9px] uppercase tracking-widest hover:bg-blue-700 active:scale-95 transition-all shadow-lg shadow-blue-500/10">
-                                                            Restore Node
-                                                        </button>
-                                                        <button onClick={() => setDeletingTenant(tenant)} className="w-9 h-9 bg-red-50 text-red-600 border border-red-100 rounded-xl flex items-center justify-center active:scale-95 transition-all">
-                                                            <Trash2 className="w-3.5 h-3.5" />
-                                                        </button>
-                                                    </>
+                                                    <button 
+                                                        onClick={() => handleRestore(tenant._id)} 
+                                                        className="shrink-0 h-6.5 sm:h-8.5 px-2 sm:px-3.5 bg-blue-600 hover:bg-blue-700 text-white rounded-md sm:rounded-xl flex items-center justify-center gap-1 sm:gap-1.5 font-black text-[8px] sm:text-[8px] uppercase tracking-wider active:scale-95 transition-all shadow-md shadow-blue-500/10 cursor-pointer whitespace-nowrap"
+                                                    >
+                                                        Restore Node
+                                                    </button>
                                                 )}
                                             </div>
                                         </div>
@@ -2616,27 +2784,14 @@ export default function SuperAdminDashboard() {
                                     Maintain total control over the registration ecosystem. Force system-wide updates, push core maintenance flags, and broadcast alerts across all university nodes simultaneously.
                                 </p>
 
-                                <div className="grid grid-cols-2 gap-2 sm:gap-4 max-w-xl">
-                                     <button className="flex flex-col sm:flex-row items-center justify-center sm:justify-start gap-1.5 sm:gap-3 bg-white/5 hover:bg-white/10 border border-white/10 p-2.5 sm:p-6 rounded-xl sm:rounded-[28px] transition-all group w-full">
-                                         <Lock className="w-4 h-4 sm:w-6 sm:h-6 text-orange-400 group-hover:scale-110 transition-transform shrink-0" />
-                                         <div className="text-center sm:text-left min-w-0">
-                                             <p className="text-[7px] sm:text-[10px] font-black uppercase tracking-wider sm:tracking-widest text-slate-500">Secure Mode</p>
-                                             <p className="font-black text-[9px] sm:text-sm whitespace-nowrap">
-                                                 <span className="sm:hidden">Reset Pass</span>
-                                                 <span className="hidden sm:inline">Force Password Reset</span>
-                                             </p>
-                                         </div>
-                                     </button>
-                                     <button onClick={() => setShowBroadcastModal(true)} className="flex flex-col sm:flex-row items-center justify-center sm:justify-start gap-1.5 sm:gap-3 bg-white/5 hover:bg-white/10 border border-white/10 p-2.5 sm:p-6 rounded-xl sm:rounded-[28px] transition-all group w-full">
-                                         <ArrowUpRight className="w-4 h-4 sm:w-6 sm:h-6 text-blue-400 group-hover:scale-110 transition-transform shrink-0" />
-                                         <div className="text-center sm:text-left min-w-0">
-                                             <p className="text-[7px] sm:text-[10px] font-black uppercase tracking-wider sm:tracking-widest text-slate-500">System Comms</p>
-                                             <p className="font-black text-[9px] sm:text-sm whitespace-nowrap">
-                                                 <span className="sm:hidden">Global Alert</span>
-                                                 <span className="hidden sm:inline">Broadcast Global Alert</span>
-                                             </p>
-                                         </div>
-                                     </button>
+                                <div className="max-w-xl">
+                                    <button onClick={() => setShowBroadcastModal(true)} className="flex items-center justify-center sm:justify-start gap-2.5 sm:gap-3.5 bg-blue-600/20 hover:bg-blue-600/30 border border-blue-500/30 p-3 sm:p-5 rounded-xl sm:rounded-2xl transition-all group w-full cursor-pointer shadow-lg shadow-blue-500/10 active:scale-95">
+                                        <ArrowUpRight className="w-4 h-4 sm:w-6 sm:h-6 text-blue-400 group-hover:scale-110 group-hover:translate-x-0.5 group-hover:-translate-y-0.5 transition-transform shrink-0" />
+                                        <div className="text-left min-w-0">
+                                            <p className="text-[7.5px] sm:text-[10px] font-black uppercase tracking-wider sm:tracking-widest text-blue-300">System Comms Active</p>
+                                            <p className="font-black text-[11px] sm:text-sm text-white">Broadcast Global Platform Alert</p>
+                                        </div>
+                                    </button>
                                 </div>
                             </div>
 
@@ -2666,9 +2821,6 @@ export default function SuperAdminDashboard() {
                                             </div>
                                         ))}
                                     </div>
-                                    <button className="mt-4 sm:mt-10 w-full py-2.5 sm:py-5 bg-blue-600 hover:bg-blue-700 rounded-xl sm:rounded-3xl font-black uppercase tracking-wider sm:tracking-widest transition-all shadow-xl shadow-blue-500/20 active:scale-95 text-[9px] sm:text-xs">
-                                        Deploy Platform Wide Update
-                                    </button>
                                 </div>
                             </div>
                         </div>
@@ -3408,6 +3560,109 @@ export default function SuperAdminDashboard() {
                             >
                                 {isBroadcasting ? "Transmitting..." : "Send Broadcast"}
                             </button>
+                        </form>
+                    </div>
+                </div>
+            )}
+
+            {/* Master Maintenance Modal */}
+            {showMaintenanceModal && (
+                <div className="fixed inset-0 bg-gray-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-3 sm:p-6 animate-in fade-in duration-300">
+                    <div className="bg-white w-full max-w-lg rounded-2xl sm:rounded-[36px] shadow-2xl overflow-hidden border border-white animate-in zoom-in duration-300 flex flex-col">
+                        <div className={`p-4 sm:p-8 text-white relative ${maintenanceConfig.enabled ? 'bg-gradient-to-r from-rose-600 to-amber-600' : 'bg-slate-900'}`}>
+                            <div className="flex items-center gap-2.5">
+                                <div className="w-10 h-10 rounded-2xl bg-white/10 flex items-center justify-center">
+                                    <Wrench className="w-5 h-5 text-white" />
+                                </div>
+                                <div>
+                                    <h3 className="text-lg sm:text-2xl font-black uppercase tracking-tight">Master Maintenance Mode</h3>
+                                    <p className="text-white/70 text-[9px] sm:text-[10px] font-black uppercase tracking-widest mt-0.5">
+                                        Platform-Wide Visitor Interceptor
+                                    </p>
+                                </div>
+                            </div>
+                            <button
+                                type="button"
+                                onClick={() => setShowMaintenanceModal(false)}
+                                className="absolute top-4 sm:top-8 right-4 sm:right-8 text-white/70 hover:text-white transition-colors bg-white/10 h-7 w-7 sm:h-9 sm:w-9 rounded-full flex items-center justify-center cursor-pointer"
+                            >
+                                <X className="w-4 h-4" />
+                            </button>
+                        </div>
+
+                        <form onSubmit={handleSaveMaintenance} className="p-4 sm:p-8 space-y-4 sm:space-y-6">
+                            {/* Master Toggle */}
+                            <div className="flex items-center justify-between p-4 bg-slate-50 rounded-2xl border border-slate-200">
+                                <div>
+                                    <p className="text-xs sm:text-sm font-black text-slate-900 uppercase tracking-tight">
+                                        Enable Maintenance Mode
+                                    </p>
+                                    <p className="text-[10px] sm:text-xs text-slate-500 font-medium mt-0.5">
+                                        When active, all visitors & students see the maintenance screen. Boss Control (/superadmin) remains always accessible.
+                                    </p>
+                                </div>
+                                <button
+                                    type="button"
+                                    onClick={() => setMaintenanceConfig(prev => ({ ...prev, enabled: !prev.enabled }))}
+                                    className={`w-14 h-8 rounded-full transition-colors relative cursor-pointer shrink-0 ml-4 p-1 ${
+                                        maintenanceConfig.enabled ? 'bg-rose-600' : 'bg-slate-300'
+                                    }`}
+                                >
+                                    <div className={`w-6 h-6 rounded-full bg-white shadow-md transition-transform ${
+                                        maintenanceConfig.enabled ? 'translate-x-6' : 'translate-x-0'
+                                    }`} />
+                                </button>
+                            </div>
+
+                            {/* Custom Message Field */}
+                            <div className="space-y-1.5">
+                                <label className="text-[10px] font-black text-slate-500 uppercase tracking-wider px-1">
+                                    Maintenance Notice / Message
+                                </label>
+                                <textarea
+                                    value={maintenanceConfig.message}
+                                    onChange={(e) => setMaintenanceConfig(prev => ({ ...prev, message: e.target.value }))}
+                                    rows={3}
+                                    className="w-full bg-slate-50 border border-slate-200 p-3 sm:p-4 rounded-xl font-medium focus:ring-2 focus:ring-blue-500/20 outline-none transition-all text-slate-800 text-xs sm:text-sm placeholder:text-slate-400"
+                                    placeholder="e.g. We are upgrading database algorithms and platform security. All services will resume shortly."
+                                />
+                            </div>
+
+                            {/* Estimated Completion Time */}
+                            <div className="space-y-1.5">
+                                <label className="text-[10px] font-black text-slate-500 uppercase tracking-wider px-1">
+                                    Estimated Back Online Time (Optional)
+                                </label>
+                                <input
+                                    type="text"
+                                    value={maintenanceConfig.estimatedTime}
+                                    onChange={(e) => setMaintenanceConfig(prev => ({ ...prev, estimatedTime: e.target.value }))}
+                                    className="w-full bg-slate-50 border border-slate-200 p-3 rounded-xl font-bold focus:ring-2 focus:ring-blue-500/20 outline-none transition-all text-slate-800 text-xs sm:text-sm placeholder:text-slate-400"
+                                    placeholder="e.g. 02:30 PM (or '1 hour')"
+                                />
+                            </div>
+
+                            {/* Action Buttons */}
+                            <div className="flex items-center gap-2 pt-2">
+                                <button
+                                    type="button"
+                                    onClick={() => setShowMaintenanceModal(false)}
+                                    className="flex-1 py-3 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-black text-xs uppercase tracking-wider transition-all cursor-pointer"
+                                >
+                                    Cancel
+                                </button>
+                                <button
+                                    type="submit"
+                                    disabled={isSavingMaintenance}
+                                    className={`flex-1 py-3 rounded-xl text-white font-black text-xs uppercase tracking-wider transition-all shadow-md cursor-pointer ${
+                                        maintenanceConfig.enabled
+                                            ? 'bg-rose-600 hover:bg-rose-700 shadow-rose-600/30'
+                                            : 'bg-blue-600 hover:bg-blue-700 shadow-blue-600/30'
+                                    }`}
+                                >
+                                    {isSavingMaintenance ? "Deploying..." : maintenanceConfig.enabled ? "Activate Maintenance" : "Save Changes (Mode OFF)"}
+                                </button>
+                            </div>
                         </form>
                     </div>
                 </div>
