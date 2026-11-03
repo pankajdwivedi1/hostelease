@@ -248,6 +248,8 @@ export async function GET(request: NextRequest) {
     const hostelName = searchParams.get("hostelName");
     const authorizedHostelsStr = searchParams.get("authorizedHostels");
 
+    const filters: any = {};
+
     if (session.role === "student" || session.role === "parent") {
       let requestedStudent: any = null;
       if (studentId) {
@@ -275,22 +277,20 @@ export async function GET(request: NextRequest) {
         if (!requestedStudent || !canAccessStudent(session, requestedStudent)) {
           return NextResponse.json({ error: "You are not authorized to view these requests" }, { status: 403 });
         }
+        filters.studentId = studentId;
       }
     } else if (!isPrivilegedSession(session)) {
       return NextResponse.json({ error: "You are not authorized to view requests" }, { status: 403 });
+    } else {
+      if (studentId) {
+        filters.studentId = studentId;
+      }
     }
 
-    const filters: any = {};
-    if (session.role === "student" || session.role === "parent") {
-      filters.studentId = studentId;
-    }
-    if (studentId) {
-      filters.studentId = studentId;
-    }
-    if (registrationId) {
+    if (registrationId && !filters.studentId) {
       filters.registrationId = registrationId;
     }
-    if (email) {
+    if (email && !filters.studentId) {
       filters.email = email;
     }
     if (firebaseUID && !studentId && !registrationId && !email) {
