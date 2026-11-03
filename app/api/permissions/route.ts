@@ -269,7 +269,17 @@ export async function GET(request: NextRequest) {
       }
       filters.studentId = (requestedStudent._id || requestedStudent.id || studentId).toString();
     } else if (session.role === "warden") {
-      if (hostelName && !session.hostelNames?.some((name) => name.toLowerCase() === hostelName.toLowerCase())) {
+      let allowedHostels = session.hostelNames && session.hostelNames.length > 0 ? session.hostelNames : [];
+      if (allowedHostels.length === 0 && authorizedHostelsStr) {
+        try {
+          const parsed = JSON.parse(authorizedHostelsStr);
+          if (Array.isArray(parsed)) allowedHostels = parsed;
+        } catch {}
+      }
+      if (allowedHostels.length === 0 && hostelName) {
+        allowedHostels = [hostelName];
+      }
+      if (hostelName && allowedHostels.length > 0 && !allowedHostels.some((name) => name.toLowerCase() === hostelName.toLowerCase())) {
         return NextResponse.json({ error: "You are not authorized for this hostel" }, { status: 403 });
       }
       if (studentId) {
@@ -305,7 +315,7 @@ export async function GET(request: NextRequest) {
     if (session.role === "warden" && !hostelName) {
       filters.authorizedHostels = session.hostelNames || [];
     }
-    if (authorizedHostelsStr && isPrivilegedSession(session)) {
+    if (authorizedHostelsStr && (isPrivilegedSession(session) || session.role === "warden")) {
       try {
         filters.authorizedHostels = JSON.parse(authorizedHostelsStr);
       } catch (e) {

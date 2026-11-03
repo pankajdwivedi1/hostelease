@@ -691,18 +691,10 @@ export default function GatepassView({ onClose }: { onClose?: () => void }) {
             connectSSE();
         }
 
-        // Lightweight safety fallback: refresh live data every 60s instead of every 1s
-        const fallbackInterval = setInterval(() => {
-            if (document.visibilityState === "visible") {
-                fetchLiveData(true);
-            }
-        }, 60000);
-
         return () => {
             if (eventSource) {
                 eventSource.close();
             }
-            clearInterval(fallbackInterval);
         };
     }, [fetchLiveData]);
 

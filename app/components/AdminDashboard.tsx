@@ -4093,25 +4093,12 @@ export default function AdminDashboard({
   };
 
   useEffect(() => {
-    let interval: any;
     if (showSystemSettingsModal) {
       fetchSystemSettings();
     }
     if (showHostelSettingsModal) {
       fetchHostels(true);
-      interval = setInterval(() => {
-        fetchHostels(true);
-      }, 15000);
     }
-    const handleFocus = () => {
-      if (showSystemSettingsModal) fetchSystemSettings();
-      if (showHostelSettingsModal) fetchHostels(true);
-    };
-    window.addEventListener("focus", handleFocus);
-    return () => {
-      if (interval) clearInterval(interval);
-      window.removeEventListener("focus", handleFocus);
-    };
   }, [showSystemSettingsModal, showHostelSettingsModal]);
 
   const handleToggleDeveloperSetting = async (key: string, value: boolean) => {

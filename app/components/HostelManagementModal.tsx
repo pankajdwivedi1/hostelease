@@ -1159,13 +1159,8 @@ export default function HostelManagementModal({
       }
     };
     refreshHostels();
-    const interval = setInterval(refreshHostels, 8000);
-    const handleFocus = () => refreshHostels();
-    window.addEventListener("focus", handleFocus);
     return () => {
       isMounted = false;
-      clearInterval(interval);
-      window.removeEventListener("focus", handleFocus);
     };
   }, []);
 

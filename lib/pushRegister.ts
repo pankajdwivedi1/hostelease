@@ -40,8 +40,16 @@ export async function registerPushNotifications(
       scope: "/"
     });
 
-    // 2. Wait for Service Worker to be fully active and ready
-    const registration = await navigator.serviceWorker.ready;
+    // 2. Wait for Service Worker to be fully active and ready (with 1.5s timeout to prevent hanging)
+    const registration = await Promise.race([
+      navigator.serviceWorker.ready,
+      new Promise<null>((resolve) => setTimeout(() => resolve(null), 1500))
+    ]);
+
+    if (!registration) {
+      console.warn("ServiceWorker was not ready within timeout, skipping push registration.");
+      return;
+    }
 
     // 3. Request push notification permissions if not already granted
     let permission = Notification.permission;

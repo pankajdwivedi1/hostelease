@@ -44,11 +44,8 @@ export default function MaintenanceGuard({ children }: { children: React.ReactNo
 
     useEffect(() => {
         if (isSuperAdminRoute) return;
+        // Check maintenance status once on initial load (no ghost polling)
         checkMaintenance();
-
-        // Background polling every 30 seconds
-        const interval = setInterval(checkMaintenance, 30000);
-        return () => clearInterval(interval);
     }, [isSuperAdminRoute]);
 
     // SuperAdmin routes are completely exempt

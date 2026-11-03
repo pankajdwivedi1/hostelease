@@ -70,28 +70,7 @@ export function clearAuthSessionCookie(response: NextResponse) {
 }
 
 export function getAuthSession(request: NextRequest): AuthSession | null {
-  const userTypeHeader = request.headers.get("x-user-type");
-  const userTypeCookie = request.cookies.get("userType")?.value;
-  const adminHeader = request.headers.get("x-admin-email") || request.headers.get("x-warden-username");
-
-  // 🛡️ 1. EXPLICIT PRIVILEGED HEADER/COOKIE OVERRIDE:
-  // If request explicitly identifies as superadmin, admin, dean, or warden (e.g. from Admin / Boss dashboard),
-  // honor it immediately so stale student cookies never block administrator operations.
-  const roles = [userTypeHeader, userTypeCookie].filter(Boolean);
-  if (roles.includes("superadmin")) {
-    return { role: "superadmin", expiresAt: Date.now() + SESSION_TTL_SECONDS * 1000 };
-  }
-  if (roles.includes("admin") || roles.includes("dean") || adminHeader) {
-    return { role: "admin", expiresAt: Date.now() + SESSION_TTL_SECONDS * 1000 };
-  }
-  if (roles.includes("warden")) {
-    return { role: "warden", expiresAt: Date.now() + SESSION_TTL_SECONDS * 1000 };
-  }
-  if (roles.includes("getpass")) {
-    return { role: "getpass", expiresAt: Date.now() + SESSION_TTL_SECONDS * 1000 };
-  }
-
-  // 🛡️ 2. CRYPTOGRAPHIC SESSION COOKIE:
+  // 🛡️ 1. CRYPTOGRAPHIC SESSION COOKIE (Highest fidelity - contains signed role, phone, and hostelNames):
   const token = request.cookies.get(AUTH_SESSION_COOKIE)?.value;
   if (token) {
     const [payload, signature] = token.split(".");
@@ -109,6 +88,43 @@ export function getAuthSession(request: NextRequest): AuthSession | null {
         // Continue to fallback
       }
     }
+  }
+
+  const userTypeHeader = request.headers.get("x-user-type");
+  const userTypeCookie = request.cookies.get("userType")?.value;
+  const adminHeader = request.headers.get("x-admin-email") || request.headers.get("x-warden-username");
+
+  // 🛡️ 2. EXPLICIT PRIVILEGED HEADER/COOKIE FALLBACK:
+  // If request explicitly identifies as superadmin, admin, dean, or warden (e.g. from Admin / Boss dashboard),
+  // honor it immediately so stale student cookies never block administrator operations.
+  const roles = [userTypeHeader, userTypeCookie].filter(Boolean);
+  if (roles.includes("superadmin")) {
+    return { role: "superadmin", expiresAt: Date.now() + SESSION_TTL_SECONDS * 1000 };
+  }
+  if (roles.includes("admin") || roles.includes("dean") || adminHeader) {
+    return { role: "admin", expiresAt: Date.now() + SESSION_TTL_SECONDS * 1000 };
+  }
+  if (roles.includes("warden")) {
+    const queryHostel = request.nextUrl?.searchParams?.get("hostelName");
+    const queryAuthorized = request.nextUrl?.searchParams?.get("authorizedHostels");
+    let fallbackHostels: string[] = [];
+    if (queryAuthorized) {
+      try {
+        const parsed = JSON.parse(queryAuthorized);
+        if (Array.isArray(parsed)) fallbackHostels = parsed;
+      } catch {}
+    }
+    if (fallbackHostels.length === 0 && queryHostel) {
+      fallbackHostels = [queryHostel];
+    }
+    return {
+      role: "warden",
+      hostelNames: fallbackHostels.length > 0 ? fallbackHostels : undefined,
+      expiresAt: Date.now() + SESSION_TTL_SECONDS * 1000
+    };
+  }
+  if (roles.includes("getpass")) {
+    return { role: "getpass", expiresAt: Date.now() + SESSION_TTL_SECONDS * 1000 };
   }
 
   // 🛡️ 3. STUDENT & PARENT CONTEXT FALLBACK:
@@ -227,8 +243,9 @@ export function canAccessStudent(
   }
 
   if (session.role === "warden") {
+    if (!session.hostelNames || session.hostelNames.length === 0) return true;
     return Boolean(
-      session.hostelNames?.some(
+      session.hostelNames.some(
         (name) => name.toLowerCase() === (student.hostelName || "").toLowerCase()
       )
     );

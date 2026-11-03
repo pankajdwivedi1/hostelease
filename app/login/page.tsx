@@ -1002,16 +1002,14 @@ function LoginForm() {
 
         localStorage.setItem("deanPhone", cleanPhone);
 
-        try {
-          const { registerPushNotifications } =
-            await import("@/lib/pushRegister");
-
-          await registerPushNotifications("admin", "dean", cleanPhone);
-        } catch (pushErr) {}
+        // Register push in background (fire-and-forget, never blocks login navigation)
+        import("@/lib/pushRegister")
+          .then(({ registerPushNotifications }) => registerPushNotifications("admin", "dean", cleanPhone))
+          .catch(() => {});
 
         showToast("Welcome Dean! Portal unlocked successfully.", "success");
 
-        router.push("/");
+        window.location.href = "/";
       }
     } catch (error: any) {
       console.error("Admin login error:", error);
@@ -1210,16 +1208,14 @@ function LoginForm() {
           JSON.stringify(data.authorizedHostels || [data.hostelName]),
         );
 
-        try {
-          const { registerPushNotifications } =
-            await import("@/lib/pushRegister");
-
-          await registerPushNotifications(cleanPhone, "warden", cleanPhone);
-        } catch (pushErr) {}
+        // Register push in background (fire-and-forget, never blocks login navigation)
+        import("@/lib/pushRegister")
+          .then(({ registerPushNotifications }) => registerPushNotifications(cleanPhone, "warden", cleanPhone))
+          .catch(() => {});
 
         showToast(`Welcome! Logged into ${data.hostelName}`, "success");
 
-        router.push("/");
+        window.location.href = "/";
       }
     } catch (error: any) {
       console.error("Warden login error:", error);

@@ -185,6 +185,20 @@ function parseWardenInfo(wardenUsername?: string) {
     return { name, phone };
 }
 
+const HOME_LEAVE_REASONS = [
+    "Going Home / Visiting Family",
+    "Festival Celebration / Holidays",
+    "Family Function / Marriage Ceremony",
+    "Medical Treatment / Health Issue",
+    "Academic / Competitive Examination",
+    "Internship / Job Interview / Placement Drive",
+    "Educational Seminar / Workshop / College Event",
+    "Urgent Family Emergency",
+    "Semester Break / Vacation Leave",
+    "Government Document / Official Work",
+    "Other (Please Specify)"
+];
+
 export default function StudentDashboard({ initialData, isParentView = false, hasMultipleSiblings = false }: { initialData?: any; isParentView?: boolean; hasMultipleSiblings?: boolean }) {
     const router = useRouter();
     const searchParams = useSearchParams();
@@ -200,6 +214,8 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
     const [fromDateTime, setFromDateTime] = useState("");
     const [toDateTime, setToDateTime] = useState("");
     const [reason, setReason] = useState("");
+    const [leaveReasonCategory, setLeaveReasonCategory] = useState("");
+    const [customLeaveReason, setCustomLeaveReason] = useState("");
     const [highlightLocation, setHighlightLocation] = useState(false);
     const [requestType, setRequestType] = useState<"outing" | "leave">("outing");
     const [studentProfile, setStudentProfile] = useState<StudentProfile | null>(initialData || null);
@@ -719,25 +735,8 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
         }
     }, [isParentView, tenantFromUrl]);
 
-    // ⚡ AUTO-RECHECK ON TAB RESUME: When student switches back to dashboard on phone, re-check enforcement live immediately
-    useEffect(() => {
-        const handleVisibilityChange = () => {
-            if (document.visibilityState === "visible") {
-                checkFieldEnforcement();
-            }
-        };
-        const handleFocus = () => {
-            checkFieldEnforcement();
-        };
-
-        document.addEventListener("visibilitychange", handleVisibilityChange);
-        window.addEventListener("focus", handleFocus);
-
-        return () => {
-            document.removeEventListener("visibilitychange", handleVisibilityChange);
-            window.removeEventListener("focus", handleFocus);
-        };
-    }, [checkFieldEnforcement]);
+    // ⚡ Tab Focus & Visibility: Removed automatic background server re-checking to ensure 0 ghost requests while app is open or phone is unlocked.
+    // Fresh profile enforcement is already evaluated on mount, profile load, and manual pull-to-refresh.
     const [showLiveFaceRecaptureModal, setShowLiveFaceRecaptureModal] = useState<boolean>(() => {
         if (isParentView) return false;
         const dyn = initialData?.dynamicFields;
@@ -2743,35 +2742,14 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
                 }
             };
 
-            // Run initial sync on mount
+            // Run initial sync from local storage on mount (0 network calls)
             syncStatusFromLocalStorage();
 
-            // ⚡ 60-SECOND THROTTLED SYNC: Prevent request swarms when student switches apps or unlocks phone
-            const handleFocusOrVisibility = () => {
-                syncStatusFromLocalStorage();
-                const now = Date.now();
-                if (now - lastFocusSyncRef.current >= 60000) {
-                    lastFocusSyncRef.current = now;
-                    syncFullDashboard(false);
-                }
-            };
-
-            const handleDocVisibility = () => {
-                if (document.visibilityState === 'visible') {
-                    handleFocusOrVisibility();
-                }
-            };
-
-            window.addEventListener('focus', handleFocusOrVisibility);
-            window.addEventListener('pageshow', handleFocusOrVisibility);
+            // Local storage status sync only (0 network calls)
             window.addEventListener('storage', syncStatusFromLocalStorage);
-            document.addEventListener('visibilitychange', handleDocVisibility);
 
             return () => {
                 clearTimeout(initialNotifTimer);
-                document.removeEventListener('visibilitychange', handleDocVisibility);
-                window.removeEventListener('focus', handleFocusOrVisibility);
-                window.removeEventListener('pageshow', handleFocusOrVisibility);
                 window.removeEventListener('storage', syncStatusFromLocalStorage);
             };
         }
@@ -3391,7 +3369,26 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
     };
 
     const handleRequestPermission = async () => {
-        if (!fromDateTime || !toDateTime || !reason || !studentProfile) return;
+        const effectiveReason = requestType === 'leave'
+            ? (leaveReasonCategory === "Other (Please Specify)" ? customLeaveReason.trim() : leaveReasonCategory.trim())
+            : reason.trim();
+
+        if (!fromDateTime || !toDateTime || !effectiveReason || !studentProfile) {
+            if (requestType === 'leave') {
+                if (!leaveReasonCategory) {
+                    showToast("⚠️ Please select a reason for your leave from the dropdown.", "error");
+                    return;
+                }
+                if (leaveReasonCategory === "Other (Please Specify)" && !customLeaveReason.trim()) {
+                    showToast("⚠️ Please enter your reason in the text box.", "error");
+                    return;
+                }
+            } else if (!reason.trim()) {
+                showToast("⚠️ Please enter a reason for your outing.", "error");
+                return;
+            }
+            return;
+        }
 
         const isGuestOrAdmin = Boolean(
             (typeof window !== "undefined" && (
@@ -3432,7 +3429,7 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
                     studentId: studentProfile._id,
                     fromDateTime: new Date(fromDateTime).toISOString(),
                     toDateTime: new Date(toDateTime).toISOString(),
-                    reason,
+                    reason: effectiveReason,
                     requestType,
                     deviceId: getStoredDeviceId(),
                 }),
@@ -3458,6 +3455,8 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
             setFromDateTime("");
             setToDateTime("");
             setReason("");
+            setLeaveReasonCategory("");
+            setCustomLeaveReason("");
             setShowRequestForm(false);
             showToast("Leave request submitted successfully!", "success");
             if (fetchStudentHistoryData) fetchStudentHistoryData();
@@ -5321,21 +5320,31 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
                                     </button>
 
                                     {/* 📶 Always-Visible Campus WiFi Status Card (Right side of Outing & Attendance) */}
-                                    <div className={`w-full min-h-[3rem] sm:min-h-[3.25rem] rounded-xl border-2 transition-all duration-500 flex items-center justify-between px-2.5 sm:px-3 py-1.5 text-left shadow-sm ${
+                                    <div className={`w-full h-12 rounded-xl border-2 transition-all duration-500 flex items-center justify-between px-2.5 sm:px-3 text-left shadow-sm ${
                                         highlightLocation
                                             ? 'bg-amber-100 border-amber-400 ring-4 ring-amber-300 shadow-xl scale-[1.02] animate-pulse'
                                             : isOnCampusWifi
                                                 ? 'bg-emerald-50/90 border-emerald-300 text-emerald-950'
                                                 : 'bg-amber-50/90 border-amber-300 text-amber-950'
                                     }`}>
-                                        {/* Left Side: Icon + Title + Guidance Subtitle */}
+                                        {/* Left Side: Icon + Title (Mobile: Compact CAMPUS/WIFI, Desktop: Full Guidance Text) */}
                                         <div className="flex items-center gap-1.5 sm:gap-2 min-w-0 pr-1">
                                             <span className="text-sm sm:text-base shrink-0">📶</span>
-                                            <div className="flex flex-col min-w-0">
+                                            {/* Mobile View: Visible ONLY CAMPUS on top line, WIFI on bottom line */}
+                                            <div className="flex flex-col min-w-0 justify-center sm:hidden">
+                                                <span className="block text-[8px] font-black uppercase tracking-wider leading-tight">
+                                                    CAMPUS
+                                                </span>
+                                                <span className="block text-[8px] font-black uppercase tracking-wider leading-tight">
+                                                    WIFI
+                                                </span>
+                                            </div>
+                                            {/* Desktop View: Full Title + Guidance text re-implemented in the yellow area */}
+                                            <div className="hidden sm:flex flex-col min-w-0">
                                                 <span className="block text-[7.5px] sm:text-[8.5px] font-black uppercase tracking-wider leading-none mb-0.5 opacity-70 truncate">
                                                     Campus WiFi
                                                 </span>
-                                                <p className={`text-[8px] sm:text-[9.5px] font-semibold leading-tight line-clamp-2 ${
+                                                <p className={`text-[8px] sm:text-[9.5px] font-semibold leading-tight line-clamp-1 md:line-clamp-2 ${
                                                     isOnCampusWifi ? 'text-emerald-800' : 'text-amber-800'
                                                 }`}>
                                                     {isOnCampusWifi
@@ -5354,7 +5363,7 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
                                                         ? 'bg-emerald-500 animate-pulse shadow-sm shadow-emerald-500/50'
                                                         : 'bg-red-500 animate-pulse shadow-sm shadow-red-500/50'
                                                 }`} />
-                                                <span className={`text-[8px] sm:text-[9.5px] font-black uppercase tracking-widest px-1.5 py-0.5 rounded-md ${
+                                                <span className={`text-[7.5px] sm:text-[9px] font-black uppercase tracking-widest px-1.5 py-0.5 rounded-md ${
                                                     isOnCampusWifi
                                                         ? 'bg-emerald-200/80 text-emerald-950 border border-emerald-300'
                                                         : 'bg-red-100 text-red-700 border border-red-200'
@@ -5362,7 +5371,7 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
                                                     {isOnCampusWifi ? 'ONLINE' : 'OFFLINE'}
                                                 </span>
                                             </div>
-                                            <span className={`text-[7.5px] sm:text-[8.5px] font-black uppercase tracking-tight mt-0.5 ${
+                                            <span className={`text-[7px] sm:text-[8px] font-black uppercase tracking-tight mt-0.5 ${
                                                 isOnCampusWifi ? 'text-emerald-700' : 'text-red-600'
                                             }`}>
                                                 {isOnCampusWifi ? 'CONNECTED' : 'NOT CONNECTED'}
@@ -5382,63 +5391,123 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
                             )}
 
                             {showRequestForm && (
-                                <div className="p-6 rounded-3xl border border-blue-100 bg-gradient-to-br from-white to-blue-50/30 shadow-xl shadow-blue-100/50 space-y-6 mb-6 animate-in slide-in-from-top-4 duration-300">
-                                    <div className="flex items-center justify-between mb-2">
-                                        <h3 className="text-lg font-black text-gray-900 uppercase tracking-tight">
+                                <div className="p-3.5 sm:p-5 md:p-6 rounded-2xl sm:rounded-3xl border border-blue-100 bg-gradient-to-br from-white to-blue-50/30 shadow-xl shadow-blue-100/50 space-y-3 sm:space-y-4 md:space-y-6 mb-3 sm:mb-6 animate-in slide-in-from-top-4 duration-300">
+                                    <div className="flex items-center justify-between mb-1 sm:mb-2">
+                                        <h3 className="text-xs sm:text-sm md:text-base font-black text-gray-900 uppercase tracking-tight">
                                             {requestType === 'leave' ? '🏠 New Leave Request' : '🚶‍♂️ New Gatepass Request'}
                                         </h3>
                                     </div>
 
                                     <div className="grid grid-cols-2 gap-2 md:gap-4">
                                         <div>
-                                            <label className="block text-[9px] md:text-[11px] font-black text-gray-400 uppercase tracking-widest mb-2 px-1">
+                                            <label className="block text-[8.5px] sm:text-[9.5px] md:text-[11px] font-black text-gray-400 uppercase tracking-widest mb-1 sm:mb-2 px-1">
                                                 From Date & Time
                                             </label>
                                             <input
                                                 type="datetime-local"
                                                 value={fromDateTime}
                                                 onChange={(e) => setFromDateTime(e.target.value)}
-                                                className="w-full h-12 px-2 md:px-4 rounded-xl border border-gray-200 bg-white text-[10px] md:text-sm text-gray-800 font-bold focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 transition-all outline-none tracking-tighter sm:tracking-normal"
+                                                className="w-full h-9 sm:h-10 md:h-12 px-2.5 md:px-4 rounded-xl border border-gray-200 bg-white text-[10px] sm:text-xs md:text-sm text-gray-800 font-bold focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 transition-all outline-none tracking-tighter sm:tracking-normal"
                                             />
                                         </div>
                                         <div>
-                                            <label className="block text-[9px] md:text-[11px] font-black text-gray-400 uppercase tracking-widest mb-2 px-1">
+                                            <label className="block text-[8.5px] sm:text-[9.5px] md:text-[11px] font-black text-gray-400 uppercase tracking-widest mb-1 sm:mb-2 px-1">
                                                 To Date & Time
                                             </label>
                                             <input
                                                 type="datetime-local"
                                                 value={toDateTime}
                                                 onChange={(e) => setToDateTime(e.target.value)}
-                                                className="w-full h-12 px-2 md:px-4 rounded-xl border border-gray-200 bg-white text-[10px] md:text-sm text-gray-800 font-bold focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 transition-all outline-none tracking-tighter sm:tracking-normal"
+                                                className="w-full h-9 sm:h-10 md:h-12 px-2.5 md:px-4 rounded-xl border border-gray-200 bg-white text-[10px] sm:text-xs md:text-sm text-gray-800 font-bold focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 transition-all outline-none tracking-tighter sm:tracking-normal"
                                             />
                                         </div>
                                     </div>
 
-                                    <div>
-                                        <label className="block text-[9px] md:text-[11px] font-black text-gray-400 uppercase tracking-widest mb-2 px-1">
-                                            Reason for {requestType === 'leave' ? 'Home Leave' : 'Short Outing'}
-                                        </label>
-                                        <textarea
-                                            value={reason}
-                                            onChange={(e) => {
-                                                const val = e.target.value;
-                                                const wordCount = val.trim() === '' ? 0 : val.trim().split(/\s+/).length;
-                                                if (wordCount <= 100) {
-                                                    setReason(val);
-                                                }
-                                            }}
-                                            placeholder={requestType === 'leave' ? "Mention if going to home, village, etc." : "Local market, hospital, etc."}
-                                            rows={3}
-                                            className="w-full px-2 md:px-4 py-3 rounded-xl border border-gray-200 bg-white text-[10px] md:text-sm text-gray-800 font-bold placeholder:text-gray-300 focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 transition-all outline-none resize-none tracking-tighter sm:tracking-normal"
-                                        />
-                                        <p className="text-right text-[10px] text-gray-400 font-bold mt-1 uppercase tracking-tighter">{(reason.trim() === '' ? 0 : reason.trim().split(/\s+/).length)}/100 WORDS</p>
-                                    </div>
+                                    {requestType === 'leave' ? (
+                                        <div className="space-y-2.5 sm:space-y-3">
+                                            <div>
+                                                <label className="block text-[8.5px] sm:text-[9.5px] md:text-[11px] font-black text-gray-400 uppercase tracking-widest mb-1 sm:mb-2 px-1">
+                                                    Reason for Home Leave
+                                                </label>
+                                                <div className="relative">
+                                                    <select
+                                                        value={leaveReasonCategory}
+                                                        onChange={(e) => {
+                                                            const val = e.target.value;
+                                                            setLeaveReasonCategory(val);
+                                                            if (val === "Other (Please Specify)") {
+                                                                setReason(customLeaveReason);
+                                                            } else {
+                                                                setReason(val);
+                                                            }
+                                                        }}
+                                                        className="w-full h-9 sm:h-10 md:h-12 px-2.5 sm:px-3 md:px-4 rounded-xl border border-gray-200 bg-white text-[10px] sm:text-xs md:text-sm text-gray-800 font-bold focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 transition-all outline-none cursor-pointer appearance-none pr-8 sm:pr-10"
+                                                    >
+                                                        <option value="">-- Select Reason for Leave --</option>
+                                                        {HOME_LEAVE_REASONS.map((r, i) => (
+                                                            <option key={i} value={r}>{r}</option>
+                                                        ))}
+                                                    </select>
+                                                    <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-3 text-gray-400">
+                                                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M19 9l-7 7-7-7" />
+                                                        </svg>
+                                                    </div>
+                                                </div>
+                                            </div>
 
-                                    <div className="flex gap-2 md:gap-3 pt-2">
+                                            {leaveReasonCategory === "Other (Please Specify)" && (
+                                                <div className="animate-in fade-in slide-in-from-top-2 duration-200">
+                                                    <label className="block text-[8.5px] sm:text-[9.5px] md:text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1 px-1">
+                                                        Please specify your reason
+                                                    </label>
+                                                    <textarea
+                                                        value={customLeaveReason}
+                                                        onChange={(e) => {
+                                                            const val = e.target.value;
+                                                            const wordCount = val.trim() === '' ? 0 : val.trim().split(/\s+/).length;
+                                                            if (wordCount <= 100) {
+                                                                setCustomLeaveReason(val);
+                                                                setReason(val);
+                                                            }
+                                                        }}
+                                                        placeholder="Mention if going to home, village, etc."
+                                                        rows={2}
+                                                        className="w-full px-2.5 md:px-4 py-2 sm:py-3 rounded-xl border border-gray-200 bg-white text-[10px] sm:text-xs md:text-sm text-gray-800 font-bold placeholder:text-gray-300 focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 transition-all outline-none resize-none tracking-tighter sm:tracking-normal"
+                                                    />
+                                                    <p className="text-right text-[9px] sm:text-[10px] text-gray-400 font-bold mt-0.5 uppercase tracking-tighter">
+                                                        {(customLeaveReason.trim() === '' ? 0 : customLeaveReason.trim().split(/\s+/).length)}/100 WORDS
+                                                    </p>
+                                                </div>
+                                            )}
+                                        </div>
+                                    ) : (
+                                        <div>
+                                            <label className="block text-[8.5px] sm:text-[9.5px] md:text-[11px] font-black text-gray-400 uppercase tracking-widest mb-1 sm:mb-2 px-1">
+                                                Reason for Short Outing
+                                            </label>
+                                            <textarea
+                                                value={reason}
+                                                onChange={(e) => {
+                                                    const val = e.target.value;
+                                                    const wordCount = val.trim() === '' ? 0 : val.trim().split(/\s+/).length;
+                                                    if (wordCount <= 100) {
+                                                        setReason(val);
+                                                    }
+                                                }}
+                                                placeholder="Local market, hospital, etc."
+                                                rows={2}
+                                                className="w-full px-2.5 md:px-4 py-2 sm:py-3 rounded-xl border border-gray-200 bg-white text-[10px] sm:text-xs md:text-sm text-gray-800 font-bold placeholder:text-gray-300 focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 transition-all outline-none resize-none tracking-tighter sm:tracking-normal"
+                                            />
+                                            <p className="text-right text-[9px] sm:text-[10px] text-gray-400 font-bold mt-0.5 uppercase tracking-tighter">{(reason.trim() === '' ? 0 : reason.trim().split(/\s+/).length)}/100 WORDS</p>
+                                        </div>
+                                    )}
+
+                                    <div className="flex gap-2 md:gap-3 pt-1 sm:pt-2">
                                         <button
                                             onClick={handleRequestPermission}
                                             disabled={submitting}
-                                            className="flex-1 h-12 rounded-xl bg-blue-600 text-white font-black text-[10px] md:text-sm uppercase tracking-widest shadow-lg shadow-blue-200 hover:bg-blue-700 active:scale-[0.98] transition-all disabled:opacity-50"
+                                            className="flex-1 h-9 sm:h-10 md:h-12 rounded-xl bg-blue-600 text-white font-black text-[9.5px] sm:text-xs md:text-sm uppercase tracking-widest shadow-md sm:shadow-lg shadow-blue-200 hover:bg-blue-700 active:scale-[0.98] transition-all disabled:opacity-50"
                                         >
                                             {submitting ? "Processing..." : `Request ${requestType === 'leave' ? 'Leave' : 'Outing'}`}
                                         </button>
@@ -5448,8 +5517,10 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
                                                 setFromDateTime("");
                                                 setToDateTime("");
                                                 setReason("");
+                                                setLeaveReasonCategory("");
+                                                setCustomLeaveReason("");
                                             }}
-                                            className="px-5 md:px-6 h-12 rounded-xl border border-gray-200 bg-white text-gray-500 font-black text-[10px] md:text-sm uppercase tracking-widest hover:bg-gray-50 active:scale-[0.98] transition-all"
+                                            className="px-3.5 sm:px-5 md:px-6 h-9 sm:h-10 md:h-12 rounded-xl border border-gray-200 bg-white text-gray-500 font-black text-[10px] sm:text-xs md:text-sm uppercase tracking-widest hover:bg-gray-50 active:scale-[0.98] transition-all"
                                         >
                                             ✕
                                         </button>
