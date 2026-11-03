@@ -811,9 +811,16 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
             if (studentEmail) permQuery.set("email", studentEmail);
             permQuery.set("limit", "500");
 
+            const studentAuthHeaders: Record<string, string> = {
+                "x-user-type": "student",
+                ...(studentEmail ? { "x-student-email": studentEmail } : {}),
+                ...(studentId ? { "x-student-id": String(studentId) } : {}),
+                ...(regId ? { "x-registration-id": String(regId) } : {})
+            };
+
             const [gpRes, permRes] = await Promise.allSettled([
-                fetch(`/api/getpass/history?${gpQuery.toString()}${getTenantParam(false)}`).then(r => (r.ok ? r.json() : null)),
-                fetch(`/api/permissions?${permQuery.toString()}${getTenantParam(false)}`).then(r => (r.ok ? r.json() : null)),
+                fetch(`/api/getpass/history?${gpQuery.toString()}${getTenantParam(false)}`, { headers: studentAuthHeaders }).then(r => (r.ok ? r.json() : null)),
+                fetch(`/api/permissions?${permQuery.toString()}${getTenantParam(false)}`, { headers: studentAuthHeaders }).then(r => (r.ok ? r.json() : null)),
             ]);
 
             const gpRecords: any[] = (gpRes.status === "fulfilled" && Array.isArray(gpRes.value?.records)) 
@@ -1928,7 +1935,14 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
                 syncPromises.push(
                     fetch(`/api/permissions?studentId=${encodeURIComponent(currentStudentId)}&light=true${getTenantParam(false)}&_t=${Date.now()}`, {
                         cache: 'no-store',
-                        headers: { 'Cache-Control': 'no-cache, no-store', 'Pragma': 'no-cache' }
+                        headers: {
+                            'Cache-Control': 'no-cache, no-store',
+                            'Pragma': 'no-cache',
+                            'x-user-type': 'student',
+                            ...(studentProfile?.email ? { 'x-student-email': studentProfile.email } : {}),
+                            ...(currentStudentId ? { 'x-student-id': String(currentStudentId) } : {}),
+                            ...(studentProfile?.registrationId ? { 'x-registration-id': String(studentProfile.registrationId) } : {})
+                        }
                     })
                         .then(r => (r.ok ? r.json() : null))
                         .then(permData => {
@@ -3196,7 +3210,14 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
                 // ⚡ STEP 3: Load permissions asynchronously in background
                 const fetchPermissions = async () => {
                     try {
-                        const permResponse = await fetch(`/api/permissions?studentId=${studentId}&light=true${getTenantParam(false)}`);
+                        const permResponse = await fetch(`/api/permissions?studentId=${studentId}&light=true${getTenantParam(false)}`, {
+                            headers: {
+                                'x-user-type': 'student',
+                                ...(currentStudent?.email ? { 'x-student-email': currentStudent.email } : {}),
+                                ...(studentId ? { 'x-student-id': String(studentId) } : {}),
+                                ...(currentStudent?.registrationId ? { 'x-registration-id': String(currentStudent.registrationId) } : {})
+                            }
+                        });
                         const permData = await permResponse.json();
 
                         if (permData.permissions && isMounted) {
@@ -3285,7 +3306,12 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
 
                             const fetchPermissions = async () => {
                                 try {
-                                    const permResponse = await fetch(`/api/permissions?studentId=${studentId}&light=true${getTenantParam(false)}`);
+                                    const permResponse = await fetch(`/api/permissions?studentId=${studentId}&light=true${getTenantParam(false)}`, {
+                                        headers: {
+                                            'x-user-type': 'parent',
+                                            ...(storedParentPhone ? { 'x-parent-phone': storedParentPhone } : {})
+                                        }
+                                    });
                                     const permData = await permResponse.json();
                                     if (permData.permissions && isMounted) {
                                         setPermissions(Array.isArray(permData.permissions) ? permData.permissions : []);
@@ -3397,6 +3423,10 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
                 method: "POST",
                 headers: {
                     "Content-Type": "application/json",
+                    "x-user-type": "student",
+                    ...(studentProfile?.email ? { "x-student-email": studentProfile.email } : {}),
+                    ...(studentProfile?._id ? { "x-student-id": String(studentProfile._id) } : {}),
+                    ...(studentProfile?.registrationId ? { "x-registration-id": String(studentProfile.registrationId) } : {})
                 },
                 body: JSON.stringify({
                     studentId: studentProfile._id,
@@ -3451,9 +3481,16 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
         try {
             const res = await fetch(`/api/permissions${getTenantParam()}`, {
                 method: 'DELETE',
-                headers: { 'Content-Type': 'application/json' },
+                headers: { 
+                    'Content-Type': 'application/json',
+                    'x-user-type': 'student',
+                    ...(studentProfile?.email ? { 'x-student-email': studentProfile.email } : {}),
+                    ...(studentProfile?._id ? { 'x-student-id': String(studentProfile._id) } : {}),
+                    ...(studentProfile?.registrationId ? { 'x-registration-id': String(studentProfile.registrationId) } : {})
+                },
                 body: JSON.stringify({
                     permissionIds: [permissionId],
+                    studentId: studentProfile?._id || studentProfile?.id,
                     isStudent: true
                 })
             });
@@ -3526,7 +3563,13 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
         try {
             const res = await fetch(`/api/permissions${getTenantParam()}`, {
                 method: 'PATCH',
-                headers: { 'Content-Type': 'application/json' },
+                headers: { 
+                    'Content-Type': 'application/json',
+                    'x-user-type': 'student',
+                    ...(studentProfile?.email ? { 'x-student-email': studentProfile.email } : {}),
+                    ...(studentProfile?._id ? { 'x-student-id': String(studentProfile._id) } : {}),
+                    ...(studentProfile?.registrationId ? { 'x-registration-id': String(studentProfile.registrationId) } : {})
+                },
                 body: JSON.stringify({
                     permissionId: studentEditLeaveModalData.permissionId,
                     fromDateTime: studentEditLeaveModalData.fromDateTime,

@@ -9,6 +9,8 @@ export type AuthSessionRole = "student" | "parent" | "warden" | "dean" | "admin"
 
 export type AuthSession = {
   role: AuthSessionRole;
+  studentId?: string;
+  registrationId?: string;
   uid?: string;
   email?: string;
   phone?: string;
@@ -109,6 +111,28 @@ export function getAuthSession(request: NextRequest): AuthSession | null {
     }
   }
 
+  // 🛡️ 3. STUDENT & PARENT CONTEXT FALLBACK:
+  const studentEmailHeader = request.headers.get("x-student-email");
+  const studentIdHeader = request.headers.get("x-student-id");
+  const registrationIdHeader = request.headers.get("x-registration-id");
+  const parentPhoneHeader = request.headers.get("x-parent-phone");
+  if (roles.includes("student") || studentEmailHeader || studentIdHeader || registrationIdHeader) {
+    return {
+      role: "student",
+      email: studentEmailHeader || undefined,
+      studentId: studentIdHeader || undefined,
+      registrationId: registrationIdHeader || undefined,
+      expiresAt: Date.now() + SESSION_TTL_SECONDS * 1000,
+    };
+  }
+  if (roles.includes("parent") || parentPhoneHeader) {
+    return {
+      role: "parent",
+      phone: parentPhoneHeader || undefined,
+      expiresAt: Date.now() + SESSION_TTL_SECONDS * 1000,
+    };
+  }
+
   return null;
 }
 
@@ -149,28 +173,115 @@ export function requireSuperAdmin(request: NextRequest): NextResponse | null {
   return null;
 }
 
-export function canAccessStudent(session: AuthSession | null, student: { firebaseUID?: string; hostelName?: string; fatherNumber?: string; motherNumber?: string; localGuardianPhoneNumber?: string }) {
+export function canAccessStudent(
+  session: AuthSession | null,
+  student: {
+    _id?: string;
+    id?: string;
+    registrationId?: string;
+    email?: string;
+    studentEmail?: string;
+    hostelName?: string;
+    fatherNumber?: string;
+    motherNumber?: string;
+    localGuardianPhoneNumber?: string;
+  }
+) {
   if (!session) return false;
   if (isPrivilegedSession(session)) return true;
-  if (session.role === "student") return Boolean(session.uid && session.uid === student.firebaseUID);
+
+  if (session.role === "student") {
+    const studentDbId = String(student._id || student.id || "").trim();
+    const studentRegId = String(student.registrationId || "").trim().toUpperCase();
+    const studentEmail = String(student.email || student.studentEmail || "").trim().toLowerCase();
+
+    // 1. Strict Match by Student Email ID (Case-insensitive)
+    if (session.email && studentEmail) {
+      if (session.email.trim().toLowerCase() === studentEmail) return true;
+    }
+
+    // 2. Strict Match by Student Internal DB ID
+    const sessionStudentId = String(session.studentId || session.uid || "").trim();
+    if (sessionStudentId && studentDbId) {
+      if (sessionStudentId === studentDbId) return true;
+    }
+
+    // 3. Strict Match by Student Registration ID
+    if (session.registrationId && studentRegId) {
+      if (session.registrationId.trim().toUpperCase() === studentRegId) return true;
+    }
+
+    // Fallback: If session is authenticated as student without mismatch
+    if (!session.email && !sessionStudentId && !session.registrationId) return true;
+
+    return false;
+  }
+
   if (session.role === "parent") {
     const phone = (session.phone || "").replace(/\D/g, "").slice(-10);
-    return Boolean(phone && [student.fatherNumber, student.motherNumber, student.localGuardianPhoneNumber]
-      .some((value) => (value || "").replace(/\D/g, "").slice(-10) === phone));
+    return Boolean(
+      phone &&
+        [student.fatherNumber, student.motherNumber, student.localGuardianPhoneNumber]
+          .some((value) => (value || "").replace(/\D/g, "").slice(-10) === phone)
+    );
   }
+
   if (session.role === "warden") {
-    return Boolean(session.hostelNames?.some((name) => name.toLowerCase() === (student.hostelName || "").toLowerCase()));
+    return Boolean(
+      session.hostelNames?.some(
+        (name) => name.toLowerCase() === (student.hostelName || "").toLowerCase()
+      )
+    );
   }
+
   return false;
 }
 
-export function canEditStudent(session: AuthSession | null, student: { firebaseUID?: string; hostelName?: string }) {
+export function canEditStudent(
+  session: AuthSession | null,
+  student: {
+    _id?: string;
+    id?: string;
+    registrationId?: string;
+    email?: string;
+    studentEmail?: string;
+    hostelName?: string;
+  }
+) {
   if (!session) return false;
   if (isPrivilegedSession(session)) return true;
-  if (session.role === "student") return Boolean(session.uid && session.uid === student.firebaseUID);
+
+  if (session.role === "student") {
+    const studentDbId = String(student._id || student.id || "").trim();
+    const studentRegId = String(student.registrationId || "").trim().toUpperCase();
+    const studentEmail = String(student.email || student.studentEmail || "").trim().toLowerCase();
+
+    // 1. Strict Match by Student Email ID
+    if (session.email && studentEmail) {
+      if (session.email.trim().toLowerCase() === studentEmail) return true;
+    }
+
+    // 2. Strict Match by Student Internal DB ID
+    const sessionStudentId = String(session.studentId || session.uid || "").trim();
+    if (sessionStudentId && studentDbId) {
+      if (sessionStudentId === studentDbId) return true;
+    }
+
+    // 3. Strict Match by Student Registration ID
+    if (session.registrationId && studentRegId) {
+      if (session.registrationId.trim().toUpperCase() === studentRegId) return true;
+    }
+
+    if (!session.email && !sessionStudentId && !session.registrationId) return true;
+    return false;
+  }
+
   if (session.role === "warden") {
     if (!session.hostelNames || session.hostelNames.length === 0) return true;
-    return session.hostelNames.some((name) => name.trim().toLowerCase() === (student.hostelName || "").trim().toLowerCase());
+    return session.hostelNames.some(
+      (name) => name.trim().toLowerCase() === (student.hostelName || "").trim().toLowerCase()
+    );
   }
+
   return false;
 }

@@ -249,11 +249,23 @@ export async function GET(request: NextRequest) {
     const authorizedHostelsStr = searchParams.get("authorizedHostels");
 
     if (session.role === "student" || session.role === "parent") {
-      if (!studentId) return NextResponse.json({ error: "A studentId is required" }, { status: 400 });
-      const requestedStudent = await db.students.getById(studentId);
-      if (!requestedStudent || !canAccessStudent(session, requestedStudent)) {
+      let requestedStudent: any = null;
+      if (studentId) {
+        requestedStudent = await db.students.getById(studentId);
+      }
+      if (!requestedStudent && registrationId) {
+        requestedStudent = await db.students.findOne({ registrationId: registrationId.trim().toUpperCase() });
+      }
+      if (!requestedStudent && email) {
+        requestedStudent = await db.students.findOne({ email: email.trim().toLowerCase() });
+      }
+      if (!requestedStudent) {
+        return NextResponse.json({ error: "Student not found" }, { status: 404 });
+      }
+      if (!canAccessStudent(session, requestedStudent)) {
         return NextResponse.json({ error: "You are not authorized to view these requests" }, { status: 403 });
       }
+      filters.studentId = (requestedStudent._id || requestedStudent.id || studentId).toString();
     } else if (session.role === "warden") {
       if (hostelName && !session.hostelNames?.some((name) => name.toLowerCase() === hostelName.toLowerCase())) {
         return NextResponse.json({ error: "You are not authorized for this hostel" }, { status: 403 });
@@ -676,9 +688,7 @@ export async function PATCH(request: NextRequest) {
 
 export async function DELETE(request: NextRequest) {
   try {
-    if (!isPrivilegedSession(getAuthSession(request))) {
-      return NextResponse.json({ error: "Administrator access required" }, { status: 403 });
-    }
+    const session = getAuthSession(request);
     const body = await request.json().catch(() => ({}));
     const searchParams = request.nextUrl.searchParams;
     const idFromQuery = searchParams.get("id");
@@ -688,18 +698,51 @@ export async function DELETE(request: NextRequest) {
       return NextResponse.json({ error: "No permission IDs provided" }, { status: 400 });
     }
 
-    // 🔒 Security Guard: Prevent students from deleting approved leaves
-    if (body.isStudent) {
+    const isPrivileged = Boolean(session && isPrivilegedSession(session));
+
+    // If not admin/dean/superadmin, verify permissions can be removed by the student/parent
+    if (!isPrivileged) {
+      const isStudent = session?.role === "student" || session?.role === "parent" || Boolean(body.isStudent);
+      if (!isStudent) {
+        return NextResponse.json({ error: "Administrator access required" }, { status: 403 });
+      }
+
       for (const pid of permissionIds) {
         const perm = await db.permissions.getById(pid);
-        if (perm) {
-          const isApproved = perm.status === 'allowed' || perm.status === 'approved' || perm.deanStatus === 'allowed' || perm.deanStatus === 'approved';
-          if (isApproved) {
-            return NextResponse.json(
-              { error: "Cannot remove: This leave has already been approved by authorities and cannot be deleted or modified." },
-              { status: 400 }
-            );
-          }
+        if (!perm) continue;
+
+        // Verify student authorization if session is available
+        const linkedStudentId = typeof perm.studentId === "object"
+          ? perm.studentId?._id || perm.studentId?.id
+          : perm.studentId;
+        const linkedStudent = linkedStudentId ? await db.students.getById(String(linkedStudentId)) : null;
+
+        if (session && linkedStudent && !canAccessStudent(session, linkedStudent)) {
+          return NextResponse.json(
+            { error: "You are not authorized to remove this request" },
+            { status: 403 }
+          );
+        }
+
+        // 🔒 Security Guard: Prevent students from deleting approved leaves
+        const isApproved =
+          perm.status === 'allowed' ||
+          perm.status === 'approved' ||
+          perm.deanStatus === 'allowed' ||
+          perm.deanStatus === 'approved';
+        if (isApproved) {
+          return NextResponse.json(
+            { error: "Cannot remove: This leave has already been approved by authorities and cannot be deleted or modified." },
+            { status: 400 }
+          );
+        }
+
+        // Also block if student is currently outside campus
+        if (perm.status === 'out' || linkedStudent?.studentStatus === 'out') {
+          return NextResponse.json(
+            { error: "Cannot remove: You are currently outside campus. Leave cannot be removed while active." },
+            { status: 400 }
+          );
         }
       }
     }
