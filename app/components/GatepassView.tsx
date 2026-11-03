@@ -553,11 +553,7 @@ export default function GatepassView({ onClose }: { onClose?: () => void }) {
 
                         // 🔄 SELF-HEALING: If the list is out of sync with the database counts,
                         // trigger a full query in the background to sync the list correctly.
-                        if (serverOutCount !== localOutCount) {
-                            setTimeout(() => {
-                                fetchLiveData(false);
-                            }, 50);
-                        }
+                        // Self-healing fetch loop removed
 
                         return {
                             ...prev,
@@ -672,8 +668,7 @@ export default function GatepassView({ onClose }: { onClose?: () => void }) {
                             };
                         });
 
-                        // Silently sync with server in the background
-                        fetchLiveData(false);
+                        // Realtime SSE already delivered student data directly
                     } catch (parseErr) {
                         console.warn("Error parsing SSE gate_status:", parseErr);
                     }

@@ -50,7 +50,6 @@ export default function VideoCallButton({ currentStudent }: { currentStudent?: a
     if (!studentId) return;
 
     let eventSource: EventSource | null = null;
-    let pollFallbackInterval: any = null;
 
     const onIncoming = (data: IncomingCallData) => {
       // Don't pop up incoming modal if already on a call
@@ -86,26 +85,8 @@ export default function VideoCallButton({ currentStudent }: { currentStudent?: a
       }
     } catch {}
 
-    const pollFallback = async () => {
-      if (activeCallIdRef.current || activeCallSession) return;
-      try {
-        const res = await fetch(
-          `/api/video-call/poll?incoming=true&studentId=${encodeURIComponent(studentId)}`,
-          { cache: 'no-store' }
-        );
-        if (!res.ok) return;
-        const data = await res.json();
-        if (data.incoming && data.callId) {
-          onIncoming(data);
-        }
-      } catch {}
-    };
-
-    pollFallbackInterval = setInterval(pollFallback, 1500);
-
     return () => {
       if (eventSource) eventSource.close();
-      if (pollFallbackInterval) clearInterval(pollFallbackInterval);
     };
   }, [studentId, activeCallSession]);
 

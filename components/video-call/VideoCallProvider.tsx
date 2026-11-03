@@ -69,15 +69,11 @@ export default function VideoCallProvider({ children, enabled = true }: VideoCal
   }, []);
 
   useEffect(() => {
-    if (!enabled) return;
-
-    // Start polling every 2 seconds
-    pollIntervalRef.current = setInterval(pollIncoming, 2000);
-
+    // ⚡ Zero-polling: Realtime incoming call detection is delivered via SSE EventSource
     return () => {
       if (pollIntervalRef.current) clearInterval(pollIntervalRef.current);
     };
-  }, [enabled, pollIncoming]);
+  }, [enabled]);
 
   return (
     <VideoCallContext.Provider value={{ incomingCall, dismissIncomingCall }}>
