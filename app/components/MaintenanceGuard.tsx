@@ -23,17 +23,36 @@ export default function MaintenanceGuard({ children }: { children: React.ReactNo
 
     const isSuperAdminRoute = pathname?.startsWith("/superadmin");
 
-    const checkMaintenance = async () => {
+    const checkMaintenance = async (forceFresh = false) => {
         try {
+            if (!forceFresh && typeof window !== "undefined") {
+                const cached = sessionStorage.getItem("cached_maintenance_v1");
+                if (cached) {
+                    try {
+                        const parsed = JSON.parse(cached);
+                        if (parsed && (Date.now() - parsed.ts < 60 * 60 * 1000)) {
+                            setMaintenance(parsed.data);
+                            return;
+                        }
+                    } catch {}
+                }
+            }
+
             const res = await fetch("/api/maintenance-status", { cache: "no-store" });
             if (!res.ok) return;
             const data = await res.json();
             if (data?.success) {
-                setMaintenance({
+                const state = {
                     enabled: Boolean(data.enabled),
                     message: data.message || "",
                     estimatedTime: data.estimatedTime || ""
-                });
+                };
+                setMaintenance(state);
+                if (typeof window !== "undefined") {
+                    try {
+                        sessionStorage.setItem("cached_maintenance_v1", JSON.stringify({ data: state, ts: Date.now() }));
+                    } catch {}
+                }
             }
         } catch (e) {
             console.warn("Failed to check maintenance status:", e);

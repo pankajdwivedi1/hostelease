@@ -1203,8 +1203,21 @@ export default function TenantGuard({ children }: { children: React.ReactNode })
             return;
         }
 
-        // Check if we checked subscription status in the last 5 minutes
-        const CACHE_TTL = 5 * 60 * 1000; // 5 minutes
+        // Check if we checked subscription status in the last 1 hour
+        const CACHE_TTL = 60 * 60 * 1000; // 1 hour
+        if (typeof window !== "undefined") {
+            try {
+                const sessionCached = sessionStorage.getItem("cached_tenant_guard_v1");
+                if (sessionCached) {
+                    const parsed = JSON.parse(sessionCached);
+                    if (parsed && (Date.now() - parsed.timestamp < CACHE_TTL)) {
+                        setStatus(parsed.data);
+                        setLoading(false);
+                        return;
+                    }
+                }
+            } catch {}
+        }
         if (lastCheckRef.current && Date.now() - lastCheckRef.current.timestamp < CACHE_TTL) {
             setStatus(lastCheckRef.current.data);
             setLoading(false);
@@ -1230,6 +1243,11 @@ export default function TenantGuard({ children }: { children: React.ReactNode })
                 const data = await res.json();
                 if (data.success) {
                     lastCheckRef.current = { data, timestamp: Date.now() };
+                    if (typeof window !== "undefined") {
+                        try {
+                            sessionStorage.setItem("cached_tenant_guard_v1", JSON.stringify({ data, timestamp: Date.now() }));
+                        } catch {}
+                    }
                     setStatus(data);
                     if (data.logo && typeof window !== "undefined") {
                         try {

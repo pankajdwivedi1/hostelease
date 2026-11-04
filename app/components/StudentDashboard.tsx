@@ -371,13 +371,26 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
         return `Hosteleaze ID-${isFemale ? 'GIRLS-0001' : 'BOYS-0001'}`;
     }, [studentProfile]);
 
-    // Early fetch of server hostel configs to bind warden username/phone instantly
+    // Early fetch of server hostel configs to bind warden username/phone instantly (Cached)
     useEffect(() => {
+        if (typeof window !== 'undefined') {
+            try {
+                const cached = localStorage.getItem("cached_server_hostels_v1");
+                if (cached) {
+                    const parsed = JSON.parse(cached);
+                    if (Array.isArray(parsed) && parsed.length > 0) {
+                        setServerHostelConfigs(parsed);
+                        return;
+                    }
+                }
+            } catch {}
+        }
         fetch('/api/hostels', { cache: 'no-store' })
             .then(res => res.ok ? res.json() : null)
             .then(data => {
                 if (data?.hostels && Array.isArray(data.hostels)) {
                     setServerHostelConfigs(data.hostels);
+                    try { localStorage.setItem("cached_server_hostels_v1", JSON.stringify(data.hostels)); } catch {}
                 }
             })
             .catch(() => {});
@@ -575,10 +588,12 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
         }
     }, [showPermissionsHistory, studentProfile]);
 
-    // 📶 Auto-check Campus WiFi network status on dashboard mount
+    // 📶 Auto-check Campus WiFi network status (Optimized: Lazy check only when attendance window active)
     useEffect(() => {
         let isCancelled = false;
         const checkNetwork = async () => {
+            // Skip redundant network check if attendance is already marked tonight
+            if (isAttendanceMarked) return;
             try {
                 const tenantParam = getTenantParam();
                 // 1. Direct server check (force fresh validation)
@@ -708,6 +723,13 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
         }
 
         try {
+            if (typeof window !== 'undefined') {
+                const sessionOk = sessionStorage.getItem(`enforcement_ok_${studentId}`);
+                if (sessionOk === 'true') {
+                    setShowFieldEnforcementModal(false);
+                    return;
+                }
+            }
             const res = await fetch(`/api/student/profile-blockers?studentId=${studentId}${getTenantParam(false)}`, {
                 cache: 'no-store',
                 headers: { 'Cache-Control': 'no-cache, no-store, must-revalidate' }
@@ -717,6 +739,9 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
 
             if (data.hasBlockers && Array.isArray(data.missingFields) && data.missingFields.length > 0) {
                 console.log(`[FieldEnforcement] Enforced student ${currentProfile.registrationId} has ${data.missingFields.length} active blockers`);
+                if (typeof window !== 'undefined') {
+                    try { sessionStorage.removeItem(`enforcement_ok_${studentId}`); } catch {}
+                }
                 setEnforcedMissingFields(data.missingFields);
                 setEnforcementConfig(data.enforcement);
                 const initialFormData: Record<string, string> = {};
@@ -729,6 +754,9 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
             } else {
                 setShowFieldEnforcementModal(false);
                 setEnforcedMissingFields([]);
+                if (typeof window !== 'undefined') {
+                    try { sessionStorage.setItem(`enforcement_ok_${studentId}`, 'true'); } catch {}
+                }
             }
         } catch (e) {
                 console.warn("Profile enforcement check is temporarily unavailable:", e);
@@ -1727,8 +1755,26 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
 
     const fetchSystemSettings = async () => {
         try {
-            // ⚡ 10-SECOND CLIENT CACHE: Fast synchronization with admin changes
-            const CACHE_TTL = 10 * 1000;
+            // ⚡ 1-HOUR CLIENT CACHE: Dramatically reduces redundant server pings
+            const CACHE_TTL = 60 * 60 * 1000;
+            if (typeof window !== 'undefined') {
+                try {
+                    const localCached = localStorage.getItem("cached_sys_settings_v1");
+                    if (localCached) {
+                        const parsed = JSON.parse(localCached);
+                        if (parsed && (Date.now() - parsed.ts < CACHE_TTL)) {
+                            const data = parsed.data;
+                            setFormBuilderConfig(data.formBuilderConfig || []);
+                            if (data.startTime && data.endTime) setAttendanceWindow({ start: data.startTime, end: data.endTime });
+                            if (data.overlapRadius !== undefined) setOverlapRadius(data.overlapRadius);
+                            if (data.prioritizeAssignedHostel !== undefined) setPrioritizeAssignedHostel(data.prioritizeAssignedHostel);
+                            if (data.enforceMandatoryPush !== undefined) setEnforceMandatoryPush(data.enforceMandatoryPush === true);
+                            if (data.enableVideoVoiceCall !== undefined) setEnableVideoVoiceCall(data.enableVideoVoiceCall !== false);
+                            return;
+                        }
+                    }
+                } catch {}
+            }
             if (settingsCacheRef.current && Date.now() - settingsCacheRef.current.ts < CACHE_TTL) {
                 const data = settingsCacheRef.current.data;
                 setFormBuilderConfig(data.formBuilderConfig || []);
@@ -1747,6 +1793,9 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
             const data = await res.json();
             if (data.success) {
                 settingsCacheRef.current = { data, ts: Date.now() };
+                if (typeof window !== 'undefined') {
+                    try { localStorage.setItem("cached_sys_settings_v1", JSON.stringify({ data, ts: Date.now() })); } catch {}
+                }
                 setFormBuilderConfig(data.formBuilderConfig || []);
                 if (data.startTime && data.endTime) {
                     console.log(`🕒 Syncing Attendance Window: ${data.startTime} - ${data.endTime}`);
@@ -2105,6 +2154,11 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
 
     // Payment System State
     const [showPaymentModal, setShowPaymentModal] = useState(false);
+    useEffect(() => {
+        if (showPaymentModal && studentProfile?._id) {
+            fetchPaymentData();
+        }
+    }, [showPaymentModal, studentProfile?._id]);
     const [paymentHistory, setPaymentHistory] = useState<any[]>([]);
     const [bankSettings, setBankSettings] = useState<any>(null);
     const [isSubmittingPayment, setIsSubmittingPayment] = useState(false);
@@ -2216,8 +2270,23 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
     const [hostelLocations, setHostelLocations] = useState<any[]>([]);
     const [isLocationsLoading, setIsLocationsLoading] = useState(false);
 
-    const fetchHostelLocations = async () => {
+    const fetchHostelLocations = async (forceFresh = false) => {
         try {
+            if (!forceFresh && typeof window !== 'undefined') {
+                try {
+                    const cached = localStorage.getItem("cached_hostel_locs_v1");
+                    if (cached) {
+                        const parsed = JSON.parse(cached);
+                        if (parsed && (Date.now() - parsed.ts < 24 * 60 * 60 * 1000)) {
+                            if (Array.isArray(parsed.locs) && parsed.locs.length > 0) {
+                                setHostelLocations(parsed.locs);
+                                if (Array.isArray(parsed.hostels)) setServerHostelConfigs(parsed.hostels);
+                                return;
+                            }
+                        }
+                    }
+                } catch {}
+            }
             setIsLocationsLoading(true);
             const [locRes, hostelsRes] = await Promise.allSettled([
                 fetch(`/api/admin/locations${getTenantParam()}`, { cache: "no-store" }),
@@ -2253,6 +2322,9 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
             });
 
             setHostelLocations(merged);
+            if (typeof window !== 'undefined') {
+                try { localStorage.setItem("cached_hostel_locs_v1", JSON.stringify({ locs: merged, hostels: serverHostels, ts: Date.now() })); } catch {}
+            }
         } catch (error) {
             console.warn("Hostel locations are temporarily unavailable:", error);
             setHostelLocations([]);
@@ -2698,10 +2770,10 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
                 }
             };
 
-            checkAttendance();
-            fetchHostelLocations(); // Fetch latest locations from database
-            fetchPaymentData(); // Load payments and bank info
-            fetchSystemSettings(); // Load dynamic form config
+            checkAttendance(); // ⚡ Primary check: attendance window & marked state
+            fetchHostelLocations(false); // Uses 24-hr cache (0 requests)
+            // ⚡ OPTIMIZATION: fetchPaymentData removed from startup. Only lazy-loaded when student opens payment modal!
+            fetchSystemSettings(); // Uses 1-hr cache (0 requests when cached)
 
             // ⚡ GETPASS SYNC: Store essential info for the gate scanner
             if (studentProfile) {
@@ -2844,6 +2916,9 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
             if (event.data?.type === "PUSH_NOTIFICATION_RECEIVED") {
                 console.log("⚡ [Push Event] Live Push Notification received in active dashboard tab:", event.data);
                 if (studentProfile) {
+                    if (typeof window !== 'undefined') {
+                        try { sessionStorage.removeItem(`enforcement_ok_${studentProfile._id}`); } catch {}
+                    }
                     checkFieldEnforcement(studentProfile);
                 }
             }
