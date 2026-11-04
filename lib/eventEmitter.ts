@@ -23,6 +23,11 @@ export interface GateStatusEvent {
     profilePicture?: string;
     year?: string | null;
     semester?: string | null;
+    istTime?: string;
+    checkOutISTTime?: string;
+    checkOutTime?: string;
+    checkInISTTime?: string;
+    checkInTime?: string;
     timestamp: number;
 }
 

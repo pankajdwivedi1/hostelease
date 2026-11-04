@@ -5,8 +5,29 @@ export function middleware(request: NextRequest) {
     const url = new URL(request.url);
     const pathname = url.pathname;
 
-    // ⚡ BOT & SCRAPER BLOCKING:
-    // Drop aggressive commercial crawlers that waste bandwidth (exempting webhooks and legitimate traffic)
+    // ⚡ 0. EXPLOIT & VULNERABILITY SCANNER BLOCKING:
+    // Instantly abort requests for WordPress, PHP, .env, or known exploit probes with zero server overhead
+    const lowerPath = pathname.toLowerCase();
+    const isVulnerabilityScan =
+        lowerPath.includes('wp-') ||
+        lowerPath.includes('/.env') ||
+        lowerPath.includes('/.git') ||
+        lowerPath.includes('phpmyadmin') ||
+        lowerPath.includes('xmlrpc') ||
+        lowerPath.includes('actuator') ||
+        lowerPath.includes('/eval-stdin') ||
+        lowerPath.includes('solr') ||
+        lowerPath.includes('telescope') ||
+        lowerPath.endsWith('.php') ||
+        lowerPath.endsWith('.asp') ||
+        lowerPath.endsWith('.aspx');
+
+    if (isVulnerabilityScan) {
+        return new NextResponse('Not Found', { status: 404 });
+    }
+
+    // ⚡ 1. BOT & SCRAPER BLOCKING:
+    // Drop aggressive commercial crawlers and automated security scanners that waste bandwidth
     const userAgent = (request.headers.get('user-agent') || '').toLowerCase();
     if (!pathname.startsWith('/api/webhooks')) {
         const isCommercialBot = 
@@ -19,7 +40,15 @@ export function middleware(request: NextRequest) {
             userAgent.includes('zoominfobot') ||
             userAgent.includes('megaindex') ||
             userAgent.includes('blexbot') ||
-            userAgent.includes('seekport');
+            userAgent.includes('seekport') ||
+            userAgent.includes('censys') ||
+            userAgent.includes('shodan') ||
+            userAgent.includes('zgrab') ||
+            userAgent.includes('masscan') ||
+            userAgent.includes('nikto') ||
+            userAgent.includes('sqlmap') ||
+            userAgent.includes('gobuster') ||
+            userAgent.includes('dirbuster');
             
         if (isCommercialBot) {
             return new NextResponse('Access denied', { status: 403 });

@@ -7039,9 +7039,11 @@ export default function AdminDashboard({
             eventSource.close();
             eventSource = null;
           }
-          // Reconnect after 5 seconds if connection drops
-          clearTimeout(reconnectTimeout);
-          reconnectTimeout = setTimeout(connectSSE, 5000);
+          // Only reconnect if the tab is currently visible
+          if (typeof document !== 'undefined' && document.visibilityState === "visible") {
+            clearTimeout(reconnectTimeout);
+            reconnectTimeout = setTimeout(connectSSE, 5000);
+          }
         };
       } catch (err) {
         console.warn("⚠️ EventSource setup failed:", err);
@@ -7050,15 +7052,31 @@ export default function AdminDashboard({
 
     connectSSE();
 
-    // ⚡ RESILIENT AUTO-SYNC: Throttled tab focus re-sync (60s cooldown)
-    // Only refreshes lightweight counts (4 KB), never re-downloads the heavy 1.5 MB student list!
+    // ⚡ RESILIENT AUTO-SYNC & TAB SLEEP:
+    // When tab is hidden/minimized: disconnect SSE to send 0 background requests
+    // When tab becomes visible: reconnect and sync live counts (throttled 60s)
     let lastVisibilitySyncTime = 0;
     const handleVisibilityOrFocus = () => {
       const now = Date.now();
-      if (document.visibilityState === "visible" && (now - lastVisibilitySyncTime >= 60000)) {
-        lastVisibilitySyncTime = now;
-        console.log("🔄 [Auto-Sync] Dashboard tab visible — refreshing live counts...");
-        fetchAttendanceSummary();
+      if (document.visibilityState === "visible") {
+        if (!eventSource) {
+          connectSSE();
+        }
+        if (now - lastVisibilitySyncTime >= 60000) {
+          lastVisibilitySyncTime = now;
+          console.log("🔄 [Auto-Sync] Dashboard tab visible — refreshing live counts...");
+          fetchAttendanceSummary();
+        }
+      } else if (document.visibilityState === "hidden") {
+        // Tab minimized or inactive: freeze connection to save requests, CPU and battery
+        if (eventSource) {
+          eventSource.close();
+          eventSource = null;
+        }
+        if (reconnectTimeout) {
+          clearTimeout(reconnectTimeout);
+          reconnectTimeout = null;
+        }
       }
     };
 

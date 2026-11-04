@@ -616,6 +616,16 @@ export default function GatepassView({ onClose }: { onClose?: () => void }) {
                             const newCurrentlyOut = [...(prev.currentlyOut || [])];
                             const newRecent = [...(prev.recentActivity || [])];
 
+                            const now = new Date();
+                            const nowIso = now.toISOString();
+                            const currentIstTime = data.checkOutISTTime || data.checkInISTTime || data.istTime || now.toLocaleTimeString('en-US', {
+                                timeZone: 'Asia/Kolkata',
+                                hour: '2-digit',
+                                minute: '2-digit',
+                                second: '2-digit',
+                                hour12: true
+                            });
+
                             const mapped: any = {
                                 _id: data.studentId,
                                 studentId: data.studentId,
@@ -631,7 +641,11 @@ export default function GatepassView({ onClose }: { onClose?: () => void }) {
                                 type: data.outingType || "outing",
                                 phoneNumber: data.phoneNumber || "",
                                 currentDurationText: "Just now",
-                                currentDurationMinutes: 0
+                                currentDurationMinutes: 0,
+                                checkOutTime: isCheckOut ? (data.checkOutTime || nowIso) : (data.checkOutTime || ""),
+                                checkOutISTTime: isCheckOut ? (data.checkOutISTTime || currentIstTime) : (data.checkOutISTTime || ""),
+                                checkInTime: !isCheckOut ? (data.checkInTime || nowIso) : undefined,
+                                checkInISTTime: !isCheckOut ? (data.checkInISTTime || currentIstTime) : undefined,
                             };
 
                             if (isCheckOut) {
@@ -668,7 +682,8 @@ export default function GatepassView({ onClose }: { onClose?: () => void }) {
                             };
                         });
 
-                        // Realtime SSE already delivered student data directly
+                        // Sync full database state silently in the background
+                        fetchLiveData(true);
                     } catch (parseErr) {
                         console.warn("Error parsing SSE gate_status:", parseErr);
                     }
@@ -676,6 +691,15 @@ export default function GatepassView({ onClose }: { onClose?: () => void }) {
 
                 eventSource.onerror = () => {
                     console.warn("SSE connection error in GatepassView, will auto-reconnect...");
+                    if (eventSource) {
+                        eventSource.close();
+                        eventSource = null;
+                    }
+                    if (typeof document !== 'undefined' && document.visibilityState === "visible") {
+                        setTimeout(() => {
+                            if (document.visibilityState === "visible" && !eventSource) connectSSE();
+                        }, 5000);
+                    }
                 };
             } catch (err) {
                 console.warn("Failed to connect SSE in GatepassView:", err);
@@ -684,6 +708,26 @@ export default function GatepassView({ onClose }: { onClose?: () => void }) {
 
         if (typeof window !== "undefined") {
             connectSSE();
+
+            const handleVisibility = () => {
+                if (document.visibilityState === "visible") {
+                    if (!eventSource) connectSSE();
+                } else if (document.visibilityState === "hidden") {
+                    if (eventSource) {
+                        eventSource.close();
+                        eventSource = null;
+                    }
+                }
+            };
+
+            document.addEventListener("visibilitychange", handleVisibility);
+            return () => {
+                if (eventSource) {
+                    eventSource.close();
+                    eventSource = null;
+                }
+                document.removeEventListener("visibilitychange", handleVisibility);
+            };
         }
 
         return () => {

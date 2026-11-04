@@ -503,7 +503,10 @@ export async function POST(request: NextRequest) {
                 phoneNumber: student.phoneNumber || "",
                 profilePicture: student.profilePicture || (student as any).photo || "",
                 year: student.year,
-                semester: student.semester
+                semester: student.semester,
+                istTime: istTime,
+                checkOutISTTime: istTime,
+                checkOutTime: new Date().toISOString()
             });
 
             // 🔥 Send MSG91 Gatepass Alert (Fire & Forget)
@@ -579,7 +582,10 @@ export async function POST(request: NextRequest) {
                     phoneNumber: student.phoneNumber || "",
                     profilePicture: student.profilePicture || (student as any).photo || "",
                     year: student.year,
-                    semester: student.semester
+                    semester: student.semester,
+                    istTime: istTime,
+                    checkInISTTime: istTime,
+                    checkInTime: new Date().toISOString()
                 });
 
                 return NextResponse.json({
@@ -673,7 +679,10 @@ export async function POST(request: NextRequest) {
                 phoneNumber: student.phoneNumber || "",
                 profilePicture: student.profilePicture || (student as any).photo || "",
                 year: student.year,
-                semester: student.semester
+                semester: student.semester,
+                istTime: istTime,
+                checkInISTTime: istTime,
+                checkInTime: new Date().toISOString()
             });
 
             // 🔥 Send MSG91 Gatepass Alert (Fire & Forget)
