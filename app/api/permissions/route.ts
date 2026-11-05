@@ -365,8 +365,8 @@ export async function GET(request: NextRequest) {
 
       const permId = p._id || p.id;
 
-      // Auto-heal out-of-sync records where dean approved or rejected
-      if (p.deanStatus === 'allowed' && p.status === 'pending') {
+      // Auto-heal out-of-sync records where dean or warden approved or rejected
+      if ((p.deanStatus === 'allowed' || p.wardenStatus === 'allowed') && p.status === 'pending') {
         p.status = 'allowed';
         if (permId) allowSyncIds.push(permId);
       } else if ((p.deanStatus === 'rejected' || p.wardenStatus === 'rejected') && p.status === 'pending') {
@@ -569,7 +569,7 @@ export async function PATCH(request: NextRequest) {
       update.deanStatus = "cancelled";
       update.cancellationReason = body.cancellationReason || "Cancelled by student before leaving campus";
     } else if (currentPermission.status !== "completed") {
-      if (finalDeanStatus === "allowed" || status === "allowed") {
+      if (finalDeanStatus === "allowed" || finalWardenStatus === "allowed" || status === "allowed") {
         update.status = "allowed";
       } else if (finalDeanStatus === "rejected" || finalWardenStatus === "rejected" || status === "rejected") {
         update.status = "rejected";

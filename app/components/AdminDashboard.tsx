@@ -7403,17 +7403,19 @@ export default function AdminDashboard({
   const handleStatusChange = async (id: string, newStatus: "allowed" | "rejected", targetRole?: "warden" | "dean") => {
     try {
       const userType = localStorage.getItem("userType");
+      const userTypeHeader = (typeof window !== "undefined" ? localStorage.getItem("userType") : null) || (title === "Super Admin Dashboard" ? "superadmin" : "admin");
       const updateData: any = { permissionId: id };
 
       const isWardenTarget = targetRole === "warden" || (!targetRole && userType === "warden");
-      const isDeanTarget = targetRole === "dean" || (!targetRole && (userType === "admin" || userType === "superadmin"));
+      const isDeanTarget = targetRole === "dean" || (!targetRole && (userType === "admin" || userType === "superadmin" || userType === "dean"));
 
       if (isWardenTarget) {
         updateData.wardenStatus = newStatus;
         if (newStatus === "rejected") updateData.status = "rejected";
       } else if (isDeanTarget) {
         updateData.deanStatus = newStatus;
-        updateData.status = newStatus;
+        if (newStatus === "rejected") updateData.status = "rejected";
+        else updateData.status = "allowed";
       } else {
         updateData.status = newStatus;
       }
@@ -7422,7 +7424,7 @@ export default function AdminDashboard({
         prevPermissions.map((perm) =>
           perm._id === id ? {
             ...perm,
-            status: isDeanTarget ? newStatus : (newStatus === "rejected" ? "rejected" : perm.status),
+            status: newStatus === "rejected" ? "rejected" : "allowed",
             wardenStatus: isWardenTarget ? newStatus : perm.wardenStatus,
             deanStatus: isDeanTarget ? newStatus : perm.deanStatus,
           } : perm
@@ -7431,8 +7433,11 @@ export default function AdminDashboard({
 
       const response = await fetch("/api/permissions", {
         method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-
+        headers: { 
+          "Content-Type": "application/json",
+          "x-user-type": userTypeHeader || "admin"
+        },
+        credentials: "include",
         body: JSON.stringify(updateData),
       });
 
@@ -9974,7 +9979,7 @@ export default function AdminDashboard({
                                             <span className="inline-flex items-center justify-center text-[6px] sm:text-[7px] md:text-[8px] font-bold text-red-600 bg-red-50 px-1 py-0.5 rounded uppercase tracking-wider border border-red-100 text-center whitespace-nowrap">
                                               Rejected
                                             </span>
-                                          ) : (permission.wardenStatus === "allowed" || (permission.status === "allowed" && permission.wardenStatus !== "rejected")) ? (
+                                          ) : permission.wardenStatus === "allowed" ? (
                                             <span className="inline-flex items-center justify-center text-[6px] sm:text-[7px] md:text-[8px] font-bold text-green-600 bg-green-50 px-1 py-0.5 rounded uppercase tracking-wider border border-green-100 text-center whitespace-nowrap">
                                               Accepted
                                             </span>
@@ -9992,7 +9997,7 @@ export default function AdminDashboard({
                                               if (userType === "warden" || userType === "admin" || userType === "superadmin") handleStatusChange(permission._id, "allowed", "warden");
                                             }}
                                             disabled={(userType !== "warden" && userType !== "admin" && userType !== "superadmin") || isLeaveExpired || isCancelled}
-                                            className={`w-3.5 h-3.5 sm:w-4 sm:h-4 md:w-7 md:h-7 rounded-md border flex items-center justify-center transition-all bg-white shadow-2xs ${(permission.wardenStatus === "allowed" || (permission.status === "allowed" && permission.wardenStatus !== "rejected")) ? "border-green-300 !bg-green-50 text-green-600 shadow-sm" : "border-gray-200 text-gray-400 hover:border-green-300 hover:bg-green-50/50"} ${(userType !== "warden" && userType !== "admin" && userType !== "superadmin") || isLeaveExpired || isCancelled ? "cursor-not-allowed opacity-50" : "cursor-pointer"}`}
+                                            className={`w-3.5 h-3.5 sm:w-4 sm:h-4 md:w-7 md:h-7 rounded-md border flex items-center justify-center transition-all bg-white shadow-2xs ${permission.wardenStatus === "allowed" ? "border-green-300 !bg-green-50 text-green-600 shadow-sm" : "border-gray-200 text-gray-400 hover:border-green-300 hover:bg-green-50/50"} ${(userType !== "warden" && userType !== "admin" && userType !== "superadmin") || isLeaveExpired || isCancelled ? "cursor-not-allowed opacity-50" : "cursor-pointer"}`}
                                           >
                                             <svg className="w-2 h-2 sm:w-2.5 sm:h-2.5 md:w-4 md:h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" /></svg>
                                           </button>
@@ -10043,10 +10048,10 @@ export default function AdminDashboard({
                                             onClick={() => {
                                               if (isCancelled) return showToast("Cannot modify: Leave has been cancelled by the student.", "error");
                                               if (isLeaveExpired) return showToast("Cannot modify: Leave end date has already passed.", "error");
-                                              if (userType === "admin" || userType === "superadmin") handleStatusChange(permission._id, "allowed", "dean");
+                                              if (userType === "admin" || userType === "superadmin" || userType === "dean") handleStatusChange(permission._id, "allowed", "dean");
                                             }}
-                                            disabled={(userType !== "admin" && userType !== "superadmin") || isLeaveExpired || isCancelled}
-                                            className={`w-3.5 h-3.5 sm:w-4 sm:h-4 md:w-7 md:h-7 rounded-md border flex items-center justify-center transition-all bg-white shadow-2xs ${permission.deanStatus === "allowed" ? "border-green-600 !bg-green-500 text-white shadow-md scale-105" : "border-gray-200 text-gray-400 hover:border-green-300 hover:bg-green-50/50"} ${((userType !== "admin" && userType !== "superadmin") || isLeaveExpired || isCancelled) ? "cursor-not-allowed opacity-50" : "cursor-pointer"}`}
+                                            disabled={(userType !== "admin" && userType !== "superadmin" && userType !== "dean") || isLeaveExpired || isCancelled}
+                                            className={`w-3.5 h-3.5 sm:w-4 sm:h-4 md:w-7 md:h-7 rounded-md border flex items-center justify-center transition-all bg-white shadow-2xs ${permission.deanStatus === "allowed" ? "border-green-600 !bg-green-500 text-white shadow-md scale-105" : "border-gray-200 text-gray-400 hover:border-green-300 hover:bg-green-50/50"} ${((userType !== "admin" && userType !== "superadmin" && userType !== "dean") || isLeaveExpired || isCancelled) ? "cursor-not-allowed opacity-50" : "cursor-pointer"}`}
                                           >
                                             <svg className="w-2 h-2 sm:w-2.5 sm:h-2.5 md:w-4 md:h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" /></svg>
                                           </button>
@@ -10054,10 +10059,10 @@ export default function AdminDashboard({
                                             onClick={() => {
                                               if (isCancelled) return showToast("Cannot modify: Leave has been cancelled by the student.", "error");
                                               if (isLeaveExpired) return showToast("Cannot modify: Leave end date has already passed.", "error");
-                                              if (userType === "admin" || userType === "superadmin") handleStatusChange(permission._id, "rejected", "dean");
+                                              if (userType === "admin" || userType === "superadmin" || userType === "dean") handleStatusChange(permission._id, "rejected", "dean");
                                             }}
-                                            disabled={(userType !== "admin" && userType !== "superadmin") || isLeaveExpired || isCancelled}
-                                            className={`w-3.5 h-3.5 sm:w-4 sm:h-4 md:w-7 md:h-7 rounded-md border flex items-center justify-center transition-all bg-white shadow-2xs ${permission.deanStatus === "rejected" ? "border-red-500 !bg-red-50 text-red-600 shadow-sm" : "border-gray-200 text-gray-400 hover:border-red-300 hover:bg-red-50/50"} ${((userType !== "admin" && userType !== "superadmin") || isLeaveExpired || isCancelled) ? "cursor-not-allowed opacity-50" : "cursor-pointer"}`}
+                                            disabled={(userType !== "admin" && userType !== "superadmin" && userType !== "dean") || isLeaveExpired || isCancelled}
+                                            className={`w-3.5 h-3.5 sm:w-4 sm:h-4 md:w-7 md:h-7 rounded-md border flex items-center justify-center transition-all bg-white shadow-2xs ${permission.deanStatus === "rejected" ? "border-red-500 !bg-red-50 text-red-600 shadow-sm" : "border-gray-200 text-gray-400 hover:border-red-300 hover:bg-red-50/50"} ${((userType !== "admin" && userType !== "superadmin" && userType !== "dean") || isLeaveExpired || isCancelled) ? "cursor-not-allowed opacity-50" : "cursor-pointer"}`}
                                           >
                                             <svg className="w-2 h-2 sm:w-2.5 sm:h-2.5 md:w-4 md:h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M6 18L18 6M6 6l12 12" /></svg>
                                           </button>

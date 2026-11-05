@@ -210,13 +210,12 @@ const filterPermissionForPrisma = (data: any) => {
             }
         }
     }
-    // ⚡ GLOBAL INTEGRITY: Synchronize role statuses with overall decision
-    if (filtered.status === 'allowed') {
-        if (!filtered.wardenStatus || filtered.wardenStatus === 'pending') filtered.wardenStatus = 'allowed';
-        if (!filtered.deanStatus || filtered.deanStatus === 'pending') filtered.deanStatus = 'allowed';
-    } else if (filtered.status === 'rejected') {
-        if (!filtered.wardenStatus || filtered.wardenStatus === 'pending') filtered.wardenStatus = 'rejected';
-        if (!filtered.deanStatus || filtered.deanStatus === 'pending') filtered.deanStatus = 'rejected';
+    // ⚡ PRESERVE ROLE INDEPENDENCE: Keep wardenStatus and deanStatus separate without auto-overwriting
+    if (filtered.status === 'rejected') {
+        if (!filtered.wardenStatus && !filtered.deanStatus) {
+            filtered.wardenStatus = 'rejected';
+            filtered.deanStatus = 'rejected';
+        }
     }
     return filtered;
 };
