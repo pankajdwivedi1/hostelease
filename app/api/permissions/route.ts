@@ -324,10 +324,15 @@ export async function GET(request: NextRequest) {
     }
 
     const limitParam = searchParams.get("limit");
+    const offsetParam = searchParams.get("offset");
     const light = searchParams.get("light") === "true";
     const options: any = { populate: true };
     if (limitParam) {
       options.limit = parseInt(limitParam, 10);
+    }
+    if (offsetParam) {
+      const offset = parseInt(offsetParam, 10);
+      if (Number.isFinite(offset) && offset > 0) options.offset = offset;
     }
 
     const nowMs = Date.now();

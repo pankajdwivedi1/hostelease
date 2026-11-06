@@ -27,7 +27,15 @@ interface ActiveCallSession {
   role: 'caller' | 'callee';
 }
 
-export default function VideoCallButton({ currentStudent }: { currentStudent?: any }) {
+export default function VideoCallButton({
+  currentStudent,
+  className,
+  compact = false,
+}: {
+  currentStudent?: any;
+  className?: string;
+  compact?: boolean;
+}) {
   const [openSearch, setOpenSearch] = useState(false);
   const [incomingCall, setIncomingCall] = useState<IncomingCallData | null>(null);
   const [activeCallSession, setActiveCallSession] = useState<ActiveCallSession | null>(null);
@@ -95,11 +103,14 @@ export default function VideoCallButton({ currentStudent }: { currentStudent?: a
       <button
         type="button"
         onClick={() => setOpenSearch(true)}
-        className="w-full flex items-center justify-center gap-2 py-3 px-4 rounded-2xl bg-gradient-to-r from-blue-600 via-indigo-600 to-purple-600 hover:from-blue-700 hover:via-indigo-700 hover:to-purple-700 text-white font-extrabold text-xs sm:text-sm shadow-md hover:shadow-lg transition-all active:scale-[0.98] group cursor-pointer"
+        className={className || (compact
+          ? "w-full h-full flex items-center justify-center gap-0.5 sm:gap-1.5 py-1.5 sm:py-2 px-0.5 sm:px-2 rounded-lg sm:rounded-xl bg-gradient-to-r from-blue-600 via-indigo-600 to-purple-600 hover:from-blue-700 hover:via-indigo-700 hover:to-purple-700 text-white font-black text-[7.5px] min-[360px]:text-[8px] sm:text-xs shadow-xs transition-all active:scale-95 group text-center cursor-pointer"
+          : "w-full flex items-center justify-center gap-2 py-2 sm:py-3 px-3 sm:px-4 rounded-xl sm:rounded-2xl bg-gradient-to-r from-blue-600 via-indigo-600 to-purple-600 hover:from-blue-700 hover:via-indigo-700 hover:to-purple-700 text-white font-extrabold text-xs sm:text-sm shadow-md hover:shadow-lg transition-all active:scale-[0.98] group cursor-pointer"
+        )}
         title="Start a real-time call with a hostel friend"
       >
-        <span className="text-base sm:text-lg group-hover:scale-110 transition-transform">📹</span>
-        <span className="tracking-wide uppercase text-[11px] sm:text-xs">Make Call</span>
+        <span className={compact ? "text-[10px] sm:text-sm group-hover:scale-110 transition-transform" : "text-sm sm:text-base group-hover:scale-110 transition-transform"}>📹</span>
+        <span className="tracking-tighter sm:tracking-tight uppercase whitespace-nowrap">Make Call</span>
       </button>
 
       {/* 🔍 Instant Search Modal */}

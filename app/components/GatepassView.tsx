@@ -682,8 +682,6 @@ export default function GatepassView({ onClose }: { onClose?: () => void }) {
                             };
                         });
 
-                        // Sync full database state silently in the background
-                        fetchLiveData(true);
                     } catch (parseErr) {
                         console.warn("Error parsing SSE gate_status:", parseErr);
                     }
@@ -711,7 +709,10 @@ export default function GatepassView({ onClose }: { onClose?: () => void }) {
 
             const handleVisibility = () => {
                 if (document.visibilityState === "visible") {
-                    if (!eventSource) connectSSE();
+                    if (!eventSource) {
+                        connectSSE();
+                        fetchLiveData(false);
+                    }
                 } else if (document.visibilityState === "hidden") {
                     if (eventSource) {
                         eventSource.close();
@@ -906,9 +907,6 @@ export default function GatepassView({ onClose }: { onClose?: () => void }) {
                 playSuccessChime();
                 const directionText = foundStudent.studentStatus === 'out' ? 'Check in' : 'Check out';
                 speakStatus(directionText);
-                // Refresh data
-                fetchLiveData();
-
                 // Reset after success
                 setTimeout(() => {
                     setManualSuccess("");

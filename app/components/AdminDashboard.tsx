@@ -1404,6 +1404,17 @@ interface StudentDetails {
   thumbImpressionId?: string; // ⚡ NEW: Thumb biometrics
   faceDescriptor?: any;
   outingType?: string | null;
+  activeGatePass?: {
+    id?: string;
+    status?: string;
+    permissionId?: string | null;
+    hasApprovedPermission?: boolean;
+    checkOutTime?: string | Date | null;
+    checkInTime?: string | Date | null;
+    fromDateTime?: string | Date | null;
+    checkOutIstDate?: string | null;
+    checkOutIstTime?: string | null;
+  } | null;
   leaveFrom?: string | Date | null;
   leaveTo?: string | Date | null;
   leaveReason?: string | null;
@@ -1575,6 +1586,11 @@ export default function AdminDashboard({
   const [isShowingAllPermissions, setIsShowingAllPermissions] = useState(false);
   const [isLoadingAllPermissions, setIsLoadingAllPermissions] = useState(false);
   const [isPermissionsLoading, setIsPermissionsLoading] = useState(false);
+  const [permissionDateFrom, setPermissionDateFrom] = useState("");
+  const [permissionDateTo, setPermissionDateTo] = useState("");
+  const [appliedPermissionDateFrom, setAppliedPermissionDateFrom] = useState("");
+  const [appliedPermissionDateTo, setAppliedPermissionDateTo] = useState("");
+  const [permissionPage, setPermissionPage] = useState(0);
   const [totalPermissionsCount, setTotalPermissionsCount] = useState<number>(() => {
     if (typeof window !== "undefined") {
       try {
@@ -2236,7 +2252,7 @@ export default function AdminDashboard({
           return;
         }
 
-        let permission = Notification.permission;
+        let permission: NotificationPermission = Notification.permission;
         if (permission !== "granted") {
           permission = await Notification.requestPermission();
         }
@@ -2435,7 +2451,6 @@ export default function AdminDashboard({
   // Refs for click-outside detection
   const entryLogsRef = useRef<HTMLDivElement>(null);
   const absenteesRef = useRef<HTMLDivElement>(null);
-  const permissionsContainerRef = useRef<HTMLDivElement>(null);
 
   const [hostelLocations, setHostelLocations] = useState<any[]>([]);
   const [expandedLocations, setExpandedLocations] = useState<Record<number, boolean>>({});
@@ -6319,6 +6334,7 @@ export default function AdminDashboard({
           deviceHistory: s.deviceHistory || [],
           attendanceMode: s.attendanceMode || "default",
           outingType: s.outingType,
+          activeGatePass: s.activeGatePass || null,
           leaveFrom: s.leaveFrom || null,
           leaveTo: s.leaveTo || null,
           leaveReason: s.leaveReason || null,
@@ -6347,7 +6363,7 @@ export default function AdminDashboard({
     }
   };
 
-  const fetchPermissions = async (statusArg?: string, forceRefresh = false, fetchAll = false, targetHostel?: string): Promise<boolean> => {
+  const fetchPermissions = async (statusArg?: string, forceRefresh = false, fetchAll = false, targetHostel?: string, targetOffset = 0): Promise<boolean> => {
     if (fetchAll) {
       setIsLoadingAllPermissions(true);
     } else {
@@ -6358,8 +6374,9 @@ export default function AdminDashboard({
       const activeHostelFilter = targetHostel !== undefined ? targetHostel : hostelFilter;
       
       const limitQuery = fetchAll ? '' : '&limit=5';
+      const offsetQuery = !fetchAll && targetOffset > 0 ? `&offset=${targetOffset}` : '';
       
-      const url = new URL(`/api/permissions?light=true&status=${status}${limitQuery}`, window.location.origin);
+      const url = new URL(`/api/permissions?light=true&status=${status}${limitQuery}${offsetQuery}`, window.location.origin);
       const targetSlug = isOgiTenantSession() ? "ogi" : (new URLSearchParams(window.location.search).get("tenant") || "ogi").toLowerCase();
       url.searchParams.set("tenant", targetSlug);
       
@@ -7053,21 +7070,20 @@ export default function AdminDashboard({
     connectSSE();
 
     // ⚡ RESILIENT AUTO-SYNC & TAB SLEEP:
-    // When tab is hidden/minimized: disconnect SSE to send 0 background requests
-    // When tab becomes visible: reconnect and sync live counts (throttled 60s)
-    let lastVisibilitySyncTime = 0;
+    // When tab is hidden/minimized: disconnect SSE to avoid background connections.
+    // Fetch one snapshot after returning to catch up on events missed while disconnected.
+    let wasHidden = false;
     const handleVisibilityOrFocus = () => {
-      const now = Date.now();
       if (document.visibilityState === "visible") {
         if (!eventSource) {
           connectSSE();
         }
-        if (now - lastVisibilitySyncTime >= 60000) {
-          lastVisibilitySyncTime = now;
-          console.log("🔄 [Auto-Sync] Dashboard tab visible — refreshing live counts...");
+        if (wasHidden) {
+          wasHidden = false;
           fetchAttendanceSummary();
         }
       } else if (document.visibilityState === "hidden") {
+        wasHidden = true;
         // Tab minimized or inactive: freeze connection to save requests, CPU and battery
         if (eventSource) {
           eventSource.close();
@@ -7132,15 +7148,10 @@ export default function AdminDashboard({
         setShowAllAbsentees(false);
       }
 
-      // Collapse Permissions if expanded and clicked outside
-      if (isShowingAllPermissions && permissionsContainerRef.current && !permissionsContainerRef.current.contains(event.target as Node)) {
-        setIsShowingAllPermissions(false);
-        setPermissions(prev => prev.slice(0, 5));
-      }
     };
 
     // Add event listener when any section is expanded
-    if (showAllEntryLogs || showAllAbsentees || isShowingAllPermissions) {
+    if (showAllEntryLogs || showAllAbsentees) {
       document.addEventListener('mousedown', handleClickOutside);
     }
 
@@ -7148,7 +7159,7 @@ export default function AdminDashboard({
     return () => {
       document.removeEventListener('mousedown', handleClickOutside);
     };
-  }, [showAllEntryLogs, showAllAbsentees, isShowingAllPermissions]);
+  }, [showAllEntryLogs, showAllAbsentees]);
 
   const calculateDistance = (lat1: number, lon1: number, lat2: number, lon2: number) => {
     const R = 6371e3;
@@ -8335,6 +8346,18 @@ export default function AdminDashboard({
     }
   };
 
+  const getPermissionDateKey = (value: string | Date | null | undefined) => {
+    if (!value) return null;
+    const date = parseFlexibleDate(value);
+    if (!date) return null;
+    return date.toLocaleDateString("en-IN", {
+      timeZone: "Asia/Kolkata",
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+    }).split("/").reverse().join("-");
+  };
+
   const filteredPermissions = useMemo(() => {
     return permissions.filter((p) => {
       const student = (typeof p.studentId === "object" && p.studentId !== null)
@@ -8406,13 +8429,45 @@ export default function AdminDashboard({
       const matchesSection = sectionFilter === "all" || student.section?.toUpperCase() === sectionFilter.toUpperCase();
       const matchesFloor = floorFilter === "all" || normalizeFloorName(student.floorNumber) === floorFilter;
       const matchesRoom = roomFilter === "all" || student.roomNumber === roomFilter;
+      const permissionDateKey = getPermissionDateKey(p.fromDateTime || p.createdAt);
+      const matchesDateFrom = !appliedPermissionDateFrom || (!!permissionDateKey && permissionDateKey >= appliedPermissionDateFrom);
+      const matchesDateTo = !appliedPermissionDateTo || (!!permissionDateKey && permissionDateKey <= appliedPermissionDateTo);
 
-      if (!matchesStatus || !matchesSearch || !matchesHostel || !matchesCollege || !matchesSemester || !matchesBranch || !matchesSection || !matchesFloor || !matchesRoom) return false;
+      if (!matchesStatus || !matchesSearch || !matchesHostel || !matchesCollege || !matchesSemester || !matchesBranch || !matchesSection || !matchesFloor || !matchesRoom || !matchesDateFrom || !matchesDateTo) return false;
 
       if (statusFilter === "all") return true;
       return student.studentStatus === statusFilter;
     });
-  }, [permissions, filter, statusFilter, searchQuery, hostelFilter, collegeFilter, semesterFilter, branchFilter, sectionFilter, floorFilter, roomFilter, isWarden, authorizedHostels]);
+  }, [permissions, filter, statusFilter, searchQuery, hostelFilter, collegeFilter, semesterFilter, branchFilter, sectionFilter, floorFilter, roomFilter, isWarden, authorizedHostels, appliedPermissionDateFrom, appliedPermissionDateTo]);
+
+  const sortedFilteredPermissions = useMemo(() => [...filteredPermissions].sort((left, right) => {
+    const leftDate = parseFlexibleDate(left.fromDateTime || left.createdAt)?.getTime() || 0;
+    const rightDate = parseFlexibleDate(right.fromDateTime || right.createdAt)?.getTime() || 0;
+    return rightDate - leftDate;
+  }), [filteredPermissions]);
+  const permissionPageSize = 5;
+  const permissionResultCount = isShowingAllPermissions ? sortedFilteredPermissions.length : totalPermissionsCount;
+  const permissionPageCount = Math.max(1, Math.ceil(permissionResultCount / permissionPageSize));
+  const activePermissionPage = Math.min(permissionPage, permissionPageCount - 1);
+  const pagedPermissions = isShowingAllPermissions
+    ? sortedFilteredPermissions.slice(activePermissionPage * permissionPageSize, (activePermissionPage + 1) * permissionPageSize)
+    : sortedFilteredPermissions.slice(0, permissionPageSize);
+  const permissionPageStart = permissionResultCount === 0 ? 0 : activePermissionPage * permissionPageSize + 1;
+  const permissionPageEnd = Math.min((activePermissionPage + 1) * permissionPageSize, permissionResultCount);
+  const fetchPermissionsRef = useRef(fetchPermissions);
+  fetchPermissionsRef.current = fetchPermissions;
+
+  useEffect(() => {
+    setPermissionPage(0);
+  }, [filter, statusFilter, searchQuery, hostelFilter, collegeFilter, semesterFilter, branchFilter, sectionFilter, floorFilter, roomFilter, appliedPermissionDateFrom, appliedPermissionDateTo]);
+
+  useEffect(() => {
+    if (!searchQuery.trim() || isShowingAllPermissions || isLoadingAllPermissions) return;
+    const timer = window.setTimeout(() => {
+      fetchPermissionsRef.current(filter, true, true);
+    }, 250);
+    return () => window.clearTimeout(timer);
+  }, [searchQuery, filter, hostelFilter, isShowingAllPermissions, isLoadingAllPermissions]);
 
 
   // Dynamic lists for Floor and Room dropdown filters based on authorized hostels/students
@@ -8793,36 +8848,38 @@ export default function AdminDashboard({
         });
       }
 
-      // Only flag curfew violation if student is marked 'out' AND actually has an active 'out' gatepass/leave
-      if (student.studentStatus === 'out') {
+      const activeGatePass = student.activeGatePass;
+      if (student.studentStatus === 'out' && activeGatePass?.status === 'out') {
         const now = new Date();
         const nowTimeStr = now.toLocaleTimeString("en-GB", { timeZone: "Asia/Kolkata", hour12: false }).substring(0, 5);
         const isPastCurfew = nowTimeStr > (attendanceTimeSettings.endTime || "22:30");
+        const checkedOutAt = parseFlexibleDate(activeGatePass.checkOutTime || activeGatePass.fromDateTime || activeGatePass.checkOutIstDate);
+        const istDateKey = (date: Date) => {
+          const parts = new Intl.DateTimeFormat("en-GB", {
+            timeZone: "Asia/Kolkata",
+            year: "numeric",
+            month: "2-digit",
+            day: "2-digit",
+          }).formatToParts(date);
+          const part = (type: string) => parts.find(item => item.type === type)?.value || "";
+          return `${part("year")}-${part("month")}-${part("day")}`;
+        };
+        const wasCheckedOutToday = !!checkedOutAt && istDateKey(checkedOutAt) === istDateKey(now);
 
-        if (isPastCurfew) {
-          // Check if student has an active 'out' gatepass or leave
-          const hasActiveOutPass = (student.gatePasses || []).some((gp: any) => gp.status === 'out');
-          const hasApprovedLeave = student.permissions && student.permissions.some((p: any) => {
-            if (p.status !== 'allowed' && p.wardenStatus !== 'allowed' && p.deanStatus !== 'allowed') return false;
-            const from = new Date(p.fromDateTime);
-            const to = new Date(p.toDateTime);
-            return now >= from && now <= to;
+        if (isPastCurfew && wasCheckedOutToday && !activeGatePass.hasApprovedPermission) {
+          const checkoutLabel = checkedOutAt ? formatDateTimeDDMMYYYY(checkedOutAt) : "time unavailable";
+          alertsList.push({
+            type: "curfew",
+            title: "Overnight Curfew Violation",
+            description: `Today's gate checkout at ${checkoutLabel} is still open past curfew (${attendanceTimeSettings.endTime || "22:30"}) with no approved permission covering this time.`,
+            studentName: student.name,
+            hostelName: student.hostelName,
+            roomNumber: student.roomNumber,
+            studentId: student.id,
+            date: "Today",
+            details: `Checked out ${checkoutLabel}`,
+            isProfileLocked: student.isProfileLocked
           });
-
-          if (!hasApprovedLeave && (hasActiveOutPass || !student.gatePasses || student.gatePasses.length === 0)) {
-            alertsList.push({
-              type: "curfew",
-              title: "Overnight Curfew Violation",
-              description: `Student is physically marked OUT past curfew limit (${attendanceTimeSettings.endTime}) without active leave approval.`,
-              studentName: student.name,
-              hostelName: student.hostelName,
-              roomNumber: student.roomNumber,
-              studentId: student.id,
-              date: "Today",
-              details: `Out past curfew`,
-              isProfileLocked: student.isProfileLocked
-            });
-          }
         }
       }
     });
@@ -9670,13 +9727,13 @@ export default function AdminDashboard({
                 })()}
               </div>
 
-              <div className={currentTab === 'permissions' ? 'block space-y-6' : 'hidden'}>
-                <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+              <div className={currentTab === 'permissions' ? 'block space-y-2 md:space-y-6' : 'hidden'}>
+                <div className="flex flex-col md:flex-row md:items-center justify-between gap-2 md:gap-4">
                     <div className="flex bg-[#F3F4F6] p-1 rounded-xl w-full max-w-sm md:max-w-md">
                       <button
                         onClick={() => {
                           setFilter("all");
-                          fetchPermissions("all", true);
+                          fetchPermissions("all", true, !!searchQuery.trim() || !!appliedPermissionDateFrom || !!appliedPermissionDateTo);
                         }}
                         className={`flex-1 px-2 md:px-4 py-1.5 md:py-2 rounded-lg text-[11px] md:text-sm font-medium transition-colors ${filter === "all" ? "bg-blue-600 text-background" : "bg-filler text-foreground hover:bg-[#E8E8E6]"}`}
                       >
@@ -9685,7 +9742,7 @@ export default function AdminDashboard({
                       <button
                         onClick={() => {
                           setFilter("pending");
-                          fetchPermissions("pending", true);
+                          fetchPermissions("pending", true, !!searchQuery.trim() || !!appliedPermissionDateFrom || !!appliedPermissionDateTo);
                         }}
                         className={`flex-1 px-2 md:px-4 py-1.5 md:py-2 rounded-lg text-[11px] md:text-sm font-medium transition-colors ${filter === "pending" ? "bg-blue-600 text-background" : "bg-filler text-foreground hover:bg-[#E8E8E6]"}`}
                       >
@@ -9694,7 +9751,7 @@ export default function AdminDashboard({
                       <button
                         onClick={() => {
                           setFilter("allowed");
-                          fetchPermissions("allowed", true);
+                          fetchPermissions("allowed", true, !!searchQuery.trim() || !!appliedPermissionDateFrom || !!appliedPermissionDateTo);
                         }}
                         className={`flex-1 px-2 md:px-4 py-1.5 md:py-2 rounded-lg text-[11px] md:text-sm font-medium transition-colors ${filter === "allowed" ? "bg-blue-600 text-background" : "bg-filler text-foreground hover:bg-[#E8E8E6]"}`}
                       >
@@ -9703,7 +9760,7 @@ export default function AdminDashboard({
                       <button
                         onClick={() => {
                           setFilter("rejected");
-                          fetchPermissions("rejected", true);
+                          fetchPermissions("rejected", true, !!searchQuery.trim() || !!appliedPermissionDateFrom || !!appliedPermissionDateTo);
                         }}
                         className={`flex-1 px-2 md:px-4 py-1.5 md:py-2 rounded-lg text-[11px] md:text-sm font-medium transition-colors ${filter === "rejected" ? "bg-blue-600 text-background" : "bg-filler text-foreground hover:bg-[#E8E8E6]"}`}
                       >
@@ -9713,7 +9770,7 @@ export default function AdminDashboard({
                         <button
                           onClick={() => {
                             setFilter("hidden");
-                            fetchPermissions("hidden", true);
+                            fetchPermissions("hidden", true, !!searchQuery.trim() || !!appliedPermissionDateFrom || !!appliedPermissionDateTo);
                           }}
                           className={`flex-1 px-2 md:px-4 py-1.5 md:py-2 rounded-lg text-[11px] md:text-sm font-medium transition-colors ${filter === "hidden" ? "bg-slate-800 text-white font-bold" : "bg-filler text-foreground hover:bg-[#E8E8E6]"}`}
                         >
@@ -9748,10 +9805,10 @@ export default function AdminDashboard({
                         value={hostelFilter}
                         onChange={(e) => {
                           setHostelFilter(e.target.value);
-                          fetchPermissions(filter, false, isShowingAllPermissions, e.target.value);
+                          fetchPermissions(filter, false, isShowingAllPermissions || !!searchQuery.trim() || !!appliedPermissionDateFrom || !!appliedPermissionDateTo, e.target.value);
                         }}
                         disabled={isWarden}
-                        className={`h-9 px-3 rounded-lg border border-solid border-[#9CA3AF] bg-white text-foreground text-sm focus:outline-none focus:border-foreground min-w-[100px] md:min-w-[120px] ${isWarden ? 'opacity-70 cursor-not-allowed' : ''}`}
+                        className={`h-8 md:h-9 px-2 md:px-3 rounded-lg border border-solid border-[#9CA3AF] bg-white text-foreground text-xs md:text-sm focus:outline-none focus:border-foreground min-w-[90px] md:min-w-[120px] ${isWarden ? 'opacity-70 cursor-not-allowed' : ''}`}
                       >
                         <option value="all">Hostel</option>
                         {hostels.map((h) => (
@@ -9760,8 +9817,8 @@ export default function AdminDashboard({
                       </select>
 
                       <div className="relative flex-1">
-                        <div className="absolute left-3 top-1/2 transform -translate-y-1/2">
-                          <svg className="w-4 h-4 text-secondary" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <div className="absolute left-2.5 md:left-3 top-1/2 transform -translate-y-1/2">
+                          <svg className="w-3.5 h-3.5 md:w-4 md:h-4 text-secondary" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
                           </svg>
                         </div>
@@ -9779,13 +9836,123 @@ export default function AdminDashboard({
                                   fetchStudents();
                               }
                           }}
-                          className="w-full pl-9 pr-3 h-9 text-sm rounded-lg border border-solid border-[#9CA3AF] bg-white text-foreground placeholder:text-secondary focus:outline-none focus:border-foreground"
+                          className="w-full pl-8 md:pl-9 pr-2.5 md:pr-3 h-8 md:h-9 text-xs md:text-sm rounded-lg border border-solid border-[#9CA3AF] bg-white text-foreground placeholder:text-secondary focus:outline-none focus:border-foreground"
                         />
                       </div>
                     </div>
                   </div>
 
-                  <div ref={permissionsContainerRef} className="space-y-3">
+                  <div className="space-y-1.5 md:space-y-2">
+                    <div className="grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto] items-end gap-1.5 sm:gap-2 rounded-xl border border-slate-200 bg-white p-2 sm:p-3">
+                    <label className="flex min-w-0 flex-col gap-0.5 sm:gap-1 text-[9px] sm:text-[10px] font-bold text-slate-600">
+                      From date
+                      <input
+                        type="date"
+                        value={permissionDateFrom}
+                        max={permissionDateTo || undefined}
+                        onClick={(event) => {
+                          if (typeof event.currentTarget.showPicker === "function") event.currentTarget.showPicker();
+                        }}
+                        onChange={(event) => setPermissionDateFrom(event.target.value)}
+                        className="h-7.5 sm:h-9 w-full min-w-0 rounded-md sm:rounded-lg border border-slate-300 px-1 text-[9px] text-slate-800 focus:border-blue-500 focus:outline-none sm:px-2 sm:text-xs"
+                      />
+                    </label>
+                    <label className="flex min-w-0 flex-col gap-0.5 sm:gap-1 text-[9px] sm:text-[10px] font-bold text-slate-600">
+                      To date
+                      <input
+                        type="date"
+                        value={permissionDateTo}
+                        min={permissionDateFrom || undefined}
+                        onClick={(event) => {
+                          if (typeof event.currentTarget.showPicker === "function") event.currentTarget.showPicker();
+                        }}
+                        onChange={(event) => setPermissionDateTo(event.target.value)}
+                        className="h-7.5 sm:h-9 w-full min-w-0 rounded-md sm:rounded-lg border border-slate-300 px-1 text-[9px] text-slate-800 focus:border-blue-500 focus:outline-none sm:px-2 sm:text-xs"
+                      />
+                    </label>
+                    <div className="ml-auto flex shrink-0 items-center gap-1 sm:gap-1.5 max-[380px]:col-span-3">
+                      <button
+                        type="button"
+                        disabled={(!!permissionDateFrom && !!permissionDateTo && permissionDateFrom > permissionDateTo) || isLoadingAllPermissions}
+                        onClick={async () => {
+                          if ((permissionDateFrom || permissionDateTo || searchQuery.trim()) && !isShowingAllPermissions) {
+                            const loaded = await fetchPermissions(filter, true, true);
+                            if (!loaded) return;
+                          }
+                          setAppliedPermissionDateFrom(permissionDateFrom);
+                          setAppliedPermissionDateTo(permissionDateTo);
+                          setPermissionPage(0);
+                        }}
+                        className="h-7.5 sm:h-9 shrink-0 rounded-md sm:rounded-lg bg-blue-600 px-2 sm:px-3 text-[9px] font-bold text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50 sm:text-[11px]"
+                      >
+                        Apply dates
+                      </button>
+                      <button
+                        type="button"
+                        disabled={!permissionDateFrom && !permissionDateTo && !appliedPermissionDateFrom && !appliedPermissionDateTo}
+                        onClick={() => {
+                          setPermissionDateFrom("");
+                          setPermissionDateTo("");
+                          setAppliedPermissionDateFrom("");
+                          setAppliedPermissionDateTo("");
+                          setPermissionPage(0);
+                        }}
+                        className="h-7.5 sm:h-9 shrink-0 rounded-md sm:rounded-lg border border-slate-300 px-1.5 sm:px-2.5 text-[9px] font-bold text-slate-600 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50 sm:text-[11px]"
+                      >
+                        Clear
+                      </button>
+                    </div>
+                    {!!permissionDateFrom && !!permissionDateTo && permissionDateFrom > permissionDateTo && (
+                      <p className="w-full text-[10px] font-semibold text-rose-600">From date must be on or before the To date.</p>
+                    )}
+                    </div>
+
+                    {permissionPageCount > 1 && (
+                      <div className="flex items-center justify-center gap-2 sm:gap-3 py-0.5 sm:py-1">
+                      <button
+                        type="button"
+                        aria-label="Previous 5 permissions"
+                        disabled={permissionPage === 0 || isPermissionsLoading || isLoadingAllPermissions}
+                        onClick={async () => {
+                          const nextPage = Math.max(0, permissionPage - 1);
+                          if (isShowingAllPermissions) {
+                            setPermissionPage(nextPage);
+                          } else if (await fetchPermissions(filter, true, false, undefined, nextPage * permissionPageSize)) {
+                            setPermissionPage(nextPage);
+                          }
+                        }}
+                        className="flex h-7 w-7 sm:h-9 sm:w-9 items-center justify-center rounded-md sm:rounded-lg border border-slate-300 bg-white text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40"
+                      >
+                        <svg className="h-3.5 w-3.5 sm:h-4 sm:w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+                        </svg>
+                      </button>
+                        <span className="min-w-[95px] sm:min-w-[110px] text-center text-[10px] sm:text-xs font-semibold text-slate-600">
+                          Showing {permissionPageStart}-{permissionPageEnd} of {permissionResultCount}
+                        </span>
+                      <button
+                        type="button"
+                        aria-label="Next 5 permissions"
+                        disabled={permissionPage >= permissionPageCount - 1 || isPermissionsLoading || isLoadingAllPermissions}
+                        onClick={async () => {
+                          const nextPage = Math.min(permissionPageCount - 1, permissionPage + 1);
+                          if (isShowingAllPermissions) {
+                            setPermissionPage(nextPage);
+                          } else if (await fetchPermissions(filter, true, false, undefined, nextPage * permissionPageSize)) {
+                            setPermissionPage(nextPage);
+                          }
+                        }}
+                        className="flex h-7 w-7 sm:h-9 sm:w-9 items-center justify-center rounded-md sm:rounded-lg border border-slate-300 bg-white text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40"
+                      >
+                        <svg className="h-3.5 w-3.5 sm:h-4 sm:w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                        </svg>
+                      </button>
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="space-y-3">
                     {(isPermissionsLoading && permissions.length === 0) ? (
                       <div className="flex flex-col items-center justify-center py-12 gap-3 bg-white/40 rounded-2xl border border-gray-100 shadow-sm animate-pulse">
                         <div className="h-8 w-8 animate-spin rounded-full border-2 border-gray-300 border-t-blue-600"></div>
@@ -9794,7 +9961,7 @@ export default function AdminDashboard({
                     ) : filteredPermissions.length === 0 ? (
                       <p className="text-secondary text-center py-8">No permissions found</p>
                     ) : (
-                      filteredPermissions.map((permission) => {
+                      pagedPermissions.map((permission) => {
                         const student = (typeof permission.studentId === "object" && permission.studentId !== null)
                           ? permission.studentId
                           : (permission.student || (permission as any).students || (students.find(s => (s.id || (s as any)._id) === permission.studentId)) || null);
@@ -10103,57 +10270,47 @@ export default function AdminDashboard({
                       })
                     )}
                   </div>
-                  
-                  {(!isShowingAllPermissions || isLoadingAllPermissions) && totalPermissionsCount > 5 && (
-                    <div className="flex flex-col items-center justify-center mt-6 pb-4 gap-3">
-                      {isLoadingAllPermissions && (
-                        <div className="flex items-center gap-2.5 px-5 py-2.5 rounded-2xl bg-blue-50 border border-blue-200 text-blue-800 font-bold text-xs sm:text-sm shadow-sm animate-pulse">
-                          <svg className="animate-spin h-5 w-5 text-blue-600 shrink-0" fill="none" viewBox="0 0 24 24">
-                            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                          </svg>
-                          <span>Loading all {totalPermissionsCount} permissions... Please wait</span>
-                        </div>
-                      )}
-                      <button
-                        disabled={isLoadingAllPermissions}
-                        onClick={() => fetchPermissions(filter, true, true)}
-                        className="px-6 py-3 rounded-2xl bg-gradient-to-r from-blue-600 to-indigo-600 text-white font-black text-xs sm:text-sm tracking-wide shadow-md shadow-blue-500/25 hover:shadow-lg hover:from-blue-700 hover:to-indigo-700 active:scale-95 transition-all flex items-center gap-2 cursor-pointer disabled:opacity-75 disabled:cursor-wait"
-                      >
-                        {isLoadingAllPermissions ? (
-                          <>
-                            <svg className="animate-spin -ml-0.5 mr-1.5 h-4 w-4 text-white" fill="none" viewBox="0 0 24 24">
-                              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                            </svg>
-                            <span>Loading All ({totalPermissionsCount})...</span>
-                          </>
-                        ) : (
-                          <>
-                            <svg className="w-4 h-4 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M19 9l-7 7-7-7" />
-                            </svg>
-                            <span>Show All Permissions ({totalPermissionsCount})</span>
-                          </>
-                        )}
-                      </button>
-                    </div>
-                  )}
 
-                  {isShowingAllPermissions && !isLoadingAllPermissions && totalPermissionsCount > 5 && (
-                    <div className="flex justify-center mt-6 pb-4">
+                  {permissionPageCount > 1 && (
+                    <div className="flex items-center justify-center gap-3 py-1">
                       <button
-                        onClick={() => {
-                          setIsShowingAllPermissions(false);
-                          permissionsContainerRef.current?.scrollIntoView({ behavior: 'smooth' });
-                          setPermissions(prev => prev.slice(0, 5));
+                        type="button"
+                        aria-label="Previous 5 permissions"
+                        disabled={permissionPage === 0 || isPermissionsLoading || isLoadingAllPermissions}
+                        onClick={async () => {
+                          const nextPage = Math.max(0, permissionPage - 1);
+                          if (isShowingAllPermissions) {
+                            setPermissionPage(nextPage);
+                          } else if (await fetchPermissions(filter, true, false, undefined, nextPage * permissionPageSize)) {
+                            setPermissionPage(nextPage);
+                          }
                         }}
-                        className="px-6 py-2.5 rounded-2xl bg-gray-100 hover:bg-gray-200 text-gray-700 font-bold text-xs sm:text-sm tracking-wide border border-gray-200 shadow-sm active:scale-95 transition-all flex items-center gap-2 cursor-pointer"
+                        className="flex h-9 w-9 items-center justify-center rounded-lg border border-slate-300 bg-white text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40"
                       >
-                        <svg className="w-4 h-4 text-gray-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 15l7-7 7 7" />
+                        <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
                         </svg>
-                        Show Less (Top 5)
+                      </button>
+                      <span className="min-w-[110px] text-center text-xs font-semibold text-slate-600">
+                        Showing {permissionPageStart}-{permissionPageEnd} of {permissionResultCount}
+                      </span>
+                      <button
+                        type="button"
+                        aria-label="Next 5 permissions"
+                        disabled={permissionPage >= permissionPageCount - 1 || isPermissionsLoading || isLoadingAllPermissions}
+                        onClick={async () => {
+                          const nextPage = Math.min(permissionPageCount - 1, permissionPage + 1);
+                          if (isShowingAllPermissions) {
+                            setPermissionPage(nextPage);
+                          } else if (await fetchPermissions(filter, true, false, undefined, nextPage * permissionPageSize)) {
+                            setPermissionPage(nextPage);
+                          }
+                        }}
+                        className="flex h-9 w-9 items-center justify-center rounded-lg border border-slate-300 bg-white text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40"
+                      >
+                        <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                        </svg>
                       </button>
                     </div>
                   )}

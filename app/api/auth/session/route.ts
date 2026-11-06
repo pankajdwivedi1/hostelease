@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { adminAuth } from "@/lib/firebase-admin";
 import { clearAuthSessionCookie, setAuthSessionCookie } from "@/lib/authSession";
+import { db } from "@/lib/dbAdapter";
 
 export const dynamic = "force-dynamic";
 
@@ -11,8 +12,31 @@ export async function POST(request: NextRequest) {
 
   try {
     const decoded = await adminAuth.verifyIdToken(idToken);
-    const response = NextResponse.json({ success: true });
-    setAuthSessionCookie(response, { role: "student", uid: decoded.uid, email: decoded.email });
+    const cleanEmail = (decoded.email || "").toLowerCase().trim();
+
+    let studentDbId: string | undefined;
+    let registrationId: string | undefined;
+
+    if (cleanEmail) {
+      try {
+        const student = await db.students.findOne({ email: cleanEmail });
+        if (student) {
+          studentDbId = String(student._id || student.id || "");
+          registrationId = student.registrationId || (student as any).registration_id;
+        }
+      } catch (dbErr) {
+        console.warn("[AUTH_SESSION] Database student lookup notice:", dbErr);
+      }
+    }
+
+    const response = NextResponse.json({ success: true, studentId: studentDbId, registrationId });
+    setAuthSessionCookie(response, {
+      role: "student",
+      studentId: studentDbId,
+      registrationId: registrationId,
+      email: cleanEmail,
+      uid: decoded.uid,
+    });
     return response;
   } catch {
     return NextResponse.json({ error: "Invalid Firebase ID token" }, { status: 401 });

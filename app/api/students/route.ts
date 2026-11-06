@@ -806,7 +806,9 @@ export async function GET(request: NextRequest) {
                 status: true,
                 reason: true,
                 fromDateTime: true,
-                toDateTime: true
+                toDateTime: true,
+                wardenStatus: true,
+                deanStatus: true
               }
             });
           } catch (e) {
@@ -819,13 +821,40 @@ export async function GET(request: NextRequest) {
 
       // Create a map of studentId -> outing details for efficient lookup
       const activeOutingMap = new Map<string, any>();
+      const permissionsByStudentId = new Map<string, any[]>();
+      (permsList || []).forEach((perm: any) => {
+        const pSid = typeof perm.studentId === 'object' ? (perm.studentId?._id || perm.studentId?.id) : perm.studentId;
+        if (!pSid) return;
+        const key = pSid.toString();
+        const studentPermissions = permissionsByStudentId.get(key) || [];
+        studentPermissions.push(perm);
+        permissionsByStudentId.set(key, studentPermissions);
+      });
+      const nowMs = Date.now();
       openPasses.forEach((p: any) => {
         const sId = typeof p.studentId === 'object' ? (p.studentId?._id || p.studentId?.id) : p.studentId;
         const pType = String(p.type || '').toLowerCase();
         const normalizedType = (pType === 'leave' || pType === 'home-leave' || pType === 'hleave') ? 'leave' : 'outing';
+        const permissionId = p.permissionId || p.permission_id;
+        const studentPermissions = sId ? (permissionsByStudentId.get(sId.toString()) || []) : [];
+        const hasApprovedPermission = studentPermissions.some((perm: any) => {
+          const isApproved = ['allowed', 'approved'].includes(String(perm.status || '').toLowerCase()) ||
+            ['allowed', 'approved'].includes(String(perm.wardenStatus || '').toLowerCase()) ||
+            ['allowed', 'approved'].includes(String(perm.deanStatus || '').toLowerCase());
+          if (!isApproved || (permissionId && String(perm.id) !== String(permissionId))) return false;
+          const fromMs = perm.fromDateTime ? new Date(perm.fromDateTime).getTime() : 0;
+          const toMs = perm.toDateTime ? new Date(perm.toDateTime).getTime() : 0;
+          return fromMs > 0 && toMs > 0 && fromMs <= nowMs && nowMs <= toMs;
+        });
         const passDetails = {
+          id: p.id || p._id,
+          status: p.status,
+          permissionId: permissionId || null,
+          hasApprovedPermission,
           outingType: normalizedType,
           reason: p.reason || p.destination || null,
+          checkOutTime: p.checkOutTime || null,
+          checkInTime: p.checkInTime || null,
           fromDateTime: p.fromDateTime || (p.checkOutIstDate ? `${p.checkOutIstDate} ${p.checkOutIstTime || ''}` : p.checkOutTime),
           toDateTime: p.toDateTime || p.expectedReturnDate || p.expectedReturnIstDate || null,
           checkOutIstDate: p.checkOutIstDate,
@@ -846,6 +875,7 @@ export async function GET(request: NextRequest) {
         // Priority 1: If Gatepass says OUT, stay OUT
         if (passInfo) {
           s.studentStatus = "out";
+          s.activeGatePass = passInfo;
           s.outingType = passInfo.outingType;
           s.leaveReason = passInfo.reason;
           s.leaveFrom = passInfo.fromDateTime;
@@ -855,6 +885,7 @@ export async function GET(request: NextRequest) {
           syncCount++;
         } else {
           s.studentStatus = "in";
+          s.activeGatePass = null;
           s.outingType = undefined;
           s.leaveReason = undefined;
           s.leaveFrom = undefined;

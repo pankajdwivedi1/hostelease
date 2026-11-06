@@ -732,7 +732,13 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
             }
             const res = await fetch(`/api/student/profile-blockers?studentId=${studentId}${getTenantParam(false)}`, {
                 cache: 'no-store',
-                headers: { 'Cache-Control': 'no-cache, no-store, must-revalidate' }
+                headers: { 
+                    'Cache-Control': 'no-cache, no-store, must-revalidate',
+                    'x-user-type': 'student',
+                    'x-student-id': String(studentId || ''),
+                    'x-student-email': String(currentProfile.email || '').toLowerCase().trim(),
+                    'x-registration-id': String(currentProfile.registrationId || '').toUpperCase().trim(),
+                }
             });
             if (!res.ok) throw new Error('Failed to check profile blockers');
             const data = await res.json();
@@ -793,11 +799,100 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
     }, [initialData, isParentView, checkFieldEnforcement]);
     
     // ⚡ Student Profile History State (Permissions, Home-Leave & Gate-Pass)
-    const [studentHistoryTab, setStudentHistoryTab] = useState<"permissions" | "home_leave" | "gate_pass">("permissions");
+    const [studentHistoryTab, setStudentHistoryTab] = useState<"permissions" | "home_leave" | "gate_pass" | "attendance">("permissions");
     const [studentPermissionsList, setStudentPermissionsList] = useState<any[]>([]);
     const [studentHomeLeaves, setStudentHomeLeaves] = useState<any[]>([]);
     const [studentGatePasses, setStudentGatePasses] = useState<any[]>([]);
     const [isLoadingStudentHistory, setIsLoadingStudentHistory] = useState<boolean>(false);
+    const [studentHistoryCalendarMonth, setStudentHistoryCalendarMonth] = useState<Date>(new Date());
+    const [selectedStudentHistoryDate, setSelectedStudentHistoryDate] = useState<Date | null>(null);
+    const attendanceAutoSelectionRef = useRef(false);
+
+    const getStudentHistoryDateKey = (value: string | Date | null | undefined) => {
+        if (!value) return null;
+        const date = new Date(value);
+        if (Number.isNaN(date.getTime())) return null;
+        return date.toLocaleDateString("en-IN", {
+            timeZone: "Asia/Kolkata",
+            year: "numeric",
+            month: "2-digit",
+            day: "2-digit",
+        }).split("/").reverse().join("-");
+    };
+    const getStudentHistoryRecordDateKey = (record: {
+        date?: string | Date | null;
+        checkOutTime?: string | Date | null;
+        fromDateTime?: string | Date | null;
+        createdAt?: string | Date | null;
+    }) =>
+        getStudentHistoryDateKey(record.date || record.checkOutTime || record.fromDateTime || record.createdAt);
+    const activeStudentHistoryRecords = studentHistoryTab === "permissions"
+        ? studentPermissionsList
+        : studentHistoryTab === "home_leave"
+            ? studentHomeLeaves
+            : studentHistoryTab === "gate_pass"
+                ? studentGatePasses
+                : attendanceHistory;
+    const selectedStudentHistoryDateKey = getStudentHistoryDateKey(selectedStudentHistoryDate);
+    const getStudentHistoryRecordsForDate = (date: Date) => {
+        const dateKey = getStudentHistoryDateKey(date);
+        return activeStudentHistoryRecords.filter(record => getStudentHistoryRecordDateKey(record) === dateKey);
+    };
+    const selectStudentHistoryTab = (tab: "permissions" | "home_leave" | "gate_pass" | "attendance") => {
+        setStudentHistoryTab(tab);
+        attendanceAutoSelectionRef.current = false;
+        if (tab === "permissions") {
+            setSelectedStudentHistoryDate(null);
+            return;
+        }
+        const records = tab === "home_leave" ? studentHomeLeaves : tab === "gate_pass" ? studentGatePasses : attendanceHistory;
+        const latestDateKey = records
+            .map(getStudentHistoryRecordDateKey)
+            .filter((dateKey): dateKey is string => !!dateKey)
+            .sort((left, right) => right.localeCompare(left))[0] || null;
+        if (!latestDateKey) {
+            setSelectedStudentHistoryDate(null);
+            return;
+        }
+        const [year, month, day] = latestDateKey.split("-").map(Number);
+        const latestDate = new Date(year, month - 1, day);
+        setSelectedStudentHistoryDate(latestDate);
+        setStudentHistoryCalendarMonth(new Date(year, month - 1, 1));
+        if (tab === "attendance") attendanceAutoSelectionRef.current = true;
+    };
+    const visibleStudentPermissionsList = selectedStudentHistoryDateKey
+        ? studentPermissionsList.filter(record => getStudentHistoryRecordDateKey(record) === selectedStudentHistoryDateKey)
+        : studentPermissionsList;
+    const visibleStudentHomeLeaves = selectedStudentHistoryDateKey
+        ? studentHomeLeaves.filter(record => getStudentHistoryRecordDateKey(record) === selectedStudentHistoryDateKey).slice(0, 1)
+        : studentHomeLeaves.slice(0, 1);
+    const visibleStudentGatePasses = selectedStudentHistoryDateKey
+        ? studentGatePasses.filter(record => getStudentHistoryRecordDateKey(record) === selectedStudentHistoryDateKey).slice(0, 1)
+        : studentGatePasses.slice(0, 1);
+    const visibleStudentAttendanceHistory = selectedStudentHistoryDateKey
+        ? attendanceHistory.filter(record => getStudentHistoryRecordDateKey(record) === selectedStudentHistoryDateKey)
+        : [];
+    const studentHistoryMarkerClass = studentHistoryTab === "permissions"
+        ? "bg-blue-500"
+        : studentHistoryTab === "home_leave"
+            ? "bg-amber-400"
+            : studentHistoryTab === "attendance"
+                ? "bg-emerald-500"
+                : "bg-emerald-500";
+    const isParentAttendanceCalendar = isParentView && studentHistoryTab === "attendance";
+
+    useEffect(() => {
+        if (!isParentView || studentHistoryTab !== "attendance" || attendanceAutoSelectionRef.current || selectedStudentHistoryDate || attendanceHistory.length === 0) return;
+        const latestDateKey = attendanceHistory
+            .map(getStudentHistoryRecordDateKey)
+            .filter((dateKey): dateKey is string => !!dateKey)
+            .sort((left, right) => right.localeCompare(left))[0];
+        if (!latestDateKey) return;
+        const [year, month, day] = latestDateKey.split("-").map(Number);
+        attendanceAutoSelectionRef.current = true;
+        setSelectedStudentHistoryDate(new Date(year, month - 1, day));
+        setStudentHistoryCalendarMonth(new Date(year, month - 1, 1));
+    }, [isParentView, studentHistoryTab, selectedStudentHistoryDate, attendanceHistory]);
 
     // ⚡ Mobile Pull-to-Refresh & Server Auto-Sync States
     const [pullDistance, setPullDistance] = useState<number>(0);
@@ -1468,22 +1563,92 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
         };
     }, [studentProfile?.email, studentProfile?.registrationId, studentProfile?.firebaseUID, studentProfile?.faceDescriptor]);
 
-    // ⚡ PERMANENT BIOMETRIC PRE-WARM: Keeps all face models permanently hot in browser memory from the moment dashboard mounts
+    // ⚡ SMART NIGHT ATTENDANCE BIOMETRIC PRE-WARM:
+    // Safely warms up face AI models in browser RAM & GPU during the night attendance window
+    // Uses a 2.5s idle delay so initial dashboard rendering & GPS lock complete first with 0 stutter on budget phones.
+    const hasWarmupRunRef = useRef(false);
     useEffect(() => {
         if (typeof window === 'undefined') return;
+        if (isParentView) return; // Parents never mark attendance
+        if (isAttendanceMarked) return; // Skip if already marked tonight
+        if (hasWarmupRunRef.current) return; // Run at most once per session
+
+        // Check if current time is within or approaching (within 15 mins) of night attendance window
+        const now = new Date();
+        const istTimeStr = now.toLocaleTimeString("en-GB", { timeZone: "Asia/Kolkata", hour12: false });
+        const [currH, currM] = istTimeStr.split(":").map(Number);
+        const currentMinutes = currH * 60 + currM;
+
+        const [startH, startM] = (attendanceWindow.start || "21:00").split(":").map(Number);
+        const startMinutes = startH * 60 + startM;
+        const [endH, endM] = (attendanceWindow.end || "22:00").split(":").map(Number);
+        const endMinutes = endH * 60 + endM;
+
+        // Active if within window or within 15 minutes before window starts
+        const isNearOrInWindow = currentMinutes >= (startMinutes - 15) && currentMinutes <= endMinutes;
+        if (!isNearOrInWindow) return;
+
+        // Skip if student or hostel is configured for GPS-only or WiFi-only mode (no face scan needed)
+        const studentMode = studentProfile?.attendanceMode;
+        if (studentMode === 'gps-only' || studentMode === 'gps' || studentMode === 'wifi') return;
+
+        hasWarmupRunRef.current = true;
+
         const isMobile = (
             /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) ||
             (window.innerWidth <= 768)
         );
-        console.log(`⚡ [Biometrics Pre-warm] Warming ${isMobile ? 'Mobile LITE' : 'Desktop PRO'} models in memory immediately...`);
-        faceMatching.loadFaceApiModels(!isMobile).then((ready) => {
-            if (ready) {
-                console.log("✅ [Biometrics Pre-warm] Face AI models active in RAM & GPU ready for instant attendance!");
+
+        // ⚡ 2.5-second idle delay: ensures initial UI rendering, avatar loading, and GPS complete smoothly
+        let idleTimer = null;
+        let idleCallbackId = null;
+
+        const executeWarmup = () => {
+            console.log(`⚡ [Night Attendance Pre-Warm] Warming ${isMobile ? 'Mobile LITE' : 'Desktop PRO'} models in background...`);
+            faceMatching.loadFaceApiModels(!isMobile).then((ready) => {
+                if (ready) {
+                    console.log("✅ [Night Attendance Pre-Warm] Face AI models hot in RAM & GPU. Ready for instant attendance!");
+                }
+            }).catch((err) => {
+                console.warn("⚠️ [Night Attendance Pre-Warm] Non-fatal background note:", err);
+            });
+
+            // Also silently pre-load reference face descriptor into memory ref if not cached yet
+            if (!referenceDescriptorRef.current || referenceDescriptorRef.current.length < 68) {
+                let ref = studentProfile?.faceDescriptor;
+                if (typeof ref === 'string') {
+                    try { ref = JSON.parse(ref); } catch (e) {}
+                }
+                if (Array.isArray(ref) && ref.length >= 68) {
+                    referenceDescriptorRef.current = ref;
+                } else {
+                    const regId = studentProfile?.registrationId || studentProfile?._id || '';
+                    if (regId) {
+                        getBiometricDescriptor(regId).then((cached) => {
+                            if (cached?.isValid && cached.descriptor && cached.descriptor.length >= 68) {
+                                referenceDescriptorRef.current = cached.descriptor;
+                            }
+                        }).catch(() => {});
+                    }
+                }
             }
-        }).catch((err) => {
-            console.warn("⚠️ [Biometrics Pre-warm] Background note:", err);
-        });
-    }, []);
+        };
+
+        idleTimer = setTimeout(() => {
+            if ("requestIdleCallback" in window) {
+                idleCallbackId = window.requestIdleCallback(executeWarmup, { timeout: 3000 });
+            } else {
+                executeWarmup();
+            }
+        }, 2500);
+
+        return () => {
+            if (idleTimer) clearTimeout(idleTimer);
+            if (idleCallbackId && "cancelIdleCallback" in window) {
+                window.cancelIdleCallback(idleCallbackId);
+            }
+        };
+    }, [isParentView, isAttendanceMarked, attendanceWindow, studentProfile?.attendanceMode]);
 
     // Helper function to calculate accurately centered face box coordinates inside aspect-square object-cover scale-x-[-1]
     const getFaceBoxStyle = (box: { x: number, y: number, width: number, height: number } | null, video: HTMLVideoElement | null) => {
@@ -3813,7 +3978,13 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
 
             const response = await fetch(`/api/students/${studentProfile._id}${getTenantParam()}`, {
                 method: "PATCH",
-                headers: { "Content-Type": "application/json" },
+                headers: { 
+                    "Content-Type": "application/json",
+                    "x-user-type": "student",
+                    "x-student-id": String(studentProfile._id || studentProfile.id || ""),
+                    "x-student-email": String(studentProfile.email || (studentProfile as any).studentEmail || "").toLowerCase().trim(),
+                    "x-registration-id": String(studentProfile.registrationId || "").toUpperCase().trim(),
+                },
                 body: JSON.stringify(updateData),
             });
 
@@ -4922,7 +5093,7 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
                             {/* Header section: Profile @ Top-Right, Logout next to Name */}
                             <div className="flex items-start justify-between gap-3 sm:gap-4 mb-2 sm:mb-6">
                                 <div className="flex-1 min-w-0">
-                                    <div className="flex items-center flex-wrap gap-3 mb-1">
+                                    <div className="flex items-center flex-wrap gap-2 sm:gap-3 mb-1">
                                         <h1 className="text-xl md:text-3xl font-bold text-gray-900 leading-tight">
                                             {isParentView ? (
                                                 <>Parent of <span className="text-blue-600">{studentProfile.name}</span></>
@@ -4932,10 +5103,10 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
                                         </h1>
                                         <button
                                             onClick={handleLogout}
-                                            className="px-3 py-1.5 rounded-xl border border-solid border-gray-100 bg-white text-slate-800 text-[9px] font-black uppercase tracking-tight shadow-sm active:scale-95 transition-all flex items-center gap-1.5 hover:bg-slate-50 mt-1 md:mt-0"
+                                            className="px-2 py-1 sm:px-3 sm:py-1.5 rounded-lg sm:rounded-xl border border-solid border-gray-100 bg-white text-slate-800 text-[8.5px] sm:text-[9px] font-black uppercase tracking-tight shadow-sm active:scale-95 transition-all flex items-center gap-1 sm:gap-1.5 hover:bg-slate-50"
                                         >
                                             LOGOUT
-                                            <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <svg className="w-2.5 h-2.5 sm:w-3 sm:h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
                                             </svg>
                                         </button>
@@ -4945,7 +5116,7 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
                                                     localStorage.removeItem("parentSelectedStudentId");
                                                     window.location.reload();
                                                 }}
-                                                className="px-3 py-1.5 rounded-xl border border-solid border-blue-100 bg-blue-50 text-blue-700 text-[9px] font-black uppercase tracking-tight shadow-sm active:scale-95 transition-all flex items-center gap-1.5 hover:bg-blue-100 mt-1 md:mt-0"
+                                                className="px-2 py-1 sm:px-3 sm:py-1.5 rounded-lg sm:rounded-xl border border-solid border-blue-100 bg-blue-50 text-blue-700 text-[8.5px] sm:text-[9px] font-black uppercase tracking-tight shadow-sm active:scale-95 transition-all flex items-center gap-1 sm:gap-1.5 hover:bg-blue-100"
                                             >
                                                 SWITCH SIBLING
                                                 <span className="text-[10px]">🔄</span>
@@ -5003,7 +5174,7 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
 
                             {/* Quick Info Grid */}
                             <div className={`grid grid-cols-2 ${gridColsClass} gap-2 sm:gap-3 mb-2`} style={{ fontFamily: 'var(--font-lora), Cambria' }}>
-                                <div className={`h-12 px-2.5 sm:px-3 rounded-xl border-2 shadow-sm flex flex-col justify-center overflow-hidden min-w-0 ${
+                                <div className={`h-11.5 sm:h-12 px-2.5 sm:px-3 rounded-xl border-2 shadow-sm flex flex-col justify-center overflow-hidden min-w-0 ${
                                     studentProfile.studentStatus === 'out'
                                         ? (() => {
                                             const isCurrentHomeLeave = String(studentProfile.outingType || '').toLowerCase().includes('leave') || (studentProfile as any).rStatus === 'hleave';
@@ -5069,12 +5240,12 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
                                         )}
                                     </div>
                                 </div>
-                                <div className="h-12 bg-gradient-to-br from-sky-50 via-blue-50 to-indigo-50 px-2.5 sm:px-3 rounded-xl border-2 border-sky-200 shadow-sm flex flex-col justify-center overflow-hidden min-w-0">
+                                <div className="h-11.5 sm:h-12 bg-gradient-to-br from-sky-50 via-blue-50 to-indigo-50 px-2.5 sm:px-3 rounded-xl border-2 border-sky-200 shadow-sm flex flex-col justify-center overflow-hidden min-w-0">
                                     <span className="block text-[7.5px] font-black uppercase tracking-[0.2em] leading-none mb-1 text-sky-800 truncate">Hostel & Room</span>
                                     <p className="text-[9.5px] md:text-[11px] font-black text-slate-900 uppercase tracking-tight truncate">{studentProfile.hostelName}<span className="text-blue-700 font-black ml-1">#{studentProfile.roomNumber}</span></p>
                                 </div>
                                 {!isParentView && (
-                                    <div className={`h-12 px-2.5 sm:px-3 rounded-xl border-2 shadow-sm flex items-center justify-between gap-1 transition-all duration-500 overflow-hidden min-w-0 ${highlightLocation ? 'bg-amber-100 border-amber-400 ring-4 ring-amber-300 shadow-xl scale-[1.02]' : isAtHostel ? 'bg-gradient-to-br from-teal-50 via-emerald-50 to-teal-100 border-teal-200 text-teal-950' : 'bg-gradient-to-br from-rose-50 via-pink-50 to-rose-100 border-rose-200 text-rose-950'}`}>
+                                    <div className={`h-11.5 sm:h-12 px-2.5 sm:px-3 rounded-xl border-2 shadow-sm flex items-center justify-between gap-1 transition-all duration-500 overflow-hidden min-w-0 ${highlightLocation ? 'bg-amber-100 border-amber-400 ring-4 ring-amber-300 shadow-xl scale-[1.02]' : isAtHostel ? 'bg-gradient-to-br from-teal-50 via-emerald-50 to-teal-100 border-teal-200 text-teal-950' : 'bg-gradient-to-br from-rose-50 via-pink-50 to-rose-100 border-rose-200 text-rose-950'}`}>
                                         <div className="flex flex-col overflow-hidden min-w-0">
                                             <span className={`block text-[7.5px] font-black uppercase tracking-[0.2em] leading-none mb-1 truncate ${highlightLocation ? 'text-amber-800 animate-pulse' : isAtHostel ? 'text-teal-800' : 'text-rose-800'}`}>Location Lock</span>
                                             <p className={`text-[9.5px] md:text-[11px] font-black uppercase tracking-tight truncate ${isAtHostel ? 'text-teal-950' : 'text-rose-950'}`}>{isAtHostel ? '📍 Verified' : '❌ Not Verified'}</p>
@@ -5100,7 +5271,7 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
                                     </div>
                                 )}
 
-                                <div className="h-12 bg-gradient-to-br from-purple-50 via-indigo-50 to-blue-50 px-2.5 sm:px-3 rounded-xl border-2 border-purple-200 shadow-sm flex items-center justify-between gap-1 overflow-hidden min-w-0">
+                                <div className="h-11.5 sm:h-12 bg-gradient-to-br from-purple-50 via-indigo-50 to-blue-50 px-2.5 sm:px-3 rounded-xl border-2 border-purple-200 shadow-sm flex items-center justify-between gap-1 overflow-hidden min-w-0">
                                     <div className="flex flex-col overflow-hidden min-w-0">
                                         <span className="block text-[7.5px] font-black uppercase tracking-[0.2em] leading-none mb-1 text-purple-800 truncate">Daily Attendance</span>
                                         <p className={`text-[9.5px] md:text-[11px] font-black uppercase tracking-tight truncate ${isParentView ? attendanceDisplay.textColor : 'text-purple-950'}`}>
@@ -5147,7 +5318,7 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
                                         onMouseEnter={() => fetchStudentHistoryData()}
                                         onTouchStart={() => fetchStudentHistoryData()}
                                         onClick={() => setShowPermissionsHistory(true)}
-                                        className="h-12 bg-white px-2.5 sm:px-3 rounded-xl border border-gray-100 shadow-sm flex items-center justify-between gap-1 overflow-hidden min-w-0 hover:bg-gray-50 transition-all cursor-pointer text-left"
+                                        className="h-11.5 sm:h-12 bg-white px-2.5 sm:px-3 rounded-xl border border-gray-100 shadow-sm flex items-center justify-between gap-1 overflow-hidden min-w-0 hover:bg-gray-50 transition-all cursor-pointer text-left"
                                     >
                                         <div className="flex flex-col overflow-hidden min-w-0">
                                             <span className="block text-[7.5px] font-black uppercase tracking-[0.2em] leading-none mb-1 text-gray-400 opacity-70 truncate">Permissions & History</span>
@@ -5312,7 +5483,7 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
                                 <div className="grid grid-cols-2 gap-2 sm:gap-3 mb-2 sm:mb-4">
                                     <button
                                         onClick={() => router.push("/getpass/scan")}
-                                        className="w-full h-12 rounded-xl bg-gradient-to-r from-indigo-50 via-blue-50 to-indigo-100 border-2 border-indigo-200 text-indigo-950 font-black hover:border-indigo-400 transition-all flex flex-row items-center justify-start gap-2.5 group px-3 text-left shadow-sm"
+                                        className="w-full h-11.5 sm:h-12 rounded-xl bg-gradient-to-r from-indigo-50 via-blue-50 to-indigo-100 border-2 border-indigo-200 text-indigo-950 font-black hover:border-indigo-400 transition-all flex flex-row items-center justify-start gap-2.5 group px-3 text-left shadow-sm"
                                     >
                                         <div className="w-8 h-8 shrink-0 bg-indigo-200/60 rounded-lg flex items-center justify-center group-hover:scale-110 transition-transform">
                                             <svg className="w-4 h-4 text-indigo-700" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -5343,7 +5514,7 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
                                                 setRequestType("leave");
                                                 setShowRequestForm(true);
                                             }}
-                                            className={`w-full h-12 rounded-xl font-black border-2 transition-all flex flex-row items-center justify-start gap-2.5 group px-3 text-left shadow-sm ${
+                                            className={`w-full h-11.5 sm:h-12 rounded-xl font-black border-2 transition-all flex flex-row items-center justify-start gap-2.5 group px-3 text-left shadow-sm ${
                                                 hasActiveLeave
                                                     ? "bg-gradient-to-r from-slate-50 via-gray-50 to-slate-100 border-slate-200 text-slate-500 cursor-pointer"
                                                     : (isAtHostel || isParentView)
@@ -5389,13 +5560,13 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
                                         onMouseEnter={() => fetchStudentHistoryData()}
                                         onTouchStart={() => fetchStudentHistoryData()}
                                         onClick={() => setShowPermissionsHistory(true)}
-                                        className="w-full h-12 rounded-xl bg-gradient-to-r from-teal-50 via-emerald-50 to-teal-100 border-2 border-teal-200 text-teal-950 font-black text-[9.5px] md:text-[11px] uppercase tracking-widest hover:border-teal-400 transition-all flex items-center justify-center gap-1.5 shadow-sm"
+                                        className="w-full h-11.5 sm:h-12 rounded-xl bg-gradient-to-r from-teal-50 via-emerald-50 to-teal-100 border-2 border-teal-200 text-teal-950 font-black text-[9.5px] md:text-[11px] uppercase tracking-widest hover:border-teal-400 transition-all flex items-center justify-center gap-1.5 shadow-sm"
                                     >
                                         <span>🚪</span> <span className="truncate text-teal-950 font-black">Outing & Attendance</span>
                                     </button>
 
                                     {/* 📶 Always-Visible Campus WiFi Status Card (Right side of Outing & Attendance) */}
-                                    <div className={`w-full h-12 rounded-xl border-2 transition-all duration-500 flex items-center justify-between px-2.5 sm:px-3 text-left shadow-sm ${
+                                    <div className={`w-full h-11.5 sm:h-12 rounded-xl border-2 transition-all duration-500 flex items-center justify-between px-2.5 sm:px-3 text-left shadow-sm ${
                                         highlightLocation
                                             ? 'bg-amber-100 border-amber-400 ring-4 ring-amber-300 shadow-xl scale-[1.02] animate-pulse'
                                             : isOnCampusWifi
@@ -6159,15 +6330,15 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
 
                                                         return (
                                                             <div key={field.id} className={`flex flex-col bg-slate-50/80 border border-slate-100 ${isTrio ? 'p-1 sm:p-2' : 'p-1.5 sm:p-2'} rounded-lg ${colSpanClass}`}>
-                                                                <p className={`${isTrio ? 'text-[7.5px] min-[360px]:text-[8px] tracking-tight' : 'text-[8.5px] tracking-wider'} font-bold text-gray-400 uppercase mb-0.5 truncate`}>{field.label}</p>
+                                                                <p className={`text-[8.5px] tracking-wider font-bold text-gray-400 uppercase mb-0.5 truncate`}>{field.label}</p>
                                                                 {isProfileLoading ? (
                                                                     <div className="h-4 w-16 bg-gray-100 animate-pulse rounded mt-1"></div>
                                                                 ) : isPhone ? (
-                                                                    <a href={`tel:${value}`} title="Click to call" className={`${isTrio ? 'text-[9px] min-[360px]:text-[9.5px] gap-0.5' : 'text-[10.5px] gap-1'} font-black text-blue-600 hover:underline flex items-center whitespace-nowrap overflow-hidden`}>
-                                                                        <span className={isTrio ? 'text-[8.5px]' : ''}>📞</span> {displayValue}
+                                                                    <a href={`tel:${value}`} title="Click to call" className={`text-[10.5px] gap-1 font-black text-blue-600 hover:underline flex items-center whitespace-nowrap overflow-hidden`}>
+                                                                        <span>📞</span> {displayValue}
                                                                     </a>
                                                                 ) : (
-                                                                    <p className={`${isTrio ? 'text-[9.5px] min-[360px]:text-[10px] leading-tight' : 'text-[10.5px]'} font-extrabold break-words ${field.id === 'roomNumber' || field.id === 'floorNumber' ? 'text-blue-600' : 'text-gray-900'}`}>
+                                                                    <p className={`text-[10.5px] font-extrabold break-words ${field.id === 'roomNumber' || field.id === 'floorNumber' ? 'text-blue-600' : 'text-gray-900'}`}>
                                                                         {fieldIcon}{field.id === 'roomNumber' && value !== 'N/A' && !value.startsWith('#') ? '#' : ''}{displayValue}
                                                                     </p>
                                                                 )}
@@ -6207,43 +6378,40 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
                                 </div>
                             </div>
 
-                            {/* 📞 QUICK CONTACTS & 📜 UNDERTAKING STRIP */}
-                            <div className="grid grid-cols-3 gap-2 mt-2 sm:mt-3">
+                            {/* 📞 QUICK CONTACTS, 📜 UNDERTAKING & 📹 MAKE CALL STRIP */}
+                            <div className={`grid ${enableVideoVoiceCall ? 'grid-cols-4' : 'grid-cols-3'} gap-1 sm:gap-2 mt-2 sm:mt-3`}>
                                 <a
                                     href={`tel:${wardenContactPhone}`}
-                                    className="flex items-center justify-center gap-1.5 py-2 px-2 rounded-xl bg-blue-50/90 hover:bg-blue-100 text-blue-800 border border-blue-200/90 shadow-xs transition-all active:scale-95 group text-center"
+                                    className="flex items-center justify-center gap-0.5 sm:gap-1.5 py-1.5 sm:py-2 px-0.5 sm:px-2 rounded-lg sm:rounded-xl bg-blue-50/90 hover:bg-blue-100 text-blue-800 border border-blue-200/90 shadow-xs transition-all active:scale-95 group text-center overflow-hidden"
                                     title={`Call Hostel Warden: ${wardenContactInfo.name} (${wardenContactPhone})`}
                                 >
-                                    <span className="text-xs sm:text-sm group-hover:scale-110 transition-transform">📞</span>
-                                    <span className="text-[10px] sm:text-xs font-black tracking-tight truncate">Call Warden</span>
+                                    <span className="text-[10px] sm:text-sm group-hover:scale-110 transition-transform shrink-0">📞</span>
+                                    <span className="text-[7.5px] min-[360px]:text-[8px] sm:text-xs font-black tracking-tighter sm:tracking-tight whitespace-nowrap">Call Warden</span>
                                 </a>
 
                                 <a
                                     href={`tel:${deanContactPhone}`}
-                                    className="flex items-center justify-center gap-1.5 py-2 px-2 rounded-xl bg-indigo-50/90 hover:bg-indigo-100 text-indigo-800 border border-indigo-200/90 shadow-xs transition-all active:scale-95 group text-center"
+                                    className="flex items-center justify-center gap-0.5 sm:gap-1.5 py-1.5 sm:py-2 px-0.5 sm:px-2 rounded-lg sm:rounded-xl bg-indigo-50/90 hover:bg-indigo-100 text-indigo-800 border border-indigo-200/90 shadow-xs transition-all active:scale-95 group text-center overflow-hidden"
                                     title={`Call Hostel Dean: ${deanContactInfo.name} (${deanContactPhone})`}
                                 >
-                                    <span className="text-xs sm:text-sm group-hover:scale-110 transition-transform">📞</span>
-                                    <span className="text-[10px] sm:text-xs font-black tracking-tight truncate">Call Dean</span>
+                                    <span className="text-[10px] sm:text-sm group-hover:scale-110 transition-transform shrink-0">📞</span>
+                                    <span className="text-[7.5px] min-[360px]:text-[8px] sm:text-xs font-black tracking-tighter sm:tracking-tight whitespace-nowrap">Call Dean</span>
                                 </a>
 
                                 <button
                                     type="button"
                                     onClick={() => setShowUndertakingModal(true)}
-                                    className="flex items-center justify-center gap-1.5 py-2 px-2 rounded-xl bg-amber-50/90 hover:bg-amber-100 text-amber-900 border border-amber-200/90 shadow-xs transition-all active:scale-95 group text-center cursor-pointer"
+                                    className="flex items-center justify-center gap-0.5 sm:gap-1.5 py-1.5 sm:py-2 px-0.5 sm:px-2 rounded-lg sm:rounded-xl bg-amber-50/90 hover:bg-amber-100 text-amber-900 border border-amber-200/90 shadow-xs transition-all active:scale-95 group text-center cursor-pointer overflow-hidden"
                                     title="View My Undertaking Agreement"
                                 >
-                                    <span className="text-xs sm:text-sm group-hover:scale-110 transition-transform">📜</span>
-                                    <span className="text-[10px] sm:text-xs font-black tracking-tight truncate">My Undertaking</span>
+                                    <span className="text-[10px] sm:text-sm group-hover:scale-110 transition-transform shrink-0">📜</span>
+                                    <span className="text-[7.5px] min-[360px]:text-[8px] sm:text-xs font-black tracking-tighter sm:tracking-tight whitespace-nowrap">My Undertaking</span>
                                 </button>
-                            </div>
 
-                            {/* 📹 VIDEO CALL TO FRIEND (Controlled by Super Admin Setting) */}
-                            {enableVideoVoiceCall && (
-                                <div className="mt-2 sm:mt-3">
-                                    <VideoCallButton currentStudent={studentProfile} />
-                                </div>
-                            )}
+                                {enableVideoVoiceCall && (
+                                    <VideoCallButton currentStudent={studentProfile} compact={true} />
+                                )}
+                            </div>
 
 
                             {showFeeDetailsModal && (
@@ -6357,7 +6525,7 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
                                 <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm animate-in fade-in">
                                     <div className="bg-white rounded-2xl w-full max-w-2xl max-h-[85vh] overflow-hidden shadow-2xl flex flex-col">
                                         <div className="p-4 border-b flex items-center justify-between bg-gray-50">
-                                            <h2 className="text-lg font-bold text-gray-900">Outing & Permission History & Hostel Attendance</h2>
+                                            <h2 className="text-sm sm:text-lg font-bold text-gray-900">Outing & Permission History & Hostel Attendance</h2>
                                             <button
                                                 onClick={() => setShowPermissionsHistory(false)}
                                                 className="p-2 hover:bg-gray-200 rounded-full transition-colors"
@@ -6373,13 +6541,13 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
                                             <div className="flex border-b border-gray-100 bg-gray-50/50">
                                                 <button
                                                     onClick={() => setActiveHistoryTab('calendar')}
-                                                    className={`flex-1 py-3 text-xs font-black uppercase tracking-wider transition-colors border-b-2 flex items-center justify-center gap-2 ${activeHistoryTab === 'calendar' ? 'border-blue-600 text-blue-600' : 'border-transparent text-gray-500 hover:text-gray-900'}`}
+                                                    className={`flex-1 py-2 sm:py-3 text-[10px] sm:text-xs font-black uppercase tracking-wider transition-colors border-b-2 flex items-center justify-center gap-2 ${activeHistoryTab === 'calendar' ? 'border-blue-600 text-blue-600' : 'border-transparent text-gray-500 hover:text-gray-900'}`}
                                                 >
                                                     <span>📅</span> Outing Calendar
                                                 </button>
                                                 <button
                                                     onClick={() => setActiveHistoryTab('permissions')}
-                                                    className={`flex-1 py-3 text-xs font-black uppercase tracking-wider transition-colors border-b-2 flex items-center justify-center gap-2 ${activeHistoryTab === 'permissions' ? 'border-blue-600 text-blue-600' : 'border-transparent text-gray-500 hover:text-gray-900'}`}
+                                                    className={`flex-1 py-2 sm:py-3 text-[10px] sm:text-xs font-black uppercase tracking-wider transition-colors border-b-2 flex items-center justify-center gap-2 ${activeHistoryTab === 'permissions' ? 'border-blue-600 text-blue-600' : 'border-transparent text-gray-500 hover:text-gray-900'}`}
                                                 >
                                                     <span>📜</span> Permission Logs
                                                 </button>
@@ -6387,65 +6555,97 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
                                         )}
 
                                         <div className="overflow-y-auto flex-1 flex flex-col">
-                                            {activeHistoryTab === 'calendar' || isParentView ? (
+                                            {activeHistoryTab === 'calendar' && !isParentView ? (
                                                 <div 
                                                     className="flex-1 flex flex-col"
                                                     onTouchStart={handleCalendarTouchStart}
                                                     onTouchMove={handleCalendarTouchMove}
                                                     onTouchEnd={handleCalendarTouchEnd}
                                                 >
+                                                    <div className="flex items-center justify-between gap-3 bg-[#080d19] px-3 pt-2 pb-1 text-white sm:px-5 sm:pt-4 sm:pb-3">
+                                                        <h3 className="text-[9px] sm:text-sm font-black uppercase tracking-wider">Your Outing History</h3>
+                                                        <span className="shrink-0 rounded-full border border-slate-700 bg-slate-900 px-2 py-1 text-[8px] sm:px-2.5 sm:text-[10px] font-bold text-slate-200">
+                                                            {gatePasses.length} Total Passes
+                                                        </span>
+                                                    </div>
                                                     {/* Calendar Navigation */}
-                                                    <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100 bg-white">
+                                                    <div className="flex items-center justify-between gap-1 border-b border-slate-800 bg-[#080d19] px-2 py-1 sm:gap-2 sm:px-5 sm:py-3">
                                                         <button
                                                             onClick={() => setCalendarMonth(new Date(calendarMonth.getFullYear(), calendarMonth.getMonth() - 1, 1))}
-                                                            className="p-2 hover:bg-gray-100 rounded-xl transition-all font-bold text-gray-600 flex items-center justify-center"
+                                                            aria-label="Previous month"
+                                                            className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg border border-slate-700 bg-slate-800 text-slate-200 transition-colors hover:bg-slate-700 sm:h-9 sm:w-9"
                                                         >
                                                             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M15 19l-7-7 7-7" />
                                                             </svg>
                                                         </button>
-                                                        <h3 className="text-sm font-black text-gray-800 uppercase tracking-widest">
-                                                            {monthNames[calendarMonth.getMonth()]} <span className="text-gray-400 font-bold">{calendarMonth.getFullYear()}</span>
-                                                        </h3>
+                                                        <div className="flex items-center justify-center gap-1 sm:flex-1 sm:gap-2">
+                                                            <select
+                                                                aria-label="Calendar month"
+                                                                value={calendarMonth.getMonth()}
+                                                                onChange={(event) => setCalendarMonth(new Date(calendarMonth.getFullYear(), Number(event.target.value), 1))}
+                                                                className="h-7 w-[92px] min-w-0 rounded-lg border border-slate-700 bg-slate-800 px-1.5 text-[9px] font-black uppercase text-white outline-none focus:border-blue-500 sm:h-9 sm:w-auto sm:max-w-[150px] sm:px-3 sm:text-xs"
+                                                            >
+                                                                {monthNames.map((month, index) => <option key={month} value={index}>{month}</option>)}
+                                                            </select>
+                                                            <select
+                                                                aria-label="Calendar year"
+                                                                value={calendarMonth.getFullYear()}
+                                                                onChange={(event) => setCalendarMonth(new Date(Number(event.target.value), calendarMonth.getMonth(), 1))}
+                                                                className="h-7 w-[64px] rounded-lg border border-slate-700 bg-slate-800 px-1 text-[9px] font-black text-white outline-none focus:border-blue-500 sm:h-9 sm:w-[88px] sm:px-2 sm:text-xs"
+                                                            >
+                                                                {Array.from({ length: 11 }, (_, index) => new Date().getFullYear() - 5 + index).map(year => (
+                                                                    <option key={year} value={year}>{year}</option>
+                                                                ))}
+                                                            </select>
+                                                        </div>
                                                         <button
                                                             onClick={() => setCalendarMonth(new Date(calendarMonth.getFullYear(), calendarMonth.getMonth() + 1, 1))}
-                                                            className="p-2 hover:bg-gray-100 rounded-xl transition-all font-bold text-gray-600 flex items-center justify-center"
+                                                            aria-label="Next month"
+                                                            className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg border border-slate-700 bg-slate-800 text-slate-200 transition-colors hover:bg-slate-700 sm:h-9 sm:w-9"
                                                         >
                                                             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M9 5l7 7-7 7" />
                                                             </svg>
                                                         </button>
+                                                        <button
+                                                            onClick={() => {
+                                                                const today = new Date();
+                                                                setCalendarMonth(new Date(today.getFullYear(), today.getMonth(), 1));
+                                                                setSelectedCalendarDay(today);
+                                                            }}
+                                                            className="h-7 shrink-0 rounded-lg border border-blue-500/60 bg-blue-500/10 px-2 text-[8px] font-black uppercase tracking-wide text-blue-300 transition-colors hover:bg-blue-500/20 sm:h-9 sm:px-3 sm:text-[10px]"
+                                                        >
+                                                            Today
+                                                        </button>
                                                     </div>
 
                                                     {/* Legend */}
-                                                    <div className="bg-gray-50 border-b border-gray-100 px-3 py-2 space-y-1.5">
+                                                    <div className="border-b border-slate-800 bg-[#0d1424] px-3 py-2 sm:px-4 sm:py-2.5 text-slate-200 space-y-1.5 sm:space-y-2">
                                                         {/* Outing Tile Header */}
-                                                        <div className="flex items-center justify-between text-[9px] sm:text-[10px] font-black tracking-wider gap-1">
-                                                            <span className="px-1 py-0.5 rounded bg-gray-200 text-rose-900 text-[8px] tracking-widest shrink-0 font-bold border border-gray-300">OUTING:</span>
-                                                            <div className="flex items-center gap-1 text-gray-900">
-                                                                <span className="w-3.5 h-3.5 rounded-none border border-gray-900 bg-emerald-500 shrink-0"></span>
+                                                        <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-[8px] sm:gap-x-4 sm:gap-y-1.5 sm:text-[10px] font-bold tracking-wide">
+                                                            <span className="rounded border border-slate-600 bg-slate-800 px-1 py-0.5 text-[8px] tracking-wide text-slate-200 shrink-0 sm:px-1.5 sm:tracking-widest">OUTING</span>
+                                                            <div className="flex items-center gap-1 text-slate-200 sm:gap-1.5">
+                                                                <span className="w-2.5 h-2.5 rounded-sm bg-emerald-500 shrink-0"></span>
                                                                 <span>Inside Campus</span>
                                                             </div>
-                                                            <span className="text-gray-400 font-normal">|</span>
-                                                            <div className="flex items-center gap-1 text-gray-900">
-                                                                <span className="w-3.5 h-3.5 rounded-none border border-gray-900 bg-amber-500 shrink-0"></span>
+                                                            <div className="flex items-center gap-1 text-slate-200 sm:gap-1.5">
+                                                                <span className="w-2.5 h-2.5 rounded-sm bg-amber-500 shrink-0"></span>
                                                                 <span>Partial Outing</span>
                                                             </div>
-                                                            <span className="text-gray-400 font-normal">|</span>
-                                                            <div className="flex items-center gap-1 text-gray-900">
-                                                                <span className="w-3.5 h-3.5 rounded-none border border-gray-900 bg-rose-600 shrink-0"></span>
+                                                            <div className="flex items-center gap-1 text-slate-200 sm:gap-1.5">
+                                                                <span className="w-2.5 h-2.5 rounded-sm bg-rose-600 shrink-0"></span>
                                                                 <span>Completely Out</span>
                                                             </div>
                                                         </div>
                                                         {/* Daily Attendance Dot */}
-                                                        <div className="flex items-center justify-between text-[9px] sm:text-[10px] font-black tracking-wider gap-1 border-t border-gray-200/60 pt-1.5">
-                                                            <span className="px-1 py-0.5 rounded bg-gray-200 text-rose-900 text-[8px] tracking-widest shrink-0 font-bold border border-gray-300">NIGHT ATTENDANCE:</span>
-                                                            <div className="flex items-center gap-1 text-gray-900">
+                                                        <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[8px] sm:gap-x-4 sm:gap-y-1.5 sm:text-[10px] font-bold tracking-wide">
+                                                            <span className="rounded border border-slate-600 bg-slate-800 px-1 py-0.5 text-[8px] tracking-wide text-slate-200 shrink-0 sm:px-1.5 sm:tracking-widest">NIGHT ATTENDANCE</span>
+                                                            <div className="flex items-center gap-1.5 text-slate-200">
                                                                 <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 shrink-0"></span>
                                                                 <span>Present</span>
                                                             </div>
-                                                            <span className="text-gray-400 font-normal">|</span>
-                                                            <div className="flex items-center gap-1 text-gray-900">
+                                                            <div className="flex items-center gap-1.5 text-slate-200">
                                                                 <span className="w-2.5 h-2.5 rounded-full bg-rose-500 shrink-0"></span>
                                                                 <span>Absent</span>
                                                             </div>
@@ -6458,16 +6658,16 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
                                                             <p className="text-[10px] text-gray-400 font-black uppercase tracking-widest">Loading Outing Logs...</p>
                                                         </div>
                                                     ) : (
-                                                        <div className="flex-1 bg-white">
+                                                        <div className="flex-1 bg-[#0d1424]">
                                                             {/* Weekday headers */}
-                                                            <div className="grid grid-cols-7 gap-1 p-4 pb-1 text-center text-[10px] font-black text-gray-400 uppercase tracking-widest border-b border-gray-50">
+                                                            <div className="grid grid-cols-7 gap-1 px-3 pt-2 pb-1 text-center text-[8px] sm:text-[10px] font-black text-slate-400 uppercase tracking-wider sm:px-5 sm:pt-3">
                                                                 {["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].map(day => (
                                                                     <div key={day} className="py-1">{day}</div>
                                                                 ))}
                                                             </div>
 
                                                             {/* Calendar cells */}
-                                                            <div className="grid grid-cols-7 gap-2 p-4">
+                                                            <div className="grid grid-cols-7 gap-1.5 px-3 pb-3 pt-2 sm:gap-2 sm:px-5 sm:pb-5">
                                                                 {getDaysInMonth(calendarMonth).map((cell, idx) => {
                                                                     if (!cell.date) return <div key={idx} className="aspect-square" />;
 
@@ -6487,7 +6687,7 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
                                                                         return (
                                                                             <div
                                                                                 key={idx}
-                                                                                className="aspect-square flex items-center justify-center rounded-none bg-gray-50/50 text-gray-300 text-xs font-bold select-none cursor-not-allowed opacity-40"
+                                                                                className="h-5 sm:h-9 flex items-center justify-center rounded border border-slate-700 bg-slate-900/40 text-[9px] sm:text-xs text-slate-600 font-bold select-none cursor-not-allowed"
                                                                             >
                                                                                 {cell.date.getDate()}
                                                                             </div>
@@ -6527,18 +6727,10 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
                                                                     })();
 
                                                                     const status = (isFuture || isBeforeJoining || isOutsideSubscription) ? null : getDayOutingStatus(cell.date);
-                                                                    let colorClasses = "";
-                                                                    if (isJoiningDate) {
-                                                                        colorClasses = "bg-gradient-to-br from-blue-400 to-indigo-600 text-white shadow-lg shadow-blue-500/20 border-0";
-                                                                    } else if (isFuture || isBeforeJoining || isOutsideSubscription) {
-                                                                        colorClasses = "bg-gradient-to-br from-gray-50 to-gray-100 text-gray-400 border border-gray-200/50 shadow-sm opacity-60";
-                                                                    } else if (status === 'red') {
-                                                                        colorClasses = "bg-gradient-to-br from-rose-400 to-red-600 text-white shadow-lg shadow-red-500/20";
-                                                                    } else if (status === 'orange') {
-                                                                        colorClasses = "bg-gradient-to-br from-amber-400 to-orange-500 text-white shadow-lg shadow-orange-500/20";
-                                                                    } else {
-                                                                        colorClasses = "bg-gradient-to-br from-emerald-400 to-teal-600 text-white shadow-lg shadow-emerald-500/20";
-                                                                    }
+                                                                    const outingMarkerClass = isJoiningDate ? "bg-blue-500" :
+                                                                        (isFuture || isBeforeJoining || isOutsideSubscription) ? "bg-slate-700" :
+                                                                        status === 'red' ? "bg-rose-500" :
+                                                                        status === 'orange' ? "bg-amber-400" : "bg-emerald-500";
  
                                                                     const dateStr = cell.date.toLocaleDateString("en-IN", { timeZone: "Asia/Kolkata", year: "numeric", month: "2-digit", day: "2-digit" }).split('/').reverse().join('-');
                                                                     const attendanceRecord = attendanceHistory.find((r: any) => r.date === dateStr);
@@ -6558,42 +6750,41 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
                                                                         <button
                                                                             key={idx}
                                                                             onClick={() => setSelectedCalendarDay(cell.date)}
-                                                                            className={`aspect-square flex flex-col items-center justify-center rounded-none text-xs transition-all relative ${colorClasses} ${isSelected ? 'ring-2 ring-blue-500 z-10' : 'hover:scale-[1.03] active:scale-[0.97]'}`}
+                                                                            className={`h-5 sm:h-9 flex flex-col items-center justify-center overflow-hidden rounded border border-slate-600 bg-slate-800 text-xs text-slate-100 transition-colors relative ${isSelected ? 'border-blue-400 ring-2 ring-blue-500 z-10 bg-slate-700' : 'hover:border-slate-500 hover:bg-slate-700'}`}
                                                                         >
+                                                                            <span className={`absolute inset-x-0 top-0 h-1 ${outingMarkerClass}`} />
                                                                             {/* Date in the top right corner */}
-                                                                            <span className="absolute top-1.5 right-1.5 text-[9px] font-black leading-none">{cell.date.getDate()}</span>
+                                                                            <span className="absolute top-2 right-2 text-[8px] sm:text-[10px] font-black leading-none">{cell.date.getDate()}</span>
                                                                             
                                                                             {isJoiningDate && (
-                                                                                <span className="absolute top-1.5 left-1.5 text-[6px] text-white font-black leading-tight tracking-tighter uppercase text-left">
+                                                                                    <span className="absolute top-2 left-1.5 text-[6px] text-blue-200 font-black leading-tight uppercase text-left">
                                                                                     Hostel<br/>Joined
                                                                                 </span>
                                                                             )}
                                                                             
-                                                                            {/* Attendance Indicator Bar & Dot */}
-                                                                            <div className="absolute bottom-0 w-full h-[50%] bg-white/95 backdrop-blur-sm rounded-none flex items-center justify-center gap-0.5 border-t border-black/5 shadow-inner px-0.5">
-                                                                                {attendanceStatus === 'Present' && (
-                                                                                    <span className="flex items-center gap-0.5 text-[7.5px] font-black text-emerald-700" title="Attendance: Present">
-                                                                                        <span className="w-2 h-2 rounded-full bg-emerald-500 shadow-sm" />
-                                                                                    </span>
-                                                                                )}
-                                                                                {attendanceStatus === 'Absent' && (
-                                                                                    <span className="flex items-center gap-0.5 text-[7.5px] font-black text-rose-600" title="Attendance: Absent">
-                                                                                        <span className="w-2 h-2 rounded-full bg-rose-500 shadow-sm animate-pulse" />
-                                                                                    </span>
-                                                                                )}
-                                                                            </div>
+                                                                            {attendanceStatus === 'Present' && (
+                                                                                <span className="absolute top-[9px] right-6 h-1.5 w-1.5 rounded-full bg-emerald-400 shadow-sm" title="Attendance: Present" />
+                                                                            )}
+                                                                            {attendanceStatus === 'Absent' && (
+                                                                                <span className="absolute top-[9px] right-6 h-1.5 w-1.5 rounded-full bg-rose-400 shadow-sm animate-pulse" title="Attendance: Absent" />
+                                                                            )}
                                                                             {isToday && (
-                                                                                <span className={`w-1 h-1 rounded-full absolute top-1.5 left-1.5 ${status || isJoiningDate ? 'bg-white' : 'bg-blue-600'}`} />
+                                                                                <span className="w-1.5 h-1.5 rounded-full absolute top-2 left-2 bg-blue-300 ring-1 ring-slate-900" />
                                                                             )}
                                                                         </button>
                                                                     );
                                                                 })}
                                                             </div>
+                                                            {selectedCalendarDay && (
+                                                                <div className="border-t border-slate-800 px-4 py-2 text-right text-[10px] font-bold text-slate-300 sm:px-5">
+                                                                    Selected: {formatDateDDMMYYYY(selectedCalendarDay)}
+                                                                </div>
+                                                            )}
  
                                                             {/* Selected Day Details */}
                                                             {selectedCalendarDay && (
-                                                                <div className="px-6 pb-6 pt-4 border-t border-gray-100 bg-gray-50/50">
-                                                                    <h4 className="text-[11px] font-black text-gray-400 uppercase tracking-widest mb-3 flex items-center gap-1.5">
+                                                                <div className="px-3 pb-3 pt-2 border-t border-gray-100 bg-gray-50/50 sm:px-6 sm:pb-6 sm:pt-4">
+                                                                    <h4 className="text-[9px] sm:text-[11px] font-black text-gray-400 uppercase tracking-widest mb-2 sm:mb-3 flex items-center gap-1.5">
                                                                         <span>📋</span> Details • {formatDateDDMMYYYY(selectedCalendarDay)}
                                                                     </h4>
                                                                     {(() => {
@@ -6644,8 +6835,8 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
  
                                                                         if (isFuture) {
                                                                             return (
-                                                                                <div className="rounded-xl border border-gray-200 bg-gray-50/50 p-4 text-center">
-                                                                                    <p className="text-gray-500 text-xs font-bold flex items-center justify-center gap-1.5">
+                                                                                <div className="rounded-xl border border-gray-200 bg-gray-50/50 p-3 sm:p-4 text-center">
+                                                                                    <p className="text-gray-500 text-[10px] sm:text-xs font-bold flex items-center justify-center gap-1.5">
                                                                                         <span>⏳</span> Logs not available for future dates.
                                                                                     </p>
                                                                                 </div>
@@ -6653,8 +6844,8 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
                                                                         }
                                                                         if (isOutsideSubscription) {
                                                                             return (
-                                                                                <div className="rounded-xl border border-gray-200 bg-gray-50/50 p-4 text-center">
-                                                                                    <p className="text-gray-500 text-xs font-bold flex items-center justify-center gap-1.5">
+                                                                                <div className="rounded-xl border border-gray-200 bg-gray-50/50 p-3 sm:p-4 text-center">
+                                                                                    <p className="text-gray-500 text-[10px] sm:text-xs font-bold flex items-center justify-center gap-1.5">
                                                                                         <span>🛇</span> Subscription not active on this date.
                                                                                     </p>
                                                                                 </div>
@@ -6662,8 +6853,8 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
                                                                         }
                                                                         if (isBeforeJoining) {
                                                                             return (
-                                                                                <div className="rounded-xl border border-gray-200 bg-gray-50/50 p-4 text-center">
-                                                                                    <p className="text-gray-500 text-xs font-bold flex items-center justify-center gap-1.5">
+                                                                                <div className="rounded-xl border border-gray-200 bg-gray-50/50 p-3 sm:p-4 text-center">
+                                                                                    <p className="text-gray-500 text-[10px] sm:text-xs font-bold flex items-center justify-center gap-1.5">
                                                                                         <span>🛇</span> Not joined hostel yet.
                                                                                     </p>
                                                                                 </div>
@@ -6672,14 +6863,14 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
 
                                                                         const dayPasses = getOverlappingGatePasses(selectedCalendarDay);
                                                                         return (
-                                                                            <div className="space-y-3">
+                                                                            <div className="space-y-2 sm:space-y-3">
                                                                                 {/* Attendance Details */}
-                                                                                <div className="bg-white rounded-xl border border-gray-200/60 p-3 shadow-sm flex items-center justify-between">
-                                                                                    <span className="text-[10px] md:text-xs font-black uppercase tracking-widest text-gray-500 flex items-center gap-1.5">
-                                                                                        <svg className="w-4 h-4 text-indigo-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z" /></svg>
+                                                                                <div className="bg-white rounded-xl border border-gray-200/60 p-2 sm:p-3 shadow-sm flex items-center justify-between">
+                                                                                    <span className="text-[8px] sm:text-xs font-black uppercase tracking-widest text-gray-500 flex items-center gap-1.5">
+                                                                                        <svg className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-indigo-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z" /></svg>
                                                                                         Night Attendance
                                                                                     </span>
-                                                                                    <span className={`px-2 py-0.5 rounded-full text-[9px] font-black uppercase tracking-wider border ${
+                                                                                    <span className={`px-1.5 sm:px-2 py-0.5 rounded-full text-[8px] sm:text-[9px] font-black uppercase tracking-wider border ${
                                                                                         attendanceStatus === 'Present' ? 'bg-green-50 text-green-700 border-green-200' :
                                                                                         attendanceStatus === 'Absent' ? 'bg-red-50 text-red-700 border-red-200' :
                                                                                         attendanceStatus === 'Pending' ? 'bg-yellow-50 text-yellow-700 border-yellow-200' :
@@ -6693,40 +6884,40 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
                                                                                 </div>
 
                                                                                 {dayPasses.length === 0 ? (
-                                                                                    <div className="rounded-xl border border-emerald-100 bg-emerald-50/40 p-4 text-center">
-                                                                                        <p className="text-emerald-700 text-xs font-bold flex items-center justify-center gap-1.5">
+                                                                                    <div className="rounded-xl border border-emerald-100 bg-emerald-50/40 p-2 sm:p-4 text-center">
+                                                                                        <p className="text-emerald-700 text-[10px] sm:text-xs font-bold flex items-center justify-center gap-1.5">
                                                                                             <span>✅</span> Stayed inside campus for the whole day.
                                                                                         </p>
                                                                                     </div>
                                                                                 ) : (
                                                                                     <>
                                                                                         {dayPasses.map((pass: any) => (
-                                                                                            <div key={pass._id} className="bg-white rounded-xl border border-gray-200/60 p-3.5 shadow-sm space-y-2.5">
+                                                                                            <div key={pass._id} className="bg-white rounded-xl border border-gray-200/60 p-2.5 sm:p-3.5 shadow-sm space-y-2 sm:space-y-2.5">
                                                                                                 <div className="flex justify-between items-center">
-                                                                                                    <span className={`px-2.5 py-0.5 rounded-full text-[9px] font-black uppercase tracking-wider ${pass.type === 'leave' ? 'bg-purple-100 text-purple-700' : 'bg-purple-100 text-purple-700'}`}>
+                                                                                                    <span className={`px-2 sm:px-2.5 py-0.5 rounded-full text-[8px] sm:text-[9px] font-black uppercase tracking-wider ${pass.type === 'leave' ? 'bg-purple-100 text-purple-700' : 'bg-purple-100 text-purple-700'}`}>
                                                                                                         {pass.type === 'leave' ? '🏠 Home Leave' : '🚶 Short Outing'}
                                                                                                     </span>
-                                                                                                    <span className={`px-2.5 py-0.5 rounded-full text-[9px] font-black uppercase tracking-wider ${pass.status === 'out' ? 'bg-rose-100 text-rose-700 border border-rose-200' : 'bg-emerald-100 text-emerald-700 border border-emerald-200'}`}>
+                                                                                                    <span className={`px-2 sm:px-2.5 py-0.5 rounded-full text-[8px] sm:text-[9px] font-black uppercase tracking-wider ${pass.status === 'out' ? 'bg-rose-100 text-rose-700 border border-rose-200' : 'bg-emerald-100 text-emerald-700 border border-emerald-200'}`}>
                                                                                                         {pass.status === 'out' ? 'Still Outside' : 'Returned'}
                                                                                                     </span>
                                                                                                 </div>
                                                                                                 
                                                                                                 {/* Row 1 & 2: Full horizontal row matching Screenshot 2 */}
-                                                                                                <div className="space-y-1.5 text-xs pt-1">
-                                                                                                    <div className="flex items-center text-gray-900 font-extrabold text-[11px] md:text-xs">
-                                                                                                        <span className="w-[85px] uppercase tracking-tight shrink-0">CHECK OUT</span>
-                                                                                                        <span className="text-gray-300 font-normal px-2 shrink-0">|</span>
+                                                                                                <div className="space-y-1 text-[10px] sm:space-y-1.5 sm:pt-1 sm:text-xs">
+                                                                                                    <div className="flex items-center text-gray-900 font-extrabold text-[9px] sm:text-[11px] md:text-xs">
+                                                                                                        <span className="w-[70px] sm:w-[85px] uppercase tracking-tight shrink-0">CHECK OUT</span>
+                                                                                                        <span className="text-gray-300 font-normal px-1 sm:px-2 shrink-0">|</span>
                                                                                                         <span className="text-center flex-1 tabular-nums">{pass.checkOutISTTime}</span>
-                                                                                                        <span className="text-gray-300 font-normal px-2 shrink-0">|</span>
+                                                                                                        <span className="text-gray-300 font-normal px-1 sm:px-2 shrink-0">|</span>
                                                                                                         <span className="text-right flex-1 tabular-nums">{pass.checkOutISTDate}</span>
                                                                                                     </div>
-                                                                                                    <div className="flex items-center text-gray-900 font-extrabold text-[11px] md:text-xs">
-                                                                                                        <span className="w-[85px] uppercase tracking-tight shrink-0">CHECK IN</span>
-                                                                                                        <span className="text-gray-300 font-normal px-2 shrink-0">|</span>
+                                                                                                    <div className="flex items-center text-gray-900 font-extrabold text-[9px] sm:text-[11px] md:text-xs">
+                                                                                                        <span className="w-[70px] sm:w-[85px] uppercase tracking-tight shrink-0">CHECK IN</span>
+                                                                                                        <span className="text-gray-300 font-normal px-1 sm:px-2 shrink-0">|</span>
                                                                                                         {pass.status === 'in' || pass.status === 'auto-resolved' ? (
                                                                                                             <>
                                                                                                                 <span className="text-center flex-1 tabular-nums">{pass.checkInISTTime}</span>
-                                                                                                                <span className="text-gray-300 font-normal px-2 shrink-0">|</span>
+                                                                                                                <span className="text-gray-300 font-normal px-1 sm:px-2 shrink-0">|</span>
                                                                                                                 <span className="text-right flex-1 tabular-nums">{pass.checkInISTDate}</span>
                                                                                                             </>
                                                                                                         ) : (
@@ -6739,7 +6930,7 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
 
                                                                                                 {/* Row 3: Centered Total Duration */}
                                                                                                 {pass.durationMinutes !== undefined && pass.durationMinutes !== null && (
-                                                                                                    <div className="text-center text-[10.5px] md:text-[11px] text-gray-900 font-extrabold uppercase tracking-wider pt-1.5 border-t border-gray-100">
+                                                                                                    <div className="text-center text-[9px] sm:text-[10.5px] md:text-[11px] text-gray-900 font-extrabold uppercase tracking-wider pt-1.5 border-t border-gray-100">
                                                                                                         TOTAL DURATION: {(() => {
                                                                                                             const minutes = pass.durationMinutes;
                                                                                                             if (minutes >= 1440) {
@@ -6769,19 +6960,19 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
                                             ) : (
                                                 <div className="flex-1 flex flex-col min-h-0 bg-slate-50/50">
                                                     {/* 3 Sub-Tabs Segmented Bar */}
-                                                    <div className="p-2.5 sm:p-3 bg-slate-100/70 border-b border-slate-200/80 flex gap-1.5 sm:gap-2">
+                                                    <div className={`${isParentView ? "p-1.5 gap-0.5 sm:p-3 sm:gap-2" : "p-2.5 gap-1.5 sm:p-3 sm:gap-2"} bg-slate-100/70 border-b border-slate-200/80 flex`}>
                                                         <button
                                                             type="button"
-                                                            onClick={() => setStudentHistoryTab("permissions")}
-                                                            className={`flex-1 py-1.5 sm:py-2 px-1.5 sm:px-2 rounded-lg text-[10px] sm:text-xs font-black transition-all flex items-center justify-center gap-1 cursor-pointer whitespace-nowrap overflow-hidden ${
+                                                            onClick={() => selectStudentHistoryTab("permissions")}
+                                                            className={`flex-1 py-1.5 sm:py-2 px-0.5 sm:px-2 rounded-lg text-[8px] sm:text-xs font-black transition-all flex items-center justify-center gap-0.5 sm:gap-1 cursor-pointer whitespace-nowrap overflow-hidden ${
                                                                 studentHistoryTab === "permissions"
                                                                     ? "bg-white text-blue-700 shadow-xs border border-blue-100"
                                                                     : "text-slate-500 hover:text-slate-800 hover:bg-white/60"
                                                             }`}
                                                         >
-                                                            <span className="shrink-0 text-xs sm:text-sm">📋</span>
+                                                            <span className="shrink-0 text-[9px] sm:text-sm">📋</span>
                                                             <span className="whitespace-nowrap tracking-normal">PERMISSION</span>
-                                                            <span className={`text-[9px] sm:text-[10px] px-1.5 py-0.2 rounded-full font-black shrink-0 ${
+                                                            <span className={`text-[7px] sm:text-[10px] px-1 sm:px-1.5 py-0.2 rounded-full font-black shrink-0 ${
                                                                 studentHistoryTab === "permissions" ? "bg-blue-100 text-blue-800" : "bg-slate-200 text-slate-600"
                                                             }`}>
                                                                 {studentPermissionsList.length}
@@ -6790,16 +6981,16 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
 
                                                         <button
                                                             type="button"
-                                                            onClick={() => setStudentHistoryTab("home_leave")}
-                                                            className={`flex-1 py-1.5 sm:py-2 px-1 xs:px-1.5 sm:px-2 rounded-lg text-[9.5px] xs:text-[10px] sm:text-xs font-black transition-all flex items-center justify-center gap-0.5 xs:gap-1 cursor-pointer whitespace-nowrap overflow-hidden ${
+                                                            onClick={() => selectStudentHistoryTab("home_leave")}
+                                                            className={`flex-1 py-1.5 sm:py-2 px-0.5 sm:px-2 rounded-lg text-[8px] sm:text-xs font-black transition-all flex items-center justify-center gap-0.5 sm:gap-1 cursor-pointer whitespace-nowrap overflow-hidden ${
                                                                 studentHistoryTab === "home_leave"
                                                                     ? "bg-white text-amber-700 shadow-xs border border-amber-100"
                                                                     : "text-slate-500 hover:text-slate-800 hover:bg-white/60"
                                                             }`}
                                                         >
-                                                            <span className="shrink-0 text-[11px] sm:text-sm">🏠</span>
+                                                            <span className="shrink-0 text-[9px] sm:text-sm">🏠</span>
                                                             <span className="whitespace-nowrap tracking-tight">HOME-LEAVE</span>
-                                                            <span className={`text-[8.5px] sm:text-[9px] px-1 py-0.2 rounded-full font-black shrink-0 ${
+                                                            <span className={`text-[7px] sm:text-[9px] px-1 py-0.2 rounded-full font-black shrink-0 ${
                                                                 studentHistoryTab === "home_leave" ? "bg-amber-100 text-amber-800" : "bg-slate-200 text-slate-600"
                                                             }`}>
                                                                 {studentHomeLeaves.length}
@@ -6808,21 +6999,204 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
 
                                                         <button
                                                             type="button"
-                                                            onClick={() => setStudentHistoryTab("gate_pass")}
-                                                            className={`flex-1 py-1.5 sm:py-2 px-1 xs:px-1.5 sm:px-2 rounded-lg text-[9.5px] xs:text-[10px] sm:text-xs font-black transition-all flex items-center justify-center gap-0.5 xs:gap-1 cursor-pointer whitespace-nowrap overflow-hidden ${
+                                                            onClick={() => selectStudentHistoryTab("gate_pass")}
+                                                            className={`flex-1 py-1.5 sm:py-2 px-0.5 sm:px-2 rounded-lg text-[8px] sm:text-xs font-black transition-all flex items-center justify-center gap-0.5 sm:gap-1 cursor-pointer whitespace-nowrap overflow-hidden ${
                                                                 studentHistoryTab === "gate_pass"
                                                                     ? "bg-white text-indigo-700 shadow-xs border border-indigo-100"
                                                                     : "text-slate-500 hover:text-slate-800 hover:bg-white/60"
                                                             }`}
                                                         >
-                                                            <span className="shrink-0 text-[11px] sm:text-sm">🎫</span>
+                                                            <span className="shrink-0 text-[9px] sm:text-sm">🎫</span>
                                                             <span className="whitespace-nowrap tracking-tight">GATE-PASS</span>
-                                                            <span className={`text-[8.5px] sm:text-[9px] px-1 py-0.2 rounded-full font-black shrink-0 ${
+                                                            <span className={`text-[7px] sm:text-[9px] px-1 py-0.2 rounded-full font-black shrink-0 ${
                                                                 studentHistoryTab === "gate_pass" ? "bg-indigo-100 text-indigo-800" : "bg-slate-200 text-slate-600"
                                                             }`}>
                                                                 {studentGatePasses.length}
                                                             </span>
                                                         </button>
+                                                        {isParentView && (
+                                                            <button
+                                                                type="button"
+                                                                onClick={() => selectStudentHistoryTab("attendance")}
+                                                                className={`flex-1 py-1.5 sm:py-2 px-0.5 sm:px-2 rounded-lg text-[8px] sm:text-xs font-black transition-all flex items-center justify-center gap-0.5 sm:gap-1 cursor-pointer whitespace-nowrap overflow-hidden ${
+                                                                    studentHistoryTab === "attendance"
+                                                                        ? "bg-white text-emerald-700 shadow-xs border border-emerald-100"
+                                                                        : "text-slate-500 hover:text-slate-800 hover:bg-white/60"
+                                                                }`}
+                                                            >
+                                                                <span className="shrink-0 text-[9px] sm:text-sm">🌙</span>
+                                                                <span className="whitespace-nowrap tracking-tight">ATTENDANCE</span>
+                                                                <span className={`text-[7px] sm:text-[9px] px-1 py-0.2 rounded-full font-black shrink-0 ${
+                                                                    studentHistoryTab === "attendance" ? "bg-emerald-100 text-emerald-800" : "bg-slate-200 text-slate-600"
+                                                                }`}>
+                                                                    {attendanceHistory.length}
+                                                                </span>
+                                                            </button>
+                                                        )}
+                                                    </div>
+
+                                                    <div className={`mx-3 mt-2 overflow-hidden rounded-lg border sm:mx-4 ${isParentView ? "border-slate-200 bg-white text-slate-800" : "border-slate-800 bg-[#0d1424] text-white"}`}>
+                                                        <div className={`flex items-center justify-between gap-2 px-3 py-2 ${isParentView ? "bg-slate-50 text-slate-800" : "bg-[#080d19] text-white"}`}>
+                                                            <span className="text-[9px] sm:text-xs font-black uppercase tracking-wide">{isParentView ? "Student History" : "Permission History"}</span>
+                                                            <span className={`text-[8px] sm:text-[10px] font-bold ${isParentView ? "text-slate-500" : "text-slate-300"}`}>{activeStudentHistoryRecords.length} Total Logs</span>
+                                                        </div>
+                                                        <div className={`flex items-center justify-between gap-1 border-y px-2 py-1 ${isParentView ? "border-slate-200 bg-slate-50" : "border-slate-800 bg-[#080d19]"}`}>
+                                                            <button
+                                                                type="button"
+                                                                aria-label="Previous month"
+                                                                onClick={() => {
+                                                                    attendanceAutoSelectionRef.current = true;
+                                                                    setStudentHistoryCalendarMonth(new Date(studentHistoryCalendarMonth.getFullYear(), studentHistoryCalendarMonth.getMonth() - 1, 1));
+                                                                    setSelectedStudentHistoryDate(null);
+                                                                }}
+                                                                className={`flex h-7 w-7 shrink-0 items-center justify-center rounded border ${isParentView ? "border-slate-200 bg-white text-slate-700" : "border-slate-700 bg-slate-800 text-slate-200"}`}
+                                                            >
+                                                                <span aria-hidden="true">‹</span>
+                                                            </button>
+                                                            <div className="flex items-center justify-center gap-1 sm:flex-1 sm:gap-2">
+                                                                <select
+                                                                    aria-label="History calendar month"
+                                                                    value={studentHistoryCalendarMonth.getMonth()}
+                                                                    onChange={event => {
+                                                                        attendanceAutoSelectionRef.current = true;
+                                                                        setStudentHistoryCalendarMonth(new Date(studentHistoryCalendarMonth.getFullYear(), Number(event.target.value), 1));
+                                                                        setSelectedStudentHistoryDate(null);
+                                                                    }}
+                                                                    className={`h-7 w-[92px] rounded border px-1 font-black uppercase text-[9px] sm:h-9 sm:w-auto sm:max-w-[150px] sm:px-3 sm:text-xs ${isParentView ? "border-slate-200 bg-white text-slate-700" : "border-slate-700 bg-slate-800 text-white"}`}
+                                                                >
+                                                                    {monthNames.map((month, index) => <option key={month} value={index}>{month}</option>)}
+                                                                </select>
+                                                                <select
+                                                                    aria-label="History calendar year"
+                                                                    value={studentHistoryCalendarMonth.getFullYear()}
+                                                                    onChange={event => {
+                                                                        attendanceAutoSelectionRef.current = true;
+                                                                        setStudentHistoryCalendarMonth(new Date(Number(event.target.value), studentHistoryCalendarMonth.getMonth(), 1));
+                                                                        setSelectedStudentHistoryDate(null);
+                                                                    }}
+                                                                    className={`h-7 w-[64px] rounded border px-1 font-black text-[9px] sm:h-9 sm:w-[88px] sm:px-2 sm:text-xs ${isParentView ? "border-slate-200 bg-white text-slate-700" : "border-slate-700 bg-slate-800 text-white"}`}
+                                                                >
+                                                                    {Array.from({ length: 11 }, (_, index) => new Date().getFullYear() - 5 + index).map(year => (
+                                                                        <option key={year} value={year}>{year}</option>
+                                                                    ))}
+                                                                </select>
+                                                            </div>
+                                                            <button
+                                                                type="button"
+                                                                aria-label="Next month"
+                                                                onClick={() => {
+                                                                    attendanceAutoSelectionRef.current = true;
+                                                                    setStudentHistoryCalendarMonth(new Date(studentHistoryCalendarMonth.getFullYear(), studentHistoryCalendarMonth.getMonth() + 1, 1));
+                                                                    setSelectedStudentHistoryDate(null);
+                                                                }}
+                                                                className={`flex h-7 w-7 shrink-0 items-center justify-center rounded border ${isParentView ? "border-slate-200 bg-white text-slate-700" : "border-slate-700 bg-slate-800 text-slate-200"}`}
+                                                            >
+                                                                <span aria-hidden="true">›</span>
+                                                            </button>
+                                                            <button
+                                                                type="button"
+                                                                onClick={() => {
+                                                                    const today = new Date();
+                                                                    attendanceAutoSelectionRef.current = true;
+                                                                    setStudentHistoryCalendarMonth(new Date(today.getFullYear(), today.getMonth(), 1));
+                                                                    setSelectedStudentHistoryDate(today);
+                                                                }}
+                                                                className={`h-7 shrink-0 rounded border px-2 font-black uppercase text-[8px] sm:h-9 sm:px-3 sm:text-[10px] ${isParentView ? "border-blue-200 bg-blue-50 text-blue-700" : "border-blue-500/60 bg-blue-500/10 text-blue-300"}`}
+                                                            >
+                                                                Today
+                                                            </button>
+                                                        </div>
+                                                        <div className={`flex flex-wrap items-center gap-x-3 gap-y-1 px-2 py-1.5 text-[7px] sm:gap-x-4 sm:px-3 sm:text-[9px] ${isParentView ? "text-slate-600" : "text-slate-200"}`}>
+                                                            {isParentAttendanceCalendar ? (
+                                                                <>
+                                                                    <span className="flex items-center gap-1"><i className="h-2 w-2 rounded-full bg-emerald-500" />Present</span>
+                                                                    <span className="flex items-center gap-1"><i className="h-2 w-2 rounded-full bg-rose-500" />Absent</span>
+                                                                    <span className="flex items-center gap-1"><i className="h-2 w-2 rounded-full bg-amber-400" />On Leave</span>
+                                                                    <span className="flex items-center gap-1"><i className="h-2 w-2 rounded-full bg-blue-500" />Selected</span>
+                                                                </>
+                                                            ) : (
+                                                                <>
+                                                                    <span className="flex items-center gap-1"><i className="h-2 w-2 rounded-full bg-blue-500" />Permission</span>
+                                                                    <span className="flex items-center gap-1"><i className="h-2 w-2 rounded-full bg-amber-400" />Home Leave</span>
+                                                                    <span className="flex items-center gap-1"><i className="h-2 w-2 rounded-full bg-emerald-500" />Gate Pass</span>
+                                                                </>
+                                                            )}
+                                                        </div>
+                                                        <div className={`grid grid-cols-7 gap-1 px-2 pb-1 text-center text-[7px] font-black uppercase sm:px-3 sm:text-[9px] ${isParentView ? "text-slate-500" : "text-slate-400"}`}>
+                                                            {["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].map(day => <span key={day}>{day}</span>)}
+                                                        </div>
+                                                        <div className="grid grid-cols-7 gap-1 px-2 pb-2 sm:px-3">
+                                                            {getDaysInMonth(studentHistoryCalendarMonth).map((cell, index) => {
+                                                                if (!cell.date) return <div key={index} className="h-6 sm:h-9" />;
+                                                                const dateKey = getStudentHistoryDateKey(cell.date);
+                                                                const cellRecords = cell.isCurrentMonth ? getStudentHistoryRecordsForDate(cell.date) : [];
+                                                                const hasHistory = cellRecords.length > 0;
+                                                                const hasPresentAttendance = cellRecords.some(record => String(record.status || "present").toLowerCase() === "present");
+                                                                const hasAbsentAttendance = cellRecords.some(record => String(record.status || "").toLowerCase() === "absent");
+                                                                const isSelected = !!selectedStudentHistoryDateKey && selectedStudentHistoryDateKey === dateKey;
+                                                                if (!cell.isCurrentMonth) {
+                                                                    return <div key={index} className={`h-6 sm:h-9 rounded border text-center text-[8px] leading-6 sm:text-[10px] sm:leading-9 ${isParentView ? "border-transparent text-slate-300" : "border-slate-800/60 text-slate-600"}`}>{cell.date.getDate()}</div>;
+                                                                }
+                                                                return (
+                                                                    <button
+                                                                        key={index}
+                                                                        type="button"
+                                                                        onClick={() => {
+                                                                            attendanceAutoSelectionRef.current = true;
+                                                                            setSelectedStudentHistoryDate(isSelected ? null : cell.date);
+                                                                        }}
+                                                                        aria-pressed={isSelected}
+                                                                        className={`relative h-6 sm:h-9 rounded border text-[8px] font-bold sm:text-[10px] ${isParentView
+                                                                            ? isSelected
+                                                                                ? "border-indigo-500 bg-indigo-600 text-white ring-1 ring-indigo-500"
+                                                                                : isParentAttendanceCalendar && hasPresentAttendance
+                                                                                    ? "border-emerald-300 bg-emerald-50 text-emerald-950"
+                                                                                    : isParentAttendanceCalendar && hasAbsentAttendance
+                                                                                        ? "border-rose-300 bg-rose-50 text-rose-950"
+                                                                                        : hasHistory
+                                                                                            ? "border-slate-200 bg-slate-50 text-slate-800 hover:bg-slate-100"
+                                                                                            : "border-transparent bg-slate-50 text-slate-600 hover:bg-slate-100"
+                                                                            : isSelected
+                                                                                ? "border-blue-400 bg-slate-700 text-slate-100 ring-1 ring-blue-500"
+                                                                                : "border-slate-700 bg-slate-800 text-slate-100 hover:bg-slate-700"}`}
+                                                                    >
+                                                                        {hasHistory && !isParentAttendanceCalendar && <span className={`absolute inset-x-0 top-0 h-1 ${studentHistoryMarkerClass}`} />}
+                                                                        <span className="absolute right-1 top-1">{cell.date.getDate()}</span>
+                                                                        {hasHistory && (
+                                                                            <span className={`absolute bottom-1 left-1/2 h-1.5 w-1.5 -translate-x-1/2 rounded-full ${isParentAttendanceCalendar
+                                                                                ? isSelected ? "bg-white" : hasPresentAttendance ? "bg-emerald-600" : "bg-rose-600"
+                                                                                : studentHistoryMarkerClass
+                                                                            }`} />
+                                                                        )}
+                                                                    </button>
+                                                                );
+                                                            })}
+                                                        </div>
+                                                        <div className={`flex flex-wrap items-center justify-between gap-1 border-t px-2 py-1 text-[8px] sm:px-3 sm:text-[10px] ${isParentView ? "border-slate-200 text-slate-500" : "border-slate-800 text-slate-300"}`}>
+                                                            <span>{selectedStudentHistoryDate ? `Selected: ${formatDateDDMMYYYY(selectedStudentHistoryDate)}` : studentHistoryTab === "permissions" ? "All dates" : "Latest record"}</span>
+                                                            {isParentAttendanceCalendar && <span className="text-[7px] sm:text-[9px]">Click any date above to view details below.</span>}
+                                                            {selectedStudentHistoryDate && (
+                                                                <button
+                                                                    type="button"
+                                                                    onClick={() => {
+                                                                        const records = studentHistoryTab === "home_leave" ? studentHomeLeaves : studentHistoryTab === "gate_pass" ? studentGatePasses : studentHistoryTab === "attendance" ? attendanceHistory : [];
+                                                                        const latestDateKey = records.map(getStudentHistoryRecordDateKey).filter((dateKey): dateKey is string => !!dateKey).sort((left, right) => right.localeCompare(left))[0] || null;
+                                                                        if (latestDateKey && studentHistoryTab !== "permissions") {
+                                                                            const [year, month, day] = latestDateKey.split("-").map(Number);
+                                                                            const latestDate = new Date(year, month - 1, day);
+                                                                            attendanceAutoSelectionRef.current = true;
+                                                                            setSelectedStudentHistoryDate(latestDate);
+                                                                            setStudentHistoryCalendarMonth(new Date(year, month - 1, 1));
+                                                                        } else {
+                                                                            setSelectedStudentHistoryDate(null);
+                                                                        }
+                                                                    }}
+                                                                    className="font-bold text-blue-300 hover:text-blue-200"
+                                                                >
+                                                                    {studentHistoryTab === "permissions" ? "Show all" : "Latest"}
+                                                                </button>
+                                                            )}
+                                                        </div>
                                                     </div>
 
                                                     <div className="p-3 sm:p-4 space-y-3 overflow-y-auto flex-1">
@@ -6844,14 +7218,14 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
                                                                 {/* TAB 1: PERMISSION HISTORY */}
                                                                 {studentHistoryTab === "permissions" && (
                                                                     <div className="space-y-3">
-                                                                        {studentPermissionsList.length === 0 ? (
+                                                                        {visibleStudentPermissionsList.length === 0 ? (
                                                                             <div className="p-6 text-center bg-slate-50/70 border border-dashed border-slate-200 rounded-2xl">
                                                                                 <span className="text-2xl block mb-1.5">📋</span>
-                                                                                <p className="text-xs font-bold text-slate-700">No Permission records found</p>
-                                                                                <p className="text-[11px] text-slate-400 mt-0.5">You have not submitted any permissions yet.</p>
+                                                                                <p className="text-xs font-bold text-slate-700">{selectedStudentHistoryDate ? "No Permission logs for this date" : "No Permission records found"}</p>
+                                                                                <p className="text-[11px] text-slate-400 mt-0.5">{selectedStudentHistoryDate ? "Select another date or show all dates." : "You have not submitted any permissions yet."}</p>
                                                                             </div>
                                                                         ) : (
-                                                                            studentPermissionsList.map((permission, idx) => {
+                                                                            visibleStudentPermissionsList.map((permission, idx) => {
                                                                                 const isAllowed = permission.status === "allowed" || permission.status === "accepted" || permission.status === "approved" || permission.deanStatus === "allowed" || permission.deanStatus === "approved";
                                                                                 const isRejected = permission.status === "rejected" || permission.deanStatus === "rejected" || permission.wardenStatus === "rejected";
                                                                                 const isCancelled = permission.status === "cancelled";
@@ -6875,17 +7249,17 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
                                                                                     >
                                                                                         <div className="flex justify-between items-start mb-2 gap-2">
                                                                                             <div className="space-y-0.5">
-                                                                                                <p className="text-xs sm:text-[13px] font-black text-[#2D5A9E] leading-tight">
+                                                                                                <p className={`${isParentView ? "text-[11px]" : "text-xs"} sm:text-[13px] font-black text-[#2D5A9E] leading-tight`}>
                                                                                                     {fromFormatted}
                                                                                                 </p>
-                                                                                                <p className="text-xs sm:text-[13px] font-black text-[#2D5A9E] leading-tight">
+                                                                                                <p className={`${isParentView ? "text-[11px]" : "text-xs"} sm:text-[13px] font-black text-[#2D5A9E] leading-tight`}>
                                                                                                     To {toFormatted}
                                                                                                 </p>
                                                                                                 {(() => {
                                                                                                     const dur = getPermDurationStr(permission);
                                                                                                     if (!dur) return null;
                                                                                                     return (
-                                                                                                        <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-blue-50 text-blue-700 border border-blue-200/80 text-[8.5px] font-bold mt-0.5">
+                                                                                                        <span className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-blue-50 text-blue-700 border border-blue-200/80 ${isParentView ? "text-[7.5px]" : "text-[8.5px]"} font-bold mt-0.5`}>
                                                                                                             <span className="text-slate-500 font-semibold">Duration:</span>
                                                                                                             <span className="font-extrabold text-blue-700">{dur}</span>
                                                                                                         </span>
@@ -6937,11 +7311,11 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
                                                                                             </div>
                                                                                         </div>
 
-                                                                                        <p className="text-xs text-slate-800 leading-relaxed font-medium bg-slate-50/60 p-2 rounded-lg border border-slate-100">
+                                                                                        <p className={`${isParentView ? "text-[11px]" : "text-xs"} text-slate-800 leading-relaxed font-medium bg-slate-50/60 p-2 rounded-lg border border-slate-100`}>
                                                                                             {permission.reason || "No reason specified"}
                                                                                         </p>
 
-                                                                                        <div className="mt-1.5 pt-1.5 border-t border-slate-100 flex flex-wrap items-center justify-between gap-1.5 text-[9.5px] sm:text-[10px] text-slate-600 font-bold">
+                                                                                        <div className={`mt-1.5 pt-1.5 border-t border-slate-100 flex flex-wrap items-center justify-between gap-1.5 sm:text-[10px] text-slate-600 font-bold ${isParentView ? "text-[8.5px]" : "text-[9.5px]"}`}>
                                                                                             <div className="flex flex-wrap gap-1.5 items-center">
                                                                                                 {/* 1. Parent Consent Badge (Before Warden) */}
                                                                                                 {consentVideo ? (
@@ -7019,14 +7393,14 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
                                                                 {/* TAB 2: HOME-LEAVE HISTORY */}
                                                                 {studentHistoryTab === "home_leave" && (
                                                                     <div className="space-y-3">
-                                                                        {studentHomeLeaves.length === 0 ? (
+                                                                        {visibleStudentHomeLeaves.length === 0 ? (
                                                                             <div className="p-6 text-center bg-slate-50/70 border border-dashed border-slate-200 rounded-2xl">
                                                                                 <span className="text-2xl block mb-1.5">🏠</span>
-                                                                                <p className="text-xs font-bold text-slate-700">No Home-Leave records found</p>
-                                                                                <p className="text-[11px] text-slate-400 mt-0.5">You have not requested or taken any home leaves yet.</p>
+                                                                                <p className="text-xs font-bold text-slate-700">{selectedStudentHistoryDate ? "No Home-Leave logs for this date" : "No Home-Leave records found"}</p>
+                                                                                <p className="text-[11px] text-slate-400 mt-0.5">{selectedStudentHistoryDate ? "Select another date or show all dates." : "You have not requested or taken any home leaves yet."}</p>
                                                                             </div>
                                                                         ) : (
-                                                                            studentHomeLeaves.map((item, idx) => {
+                                                                            visibleStudentHomeLeaves.map((item, idx) => {
                                                                                 const isGatePassOuting = item.source === 'gate_pass';
                                                                                 const isCurrentlyOut = item.status === 'out';
                                                                                 const isAllowed = item.status === 'allowed' || item.status === 'approved' || item.deanStatus === 'allowed' || item.deanStatus === 'approved';
@@ -7072,10 +7446,10 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
                                                                                     >
                                                                                         <div className="flex flex-wrap items-center justify-between gap-1.5 mb-2">
                                                                                             <div className="flex items-center flex-wrap gap-1.5">
-                                                                                                <span className="text-[9px] font-black tracking-wider px-2 py-0.5 rounded-md bg-blue-50 text-blue-700 border border-blue-200/60">
+                                                                                                <span className={`font-black tracking-wider px-2 py-0.5 rounded-md bg-blue-50 text-blue-700 border border-blue-200/60 ${isParentView ? "text-[8px]" : "text-[9px]"}`}>
                                                                                                     {isGatePassOuting ? '🚪 Gate Leave Log' : '📝 Official Leave Pass'}
                                                                                                 </span>
-                                                                                                <span className="text-[10px] font-bold text-slate-700 bg-slate-100 px-2 py-0.5 rounded-md border border-slate-200 flex items-center gap-1">
+                                                                                                <span className={`font-bold text-slate-700 bg-slate-100 px-2 py-0.5 rounded-md border border-slate-200 flex items-center gap-1 ${isParentView ? "text-[9px]" : "text-[10px]"}`}>
                                                                                                     📅 {formattedOutDate}
                                                                                                 </span>
                                                                                             </div>
@@ -7101,46 +7475,46 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
                                                                                                 )}
 
                                                                                                 {isCurrentlyOut ? (
-                                                                                                    <div className="px-2 py-0.5 rounded-md text-[9px] font-black bg-amber-100 text-amber-800 border border-amber-300 flex items-center gap-1 animate-pulse">
+                                                                                                    <div className={`px-2 py-0.5 rounded-md ${isParentView ? "text-[8px]" : "text-[9px]"} font-black bg-amber-100 text-amber-800 border border-amber-300 flex items-center gap-1 animate-pulse`}>
                                                                                                         <span className="w-1.5 h-1.5 rounded-full bg-amber-600"></span>
                                                                                                         Currently At Home
                                                                                                     </div>
                                                                                                 ) : isAllowed ? (
-                                                                                                    <div className="px-2 py-0.5 rounded-md text-[9px] font-black bg-green-100 text-green-700 border border-green-200">
+                                                                                                    <div className={`px-2 py-0.5 rounded-md ${isParentView ? "text-[8px]" : "text-[9px]"} font-black bg-green-100 text-green-700 border border-green-200`}>
                                                                                                         Approved
                                                                                                     </div>
                                                                                                 ) : isRejected ? (
-                                                                                                    <div className="px-2 py-0.5 rounded-md text-[9px] font-black bg-red-100 text-red-700 border border-red-200">
+                                                                                                    <div className={`px-2 py-0.5 rounded-md ${isParentView ? "text-[8px]" : "text-[9px]"} font-black bg-red-100 text-red-700 border border-red-200`}>
                                                                                                         Rejected
                                                                                                     </div>
                                                                                                 ) : isCancelled ? (
-                                                                                                    <div className="px-2 py-0.5 rounded-md text-[9px] font-black bg-slate-100 text-slate-600 border border-slate-300">
+                                                                                                    <div className={`px-2 py-0.5 rounded-md ${isParentView ? "text-[8px]" : "text-[9px]"} font-black bg-slate-100 text-slate-600 border border-slate-300`}>
                                                                                                         Cancelled
                                                                                                     </div>
                                                                                                 ) : isExpired ? (
-                                                                                                    <div className="px-2 py-0.5 rounded-md text-[9px] font-black bg-rose-50 text-rose-700 border border-rose-200">
+                                                                                                    <div className={`px-2 py-0.5 rounded-md ${isParentView ? "text-[8px]" : "text-[9px]"} font-black bg-rose-50 text-rose-700 border border-rose-200`}>
                                                                                                         Expired
                                                                                                     </div>
                                                                                                 ) : isPending ? (
-                                                                                                    <div className="px-2 py-0.5 rounded-md text-[9px] font-black bg-yellow-100 text-yellow-800 border border-yellow-200">
+                                                                                                    <div className={`px-2 py-0.5 rounded-md ${isParentView ? "text-[8px]" : "text-[9px]"} font-black bg-yellow-100 text-yellow-800 border border-yellow-200`}>
                                                                                                         Pending
                                                                                                     </div>
                                                                                                 ) : (
-                                                                                                    <div className="px-2 py-0.5 rounded-md text-[9px] font-black bg-slate-100 text-slate-700 border border-slate-200">
+                                                                                                    <div className={`px-2 py-0.5 rounded-md ${isParentView ? "text-[8px]" : "text-[9px]"} font-black bg-slate-100 text-slate-700 border border-slate-200`}>
                                                                                                         Completed
                                                                                                     </div>
                                                                                                 )}
                                                                                             </div>
                                                                                         </div>
 
-                                                                                        <div className="grid grid-cols-3 gap-1.5 sm:gap-2 bg-slate-50/80 p-2 rounded-lg border border-slate-100 text-[11px] mb-2">
+                                                                                        <div className={`grid grid-cols-3 gap-1.5 sm:gap-2 bg-slate-50/80 p-2 rounded-lg border border-slate-100 mb-2 ${isParentView ? "text-[10px]" : "text-[11px]"}`}>
                                                                                             <div>
                                                                                                 <p className="text-[9px] font-bold text-slate-400">Leave From</p>
                                                                                                 <p className="font-extrabold text-slate-800 mt-0.5 leading-tight">
                                                                                                     {formattedOutDate}
                                                                                                 </p>
                                                                                                 {formattedOutTime && (
-                                                                                                    <p className="text-[10px] font-semibold text-blue-700">
+                                                                                                    <p className={`font-semibold text-blue-700 ${isParentView ? "text-[9px]" : "text-[10px]"}`}>
                                                                                                         {formattedOutTime}
                                                                                                     </p>
                                                                                                 )}
@@ -7155,17 +7529,17 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
 
                                                                                             <div>
                                                                                                 <p className="text-[9px] font-bold text-slate-400">Duration</p>
-                                                                                                <p className="font-black text-indigo-700 bg-indigo-50/80 px-1.5 py-0.5 rounded border border-indigo-100 inline-block mt-0.5 text-[10px] sm:text-[11px]">
+                                                                                                <p className={`font-black text-indigo-700 bg-indigo-50/80 px-1.5 py-0.5 rounded border border-indigo-100 inline-block mt-0.5 ${isParentView ? "text-[9px]" : "text-[10px]"} sm:text-[11px]`}>
                                                                                                     {leaveDuration}
                                                                                                 </p>
                                                                                             </div>
                                                                                         </div>
 
-                                                                                        <div className="text-[11px] text-slate-700 bg-slate-50/50 p-2 rounded-lg border border-slate-100/80">
+                                                                                        <div className={`${isParentView ? "text-[10px]" : "text-[11px]"} text-slate-700 bg-slate-50/50 p-2 rounded-lg border border-slate-100/80`}>
                                                                                             <span className="font-bold text-slate-900">Reason: </span>
                                                                                             <span>{item.reason || "Home Leave"}</span>
                                                                                             {item.destination && (
-                                                                                                <span className="block mt-0.5 text-[10px] text-slate-500 font-medium">
+                                                                                                <span className={`block mt-0.5 ${isParentView ? "text-[9px]" : "text-[10px]"} text-slate-500 font-medium`}>
                                                                                                     📍 Destination: {item.destination}
                                                                                                 </span>
                                                                                             )}
@@ -7227,14 +7601,14 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
                                                                 {/* TAB 3: GATE-PASS HISTORY */}
                                                                 {studentHistoryTab === "gate_pass" && (
                                                                     <div className="space-y-3">
-                                                                        {studentGatePasses.length === 0 ? (
+                                                                        {visibleStudentGatePasses.length === 0 ? (
                                                                             <div className="p-6 text-center bg-slate-50/70 border border-dashed border-slate-200 rounded-2xl">
                                                                                 <span className="text-2xl block mb-1.5">🎫</span>
-                                                                                <p className="text-xs font-bold text-slate-700">No Gate-Pass history found</p>
-                                                                                <p className="text-[11px] text-slate-400 mt-0.5">You have not recorded any campus outings or gate passes yet.</p>
+                                                                                <p className="text-xs font-bold text-slate-700">{selectedStudentHistoryDate ? "No Gate-Pass logs for this date" : "No Gate-Pass history found"}</p>
+                                                                                <p className="text-[11px] text-slate-400 mt-0.5">{selectedStudentHistoryDate ? "Select another date or show all dates." : "You have not recorded any campus outings or gate passes yet."}</p>
                                                                             </div>
                                                                         ) : (
-                                                                            studentGatePasses.map((pass, idx) => {
+                                                                            visibleStudentGatePasses.map((pass, idx) => {
                                                                                 const isCurrentlyOut = pass.status === 'out';
                                                                                 
                                                                                 const rawOutDate = pass.checkOutTime || pass.fromDateTime || pass.createdAt;
@@ -7274,65 +7648,107 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
                                                                                     >
                                                                                         <div className="flex flex-wrap items-center justify-between gap-1.5 mb-2">
                                                                                             <div className="flex items-center flex-wrap gap-1.5">
-                                                                                                <span className={`text-[9px] font-bold tracking-wider px-2 py-0.5 rounded-md border ${
+                                                                                                <span className={`${isParentView ? "text-[8px]" : "text-[9px]"} font-bold tracking-wider px-2 py-0.5 rounded-md border ${
                                                                                                     isCurrentlyOut ? 'bg-rose-100/80 text-rose-800 border-rose-200' : 'bg-emerald-50 text-emerald-700 border-emerald-200'
                                                                                                 }`}>
                                                                                                     🚪 {pass.gateName ? pass.gateName.replace(/_/g, ' ').replace(/\b\w/g, (c: string) => c.toUpperCase()) : 'Main Gate'}
                                                                                                 </span>
-                                                                                                <span className="text-[10px] font-bold text-slate-700 bg-slate-100 px-2 py-0.5 rounded-md border border-slate-200 flex items-center gap-1">
+                                                                                                <span className={`${isParentView ? "text-[9px]" : "text-[10px]"} font-bold text-slate-700 bg-slate-100 px-2 py-0.5 rounded-md border border-slate-200 flex items-center gap-1`}>
                                                                                                     📅 {formattedDate}
                                                                                                 </span>
                                                                                             </div>
 
                                                                                             <div className="flex items-center gap-1.5 shrink-0">
                                                                                                 {isCurrentlyOut ? (
-                                                                                                    <div className="px-2 py-0.5 rounded-md text-[9px] font-black bg-rose-100 text-rose-700 border border-rose-200 flex items-center gap-1 animate-pulse">
+                                                                                                    <div className={`px-2 py-0.5 rounded-md ${isParentView ? "text-[8px]" : "text-[9px]"} font-black bg-rose-100 text-rose-700 border border-rose-200 flex items-center gap-1 animate-pulse`}>
                                                                                                         <span className="w-1.5 h-1.5 rounded-full bg-rose-600"></span>
                                                                                                         Currently Out
                                                                                                     </div>
                                                                                                 ) : (
-                                                                                                    <div className="px-2 py-0.5 rounded-md text-[9px] font-black bg-emerald-100 text-emerald-800 border border-emerald-200">
+                                                                                                    <div className={`px-2 py-0.5 rounded-md ${isParentView ? "text-[8px]" : "text-[9px]"} font-black bg-emerald-100 text-emerald-800 border border-emerald-200`}>
                                                                                                         ✓ Returned (In)
                                                                                                     </div>
                                                                                                 )}
                                                                                             </div>
                                                                                         </div>
 
-                                                                                        <div className="grid grid-cols-3 gap-1.5 sm:gap-2 bg-slate-50/80 p-2 sm:p-2.5 rounded-lg border border-slate-100 text-[11px] mb-2">
+                                                                                        <div className={`grid grid-cols-3 gap-1.5 sm:gap-2 bg-slate-50/80 p-2 sm:p-2.5 rounded-lg border border-slate-100 mb-2 ${isParentView ? "text-[10px]" : "text-[11px]"}`}>
                                                                                             <div>
-                                                                                                <p className="text-[9px] font-bold text-slate-400">Check Out</p>
-                                                                                                <p className="font-extrabold text-slate-800 mt-0.5 text-xs sm:text-[13px] leading-tight">
+                                                                                                <p className={`font-bold text-slate-400 ${isParentView ? "text-[8px]" : "text-[9px]"}`}>Check Out</p>
+                                                                                                <p className={`font-extrabold text-slate-800 mt-0.5 ${isParentView ? "text-[11px]" : "text-xs"} sm:text-[13px] leading-tight`}>
                                                                                                     {formattedOutTime}
                                                                                                 </p>
-                                                                                                <p className="text-[9px] text-slate-400 font-medium">
+                                                                                                <p className={`text-slate-400 font-medium ${isParentView ? "text-[8px]" : "text-[9px]"}`}>
                                                                                                     {formattedDate}
                                                                                                 </p>
                                                                                             </div>
 
                                                                                             <div>
-                                                                                                <p className="text-[9px] font-bold text-slate-400">Check In</p>
-                                                                                                <p className={`font-extrabold mt-0.5 text-xs sm:text-[13px] leading-tight ${isCurrentlyOut ? 'text-rose-600 italic font-bold' : 'text-slate-800'}`}>
+                                                                                                <p className={`font-bold text-slate-400 ${isParentView ? "text-[8px]" : "text-[9px]"}`}>Check In</p>
+                                                                                                <p className={`font-extrabold mt-0.5 ${isParentView ? "text-[11px]" : "text-xs"} sm:text-[13px] leading-tight ${isCurrentlyOut ? 'text-rose-600 italic font-bold' : 'text-slate-800'}`}>
                                                                                                     {formattedInTime}
                                                                                                 </p>
-                                                                                                <p className="text-[9px] text-slate-400 font-medium">
+                                                                                                <p className={`text-slate-400 font-medium ${isParentView ? "text-[8px]" : "text-[9px]"}`}>
                                                                                                     {isCurrentlyOut ? "Pending Return" : formattedDate}
                                                                                                 </p>
                                                                                             </div>
 
                                                                                             <div>
-                                                                                                <p className="text-[9px] font-bold text-slate-400">Duration</p>
-                                                                                                <p className="font-black text-indigo-700 bg-indigo-50/80 px-1.5 py-0.5 rounded border border-indigo-100 inline-block mt-0.5 text-[10px] sm:text-xs">
+                                                                                                <p className={`font-bold text-slate-400 ${isParentView ? "text-[8px]" : "text-[9px]"}`}>Duration</p>
+                                                                                                <p className={`font-black text-indigo-700 bg-indigo-50/80 px-1.5 py-0.5 rounded border border-indigo-100 inline-block mt-0.5 ${isParentView ? "text-[9px]" : "text-[10px]"} sm:text-xs`}>
                                                                                                     ⏱️ {durationDisplay}
                                                                                                 </p>
                                                                                             </div>
                                                                                         </div>
 
-                                                                                        <p className="text-[11px] text-slate-600 font-medium">
+                                                                                        <p className={`${isParentView ? "text-[10px]" : "text-[11px]"} text-slate-600 font-medium`}>
                                                                                             <span className="font-bold text-slate-800">Purpose: </span>{pass.reason || "Campus Outing"}
                                                                                         </p>
                                                                                     </div>
                                                                                 );
                                                                             })
+                                                                        )}
+                                                                    </div>
+                                                                )}
+                                                                {isParentView && studentHistoryTab === "attendance" && (
+                                                                    <div className="space-y-3">
+                                                                        {visibleStudentAttendanceHistory.length > 0 ? (
+                                                                            visibleStudentAttendanceHistory.map((record, index) => {
+                                                                                const isPresent = String(record.status || "present").toLowerCase() === "present";
+                                                                                const recordDate = record.date ? formatDateDDMMYYYY(record.date) : "N/A";
+                                                                                return (
+                                                                                    <div key={record.id || `${recordDate}-${index}`} className="rounded-xl border border-slate-200 bg-white p-3 shadow-2xs">
+                                                                                        <div className="flex items-center justify-between gap-2">
+                                                                                            <span className={`flex items-center gap-1.5 sm:text-xs font-black uppercase tracking-wide text-slate-700 ${isParentView ? "text-[9px]" : "text-[10px]"}`}>
+                                                                                                <span>🌙</span> Night Attendance
+                                                                                            </span>
+                                                                                            <span className={`rounded-md border px-2 py-0.5 ${isParentView ? "text-[8px]" : "text-[9px]"} font-black uppercase ${isPresent ? "border-emerald-200 bg-emerald-50 text-emerald-700" : "border-rose-200 bg-rose-50 text-rose-700"}`}>
+                                                                                                {isPresent ? "Present" : record.status}
+                                                                                            </span>
+                                                                                        </div>
+                                                                                        <div className={`mt-2 grid grid-cols-2 gap-2 rounded-lg border border-slate-100 bg-slate-50 p-2 sm:text-xs ${isParentView ? "text-[9px]" : "text-[10px]"}`}>
+                                                                                            <div>
+                                                                                                <p className={`sm:text-[9px] font-bold uppercase text-slate-400 ${isParentView ? "text-[7px]" : "text-[8px]"}`}>Date</p>
+                                                                                                <p className="font-extrabold text-slate-800">{recordDate}</p>
+                                                                                            </div>
+                                                                                            <div>
+                                                                                                <p className={`sm:text-[9px] font-bold uppercase text-slate-400 ${isParentView ? "text-[7px]" : "text-[8px]"}`}>Marked At</p>
+                                                                                                <p className="font-extrabold text-slate-800">{record.time || "N/A"}</p>
+                                                                                            </div>
+                                                                                        </div>
+                                                                                    </div>
+                                                                                );
+                                                                            })
+                                                                        ) : (
+                                                                            <div className="rounded-xl border border-dashed border-slate-200 bg-white p-4 text-center">
+                                                                                <span className="mb-1 block text-xl">🌙</span>
+                                                                                <p className={`${isParentView ? "text-[11px]" : "text-xs"} font-bold text-slate-700`}>
+                                                                                    {selectedStudentHistoryDate ? `No attendance record for ${formatDateDDMMYYYY(selectedStudentHistoryDate)}` : "No attendance records found"}
+                                                                                </p>
+                                                                                <p className={`mt-0.5 ${isParentView ? "text-[9px]" : "text-[10px]"} text-slate-400`}>
+                                                                                    {selectedStudentHistoryDate ? "No night attendance entry was recorded on this date." : "Night attendance history is not available yet."}
+                                                                                </p>
+                                                                            </div>
                                                                         )}
                                                                     </div>
                                                                 )}
@@ -8579,13 +8995,13 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
                                                                     key={field.id} 
                                                                     className={`flex flex-col bg-slate-50/80 border border-slate-100 p-1 sm:p-2 rounded-lg ${colSpanClass}`}
                                                                 >
-                                                                    <p className={`${isTrio ? 'text-[7.5px] min-[360px]:text-[8px] tracking-tight' : 'text-[8.5px] tracking-wider'} font-bold text-slate-400 uppercase mb-0.5 truncate`}>{field.label}</p>
+                                                                    <p className={`text-[8.5px] tracking-wider font-bold text-slate-400 uppercase mb-0.5 truncate`}>{field.label}</p>
                                                                     {isPhoneModal ? (
-                                                                        <a href={`tel:${value}`} title="Click to call" className={`${isTrio ? 'text-[9px] min-[360px]:text-[9.5px] gap-0.5' : 'text-[10.5px] gap-1'} font-black text-blue-600 hover:underline flex items-center whitespace-nowrap overflow-hidden`}>
-                                                                            <span className={isTrio ? 'text-[8.5px]' : ''}>📞</span> {displayValue}
+                                                                        <a href={`tel:${value}`} title="Click to call" className={`text-[10.5px] gap-1 font-black text-blue-600 hover:underline flex items-center whitespace-nowrap overflow-hidden`}>
+                                                                            <span>📞</span> {displayValue}
                                                                         </a>
                                                                     ) : (
-                                                                        <p className={`${isTrio ? 'text-[9.5px] min-[360px]:text-[10px] leading-tight' : 'text-[10.5px]'} font-extrabold break-words ${field.id === 'roomNumber' || field.id === 'floorNumber' ? 'text-blue-600' : 'text-slate-800'}`}>
+                                                                        <p className={`text-[10.5px] font-extrabold break-words ${field.id === 'roomNumber' || field.id === 'floorNumber' ? 'text-blue-600' : 'text-slate-800'}`}>
                                                                             {fieldIconModal}{field.id === 'roomNumber' && value !== 'N/A' && !String(value).startsWith('#') ? '#' : ''}{displayValue}
                                                                         </p>
                                                                     )}

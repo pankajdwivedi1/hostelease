@@ -210,25 +210,33 @@ export function canAccessStudent(
     const studentDbId = String(student._id || student.id || "").trim();
     const studentRegId = String(student.registrationId || "").trim().toUpperCase();
     const studentEmail = String(student.email || student.studentEmail || "").trim().toLowerCase();
+    const studentFirebaseUid = String((student as any).firebaseUID || (student as any).firebase_uid || "").trim();
 
-    // 1. Strict Match by Student Email ID (Case-insensitive)
-    if (session.email && studentEmail) {
-      if (session.email.trim().toLowerCase() === studentEmail) return true;
+    // 1. Strict Match by Student Internal DB ID (_id)
+    const sessionStudentId = String(session.studentId || "").trim();
+    if (sessionStudentId && studentDbId && sessionStudentId === studentDbId) {
+      return true;
     }
 
-    // 2. Strict Match by Student Internal DB ID
-    const sessionStudentId = String(session.studentId || session.uid || "").trim();
-    if (sessionStudentId && studentDbId) {
-      if (sessionStudentId === studentDbId) return true;
+    // 2. Strict Match by Student Email ID (Case-insensitive)
+    const sessionEmail = String(session.email || "").trim().toLowerCase();
+    if (sessionEmail && studentEmail && sessionEmail === studentEmail) {
+      return true;
     }
 
     // 3. Strict Match by Student Registration ID
-    if (session.registrationId && studentRegId) {
-      if (session.registrationId.trim().toUpperCase() === studentRegId) return true;
+    const sessionRegId = String(session.registrationId || "").trim().toUpperCase();
+    if (sessionRegId && studentRegId && sessionRegId === studentRegId) {
+      return true;
+    }
+
+    // 4. Fallback match by Firebase UID
+    if (session.uid && studentFirebaseUid && session.uid === studentFirebaseUid) {
+      return true;
     }
 
     // Fallback: If session is authenticated as student without mismatch
-    if (!session.email && !sessionStudentId && !session.registrationId) return true;
+    if (!sessionEmail && !sessionStudentId && !sessionRegId && !session.uid) return true;
 
     return false;
   }
@@ -272,24 +280,32 @@ export function canEditStudent(
     const studentDbId = String(student._id || student.id || "").trim();
     const studentRegId = String(student.registrationId || "").trim().toUpperCase();
     const studentEmail = String(student.email || student.studentEmail || "").trim().toLowerCase();
+    const studentFirebaseUid = String((student as any).firebaseUID || (student as any).firebase_uid || "").trim();
 
-    // 1. Strict Match by Student Email ID
-    if (session.email && studentEmail) {
-      if (session.email.trim().toLowerCase() === studentEmail) return true;
+    // 1. Strict Match by Student Internal DB ID (_id)
+    const sessionStudentId = String(session.studentId || "").trim();
+    if (sessionStudentId && studentDbId && sessionStudentId === studentDbId) {
+      return true;
     }
 
-    // 2. Strict Match by Student Internal DB ID
-    const sessionStudentId = String(session.studentId || session.uid || "").trim();
-    if (sessionStudentId && studentDbId) {
-      if (sessionStudentId === studentDbId) return true;
+    // 2. Strict Match by Student Email ID (Case-insensitive)
+    const sessionEmail = String(session.email || "").trim().toLowerCase();
+    if (sessionEmail && studentEmail && sessionEmail === studentEmail) {
+      return true;
     }
 
     // 3. Strict Match by Student Registration ID
-    if (session.registrationId && studentRegId) {
-      if (session.registrationId.trim().toUpperCase() === studentRegId) return true;
+    const sessionRegId = String(session.registrationId || "").trim().toUpperCase();
+    if (sessionRegId && studentRegId && sessionRegId === studentRegId) {
+      return true;
     }
 
-    if (!session.email && !sessionStudentId && !session.registrationId) return true;
+    // 4. Fallback match by Firebase UID
+    if (session.uid && studentFirebaseUid && session.uid === studentFirebaseUid) {
+      return true;
+    }
+
+    if (!sessionEmail && !sessionStudentId && !sessionRegId && !session.uid) return true;
     return false;
   }
 

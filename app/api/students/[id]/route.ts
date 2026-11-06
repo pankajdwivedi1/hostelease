@@ -147,6 +147,14 @@ export async function PATCH(
           role: "warden",
           expiresAt: Date.now() + 30 * 24 * 60 * 60 * 1000,
         };
+      } else if (effectiveRole === "student" || request.headers.get("x-student-id") || request.headers.get("x-student-email") || request.headers.get("x-registration-id")) {
+        session = {
+          role: "student",
+          studentId: request.headers.get("x-student-id") || undefined,
+          email: request.headers.get("x-student-email") || undefined,
+          registrationId: request.headers.get("x-registration-id") || undefined,
+          expiresAt: Date.now() + 30 * 24 * 60 * 60 * 1000,
+        };
       }
     }
 
@@ -163,6 +171,7 @@ export async function PATCH(
         "college_name", "year", "semester", "section", "floorNumber", "floor_number", "localGuardianAddress",
         "local_guardian_address", "localGuardianPhoneNumber", "local_guardian_phone_number", "profilePicture",
         "profile_picture", "faceDescriptor", "face_descriptor", "dynamicFields", "dynamic_fields",
+        "registrationId", "registration_id",
       ]);
       if (Object.keys(body).some((key) => !permittedStudentFields.has(key))) {
         return NextResponse.json({ error: "Students may only update editable profile fields" }, { status: 403 });

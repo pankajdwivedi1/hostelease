@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/dbAdapter";
 import { isErpField, validateErpId } from "@/lib/erpValidation";
-import { getAuthSession, isPrivilegedSession } from "@/lib/authSession";
+import { canAccessStudent, getAuthSession, isPrivilegedSession } from "@/lib/authSession";
 
 export const dynamic = "force-dynamic";
 
@@ -44,7 +44,7 @@ export async function GET(request: NextRequest) {
         const isPrivileged = isPrivilegedSession(session) || session?.role === "warden";
 
         // Prevent cross-student tampering if another authenticated student's session is active
-        if (session && session.role === "student" && session.uid && student.firebaseUID && session.uid !== student.firebaseUID) {
+        if (session && session.role === "student" && !canAccessStudent(session, student)) {
             return NextResponse.json({ error: "You are not authorized to view this profile" }, { status: 403 });
         }
 
