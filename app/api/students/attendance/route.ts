@@ -34,12 +34,6 @@ function calculateDistance(
 
 export async function POST(request: NextRequest) {
     try {
-        // 🔒 Subscription Guard: Prevent recording attendance if subscription has ended
-        const subCheck = await assertTenantActive();
-        if (!subCheck.allowed) {
-            return subCheck.response;
-        }
-
         const body = await request.json();
         const {
             studentId,
@@ -91,15 +85,6 @@ export async function POST(request: NextRequest) {
             );
         }
 
-        /*
-        if (!deviceId) {
-            return NextResponse.json(
-                { error: "Device not registered. Please update your profile from the profile section to register this device first." },
-                { status: 400 }
-            );
-        }
-        */
-
         // WiFi or GPS coordinates required (at least one)
         const hasWiFi = wifiBSSID && wifiBSSID.trim().length > 0;
         const hasGPS = lat !== undefined && lng !== undefined;
@@ -111,38 +96,81 @@ export async function POST(request: NextRequest) {
             );
         }
 
+        const nowMs = Date.now();
+        const candidateStudentId = (studentId && typeof studentId === "string" && studentId.trim()) ? studentId.trim() : null;
 
-        // 1. Fetch Student and Verify Device (⚡ Database Aware)
-        // User Requirement: Support Registration ID (e.g. BOYS-0001) and Email ID directly
-        let student: any = null;
-        if (registrationId && typeof registrationId === "string" && registrationId.trim()) {
-            const regClean = registrationId.trim().toUpperCase();
-            student = await db.students.findOne({ registrationId: regClean });
-            if (!student) {
-                student = await db.students.findOne({ registrationId: registrationId.trim() });
+        // Today's date in IST
+        const today = new Date().toLocaleDateString("en-IN", {
+            timeZone: "Asia/Kolkata",
+            year: "numeric",
+            month: "2-digit",
+            day: "2-digit",
+        }).split('/').reverse().join('-'); // YYYY-MM-DD
+
+        // Helper to resolve student matching registrationId, email, or studentId
+        const lookupStudent = async () => {
+            let s: any = null;
+            if (registrationId && typeof registrationId === "string" && registrationId.trim()) {
+                const regClean = registrationId.trim().toUpperCase();
+                s = await db.students.findOne({ registrationId: regClean });
+                if (!s) {
+                    s = await db.students.findOne({ registrationId: registrationId.trim() });
+                }
             }
-        }
-        if (!student && email && typeof email === "string" && email.trim()) {
-            const emailClean = email.trim().toLowerCase();
-            student = await db.students.findOne({ email: emailClean });
-            if (!student) {
-                student = await db.students.findOne({ email: email.trim() });
+            if (!s && email && typeof email === "string" && email.trim()) {
+                const emailClean = email.trim().toLowerCase();
+                s = await db.students.findOne({ email: emailClean });
+                if (!s) {
+                    s = await db.students.findOne({ email: email.trim() });
+                }
             }
-        }
-        if (!student && studentId && typeof studentId === "string" && studentId.trim()) {
-            student = await db.students.getById(studentId);
-            if (!student) {
-                student = await db.students.findOne({ registrationId: studentId.trim().toUpperCase() }) ||
-                          await db.students.findOne({ email: studentId.trim().toLowerCase() });
+            if (!s && candidateStudentId) {
+                s = await db.students.getById(candidateStudentId);
+                if (!s) {
+                    s = await db.students.findOne({ registrationId: candidateStudentId.toUpperCase() }) ||
+                        await db.students.findOne({ email: candidateStudentId.toLowerCase() });
+                }
             }
+            return s;
+        };
+
+        // ⚡ 5 SEQUENTIAL QUERIES PARALLELIZED: Run Tenant, Student, GatePass, Today's Attendance & Settings simultaneously!
+        const [subCheck, student, initialGatePass, initialTodayAttendance, fetchedSettings] = await Promise.all([
+            assertTenantActive(),
+            lookupStudent(),
+            candidateStudentId ? db.gatePasses.findOne({ studentId: candidateStudentId, status: "out" }) : Promise.resolve(null),
+            candidateStudentId ? db.attendance.checkToday(candidateStudentId, today) : Promise.resolve(null),
+            (cachedAdminSettings && (nowMs - lastCacheUpdate < CACHE_DURATION)) ? Promise.resolve(cachedAdminSettings) : db.settings.get()
+        ]);
+
+        // 🔒 Subscription Guard: Prevent recording attendance if subscription has ended
+        if (!subCheck.allowed) {
+            return subCheck.response;
         }
 
         if (!student) {
             return NextResponse.json({ error: `Student not found for Registration ID: "${registrationId || 'N/A'}" or Email: "${email || 'N/A'}"` }, { status: 404 });
         }
 
+        let adminSettings = fetchedSettings;
+        if (adminSettings && (!cachedAdminSettings || (nowMs - lastCacheUpdate >= CACHE_DURATION))) {
+            cachedAdminSettings = adminSettings;
+            lastCacheUpdate = nowMs;
+        }
+
         const actualStudentId = (student._id || student.id || studentId).toString();
         const isTester = false;
+
+        let openGatePass = initialGatePass;
+        let existingAttendance = initialTodayAttendance;
+
+        // If candidateStudentId wasn't provided or differed from resolved student's actual ID, fetch in parallel
+        if (!candidateStudentId || actualStudentId !== candidateStudentId) {
+            [openGatePass, existingAttendance] = await Promise.all([
+                db.gatePasses.findOne({ studentId: actualStudentId, status: "out" }),
+                db.attendance.checkToday(actualStudentId, today)
+            ]);
+        }
 
         // 🔒 FIELD ENFORCEMENT CHECK: Ensure student has a valid College ERP ID (Bypassed for Admins & Guests)
         const isGuestOrAdmin = Boolean(
@@ -167,7 +195,6 @@ export async function POST(request: NextRequest) {
         // 🔥 SECURITY RESTRICTION: Mandatory Check-In First
         // If a student is marked as "out" in the gate system, they must scan the entry QR code 
         // to come "inside" before the daily attendance can be marked.
-        const openGatePass = await db.gatePasses.findOne({ studentId: actualStudentId, status: "out" });
         const isActuallyOut = student.studentStatus === 'out' || !!openGatePass;
 
         if (!isTester && isActuallyOut) {
@@ -182,41 +209,7 @@ export async function POST(request: NextRequest) {
             );
         }
 
-        // ⚡ DISABLED: Device binding / Biometric check ignored as per user request
-        /*
-        if (!isTester) {
-            // 🔥 STRICT MODE: Enforce WebAuthn (Biometric) verification only
-            // We ignore the legacy `student.deviceId` field entirely.
-            // The `deviceId` sent in the payload MUST match a registered WebAuthn Credential ID.
-
-            const webAuthnCredentials = student.webAuthnCredentials || [];
-            const isWebAuthnMatch = webAuthnCredentials.some((cred: any) => cred.credentialID === deviceId);
-
-            // Logging for debugging
-            if (!isWebAuthnMatch) {
-                console.log(`⚠️ Biometric Mismatch for student ${student.email}:`, {
-                    providedCredentialID: deviceId,
-                    registeredCredentials: webAuthnCredentials.length
-                });
-
-                return NextResponse.json(
-                    { error: "Biometric verification failed. Please register your device using Face/fingerprint in your profile." },
-                    { status: 403 }
-                );
-            }
-        }
-        */
-
-        // 2. Check for existing attendance today (IST Date)
-        const today = new Date().toLocaleDateString("en-IN", {
-            timeZone: "Asia/Kolkata",
-            year: "numeric",
-            month: "2-digit",
-            day: "2-digit",
-        }).split('/').reverse().join('-'); // YYYY-MM-DD
-
         // Check for existing attendance in database
-        const existingAttendance = await db.attendance.checkToday(actualStudentId, today);
         if (existingAttendance) {
             if (isTester) {
                 // Delete existing attendance for tester to allow re-marking multiple times
@@ -276,16 +269,11 @@ export async function POST(request: NextRequest) {
             console.log(`✅ [Attendance Atomic Bio-Verified] ${student.registrationId || student.name} (Score: ${finalFaceMatchPercentage}%, Liveness: ${verification.livenessScore}%)`);
         }
 
-        // 3. Verify Location and Time (Optimized with short-term cache)
-        const nowMs = Date.now();
-        let adminSettings;
-
-        if (cachedAdminSettings && (nowMs - lastCacheUpdate < CACHE_DURATION)) {
-            adminSettings = cachedAdminSettings;
-        } else {
-            adminSettings = await db.settings.get();
+        // 3. Verify Location and Time (Using pre-fetched settings from parallel step)
+        if (!adminSettings) {
+            adminSettings = cachedAdminSettings || await db.settings.get();
             cachedAdminSettings = adminSettings;
-            lastCacheUpdate = nowMs;
+            lastCacheUpdate = Date.now();
         }
 
         // ⚡ NEW: WiFi BSSID Verification (Primary Method - FAST!)
@@ -508,7 +496,10 @@ export async function POST(request: NextRequest) {
                                 });
                             }
 
-                            await db.settings.update({ wifiWhitelist: updatedWhitelist });
+                            // ⚡ NON-BLOCKING BACKGROUND WRITE: Do not stall student attendance waiting for settings table update
+                            db.settings.update({ wifiWhitelist: updatedWhitelist }).catch((err: any) => {
+                                console.error("Error updating self-healing IP whitelist:", err);
+                            });
                             cachedAdminSettings = null;
                             lastCacheUpdate = 0;
                             console.log(`🔄 [Self-Healing] Automatically whitelisted IP ${clientIp} for ${hostelName} by student ${student.name}`);

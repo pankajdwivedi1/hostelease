@@ -1631,28 +1631,27 @@ export const db = {
                 tenantId = await getTenantIdOrThrow();
             } catch (err) {}
 
-            try {
-                await prisma.student.updateMany({
-                    where: { id: sid, ...(tenantId ? { tenantId } : {}) },
-                    data: { studentStatus: 'in' }
-                });
-                await prisma.gatePass.updateMany({
-                    where: { studentId: sid, status: 'out', ...(tenantId ? { tenantId } : {}) },
-                    data: { status: 'in', checkInIstTime: attendanceData.istTime, qrTokenUsedIn: 'ATTENDANCE_OVERRIDE' }
-                });
-            } catch (err) {
-                console.warn("⚠️ Post-attendance sync update failed:", err);
-            }
-
             const finalData = { ...filterAttendanceForPrisma(attendanceData), tenantId };
             if (!finalData.id) finalData.id = crypto.randomUUID();
 
-            try {
-                const record = await prisma.attendance.create({
-                    data: finalData
-                });
-                return mapAttendanceToCamelCase(record);
-            } catch (createErr: any) {
+            // ⚡ PARALLEL WRITES: Execute student sync, gatePass sync, and attendance record creation concurrently
+            const studentSyncPromise = prisma.student.updateMany({
+                where: { id: sid, ...(tenantId ? { tenantId } : {}) },
+                data: { studentStatus: 'in' }
+            }).catch(err => {
+                console.warn("⚠️ Post-attendance student sync update warning:", err?.message);
+            });
+
+            const gatePassSyncPromise = prisma.gatePass.updateMany({
+                where: { studentId: sid, status: 'out', ...(tenantId ? { tenantId } : {}) },
+                data: { status: 'in', checkInIstTime: attendanceData.istTime, qrTokenUsedIn: 'ATTENDANCE_OVERRIDE' }
+            }).catch(err => {
+                console.warn("⚠️ Post-attendance gatepass sync update warning:", err?.message);
+            });
+
+            const attendanceCreatePromise = prisma.attendance.create({
+                data: finalData
+            }).catch(async (createErr: any) => {
                 if (createErr.code === 'P2002') {
                     const updated = await prisma.attendance.updateMany({
                         where: { studentId: sid, date: attendanceData.date },
@@ -1661,7 +1660,15 @@ export const db = {
                     return { success: true, updated };
                 }
                 throw createErr;
-            }
+            });
+
+            const [, , record] = await Promise.all([
+                studentSyncPromise,
+                gatePassSyncPromise,
+                attendanceCreatePromise
+            ]);
+
+            return (record && (record as any).success) ? record : mapAttendanceToCamelCase(record);
         },
 
         markBulk: async (records: any[]) => {

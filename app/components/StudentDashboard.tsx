@@ -1421,6 +1421,7 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
     } | null>(null);
     const [isFaceMatching, setIsFaceMatching] = useState(false);
     const [cameraActive, setCameraActive] = useState(false);
+    const [isCameraReady, setIsCameraReady] = useState(false);
     const [faceMatchStep, setFaceMatchStep] = useState<'idle' | 'loading-models' | 'detecting' | 'matching' | 'success' | 'flagged' | 'error'>('idle');
     const [faceDetected, setFaceDetected] = useState(false);
     const [faceBox, setFaceBox] = useState<{ x: number, y: number, width: number, height: number } | null>(null);
@@ -4443,28 +4444,55 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
             setAttendanceStep('idle');
             setAttendanceFailedReason('');
 
+            setIsCameraReady(false);
             setCameraActive(true);
 
-            // ⚡ IMMEDIATE: Start camera stream with adaptive resolution fallback
+            // ⚡ DETECT DEVICE TYPE FOR OPTIMAL INSTANT CAMERA STARTUP
+            const isMobileDevice = typeof window !== 'undefined' && (
+                /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) ||
+                (window.innerWidth <= 768)
+            );
+
+            // ⚡ FAST CAMERA STARTUP CONSTRAINTS:
+            // Mobile front cameras start 2-3x faster when requesting native 640x480 resolution (zero sensor ISP mode switch delay)
+            const videoConstraints: MediaStreamConstraints = {
+                video: isMobileDevice
+                    ? {
+                        facingMode: 'user',
+                        width: { ideal: 640, min: 320 },
+                        height: { ideal: 480, min: 240 },
+                        frameRate: { ideal: 30, min: 15 }
+                    }
+                    : {
+                        facingMode: 'user',
+                        width: { ideal: 1280, min: 640 },
+                        height: { ideal: 720, min: 480 }
+                    },
+                audio: false
+            };
+
+            // ⚡ IMMEDIATE: Start camera stream with zero wait
             let stream: MediaStream | null = null;
             try {
-                stream = await navigator.mediaDevices.getUserMedia({
-                    video: {
-                        facingMode: 'user',
-                        width: { ideal: 1280 },
-                        height: { ideal: 720 }
-                    }
-                });
+                stream = await navigator.mediaDevices.getUserMedia(videoConstraints);
             } catch (e) {
                 stream = await navigator.mediaDevices.getUserMedia({
-                    video: { facingMode: 'user' }
+                    video: { facingMode: 'user' },
+                    audio: false
                 });
             }
 
-            // ⚡ FAST FEED: Show video as soon as the browser allows & start detection loop instantly
-            if (videoRef.current && stream) {
-                videoRef.current.srcObject = stream;
-                videoRef.current.play().catch(() => {});
+            // ⚡ FAST FEED: Attach stream as soon as video element is available
+            if (stream) {
+                const attachStream = () => {
+                    if (videoRef.current) {
+                        videoRef.current.srcObject = stream;
+                        videoRef.current.play().catch(() => {});
+                    } else {
+                        requestAnimationFrame(attachStream);
+                    }
+                };
+                attachStream();
             }
 
             // ⚡ INSTANT: Start detection loop immediately without blocking
@@ -4502,6 +4530,7 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
             clearTimeout(detectionIntervalRef.current);
             detectionIntervalRef.current = null;
         }
+        setIsCameraReady(false);
         setCameraActive(false);
         setFaceDetected(false);
         setFaceBox(null);
@@ -8343,8 +8372,19 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
                                                     autoPlay
                                                     playsInline
                                                     muted
+                                                    onLoadedData={() => setIsCameraReady(true)}
+                                                    onPlaying={() => setIsCameraReady(true)}
                                                     className="w-full h-full object-cover scale-x-[-1]"
                                                 />
+
+                                                {/* ⚡ OPENING CAMERA STATUS OVERLAY */}
+                                                {!isCameraReady && (
+                                                    <div className="absolute inset-0 flex items-center justify-center p-6 text-center pointer-events-none bg-black/90 z-20">
+                                                        <p className="text-sm font-semibold text-white/90 tracking-wide animate-pulse">
+                                                            Opening camera...
+                                                        </p>
+                                                    </div>
+                                                )}
 
                                                 {/* Dynamic Green Square Face Tracking Box */}
                                                 {faceDetected && faceBox && videoRef.current ? (
