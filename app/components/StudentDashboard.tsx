@@ -4416,8 +4416,42 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
             setLiveBiometricScore(0);
             setFaceDetected(false);
             setFaceBox(null);
+            setIsCameraReady(false);
+            setDistanceInfo({
+                status: 'none',
+                cm: 0,
+                message: 'Align Face in Frame',
+                percent: 0
+            });
+            setAttendanceStep('idle');
+            setAttendanceFailedReason('');
 
-            // ⚡ PRE-LOAD BIOMETRIC REFERENCE DESCRIPTOR: Instant 0ms memory access
+            // 1. Immediately open modal with "Opening camera..."
+            setCameraActive(true);
+
+            // 2. ⚡ INSTANT HARDWARE STREAM (Universal 640x480 standard, starts in < 300ms)
+            // Zero delay: request native sensor resolution directly
+            const streamPromise = navigator.mediaDevices.getUserMedia({
+                video: {
+                    facingMode: 'user',
+                    width: { ideal: 640 },
+                    height: { ideal: 480 }
+                },
+                audio: false
+            }).catch(() => {
+                return navigator.mediaDevices.getUserMedia({
+                    video: { facingMode: 'user' },
+                    audio: false
+                });
+            });
+
+            // 3. ⚡ NON-BLOCKING BACKGROUND PRE-WARM: Run descriptor cache & model loading concurrently
+            const isMobileDevice = typeof window !== 'undefined' && (
+                /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) ||
+                (window.innerWidth <= 768)
+            );
+            faceMatching.loadFaceApiModels(!isMobileDevice).catch(() => {});
+
             if (!referenceDescriptorRef.current || referenceDescriptorRef.current.length < 68) {
                 let ref = studentProfile?.faceDescriptor;
                 if (typeof ref === 'string') {
@@ -4428,74 +4462,41 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
                 } else {
                     const regId = studentProfile?.registrationId || studentProfile?._id || '';
                     if (regId) {
-                        const cached = await getBiometricDescriptor(regId);
-                        if (cached?.isValid && cached.descriptor && cached.descriptor.length >= 68) {
-                            referenceDescriptorRef.current = cached.descriptor;
-                        }
+                        getBiometricDescriptor(regId).then((cached) => {
+                            if (cached?.isValid && cached.descriptor && cached.descriptor.length >= 68) {
+                                referenceDescriptorRef.current = cached.descriptor;
+                            }
+                        }).catch(() => {});
                     }
                 }
             }
-            setDistanceInfo({
-                status: 'none',
-                cm: 0,
-                message: 'Align Face in Frame',
-                percent: 0
-            });
-            setAttendanceStep('idle');
-            setAttendanceFailedReason('');
 
-            setIsCameraReady(false);
-            setCameraActive(true);
+            // 4. Await only the camera hardware stream
+            const stream = await streamPromise;
 
-            // ⚡ DETECT DEVICE TYPE FOR OPTIMAL INSTANT CAMERA STARTUP
-            const isMobileDevice = typeof window !== 'undefined' && (
-                /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) ||
-                (window.innerWidth <= 768)
-            );
-
-            // ⚡ FAST CAMERA STARTUP CONSTRAINTS:
-            // Mobile front cameras start 2-3x faster when requesting native 640x480 resolution (zero sensor ISP mode switch delay)
-            const videoConstraints: MediaStreamConstraints = {
-                video: isMobileDevice
-                    ? {
-                        facingMode: 'user',
-                        width: { ideal: 640, min: 320 },
-                        height: { ideal: 480, min: 240 },
-                        frameRate: { ideal: 30, min: 15 }
-                    }
-                    : {
-                        facingMode: 'user',
-                        width: { ideal: 1280, min: 640 },
-                        height: { ideal: 720, min: 480 }
-                    },
-                audio: false
-            };
-
-            // ⚡ IMMEDIATE: Start camera stream with zero wait
-            let stream: MediaStream | null = null;
-            try {
-                stream = await navigator.mediaDevices.getUserMedia(videoConstraints);
-            } catch (e) {
-                stream = await navigator.mediaDevices.getUserMedia({
-                    video: { facingMode: 'user' },
-                    audio: false
-                });
-            }
-
-            // ⚡ FAST FEED: Attach stream as soon as video element is available
+            // 5. ⚡ INSTANT PLAYBACK & IMMEDIATE FRAME READY
             if (stream) {
+                let attachAttempts = 0;
                 const attachStream = () => {
                     if (videoRef.current) {
                         videoRef.current.srcObject = stream;
-                        videoRef.current.play().catch(() => {});
-                    } else {
+                        videoRef.current.setAttribute('playsinline', 'true');
+                        videoRef.current.muted = true;
+                        const p = videoRef.current.play();
+                        if (p !== undefined) {
+                            p.then(() => setIsCameraReady(true)).catch(() => setIsCameraReady(true));
+                        } else {
+                            setIsCameraReady(true);
+                        }
+                    } else if (attachAttempts < 15) {
+                        attachAttempts++;
                         requestAnimationFrame(attachStream);
                     }
                 };
                 attachStream();
             }
 
-            // ⚡ INSTANT: Start detection loop immediately without blocking
+            // 6. ⚡ INSTANT: Start detection loop immediately
             setFaceMatchStep('detecting');
             livenessTrackerRef.current.reset();
             livenessFramesRef.current = 0;
@@ -4505,13 +4506,6 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
                 guidance: "Align face inside frame",
                 blinkCount: 0,
             });
-
-            // Ensure models are loaded in memory (Lite on mobile, Pro SSD on desktop)
-            const isMobile = (
-                /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) ||
-                (window.innerWidth <= 768)
-            );
-            await faceMatching.loadFaceApiModels(!isMobile);
         } catch (err) {
             console.error("Camera error:", err);
             alert("Could not access camera. Please ensure permissions are granted.");
