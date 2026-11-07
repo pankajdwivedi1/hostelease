@@ -197,44 +197,13 @@ export async function POST(request: NextRequest) {
         }
 
         // ============================================================
-        // 🔒 DEVICE BINDING ENFORCEMENT (Google Pay-style)
+        // 🔒 DEVICE BINDING ENFORCEMENT (Deactivated for Browser/PWA)
         // ============================================================
-        const storedDeviceId = (student.deviceId && student.deviceId.trim() !== "no-binding") ? student.deviceId.trim() : null;
-
-        if (storedDeviceId) {
-            // Device is already bound — incoming ID MUST match, no exceptions
-            if (!deviceId || storedDeviceId !== deviceId.trim()) {
-                console.warn(`🚫 [DEVICE_BLOCK] Scan blocked for ${student.name}. Expected: ${storedDeviceId?.slice(0,8)}... Got: ${deviceId?.slice(0,8) || 'none'}...`);
-                return NextResponse.json(
-                    {
-                        error: "⛔ Attendance blocked. This account is registered on a different device. If you changed your phone, please contact your Warden to reset your device.",
-                        code: "DEVICE_MISMATCH"
-                    },
-                    { status: 403 }
-                );
-            }
-            // ✅ Device matches — continue
-        } else if (deviceId?.trim()) {
-            // No device bound yet — AUTO-BIND this device on first scan
-            console.log(`📱 [DEVICE_BIND] First scan — binding device to ${student.name}: ${deviceId.slice(0,8)}...`);
-            try {
-                await db.students.update(student._id.toString(), {
-                    deviceId: deviceId.trim(),
-                    isProfileLocked: true,
-                    deviceHistory: [
-                        ...((student as any).deviceHistory || []),
-                        { deviceId: deviceId.trim(), action: "registered", timestamp: new Date() }
-                    ]
-                });
-                // Update local student object to reflect the new binding
-                (student as any).deviceId = deviceId.trim();
-            } catch (bindErr) {
-                console.warn("⚠️ Device auto-bind failed (non-critical):", bindErr);
-                // Continue — don't block the scan if binding fails
-            }
-        } else {
-            // No device ID sent at all — warn but allow (student may be on old app version)
-            console.warn(`⚠️ [NO_DEVICE_ID] Scan without deviceId for ${student.name}. Student should update their app.`);
+        // Deactivated for browser/PWA to eliminate false-alarm blocks when
+        // students clear cache, change browsers, or scan via external apps.
+        // True hardware binding will be reintroduced in native Android .apk.
+        if (deviceId?.trim()) {
+            console.log(`📱 [DEVICE_INFO] GatePass scan with device ID for ${student.name}: ${deviceId.slice(0, 8)}...`);
         }
         // ============================================================
 
