@@ -19,8 +19,7 @@ export async function GET(request: NextRequest) {
 
     const students = await prisma.student.findMany({
       where: {
-        ...(tenantId ? { tenantId } : {}),
-        faceDescriptor: { isEmpty: false }
+        ...(tenantId ? { tenantId } : {})
       },
       select: {
         id: true,

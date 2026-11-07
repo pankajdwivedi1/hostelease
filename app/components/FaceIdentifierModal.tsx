@@ -288,7 +288,7 @@ export default function FaceIdentifierModal({
               <p className="text-[10px] text-slate-400 font-medium">
                 {isLoadingGallery
                   ? "Loading student face gallery..."
-                  : `${gallery.length} student descriptors synced locally`}
+                  : `${gallery.length} students synced (${gallery.filter((s) => s.faceDescriptor && s.faceDescriptor.length > 0).length} face biometrics)`}
               </p>
             </div>
           </div>

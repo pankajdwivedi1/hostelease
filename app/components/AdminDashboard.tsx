@@ -9292,31 +9292,29 @@ export default function AdminDashboard({
                   </div>
                 </div>
 
-                <div className="flex flex-wrap items-center gap-2 w-full md:w-auto">
+                <div className="flex flex-wrap items-center gap-1.5 sm:gap-2 w-full md:w-auto">
                   {title === "Super Admin Dashboard" && (
-                    <button
-                      onClick={() => setShowSystemSettingsModal(true)}
-                      className="flex-1 md:flex-none flex items-center justify-center gap-2 px-3 py-2 bg-indigo-50 text-indigo-700 border border-indigo-200 rounded-lg text-[10px] font-bold uppercase tracking-tight hover:bg-indigo-100 transition-all whitespace-nowrap"
-                    >
-                      🛠️ System Settings
-                    </button>
-                  )}
-                  {title === "Super Admin Dashboard" && (
-                    <button
-                      onClick={() => setShowIdentifierModal(true)}
-                      className="flex-1 md:flex-none flex items-center justify-center gap-2 px-3 py-2 bg-purple-50 text-purple-700 border border-purple-200 rounded-lg text-[10px] font-bold uppercase tracking-tight hover:bg-purple-100 transition-all whitespace-nowrap shadow-xs active:scale-95"
-                    >
-                      🪪 Identifier
-                    </button>
-                  )}
-                  {title === "Super Admin Dashboard" && (
-                    <button
-                      onClick={handleFixCampusSettings}
-                      disabled={isUpdatingSettings}
-                      className="flex-1 md:flex-none flex items-center justify-center gap-2 px-3 py-2 bg-amber-50 text-amber-700 border border-amber-200 rounded-lg text-[10px] font-bold uppercase tracking-tight hover:bg-amber-100 transition-all disabled:opacity-50 whitespace-nowrap"
-                    >
-                      {isUpdatingSettings ? "Updating..." : "✨ Set New Location"}
-                    </button>
+                    <div className="grid grid-cols-3 gap-1.5 w-full md:contents">
+                      <button
+                        onClick={() => setShowSystemSettingsModal(true)}
+                        className="flex items-center justify-center gap-1 sm:gap-2 px-1.5 sm:px-3 py-2 bg-indigo-50 text-indigo-700 border border-indigo-200 rounded-lg text-[8.5px] sm:text-[10px] font-bold uppercase tracking-tight hover:bg-indigo-100 transition-all whitespace-nowrap shadow-xs active:scale-95"
+                      >
+                        🛠️ System Settings
+                      </button>
+                      <button
+                        onClick={() => setShowIdentifierModal(true)}
+                        className="flex items-center justify-center gap-1 sm:gap-2 px-1.5 sm:px-3 py-2 bg-purple-50 text-purple-700 border border-purple-200 rounded-lg text-[8.5px] sm:text-[10px] font-bold uppercase tracking-tight hover:bg-purple-100 transition-all whitespace-nowrap shadow-xs active:scale-95"
+                      >
+                        🔍 Identifier
+                      </button>
+                      <button
+                        onClick={handleFixCampusSettings}
+                        disabled={isUpdatingSettings}
+                        className="flex items-center justify-center gap-1 sm:gap-2 px-1.5 sm:px-3 py-2 bg-amber-50 text-amber-700 border border-amber-200 rounded-lg text-[8.5px] sm:text-[10px] font-bold uppercase tracking-tight hover:bg-amber-100 transition-all disabled:opacity-50 whitespace-nowrap shadow-xs active:scale-95"
+                      >
+                        {isUpdatingSettings ? "Updating..." : "✨ Set New Location"}
+                      </button>
+                    </div>
                   )}
                   {title === "Super Admin Dashboard" && (
                     <button
