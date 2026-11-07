@@ -594,6 +594,24 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
         const checkNetwork = async () => {
             // Skip redundant network check if attendance is already marked tonight
             if (isAttendanceMarked) return;
+
+            // ⚡ RAILWAY OPTIMIZATION: Check sessionStorage cache (5 min TTL) to avoid hammering server
+            if (typeof window !== 'undefined') {
+                try {
+                    const cachedNet = sessionStorage.getItem("cached_student_network_v1");
+                    if (cachedNet) {
+                        const parsed = JSON.parse(cachedNet);
+                        if (parsed && (Date.now() - parsed.ts < 5 * 60 * 1000)) {
+                            if (!isCancelled) {
+                                setIsOnCampusWifi(Boolean(parsed.isOnCampusWifi));
+                                setIsAtHostel(Boolean(parsed.isAtHostel));
+                            }
+                            return;
+                        }
+                    }
+                } catch {}
+            }
+
             try {
                 const tenantParam = getTenantParam();
                 // 1. Direct server check (force fresh validation)
@@ -605,6 +623,7 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
                             setIsOnCampusWifi(true);
                             setIsAtHostel(true);
                         }
+                        try { sessionStorage.setItem("cached_student_network_v1", JSON.stringify({ isOnCampusWifi: true, isAtHostel: true, ts: Date.now() })); } catch {}
                         return;
                     }
                 }
@@ -623,6 +642,7 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
                                     setIsOnCampusWifi(true);
                                     setIsAtHostel(true);
                                 }
+                        try { sessionStorage.setItem("cached_student_network_v1", JSON.stringify({ isOnCampusWifi: true, isAtHostel: true, ts: Date.now() })); } catch {}
                                 return;
                             }
                         }
@@ -634,6 +654,7 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
                 if (!isCancelled) {
                     setIsOnCampusWifi(false);
                 }
+                try { sessionStorage.setItem("cached_student_network_v1", JSON.stringify({ isOnCampusWifi: false, isAtHostel: false, ts: Date.now() })); } catch {}
             } catch (e) {
                 if (!isCancelled) setIsOnCampusWifi(false);
             }

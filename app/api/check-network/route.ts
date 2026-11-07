@@ -8,6 +8,11 @@ export const dynamic = "force-dynamic";
 let cachedServerPublicIp: string | null = null;
 let lastPublicIpFetch = 0;
 
+// In-memory cache for WiFi whitelist to prevent DB hammering under high traffic
+let cachedWhitelist: any[] | null = null;
+let lastWhitelistFetch = 0;
+const WHITELIST_CACHE_TTL = 60 * 1000;
+
 async function getServerPublicIp(): Promise<string | null> {
     const now = Date.now();
     if (cachedServerPublicIp && (now - lastPublicIpFetch < 5 * 60 * 1000)) {
@@ -73,29 +78,34 @@ export async function GET(request: NextRequest) {
             ""
         ).toUpperCase().trim();
 
-        // 3. Fetch settings for active tenant
-        const settings = await db.settings.get();
-        let whitelist = settings?.wifiWhitelist || [];
+        // 3. Fetch settings for active tenant (Cached in memory for 60s to reduce DB queries)
+        let combinedWhitelist: any[] = [];
+        const now = Date.now();
+        if (cachedWhitelist && (now - lastWhitelistFetch < WHITELIST_CACHE_TTL)) {
+            combinedWhitelist = cachedWhitelist;
+        } else {
+            const settings = await db.settings.get();
+            let whitelist = settings?.wifiWhitelist || [];
 
-        // Universal Fallback: If tenant-specific whitelist is empty or has no match, load all admin settings whitelist
-        const allAdminWhitelists: any[] = [];
-        try {
-            const allSettings = await prisma.adminSettings.findMany({
-                select: { wifiWhitelist: true }
-            });
-            for (const s of allSettings) {
-                if (Array.isArray(s.wifiWhitelist)) {
-                    allAdminWhitelists.push(...(s.wifiWhitelist as any[]));
+            const allAdminWhitelists: any[] = [];
+            try {
+                const allSettings = await prisma.adminSettings.findMany({
+                    select: { wifiWhitelist: true }
+                });
+                for (const s of allSettings) {
+                    if (Array.isArray(s.wifiWhitelist)) {
+                        allAdminWhitelists.push(...(s.wifiWhitelist as any[]));
+                    }
                 }
-            }
-        } catch (err) {
-            // Ignore fallback error
-        }
+            } catch (err) {}
 
-        const combinedWhitelist = [
-            ...(Array.isArray(whitelist) ? whitelist : []),
-            ...allAdminWhitelists
-        ];
+            combinedWhitelist = [
+                ...(Array.isArray(whitelist) ? whitelist : []),
+                ...allAdminWhitelists
+            ];
+            cachedWhitelist = combinedWhitelist;
+            lastWhitelistFetch = now;
+        };
 
         // 4. Verify match against IP whitelist and BSSID whitelist
         let isWhitelisted = false;

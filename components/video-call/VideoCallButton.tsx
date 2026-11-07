@@ -54,6 +54,7 @@ export default function VideoCallButton({
     '';
 
   // ⚡ INSTANT SSE STREAM: Listens for incoming call notifications in real-time
+  // Optimized for Railway: Pauses immediately when tab/phone is in background to save RAM & bandwidth
   useEffect(() => {
     if (!studentId) return;
 
@@ -76,8 +77,12 @@ export default function VideoCallButton({
       }
     };
 
-    try {
-      if (typeof window !== 'undefined' && 'EventSource' in window) {
+    const connectStream = () => {
+      if (typeof window === 'undefined' || !('EventSource' in window)) return;
+      if (document.visibilityState === 'hidden') return;
+      if (eventSource) return;
+
+      try {
         eventSource = new EventSource(`/api/video-call/stream?studentId=${encodeURIComponent(studentId)}`);
 
         eventSource.addEventListener('incoming_call', (e) => {
@@ -90,11 +95,31 @@ export default function VideoCallButton({
         eventSource.onerror = () => {
           // Silent reconnect
         };
+      } catch {}
+    };
+
+    const disconnectStream = () => {
+      if (eventSource) {
+        eventSource.close();
+        eventSource = null;
       }
-    } catch {}
+    };
+
+    connectStream();
+
+    const handleVisibility = () => {
+      if (document.visibilityState === 'visible') {
+        connectStream();
+      } else {
+        disconnectStream();
+      }
+    };
+
+    document.addEventListener('visibilitychange', handleVisibility);
 
     return () => {
-      if (eventSource) eventSource.close();
+      disconnectStream();
+      document.removeEventListener('visibilitychange', handleVisibility);
     };
   }, [studentId, activeCallSession]);
 

@@ -13,11 +13,15 @@ export function clearMaintenanceCache() {
     lastCacheTime = 0;
 }
 
+const CACHE_HEADERS = {
+    "Cache-Control": "public, max-age=60, s-maxage=300, stale-while-revalidate=600",
+};
+
 export async function GET() {
     try {
         const now = Date.now();
         if (cachedStatus && (now - lastCacheTime < CACHE_TTL_MS)) {
-            return NextResponse.json({ success: true, ...cachedStatus });
+            return NextResponse.json({ success: true, ...cachedStatus }, { headers: CACHE_HEADERS });
         }
 
         const row = await prisma.platformSetting.findUnique({
@@ -38,7 +42,7 @@ export async function GET() {
         };
         lastCacheTime = now;
 
-        return NextResponse.json({ success: true, ...cachedStatus });
+        return NextResponse.json({ success: true, ...cachedStatus }, { headers: CACHE_HEADERS });
     } catch (error: any) {
         console.warn("Maintenance status check failed, defaulting to active:", error?.message);
         return NextResponse.json({
@@ -46,6 +50,6 @@ export async function GET() {
             enabled: false,
             message: "",
             estimatedTime: ""
-        });
+        }, { headers: CACHE_HEADERS });
     }
 }
