@@ -660,7 +660,11 @@ export default function GatepassView({ onClose }: { onClose?: () => void }) {
                                         newSummary.gatePassCount = (newSummary.gatePassCount || 0) + 1;
                                     }
                                 }
-                                newRecent.unshift(mapped);
+                                // Student is outside: Remove from Returns Today list
+                                const retIdx = newRecent.findIndex(r => r._id === mapped._id || r.studentId === mapped.studentId);
+                                if (retIdx !== -1) {
+                                    newRecent.splice(retIdx, 1);
+                                }
                             } else {
                                 // Check in: Remove from Outside list immediately
                                 const idx = newCurrentlyOut.findIndex(r => r._id === mapped._id || r.studentId === mapped.studentId);
@@ -668,6 +672,11 @@ export default function GatepassView({ onClose }: { onClose?: () => void }) {
                                     newCurrentlyOut.splice(idx, 1);
                                     newSummary.studentsOut = Math.max(0, (newSummary.studentsOut || 0) - 1);
                                     newSummary.studentsIn = (newSummary.studentsIn || 0) + 1;
+                                }
+                                // Student has returned: Add to Returns Today list
+                                const retIdx = newRecent.findIndex(r => r._id === mapped._id || r.studentId === mapped.studentId);
+                                if (retIdx !== -1) {
+                                    newRecent.splice(retIdx, 1);
                                 }
                                 newRecent.unshift(mapped);
                             }
