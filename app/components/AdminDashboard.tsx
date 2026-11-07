@@ -33,6 +33,10 @@ const GatepassView = dynamic(() => import("./GatepassView"), {
 });
 
 
+const FaceIdentifierModal = dynamic(() => import("./FaceIdentifierModal"), {
+  ssr: false,
+});
+
 const FieldEnforcementComponent = dynamic(() => import("./FieldEnforcementComponent"), {
   ssr: false,
   loading: () => <div className="h-64 w-full bg-gray-100 animate-pulse rounded-xl flex items-center justify-center text-gray-400 text-xs">Loading Field Enforcement...</div>
@@ -2488,6 +2492,7 @@ export default function AdminDashboard({
 
   // System Settings - New Features
   const [showSystemSettingsModal, setShowSystemSettingsModal] = useState(false);
+  const [showIdentifierModal, setShowIdentifierModal] = useState(false);
   const [isSavingSystemSettings, setIsSavingSystemSettings] = useState(false);
   const [showChangePreviewModal, setShowChangePreviewModal] = useState(false);
   const [pendingFormBuilderChanges, setPendingFormBuilderChanges] = useState<any[] | null>(null);
@@ -9294,6 +9299,14 @@ export default function AdminDashboard({
                       className="flex-1 md:flex-none flex items-center justify-center gap-2 px-3 py-2 bg-indigo-50 text-indigo-700 border border-indigo-200 rounded-lg text-[10px] font-bold uppercase tracking-tight hover:bg-indigo-100 transition-all whitespace-nowrap"
                     >
                       🛠️ System Settings
+                    </button>
+                  )}
+                  {title === "Super Admin Dashboard" && (
+                    <button
+                      onClick={() => setShowIdentifierModal(true)}
+                      className="flex-1 md:flex-none flex items-center justify-center gap-2 px-3 py-2 bg-purple-50 text-purple-700 border border-purple-200 rounded-lg text-[10px] font-bold uppercase tracking-tight hover:bg-purple-100 transition-all whitespace-nowrap shadow-xs active:scale-95"
+                    >
+                      🪪 Identifier
                     </button>
                   )}
                   {title === "Super Admin Dashboard" && (
@@ -18428,6 +18441,21 @@ export default function AdminDashboard({
           );
         })()
       }
+      {showIdentifierModal && (
+        <FaceIdentifierModal
+          isOpen={showIdentifierModal}
+          onClose={() => setShowIdentifierModal(false)}
+          onSelectStudent={(student: any) => {
+            const full = students.find((s: any) => (s.id || s._id) === student.id || s.registrationId === student.registrationId);
+            if (full) {
+              setSelectedStudent(full);
+            } else {
+              setSelectedStudent(student);
+            }
+            setShowIdentifierModal(false);
+          }}
+        />
+      )}
       {
         showSystemSettingsModal && (
           <div className="fixed inset-0 z-[100] bg-black/75 sm:bg-black/60 sm:backdrop-blur-md flex items-center justify-center p-2 sm:p-4 animate-in fade-in duration-200 transform-gpu">
