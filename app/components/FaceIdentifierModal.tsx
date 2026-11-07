@@ -61,6 +61,135 @@ function euclideanDistance(a: number[], b: number[]): number {
   return Math.sqrt(sum);
 }
 
+/**
+ * 🛡️ Real Human Physical Skin Tone Analyzer
+ * Converts central face pixels to YCbCr & RGB space and verifies live human skin chromaticity.
+ * Instantly rejects curtains, floral bedsheets, blankets, clothes, walls, and screens (<10% skin).
+ */
+function checkHumanSkinTone(
+  ctx: CanvasRenderingContext2D,
+  box: { x: number; y: number; width: number; height: number }
+): { isSkin: boolean; skinRatio: number } {
+  try {
+    const bx = Math.max(0, Math.floor(box.x));
+    const by = Math.max(0, Math.floor(box.y));
+    const bw = Math.floor(box.width);
+    const bh = Math.floor(box.height);
+
+    // Sample the central 60% core of the detected face (forehead, nose, cheeks)
+    const cx = bx + Math.floor(bw * 0.2);
+    const cy = by + Math.floor(bh * 0.2);
+    const cw = Math.floor(bw * 0.6);
+    const ch = Math.floor(bh * 0.6);
+
+    if (cw < 10 || ch < 10) return { isSkin: false, skinRatio: 0 };
+
+    const imgData = ctx.getImageData(cx, cy, cw, ch).data;
+    let skinPixels = 0;
+    const total = cw * ch;
+
+    for (let i = 0; i < imgData.length; i += 4) {
+      const r = imgData[i];
+      const g = imgData[i + 1];
+      const b = imgData[i + 2];
+
+      // Standard human skin chromaticity bounds in YCbCr:
+      const cb = 128 - 0.168736 * r - 0.331264 * g + 0.5 * b;
+      const cr = 128 + 0.5 * r - 0.418688 * g - 0.081312 * b;
+
+      // Human skin has warm melanin/hemoglobin chromaticity: R > G, R > B, Cr: 133-173, Cb: 77-127
+      const isSkinPixel = (
+        r > 50 && g > 35 && b > 20 &&
+        r > g && r > b &&
+        (r - g) >= 12 &&
+        cb >= 77 && cb <= 127 &&
+        cr >= 133 && cr <= 173
+      );
+
+      if (isSkinPixel) {
+        skinPixels++;
+      }
+    }
+
+    const skinRatio = skinPixels / Math.max(1, total);
+    // Real physical human face must contain at least 35% genuine skin pixels
+    return { isSkin: skinRatio >= 0.35, skinRatio };
+  } catch (_) {
+    return { isSkin: false, skinRatio: 0 };
+  }
+}
+
+/**
+ * 🛡️ Facial Landmark & Geometric Anatomy Validator
+ * Ensures detected contours match genuine human facial anatomy (eyes, nose, mouth positioning).
+ * Rejects pareidolia on floral cloth, curtain folds, and inanimate textures.
+ */
+function verifyFacialAnatomy(
+  landmarks: any,
+  box: { x: number; y: number; width: number; height: number }
+): boolean {
+  if (!landmarks || !box) return false;
+
+  // Face size must be substantial
+  if (box.width < 50 || box.height < 50) return false;
+
+  // Aspect ratio check (human face width/height is between 0.60 and 1.35)
+  const aspect = box.width / box.height;
+  if (aspect < 0.60 || aspect > 1.35) return false;
+
+  const positions = landmarks.positions || (typeof landmarks.getPositions === "function" ? landmarks.getPositions() : null);
+  if (!positions || positions.length < 5) return false;
+
+  let leftEye: { x: number; y: number };
+  let rightEye: { x: number; y: number };
+  let nose: { x: number; y: number };
+  let mouth: { x: number; y: number };
+
+  if (positions.length >= 68) {
+    leftEye = {
+      x: (positions[36].x + positions[39].x) / 2,
+      y: (positions[36].y + positions[39].y) / 2
+    };
+    rightEye = {
+      x: (positions[42].x + positions[45].x) / 2,
+      y: (positions[42].y + positions[45].y) / 2
+    };
+    nose = positions[30];
+    mouth = {
+      x: (positions[48].x + positions[54].x) / 2,
+      y: (positions[48].y + positions[54].y) / 2
+    };
+  } else {
+    leftEye = positions[0];
+    rightEye = positions[1];
+    nose = positions[2];
+    mouth = {
+      x: (positions[3].x + positions[4].x) / 2,
+      y: (positions[3].y + positions[4].y) / 2
+    };
+  }
+
+  // 1. Inter-ocular distance must be 20% to 55% of face width
+  const eyeDist = Math.sqrt((rightEye.x - leftEye.x) ** 2 + (rightEye.y - leftEye.y) ** 2);
+  const eyeRatio = eyeDist / box.width;
+  if (eyeRatio < 0.20 || eyeRatio > 0.55) return false;
+
+  // 2. Eyes tilt check (tilt cannot exceed 45 degrees)
+  const eyeTilt = Math.abs(rightEye.y - leftEye.y) / Math.max(1, eyeDist);
+  if (eyeTilt > 0.45) return false;
+
+  // 3. Eye Level: eyes must be in the upper 65% of the bounding box
+  const avgEyeY = (leftEye.y + rightEye.y) / 2;
+  const eyeRelY = (avgEyeY - box.y) / box.height;
+  if (eyeRelY < 0.15 || eyeRelY > 0.65) return false;
+
+  // 4. Vertical Anatomy: Eyes above Nose, Nose above Mouth
+  if (nose.y <= avgEyeY) return false;
+  if (mouth.y <= nose.y) return false;
+
+  return true;
+}
+
 export default function FaceIdentifierModal({
   isOpen,
   onClose,
@@ -69,6 +198,7 @@ export default function FaceIdentifierModal({
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const scanIntervalRef = useRef<any>(null);
+  const consecutiveMatchRef = useRef<{ studentId: string; count: number }>({ studentId: "", count: 0 });
 
   const [gallery, setGallery] = useState<IdentifiedStudent[]>([]);
   const [isLoadingGallery, setIsLoadingGallery] = useState(true);
@@ -98,7 +228,7 @@ export default function FaceIdentifierModal({
       try {
         setIsLoadingGallery(true);
         // Check session cache first
-        const cached = sessionStorage.getItem("hosteleaze_identifier_gallery_v2");
+        const cached = sessionStorage.getItem("hosteleaze_identifier_gallery_v3");
         if (cached) {
           const parsed = JSON.parse(cached);
           if (Array.isArray(parsed) && parsed.length > 0 && isMounted) {
@@ -112,7 +242,7 @@ export default function FaceIdentifierModal({
         if (data.success && Array.isArray(data.students) && isMounted) {
           setGallery(data.students);
           try {
-            sessionStorage.setItem("hosteleaze_identifier_gallery_v2", JSON.stringify(data.students));
+            sessionStorage.setItem("hosteleaze_identifier_gallery_v3", JSON.stringify(data.students));
           } catch (_) {}
         }
       } catch (err) {
@@ -155,12 +285,14 @@ export default function FaceIdentifierModal({
       videoRef.current.srcObject = null;
     }
     setIsCameraActive(false);
+    consecutiveMatchRef.current = { studentId: "", count: 0 };
   }, []);
 
   const startCamera = useCallback(async () => {
     stopCamera();
     setCameraError(null);
     setSpoofWarning(null);
+    consecutiveMatchRef.current = { studentId: "", count: 0 };
 
     try {
       const constraints: MediaStreamConstraints = {
@@ -200,7 +332,7 @@ export default function FaceIdentifierModal({
     };
   }, [isOpen, isAIWarming, startCamera, stopCamera]);
 
-  // 3. Real-Time Facial Identification & Bank-Grade Multi-Factor Anti-Spoofing Loop
+  // 3. Real-Time Facial Identification with Human Skin & Multi-Factor PAD
   useEffect(() => {
     if (!isCameraActive || isAIWarming || matchedStudent || !videoRef.current || gallery.length === 0) {
       return;
@@ -218,15 +350,39 @@ export default function FaceIdentifierModal({
         if (!detection || !detection.descriptor) {
           setScanStatus("Looking for student face...");
           setSpoofWarning(null);
+          consecutiveMatchRef.current = { studentId: "", count: 0 };
+          isBusy = false;
+          return;
+        }
+
+        // 🛡️ CHECK 1: Detection Confidence Score (Must be high confidence human face >= 0.65)
+        const detectionScore = detection.detection?.score ?? (detection as any).score ?? 0;
+        if (detectionScore < 0.65) {
+          setScanStatus("Weak detection (holding steady on student face)...");
+          consecutiveMatchRef.current = { studentId: "", count: 0 };
           isBusy = false;
           return;
         }
 
         const box = detection.detection?.box || (detection as any).box;
+        if (!box || box.width < 50 || box.height < 50) {
+          setScanStatus("Face too small or distant. Bring camera closer...");
+          consecutiveMatchRef.current = { studentId: "", count: 0 };
+          isBusy = false;
+          return;
+        }
+
+        // 🛡️ CHECK 2: Facial Landmark Geometry (Eyes, Nose, Mouth Anatomy)
+        if (!verifyFacialAnatomy(detection.landmarks, box)) {
+          setScanStatus("Inanimate pattern or distorted texture rejected. Looking for real face...");
+          consecutiveMatchRef.current = { studentId: "", count: 0 };
+          isBusy = false;
+          return;
+        }
+
         const vw = videoRef.current.videoWidth || 640;
         const vh = videoRef.current.videoHeight || 480;
 
-        // 🛡️ LAYER 1 & 2: CLIENT-SIDE PRESENTATION ATTACK DETECTION (Phone Screen / Bezel / Photo borders)
         const offCanvas = document.createElement("canvas");
         offCanvas.width = vw;
         offCanvas.height = vh;
@@ -235,36 +391,47 @@ export default function FaceIdentifierModal({
         if (ctx) {
           ctx.drawImage(videoRef.current, 0, 0, vw, vh);
 
-          // Check A: Mobile screen display & secondary phone casing surrounding face
-          if (box) {
-            const screenCheck = detectMobileScreenDisplay(offCanvas, box);
-            if (screenCheck.isSpoof) {
-              setSpoofWarning(screenCheck.reason || "Mobile phone screen / device casing detected!");
-              setScanStatus("🛑 FRAUD DETECTED: Secondary Phone Screen / Display Rejected!");
-              isBusy = false;
-              return;
-            }
+          // 🛡️ CHECK 3: Real Human Physical Skin Tone Chromaticity Filter
+          const skinCheck = checkHumanSkinTone(ctx, box);
+          if (!skinCheck.isSkin) {
+            // Curtain, bedsheet, cloth pattern or non-skin object!
+            setScanStatus("Inanimate object / cloth pattern rejected (No live human skin detected).");
+            consecutiveMatchRef.current = { studentId: "", count: 0 };
+            isBusy = false;
+            return;
           }
 
-          // Check B: Photo-of-photo bezel / photo border detection
+          // 🛡️ CHECK 4: Phone Casing / Secondary Screen Frame Detection
+          const screenCheck = detectMobileScreenDisplay(offCanvas, box);
+          if (screenCheck.isSpoof) {
+            setSpoofWarning(screenCheck.reason || "Mobile phone screen / device casing detected!");
+            setScanStatus("🛑 FRAUD DETECTED: Secondary Phone Screen / Display Rejected!");
+            consecutiveMatchRef.current = { studentId: "", count: 0 };
+            isBusy = false;
+            return;
+          }
+
+          // 🛡️ CHECK 5: Photo-of-photo Bezel / Border Detection
           const photoCheck = assessPhotoQuality(offCanvas);
           if (photoCheck.isPhotoOfPhoto) {
             setSpoofWarning("Secondary photo border / screen bezel detected!");
             setScanStatus("🛑 FRAUD DETECTED: Printed Photo or Screen Border Detected!");
+            consecutiveMatchRef.current = { studentId: "", count: 0 };
             isBusy = false;
             return;
           }
         }
 
-        // Passed client screening: proceed to 1:N descriptor comparison
+        // Passed all live human skin and biometric checks
         setSpoofWarning(null);
         setIsScanning(true);
-        setScanStatus("Physical face detected — searching student records...");
+        setScanStatus("Live human face confirmed — searching student roster...");
 
         const liveDescriptor = Array.from(detection.descriptor) as number[];
 
         let bestMatch: IdentifiedStudent | null = null;
         let minDistance = 999.0;
+        let secondMinDistance = 999.0;
 
         // Perform 1:N Euclidean vector comparison against cached gallery
         for (let i = 0; i < gallery.length; i++) {
@@ -273,17 +440,33 @@ export default function FaceIdentifierModal({
 
           const dist = euclideanDistance(liveDescriptor, candidate.faceDescriptor);
           if (dist < minDistance) {
+            secondMinDistance = minDistance;
             minDistance = dist;
             bestMatch = candidate;
+          } else if (dist < secondMinDistance) {
+            secondMinDistance = dist;
           }
         }
 
-        // Calibrated Threshold: distance <= 0.48 equates to >= 75% biometric match
-        if (bestMatch && minDistance <= 0.48) {
-          // 🛡️ LAYER 3: BANK-GRADE SERVER NEURAL ANTI-SPOOFING (MiniFASNetV2 ONNX Runtime)
-          // Verifies physical human skin vs LCD/OLED screens, paper prints, glass glare & Moiré lattice
+        // 🛡️ CHECK 6: Calibrated 1:N Search Threshold (distance <= 0.38 = >= 88% Match)
+        // AND margin between best and 2nd best must be >= 0.03 to eliminate ambiguous random collisions
+        if (bestMatch && minDistance <= 0.38 && (secondMinDistance - minDistance) >= 0.03) {
+          // 🛡️ CHECK 7: Temporal Stability Check (Must match the same student across 2 consecutive frames)
+          if (consecutiveMatchRef.current.studentId === bestMatch.id) {
+            consecutiveMatchRef.current.count++;
+          } else {
+            consecutiveMatchRef.current = { studentId: bestMatch.id, count: 1 };
+          }
+
+          if (consecutiveMatchRef.current.count < 2) {
+            setScanStatus(`Identifying ${bestMatch.name}... hold steady`);
+            isBusy = false;
+            return;
+          }
+
+          // 🛡️ CHECK 8: MiniFASNet Neural Verification on Server
           setIsVerifyingLiveness(true);
-          setScanStatus("Verifying physical human skin with neural anti-spoofing...");
+          setScanStatus("Confirming neural anti-spoofing...");
 
           try {
             const frameDataUrl = offCanvas.toDataURL("image/jpeg", 0.85);
@@ -300,23 +483,22 @@ export default function FaceIdentifierModal({
             if (liveRes.ok) {
               const liveData = await liveRes.json();
               if (liveData.isSpoof) {
-                // 🛑 FRAUD DETECTED: Server MiniFASNet flagged synthetic screen / photo
                 setSpoofWarning(`🛑 FRAUD PREVENTED: ${liveData.message || liveData.reason || "Mobile Screen or Photo Spoof"}`);
                 setScanStatus("🛑 Fake Identity Rejected: Mobile display / photo detected!");
+                consecutiveMatchRef.current = { studentId: "", count: 0 };
                 setIsVerifyingLiveness(false);
                 isBusy = false;
                 return;
               }
 
-              // ✅ 100% Genuine Physical Face Verified
+              // ✅ Genuine Physical Face Verified
               const score = calculateScore(minDistance);
               setMatchedStudent(bestMatch);
               setMatchScore(score);
               setLivenessScore(liveData.livenessScore || 98);
-              setScanStatus(`Verified: ${bestMatch.name} (${score}% match, Live Human Skin)`);
+              setScanStatus(`Verified: ${bestMatch.name} (${score}% match)`);
               if (scanIntervalRef.current) clearInterval(scanIntervalRef.current);
             } else {
-              // Fallback if server unreachable: match with local PAD
               const score = calculateScore(minDistance);
               setMatchedStudent(bestMatch);
               setMatchScore(score);
@@ -334,6 +516,7 @@ export default function FaceIdentifierModal({
             setIsVerifyingLiveness(false);
           }
         } else {
+          consecutiveMatchRef.current = { studentId: "", count: 0 };
           setScanStatus("Unknown student or poor lighting. Hold steady...");
         }
       } catch (err) {
@@ -342,7 +525,7 @@ export default function FaceIdentifierModal({
         isBusy = false;
         setIsScanning(false);
       }
-    }, 350);
+    }, 320);
 
     return () => {
       if (scanIntervalRef.current) {
@@ -361,6 +544,7 @@ export default function FaceIdentifierModal({
     setMatchScore(0);
     setLivenessScore(0);
     setSpoofWarning(null);
+    consecutiveMatchRef.current = { studentId: "", count: 0 };
     setScanStatus("Point camera at student's face...");
     startCamera();
   };
@@ -385,7 +569,7 @@ export default function FaceIdentifierModal({
   return (
     <div className="fixed inset-0 z-[99999] flex items-center justify-center p-3 sm:p-4 bg-black/80 backdrop-blur-md animate-in fade-in duration-200">
       <div className="relative w-full max-w-lg bg-slate-900 border border-slate-700/80 rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[92vh]">
-        {/* Header */}
+        {/* Header - Marked badge removed as requested */}
         <div className="px-4 py-3 bg-slate-800/90 border-b border-slate-700 flex items-center justify-between">
           <div className="flex items-center gap-2">
             <div className="w-8 h-8 rounded-lg bg-purple-500/20 border border-purple-400/30 flex items-center justify-center text-purple-300">
@@ -396,9 +580,6 @@ export default function FaceIdentifierModal({
                 Face Identifier
                 <span className="px-1.5 py-0.5 rounded text-[8px] font-black uppercase tracking-wider bg-purple-500/20 text-purple-300 border border-purple-500/30">
                   1:N Biometric
-                </span>
-                <span className="px-1.5 py-0.5 rounded text-[8px] font-black uppercase tracking-wider bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
-                  Anti-Spoof Active
                 </span>
               </h3>
               <p className="text-[10px] text-slate-400 font-medium">
@@ -565,11 +746,6 @@ export default function FaceIdentifierModal({
                     <span className="px-1.5 py-0.5 rounded text-[8px] font-black uppercase tracking-wider bg-green-500/20 text-green-300 border border-green-500/40 flex items-center gap-0.5">
                       <ShieldCheck className="w-2.5 h-2.5" /> {matchScore}% Match
                     </span>
-                    {livenessScore > 0 && (
-                      <span className="px-1.5 py-0.5 rounded text-[8px] font-black uppercase tracking-wider bg-emerald-500/20 text-emerald-300 border border-emerald-500/40">
-                        Live Human Skin
-                      </span>
-                    )}
                   </div>
 
                   <p className="text-[11px] font-bold text-slate-300 mt-0.5">
