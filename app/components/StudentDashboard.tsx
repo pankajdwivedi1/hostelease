@@ -1228,17 +1228,25 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
         const cacheKey = `cached_gatepasses_${studentId || regId}`;
 
         // ⚡ INSTANT 0ms LOAD FROM LOCAL CACHE
+        let hasLocalCache = false;
         try {
             const cachedPassesStr = localStorage.getItem(cacheKey);
-            if (cachedPassesStr && gatePasses.length === 0) {
+            if (cachedPassesStr) {
                 const cachedPasses = JSON.parse(cachedPassesStr);
                 if (Array.isArray(cachedPasses) && cachedPasses.length > 0) {
                     setGatePasses(cachedPasses);
+                    hasLocalCache = true;
                     console.log("⚡ [PWA Cache] Gatepasses loaded instantly from local device storage!");
                 }
             }
         } catch (e) {
             console.error("Failed to parse cached gatepasses:", e);
+        }
+
+        // If local cache exists and this is not a manual refresh/modal open, avoid server request
+        if (hasLocalCache && !isFullHistory) {
+            setLoadingGatePasses(false);
+            return;
         }
 
         setLoadingGatePasses(true);
@@ -1274,8 +1282,9 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
     };
 
     useEffect(() => {
-        if (studentProfile?._id || (studentProfile as any)?.id || studentProfile?.registrationId) {
-            fetchGatePassHistory(Boolean(showPermissionsHistory));
+        // Only fetch history when student actually opens the Outing/Permissions modal
+        if (showPermissionsHistory && (studentProfile?._id || (studentProfile as any)?.id || studentProfile?.registrationId)) {
+            fetchGatePassHistory(true);
             fetchStudentHistoryData();
         }
     }, [showPermissionsHistory, studentProfile?._id, (studentProfile as any)?.id, studentProfile?.registrationId, fetchStudentHistoryData]);
@@ -2908,15 +2917,20 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
             // Fetch Notifications
             const fetchStudentNotifications = async () => {
                 // ⚡ Instant load from LocalStorage cache
+                let hasCachedNotifs = false;
                 try {
                     const cachedNotifsStr = localStorage.getItem(`cached_notifs_${studentProfile._id}`);
                     if (cachedNotifsStr) {
                         const cached = JSON.parse(cachedNotifsStr);
                         if (Array.isArray(cached) && cached.length > 0) {
                             setNotifications(cached);
+                            hasCachedNotifs = true;
                         }
                     }
                 } catch (e) {}
+
+                // If cached notifications exist, skip server request on startup (refreshes on pull-to-refresh)
+                if (hasCachedNotifs) return;
 
                 try {
                     const res = await fetch(`/api/student/notifications?studentId=${encodeURIComponent(studentProfile._id)}&hostelName=${encodeURIComponent(studentProfile.hostelName)}${getTenantParam(false)}`);
@@ -3447,9 +3461,19 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
                     }
                 };
 
-                // ⚡ STEP 3: Load permissions asynchronously in background
+                // ⚡ STEP 3: Load permissions from cache first (skip server request if cached)
                 const fetchPermissions = async () => {
                     try {
+                        const cachedPerms = localStorage.getItem("cachedStudentPermissions");
+                        if (cachedPerms) {
+                            try {
+                                const parsed = JSON.parse(cachedPerms);
+                                if (Array.isArray(parsed) && parsed.length > 0) {
+                                    setPermissions(parsed);
+                                    return; // Zero server requests on startup!
+                                }
+                            } catch (e) {}
+                        }
                         const permResponse = await fetch(`/api/permissions?studentId=${studentId}&light=true${getTenantParam(false)}`, {
                             headers: {
                                 'x-user-type': 'student',
