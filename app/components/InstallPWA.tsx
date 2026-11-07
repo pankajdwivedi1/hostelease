@@ -77,22 +77,16 @@ export default function InstallPWA() {
     }, []);
 
     const handleInstallClick = async () => {
-        if (deferredPrompt) {
-            try {
-                deferredPrompt.prompt();
-                const { outcome } = await deferredPrompt.userChoice;
-                if (outcome === 'accepted') {
-                    setShowBanner(false);
-                }
-                setDeferredPrompt(null);
-            } catch (e) {
-                console.warn("Prompt error:", e);
-            }
-        } else if (isInAppBrowser) {
+        if (isInAppBrowser) {
             // Android Intent escape to native Google Chrome
             const currentUrl = window.location.href.replace(/^https?:\/\//, '');
             window.location.href = `intent://${currentUrl}#Intent;scheme=https;package=com.android.chrome;end`;
+            return;
         }
+
+        // Direct Android APK Download
+        window.location.href = '/api/download/android';
+        setTimeout(() => setShowBanner(false), 2500);
     };
 
     const handleDismiss = () => {

@@ -851,7 +851,7 @@ export async function GET(request: NextRequest) {
           status: p.status,
           permissionId: permissionId || null,
           hasApprovedPermission,
-          outingType: normalizedType,
+          outingType: hasApprovedPermission ? 'leave' : normalizedType,
           reason: p.reason || p.destination || null,
           checkOutTime: p.checkOutTime || null,
           checkInTime: p.checkInTime || null,

@@ -604,7 +604,7 @@ export async function GET(
     const isOutingHomeLeave = lastOuting && (lastOutingType.includes('leave') || lastOutingType === 'hleave');
     const studentDynamicLeave = (student as any)?.dynamicFields?.outingType === 'leave' || !!(student as any)?.dynamicFields?.leaveTo;
 
-    if (isOutingGatePass) {
+    if (isOutingGatePass && !studentDynamicLeave) {
       // ⚡ STRICT RULE: For students on regular GATE-PASS (outing), do NOT attach old expired leaves
       const s = student as any;
       s.outingType = (lastOuting as any)?.type || 'GATE-PASS';

@@ -128,7 +128,7 @@ export async function GET(request: NextRequest) {
                 populate: true
             }),
             db.permissions.list({
-                status: "allowed"
+                status: "all"
             }, { limit: 500, populate: false })
         ]);
 
@@ -147,12 +147,12 @@ export async function GET(request: NextRequest) {
             if (!isLeave) return false;
 
             // Must NOT be completed, expired, rejected, or cancelled
-            if (perm.status === 'completed' || perm.status === 'expired' || perm.status === 'rejected' || perm.status === 'cancelled') {
+            if (perm.status === 'rejected' || perm.status === 'cancelled') {
                 return false;
             }
 
             // Must be approved by Dean or Warden
-            const isApproved = perm.status === 'allowed' || perm.status === 'approved' || perm.deanStatus === 'allowed' || perm.deanStatus === 'approved';
+            const isApproved = perm.status === 'allowed' || perm.status === 'approved' || perm.deanStatus === 'allowed' || perm.deanStatus === 'approved' || perm.wardenStatus === 'allowed' || perm.wardenStatus === 'approved';
             if (!isApproved) return false;
 
             return true;

@@ -382,39 +382,36 @@ export async function POST(request: NextRequest) {
                 });
             }
 
-            // Find if any permission covers "NOW" and is approved (by dean OR fully allowed)
-            // A permission is only "active" if ALL of these are true:
-            //   1. Approved (status="allowed" OR deanStatus="allowed")
-            //   2. NOT already completed
-            //   3. NOT already linked to a previous gate pass (already consumed)
-            //   4. Current time is within [fromDateTime → toDateTime]
-            //   5. requestType is explicitly "leave"
+            // Find if any permission covers "NOW" and is approved (by dean, warden OR fully allowed)
             const activeLeave = activePermissions?.find((p: any) => {
                 const isFullyAllowed = p.status === "allowed" || p.status === "approved";
                 const isDeanAllowed = p.deanStatus === "allowed" || p.deanStatus === "approved";
+                const isWardenAllowed = p.wardenStatus === "allowed" || p.wardenStatus === "approved";
 
-                if (!isFullyAllowed && !isDeanAllowed) return false;
+                if (!isFullyAllowed && !isDeanAllowed && !isWardenAllowed) return false;
 
-                // Skip permissions already marked completed
-                if (p.status === "completed") return false;
-
-                // ✅ KEY FIX: Skip permissions already consumed by a previous gate pass
-                const permId = (p._id || p.id)?.toString();
-                if (permId && alreadyConsumedPermIds.has(permId)) return false;
+                // Skip cancelled or rejected permissions
+                if (p.status === "cancelled" || p.status === "rejected") return false;
 
                 const start = new Date(p.fromDateTime).getTime();
                 const end = new Date(p.toDateTime).getTime();
                 const currentTime = now.getTime();
-                // Allow student to scan out on the departure day (up to 18 hours before fromDateTime) through the end date
-                const isBeforeExpiry = currentTime <= end;
-                const isAfterOrNearDeparture = (start - currentTime) <= (18 * 60 * 60 * 1000);
-                const isInTimeWindow = isBeforeExpiry && isAfterOrNearDeparture;
-
-                if (!isInTimeWindow) return false;
+                // Allow student to scan out during their approved leave window (through the end date toDateTime)
+                // AFTER the approved leave end date has passed, this leave expires and will NOT match!
+                const isWithinLeaveWindow = currentTime >= (start - 12 * 60 * 60 * 1000) && currentTime <= end;
+                if (!isWithinLeaveWindow) return false;
 
                 // Check for all leave request types (leave, home-leave, home, home_leave)
                 const rType = String(p.requestType || '').trim().toLowerCase();
-                return rType === "leave" || rType === "home-leave" || rType === "home" || rType === "home_leave";
+                const isLeaveType = rType === "leave" || rType === "home-leave" || rType === "home" || rType === "home_leave" || rType.includes("leave");
+                if (!isLeaveType) return false;
+
+                // Only skip if another CURRENTLY OPEN pass is already using this permission
+                const permId = (p._id || p.id)?.toString();
+                const isAlreadyOpen = openPasses?.some((op: any) => (op.permissionId || op.permission_id)?.toString() === permId);
+                if (isAlreadyOpen) return false;
+
+                return true;
             });
 
             // Create new gate pass (check-out)
@@ -598,25 +595,19 @@ export async function POST(request: NextRequest) {
 
                 if (pass.permissionId) {
                     try {
-                        await db.permissions.update(pass.permissionId.toString(), { status: "completed" });
+                        const passType = String(pass.type || '').toLowerCase();
+                        if (passType.includes('leave') || passType === 'hleave') {
+                            const passEnd = pass.toDateTime || pass.expectedReturnDate;
+                            const passEndMs = passEnd ? new Date(passEnd).getTime() : 0;
+                            // Only complete the leave permission if student returns after or at the scheduled leave end date
+                            if (passEndMs > 0 && now.getTime() >= passEndMs) {
+                                await db.permissions.update(pass.permissionId.toString(), { status: "completed" });
+                            }
+                        }
                     } catch (pErr) {
                         console.warn("Failed to complete linked permission on scan checkin:", pErr);
                     }
                 }
-            }
-
-            // Complete all remaining active permissions for this student upon return
-            try {
-                const activePermsRes = await db.permissions.list({ studentId: studentDbId, status: "allowed" });
-                const activePerms = Array.isArray(activePermsRes) ? activePermsRes : (activePermsRes?.records || (activePermsRes as any)?.permissions || []);
-                for (const p of activePerms) {
-                    const pId = (p._id || p.id)?.toString();
-                    if (pId) {
-                        await db.permissions.update(pId, { status: "completed" });
-                    }
-                }
-            } catch (pErr) {
-                console.warn("Failed to complete remaining permissions on scan checkin:", pErr);
             }
 
             // Update student status to "in"
@@ -624,9 +615,16 @@ export async function POST(request: NextRequest) {
                 let updatedDynamicFields = typeof student.dynamicFields === 'string'
                     ? JSON.parse(student.dynamicFields || '{}')
                     : { ...(student.dynamicFields || {}) };
-                delete updatedDynamicFields.leaveTo;
-                delete updatedDynamicFields.leaveFrom;
-                delete updatedDynamicFields.leaveReason;
+
+                const leaveEndVal = updatedDynamicFields.leaveTo;
+                const leaveEndMs = leaveEndVal ? new Date(leaveEndVal).getTime() : 0;
+                // Only clear leave details if the approved leave has ended (past toDateTime)
+                if (leaveEndMs === 0 || now.getTime() >= leaveEndMs) {
+                    delete updatedDynamicFields.leaveTo;
+                    delete updatedDynamicFields.leaveFrom;
+                    delete updatedDynamicFields.leaveReason;
+                    updatedDynamicFields.outingType = "outing";
+                }
 
                 await db.students.update(studentDbId, { 
                     studentStatus: "in",
@@ -676,14 +674,15 @@ export async function POST(request: NextRequest) {
                 }).catch(e => console.error("Failed to load pushNotification helper:", e));
             }
 
-            // ✅ FIX: Mark the used leave permission as "completed" so it does NOT
-            // trigger again on future scans. Without this, an old approved permission
-            // whose time window still covers future time keeps classifying new outings as LEAVE.
+            // Mark the used leave permission as "completed" ONLY if student returned after the scheduled leave end date
             const usedPermissionId = (openPasses[0] as any)?.permissionId || (openPasses[0] as any)?.permission_id;
-            if (usedPermissionId) {
+            const openPassType = String((openPasses[0] as any)?.type || '').toLowerCase();
+            const openPassEnd = (openPasses[0] as any)?.toDateTime || (openPasses[0] as any)?.expectedReturnDate;
+            const openPassEndMs = openPassEnd ? new Date(openPassEnd).getTime() : 0;
+            if (usedPermissionId && (openPassType.includes('leave') || openPassType === 'hleave') && openPassEndMs > 0 && now.getTime() >= openPassEndMs) {
                 try {
                     await db.permissions.update(usedPermissionId, { status: "completed" });
-                    console.log(`✅ Permission ${usedPermissionId} marked as completed after student checked in.`);
+                    console.log(`✅ Permission ${usedPermissionId} marked as completed after student checked in after leave end date.`);
                 } catch (permErr) {
                     console.warn("⚠️ Could not mark permission as completed (non-critical):", permErr);
                 }
