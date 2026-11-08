@@ -431,7 +431,6 @@ export default function FaceIdentifierModal({
 
   const [gallery, setGallery] = useState<IdentifiedStudent[]>([]);
   const [isLoadingGallery, setIsLoadingGallery] = useState(false);
-  const [isAIWarming, setIsAIWarming] = useState(false);
   const [isCameraActive, setIsCameraActive] = useState(false);
   const [cameraError, setCameraError] = useState<string | null>(null);
   const [insecureOriginInfo, setInsecureOriginInfo] = useState<string | null>(null);
@@ -485,15 +484,9 @@ export default function FaceIdentifierModal({
 
     const initAI = async () => {
       try {
-        setIsAIWarming(true);
-        await Promise.allSettled([
-          loadFaceApiModels(false),
-          loadPhoneDetector()
-        ]);
+        await loadFaceApiModels(false);
       } catch (err) {
         console.warn("AI warmup warning:", err);
-      } finally {
-        if (isMounted) setIsAIWarming(false);
       }
     };
 
@@ -587,9 +580,9 @@ export default function FaceIdentifierModal({
     }
   }, [facingMode, stopCamera]);
 
-  // Start camera when modal opens and models are ready
+  // Start camera immediately when modal opens
   useEffect(() => {
-    if (isOpen && !isAIWarming) {
+    if (isOpen) {
       startCamera();
     } else {
       stopCamera();
@@ -597,11 +590,11 @@ export default function FaceIdentifierModal({
     return () => {
       stopCamera();
     };
-  }, [isOpen, isAIWarming, startCamera, stopCamera]);
+  }, [isOpen, startCamera, stopCamera]);
 
   // 3. Real-Time 60FPS Synchronized Face Tracking & Instant In-Memory 1:N Identification
   useEffect(() => {
-    if (!isCameraActive || isAIWarming || matchedStudent || !videoRef.current || gallery.length === 0) {
+    if (!isCameraActive || matchedStudent || !videoRef.current || gallery.length === 0) {
       return;
     }
 
@@ -750,8 +743,8 @@ export default function FaceIdentifierModal({
           }
         }
 
-        // Instant face match on live video by 128-D Euclidean vector (distance <= 0.40 = >= 88% Match)
-        if (bestMatch && minDistance <= 0.40 && (secondMinDistance - minDistance) >= 0.02) {
+        // Instant face match on live video by 128-D Euclidean vector (distance <= 0.46 = >= 78% Match)
+        if (bestMatch && minDistance <= 0.46) {
           const score = calculateScore(minDistance);
           setMatchedStudent(bestMatch);
           setMatchScore(score);
@@ -780,7 +773,7 @@ export default function FaceIdentifierModal({
         animFrameRef.current = null;
       }
     };
-  }, [isCameraActive, isAIWarming, matchedStudent, gallery, facingMode]);
+  }, [isCameraActive, matchedStudent, gallery, facingMode]);
 
   const toggleCameraFacing = () => {
     setFacingMode((prev) => (prev === "environment" ? "user" : "environment"));
@@ -863,14 +856,7 @@ export default function FaceIdentifierModal({
                 ? "border-emerald-500 shadow-[0_0_25px_rgba(16,185,129,0.45)]" 
                 : "border-slate-700"
           }`}>
-            {isAIWarming ? (
-              <div className="flex flex-col items-center gap-2 text-slate-400">
-                <Sparkles className="w-8 h-8 text-purple-400 animate-spin" />
-                <span className="text-xs font-bold uppercase tracking-wider text-slate-300">
-                  Warming Neural AI Models...
-                </span>
-              </div>
-            ) : cameraError ? (
+            {cameraError ? (
               <div className="p-5 text-center text-red-400 text-xs font-semibold flex flex-col items-center gap-2.5 max-w-sm">
                 <Camera className="w-9 h-9 text-red-400/80 animate-pulse" />
                 <p className="font-bold text-red-200">{cameraError}</p>
