@@ -93,9 +93,10 @@ export async function POST(request: NextRequest) {
                 throw new Error("Invalid signature");
             }
 
-            // 2. Strict Live Token Validation (25 seconds limit: 15s rotation + 10s network buffer)
+            // 2. Strict Live Token Validation (Dynamic rotation interval + 10s network buffer)
             const nowMs = Date.now();
-            const MAX_LIVE_SCAN_AGE_MS = 25 * 1000;
+            const rotationSeconds = typeof parsedQR.s === 'number' && parsedQR.s > 0 ? parsedQR.s : 15;
+            const MAX_LIVE_SCAN_AGE_MS = (rotationSeconds + 10) * 1000;
 
             if (nowMs - timestamp > MAX_LIVE_SCAN_AGE_MS) {
                 return NextResponse.json(

@@ -38,30 +38,53 @@ export async function POST(request: NextRequest) {
             );
         }
 
-        // 1. Handle special GETPASS login
-        if (hostelId === 'getpass') {
+        // 1. Handle GETPASS login (Supports dynamic gates like Main Gate, Gate 1, Gate 2)
+        if (hostelId === 'getpass' || String(hostelId).startsWith('getpass_') || String(hostelId).startsWith('gate_')) {
             const settings = await db.settings.get();
-            const getpassPassword = resolveConfiguredPassword(settings?.getpassPassword, "GETPASS_LOGIN_PASSWORD");
+            const gates: any[] = (settings?.notificationSettings as any)?.gatepassGates || (settings as any)?.gatepassGates || [];
 
-            if (!getpassPassword) {
+            let targetGate: any = null;
+            const hId = String(hostelId);
+            if (hId.startsWith('getpass_')) {
+                const gId = hId.replace('getpass_', '');
+                targetGate = gates.find((g: any) => g.id === gId || g.name?.toUpperCase() === gId.toUpperCase());
+            } else if (hId.startsWith('gate_')) {
+                const gId = hId.replace('gate_', '');
+                targetGate = gates.find((g: any) => g.id === gId || g.name?.toUpperCase() === gId.toUpperCase());
+            }
+
+            if (!targetGate && gates.length > 0) {
+                targetGate = gates[0];
+            }
+
+            const gatePassword = targetGate?.password 
+                ? targetGate.password.trim() 
+                : resolveConfiguredPassword(settings?.getpassPassword, "GETPASS_LOGIN_PASSWORD");
+
+            if (!gatePassword) {
                 return NextResponse.json(
-                    { error: "Gatepass authentication is not configured. Set GETPASS_LOGIN_PASSWORD in the environment." },
+                    { error: "Gatepass authentication is not configured. Please set password in Manage Gatepass." },
                     { status: 503 }
                 );
             }
 
-            if (password.trim() === getpassPassword.trim()) {
+            if (password.trim() === gatePassword.trim()) {
+                const gateName = targetGate?.name || 'MAIN GATE';
+                const gateMode = targetGate?.mode || (settings?.enableGateCameraScan ? 'camera' : 'qr');
                 const response = NextResponse.json({
                     success: true,
                     type: 'getpass',
-                    hostelName: 'GATEPASS MONITOR',
+                    gateId: targetGate?.id || 'main-gate',
+                    gateName: gateName,
+                    gateMode: gateMode,
+                    hostelName: gateName,
                     authorizedHostels: []
                 }, { status: 200 });
                 setAuthSessionCookie(response, { role: "getpass" });
                 return response;
             } else {
                 return NextResponse.json(
-                    { error: "Invalid authentication key for GATEPASS" },
+                    { error: `Invalid password for ${targetGate?.name || 'Gatepass'}` },
                     { status: 401 }
                 );
             }

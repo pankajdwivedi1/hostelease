@@ -1162,7 +1162,38 @@ export default function HostelManagementModal({
     return () => {
       isMounted = false;
     };
-  }, []);
+  }, []);
+
+  useEffect(() => {
+    if (Array.isArray(hostels) && hostels.length > 0) {
+      setLocalHostels(prev => {
+        if (!prev || prev.length === 0) return hostels;
+        return prev.map(local => {
+          const parentMatch = hostels.find((h: any) => (h._id && h._id === (local._id || local.id)) || (h.id && h.id === (local._id || local.id)) || h.name === local.name);
+          return parentMatch ? { ...local, ...parentMatch } : local;
+        });
+      });
+    }
+  }, [hostels]);
+
+  // Instant (<1ms) Optimistic Mode Switcher
+  const onSwitchAttendanceMode = (targetHostel: any, newMode: 'strict' | 'gps-only' | 'biometric') => {
+    const targetId = targetHostel._id || targetHostel.id;
+    // 1. Instantly flip UI state in < 1ms
+    setLocalHostels(prev => {
+      const base = (prev && prev.length > 0) ? prev : (hostels || []);
+      return base.map((h: any) =>
+        (h._id === targetId || h.id === targetId || h.name === targetHostel.name)
+          ? { ...h, attendanceMode: newMode }
+          : h
+      );
+    });
+
+    // 2. Trigger parent state & persistent background server save
+    if (targetId) {
+      handleUpdateHostelMode(targetId, newMode);
+    }
+  };
 
   const effectiveHostels = (localHostels && localHostels.length > 0)
     ? localHostels
@@ -1326,31 +1357,28 @@ export default function HostelManagementModal({
                         </div>
                         <div className="flex bg-white p-1 rounded-lg border border-slate-200 w-full sm:w-auto mt-2">
                           <button
-                            disabled={isLoading}
-                            onClick={() => handleUpdateHostelMode(matchedHostel._id, 'gps-only')}
+                            onClick={() => onSwitchAttendanceMode(matchedHostel, 'gps-only')}
                             className={`flex-1 px-2 py-2 rounded-md text-[9px] font-black uppercase tracking-wider transition-all flex justify-center items-center gap-1.5 ${
                               matchedHostel.attendanceMode === 'gps-only' ? 'bg-slate-900 text-white shadow-sm scale-[1.02]' : 'text-slate-500 hover:bg-slate-50'
                             }`}
                           >
-                            {isLoading && matchedHostel.attendanceMode === 'gps-only' ? '⏳' : '📍'} GPS
+                            📍 GPS
                           </button>
                           <button
-                            disabled={isLoading}
-                            onClick={() => handleUpdateHostelMode(matchedHostel._id, 'biometric')}
+                            onClick={() => onSwitchAttendanceMode(matchedHostel, 'biometric')}
                             className={`flex-1 px-2 py-2 rounded-md text-[9px] font-black uppercase tracking-wider transition-all flex justify-center items-center gap-1.5 ${
                               matchedHostel.attendanceMode === 'biometric' ? 'bg-slate-900 text-white shadow-sm scale-[1.02]' : 'text-slate-500 hover:bg-slate-50'
                             }`}
                           >
-                            {isLoading && matchedHostel.attendanceMode === 'biometric' ? '⏳' : '👆'} BIO
+                            👆 BIO
                           </button>
                           <button
-                            disabled={isLoading}
-                            onClick={() => handleUpdateHostelMode(matchedHostel._id, 'strict')}
+                            onClick={() => onSwitchAttendanceMode(matchedHostel, 'strict')}
                             className={`flex-1 px-2 py-2 rounded-md text-[9px] font-black uppercase tracking-wider transition-all flex justify-center items-center gap-1.5 ${
                               (!matchedHostel.attendanceMode || matchedHostel.attendanceMode === 'strict') ? 'bg-slate-900 text-white shadow-sm scale-[1.02]' : 'text-slate-500 hover:bg-slate-50'
                             }`}
                           >
-                            {isLoading && matchedHostel.attendanceMode === 'strict' ? '⏳' : '📸'} CAM
+                            📸 CAM
                           </button>
                         </div>
                         <button

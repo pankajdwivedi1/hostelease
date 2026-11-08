@@ -87,6 +87,14 @@ export async function GET(request: NextRequest) {
             studentNotifications: settings?.studentNotifications !== false,
             enableVideoVoiceCall: (settings?.notificationSettings as any)?.enableVideoVoiceCall !== false && (settings as any)?.enableVideoVoiceCall !== false,
             qrScanCooldownMinutes: settings?.qrScanCooldownMinutes !== undefined ? settings.qrScanCooldownMinutes : 5,
+            allowEmergencyExitWithoutCooldown: settings?.allowEmergencyExitWithoutCooldown !== undefined ? settings.allowEmergencyExitWithoutCooldown : true,
+            enableGateCameraScan: (() => {
+                const notif = (settings?.notificationSettings as any) || {};
+                const gates: any[] = notif.gatepassGates || (settings as any)?.gatepassGates || [];
+                const anyCamera = Array.isArray(gates) && gates.some((g: any) => g.mode === 'camera');
+                return anyCamera || notif.enableGateCameraScan === true || (settings as any)?.enableGateCameraScan === true;
+            })(),
+            gatepassGates: (settings?.notificationSettings as any)?.gatepassGates || (settings as any)?.gatepassGates || [],
             enforceMandatoryPush
         }, request, 30);
     } catch (error: any) {
@@ -206,6 +214,19 @@ export async function POST(request: NextRequest) {
         if (body.deanNotifications !== undefined) updateData.deanNotifications = body.deanNotifications;
         if (body.parentNotifications !== undefined) updateData.parentNotifications = body.parentNotifications;
         if (body.studentNotifications !== undefined) updateData.studentNotifications = body.studentNotifications;
+        if (body.enableGateCameraScan !== undefined || body.gatepassGates !== undefined) {
+            const currentSettings = await db.settings.get();
+            const notifSettings = (currentSettings?.notificationSettings as any) || {};
+            const isCam = body.enableGateCameraScan !== undefined 
+                ? body.enableGateCameraScan === true 
+                : (Array.isArray(body.gatepassGates) ? body.gatepassGates.some((g: any) => g.mode === 'camera') : false);
+            updateData.notificationSettings = {
+                ...notifSettings,
+                ...(updateData.notificationSettings || {}),
+                enableGateCameraScan: isCam,
+                ...(body.gatepassGates !== undefined ? { gatepassGates: body.gatepassGates } : {})
+            };
+        }
         if (body.enableVideoVoiceCall !== undefined) {
             updateData.enableVideoVoiceCall = body.enableVideoVoiceCall === true;
             const currentSettings = await db.settings.get();

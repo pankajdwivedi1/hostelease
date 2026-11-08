@@ -13,7 +13,10 @@ import { formatToDDMMYYYY, formatDateDDMMYYYY, formatDateTimeDDMMYYYY, parseFlex
 // Right side: Live outing history and student counts
 // ============================================================
 
+import dynamic from "next/dynamic";
 import QRCode from "qrcode";
+
+const GateCameraScanner = dynamic(() => import("./GateCameraScanner"), { ssr: false });
 
 function QRCodeCanvas({ data, size = 550 }: { data: string; size?: number }) {
     const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -281,12 +284,116 @@ interface LiveData {
 }
 
 // ===================== Main Component =====================
-export default function GatepassView({ onClose }: { onClose?: () => void }) {
+export default function GatepassView({ 
+    onClose, 
+    initialScannerMode = "qr" 
+}: { 
+    onClose?: () => void;
+    initialScannerMode?: "qr" | "camera";
+}) {
+    const [scannerMode, setScannerMode] = useState<"qr" | "camera">(() => {
+        if (typeof window !== "undefined") {
+            const savedMode = localStorage.getItem("activeGateMode") as "qr" | "camera";
+            if (savedMode === "camera" || savedMode === "qr") return savedMode;
+        }
+        return initialScannerMode;
+    });
+
+    // Auto-sync scanner mode and gate identity from settings & storage
+    useEffect(() => {
+        let isMounted = true;
+
+        const syncGateSettings = async () => {
+            try {
+                const res = await fetch("/api/admin/settings");
+                const data = await res.json();
+                if (!isMounted || !data?.success) return;
+
+                const gates: any[] = data.gatepassGates || [];
+                const activeId = typeof window !== "undefined" ? localStorage.getItem("activeGateId") : null;
+                const activeName = typeof window !== "undefined" ? localStorage.getItem("activeGateName") : null;
+
+                const currentGate = gates.find((g: any) =>
+                    (activeId && g.id === activeId) ||
+                    (activeName && g.name?.toUpperCase() === activeName?.toUpperCase())
+                ) || gates[0];
+
+                if (currentGate) {
+                    const targetMode: "qr" | "camera" = currentGate.mode === "camera" ? "camera" : "qr";
+                    const targetSeconds: number = currentGate.qrSeconds || 15;
+                    const targetStandby: number = currentGate.standbyMinutes || 3;
+                    setScannerMode(targetMode);
+                    setGateName(currentGate.name);
+                    setQrSeconds(targetSeconds);
+                    setStandbyMinutes(targetStandby);
+                    if (typeof window !== "undefined") {
+                        localStorage.setItem("activeGateId", currentGate.id);
+                        localStorage.setItem("activeGateName", currentGate.name);
+                        localStorage.setItem("activeGateMode", targetMode);
+                        localStorage.setItem("activeGateQrSeconds", String(targetSeconds));
+                        localStorage.setItem("activeGateStandbyMinutes", String(targetStandby));
+                    }
+                } else if (data.enableGateCameraScan) {
+                    setScannerMode("camera");
+                } else {
+                    setScannerMode("qr");
+                }
+            } catch (err) {
+                console.warn("Gate mode auto-sync error:", err);
+            }
+        };
+
+        syncGateSettings();
+
+        // Listen for storage events across browser tabs/windows
+        const handleStorageChange = () => {
+            if (typeof window !== "undefined") {
+                const savedMode = localStorage.getItem("activeGateMode") as "qr" | "camera";
+                if (savedMode === "camera" || savedMode === "qr") {
+                    setScannerMode(savedMode);
+                }
+                const savedName = localStorage.getItem("activeGateName");
+                if (savedName) setGateName(savedName);
+                const savedSeconds = localStorage.getItem("activeGateQrSeconds");
+                if (savedSeconds && !isNaN(Number(savedSeconds))) {
+                    setQrSeconds(Number(savedSeconds));
+                }
+                const savedStandby = localStorage.getItem("activeGateStandbyMinutes");
+                if (savedStandby && !isNaN(Number(savedStandby))) {
+                    setStandbyMinutes(Number(savedStandby));
+                }
+            }
+        };
+        window.addEventListener("storage", handleStorageChange);
+
+        // Auto-poll settings every 10 seconds to catch remote admin changes on kiosk
+        const pollTimer = setInterval(syncGateSettings, 10000);
+
+        return () => {
+            isMounted = false;
+            window.removeEventListener("storage", handleStorageChange);
+            clearInterval(pollTimer);
+        };
+    }, []);
     const router = useRouter();
     const lastSpokenScanIdRef = useRef<string | null>(null);
     const [qrData, setQrData] = useState<string>("");
     const [qrToken, setQrToken] = useState<string>("");
     const [qrExpiry, setQrExpiry] = useState<Date | null>(null);
+    const [qrSeconds, setQrSeconds] = useState<number>(() => {
+        if (typeof window !== "undefined") {
+            const saved = localStorage.getItem("activeGateQrSeconds");
+            if (saved && !isNaN(Number(saved))) return Number(saved);
+        }
+        return 15;
+    });
+    const [standbyMinutes, setStandbyMinutes] = useState<number>(() => {
+        if (typeof window !== "undefined") {
+            const saved = localStorage.getItem("activeGateStandbyMinutes");
+            if (saved && !isNaN(Number(saved))) return Number(saved);
+        }
+        return 3;
+    });
     const [timeLeft, setTimeLeft] = useState<number>(10); // Standard security interval
     const [liveData, setLiveData] = useState<LiveData | null>(null);
     const [selectedStudentId, setSelectedStudentId] = useState<string | null>(null);
@@ -301,7 +408,12 @@ export default function GatepassView({ onClose }: { onClose?: () => void }) {
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string>("");
     const [currentTime, setCurrentTime] = useState(new Date());
-    const [gateName] = useState("Main Gate");
+    const [gateName, setGateName] = useState<string>(() => {
+        if (typeof window !== "undefined") {
+            return localStorage.getItem("activeGateName") || "Main Gate";
+        }
+        return "Main Gate";
+    });
     const [isFullscreen, setIsFullscreen] = useState(false);
     const [mounted, setMounted] = useState(false);
     const [isManualModalOpen, setIsManualModalOpen] = useState(false);
@@ -350,11 +462,12 @@ export default function GatepassView({ onClose }: { onClose?: () => void }) {
             .join("");
 
         const signedToken = `${timestamp}.${signature}`;
-        const expiresAt = new Date(timestamp + 25000);
+        const expiresAt = new Date(timestamp + (qrSeconds + 10) * 1000);
 
         const qrData = JSON.stringify({
             t: signedToken,
             g: gate,
+            s: qrSeconds,
             ts: timestamp,
             app: "hosteleaze-getpass",
         });
@@ -375,7 +488,7 @@ export default function GatepassView({ onClose }: { onClose?: () => void }) {
                 setQrData(localToken.qrData);
                 setQrToken(localToken.token);
                 setQrExpiry(localToken.expiresAt);
-                setTimeLeft(15);
+                setTimeLeft(qrSeconds);
                 setError("");
                 return;
             }
@@ -392,7 +505,7 @@ export default function GatepassView({ onClose }: { onClose?: () => void }) {
                 setQrData(data.qrData);
                 setQrToken(data.token);
                 setQrExpiry(new Date(data.expiresAt));
-                setTimeLeft(15);
+                setTimeLeft(qrSeconds);
                 setError("");
             } else {
                 setError("Failed to generate QR code");
@@ -574,17 +687,18 @@ export default function GatepassView({ onClose }: { onClose?: () => void }) {
 
     // ⚡ CLEANUP: fetchActivityHeartbeat removed. Realtime is now used.
 
-    // ===================== Timer: Rotate QR every 30 seconds (Optimized for Bandwidth) =====================
+    // ===================== Timer: Rotate QR every X seconds (Stopped in Camera Mode) =====================
     useEffect(() => {
+        if (scannerMode !== "qr") return; // ⚡ STOPPED when in Camera / Face Scan Mode!
+
         fetchNewQR();
         const qrInterval = setInterval(() => {
-            // ⚡ OPTIMIZATION: Stop QR rotation if tab is not visible
-            if (document.visibilityState === 'visible') {
+            if (document.visibilityState === 'visible' && scannerMode === "qr") {
                 fetchNewQR();
             }
-        }, 15000); // 15 seconds (Matches display time to server logic)
+        }, qrSeconds * 1000);
         return () => clearInterval(qrInterval);
-    }, [fetchNewQR]);
+    }, [fetchNewQR, qrSeconds, scannerMode]);
 
     // ===================== Real-time SSE Connection (/api/admin/events) =====================
     useEffect(() => {
@@ -807,16 +921,24 @@ export default function GatepassView({ onClose }: { onClose?: () => void }) {
     // Cleanup: Heartbeat fetcher and timer removed as they are no longer needed
     // fetchActivityHeartbeat was here - removed to save 200MB/day bandwidth.
 
-    // ===================== Countdown timer =====================
+    // ===================== Countdown timer (Stopped in Camera Mode) =====================
     useEffect(() => {
+        if (scannerMode !== "qr") return; // ⚡ STOPPED when in Camera / Face Scan Mode!
+
         const countdownInterval = setInterval(() => {
-            // Only countdown if page is active
-            if (document.visibilityState === 'visible') {
-                setTimeLeft((prev) => (prev > 0 ? prev - 1 : 15));
+            if (document.visibilityState === 'visible' && scannerMode === "qr") {
+                setTimeLeft((prev) => (prev > 0 ? prev - 1 : qrSeconds));
             }
-            setCurrentTime(new Date());
         }, 1000);
         return () => clearInterval(countdownInterval);
+    }, [qrSeconds, scannerMode]);
+
+    // Independent live clock updater (runs continuously)
+    useEffect(() => {
+        const clockInterval = setInterval(() => {
+            setCurrentTime(new Date());
+        }, 1000);
+        return () => clearInterval(clockInterval);
     }, []);
 
     // ===================== Fullscreen toggle =====================
@@ -1157,6 +1279,13 @@ export default function GatepassView({ onClose }: { onClose?: () => void }) {
                             <span className="inline-block px-2 py-0.5 bg-[rgba(0,255,136,0.1)] border border-[rgba(0,255,136,0.3)] rounded-full text-[10px] md:text-xs text-[#00ff88] font-bold">
                                 📍 {gateName}
                             </span>
+                            <span className={`inline-block px-2 py-0.5 rounded-full text-[10px] md:text-xs font-bold border ${
+                                scannerMode === "camera"
+                                    ? "bg-purple-500/10 border-purple-500/30 text-purple-400"
+                                    : "bg-blue-500/10 border-blue-500/30 text-blue-400"
+                            }`}>
+                                {scannerMode === "camera" ? "📸 FACE CAMERA" : "📱 QR CODE"}
+                            </span>
                             <p className="text-[10px] md:text-[11px] text-[rgba(255,255,255,0.45)] tracking-widest uppercase m-0 leading-none">
                                 Campus Outing System
                             </p>
@@ -1165,43 +1294,77 @@ export default function GatepassView({ onClose }: { onClose?: () => void }) {
 
                     {/* Mobile: Gate tag in top right corner, Campus Outing System just below */}
                     <div className="flex flex-col items-end sm:hidden shrink-0 pt-0.5">
-                        <span className="inline-block px-2 py-0.5 bg-[rgba(0,255,136,0.1)] border border-[rgba(0,255,136,0.3)] rounded-full text-[10px] text-[#00ff88] font-bold whitespace-nowrap">
-                            📍 {gateName}
-                        </span>
+                        <div className="flex items-center gap-1">
+                            <span className="inline-block px-2 py-0.5 bg-[rgba(0,255,136,0.1)] border border-[rgba(0,255,136,0.3)] rounded-full text-[10px] text-[#00ff88] font-bold whitespace-nowrap">
+                                📍 {gateName}
+                            </span>
+                            <span className={`inline-block px-1.5 py-0.5 rounded-full text-[9px] font-bold border ${
+                                scannerMode === "camera"
+                                    ? "bg-purple-500/10 border-purple-500/30 text-purple-400"
+                                    : "bg-blue-500/10 border-blue-500/30 text-blue-400"
+                            }`}>
+                                {scannerMode === "camera" ? "📸 FACE" : "📱 QR"}
+                            </span>
+                        </div>
                         <p className="text-[9px] text-[rgba(255,255,255,0.45)] tracking-wider uppercase m-0 mt-1 leading-none text-right whitespace-nowrap">
                             Campus Outing System
                         </p>
                     </div>
 
+
+
                     {/* Instructions bar */}
                     <div className="hidden sm:flex items-center gap-2 px-3 py-2 bg-[rgba(0,255,136,0.07)] rounded-xl border border-[rgba(0,255,136,0.3)] shadow-[0_0_12px_rgba(0,255,136,0.08)] flex-shrink-0">
-                        <div className="flex items-center gap-1.5 text-[11px] md:text-xs font-semibold text-white">
-                            <span className="text-sm">📱</span>
-                            <span>Open App</span>
-                        </div>
-                        <div className="text-[#00ff88] font-black text-xs">→</div>
-                        <div className="flex items-center gap-1.5 text-[11px] md:text-xs font-semibold text-white">
-                            <span className="text-sm">📸</span>
-                            <span>Scan QR</span>
-                        </div>
-                        <div className="text-[#00ff88] font-black text-xs">→</div>
-                        <div className="flex items-center gap-1.5 text-[11px] md:text-xs font-semibold text-white">
-                            <span className="text-base">✅</span>
-                            <span>Done</span>
-                        </div>
+                        {scannerMode === "camera" ? (
+                            <>
+                                <div className="flex items-center gap-1.5 text-[11px] md:text-xs font-semibold text-white">
+                                    <span className="text-sm">🚶</span>
+                                    <span>Face Camera</span>
+                                </div>
+                                <div className="text-[#00ff88] font-black text-xs">→</div>
+                                <div className="flex items-center gap-1.5 text-[11px] md:text-xs font-semibold text-white">
+                                    <span className="text-sm">👤</span>
+                                    <span>Match Face</span>
+                                </div>
+                                <div className="text-[#00ff88] font-black text-xs">→</div>
+                                <div className="flex items-center gap-1.5 text-[11px] md:text-xs font-semibold text-white">
+                                    <span className="text-base">✅</span>
+                                    <span>Auto Pass</span>
+                                </div>
+                            </>
+                        ) : (
+                            <>
+                                <div className="flex items-center gap-1.5 text-[11px] md:text-xs font-semibold text-white">
+                                    <span className="text-sm">📱</span>
+                                    <span>Open App</span>
+                                </div>
+                                <div className="text-[#00ff88] font-black text-xs">→</div>
+                                <div className="flex items-center gap-1.5 text-[11px] md:text-xs font-semibold text-white">
+                                    <span className="text-sm">📸</span>
+                                    <span>Scan QR</span>
+                                </div>
+                                <div className="text-[#00ff88] font-black text-xs">→</div>
+                                <div className="flex items-center gap-1.5 text-[11px] md:text-xs font-semibold text-white">
+                                    <span className="text-base">✅</span>
+                                    <span>Done</span>
+                                </div>
+                            </>
+                        )}
                     </div>
                 </div>
 
                 {/* ── Timer | Time | Date — single centered row ── */}
                 <div className="flex flex-col items-center gap-4 w-full">
                     <div className="flex items-center justify-center gap-3 md:gap-4 w-full px-2">
-                        {/* Timer */}
-                        <div className="scale-75 md:scale-100 origin-center shrink-0">
-                            <RectangleTimer timeLeft={timeLeft} maxTime={15} />
-                        </div>
-
-                        {/* Divider */}
-                        <div className="w-px h-8 md:h-12 bg-[rgba(255,255,255,0.2)] shrink-0" />
+                        {/* Timer: Displayed & running ONLY in QR Code Mode. In Face Cam Mode, timer is stopped & hidden */}
+                        {scannerMode === "qr" && (
+                            <>
+                                <div className="scale-75 md:scale-100 origin-center shrink-0">
+                                    <RectangleTimer timeLeft={timeLeft} maxTime={qrSeconds} />
+                                </div>
+                                <div className="w-px h-8 md:h-12 bg-[rgba(255,255,255,0.2)] shrink-0" />
+                            </>
+                        )}
 
                         {/* Time & Date Container */}
                         <div className="flex flex-col items-center md:flex-row md:items-center md:gap-4 shrink-0">
@@ -1221,17 +1384,21 @@ export default function GatepassView({ onClose }: { onClose?: () => void }) {
                     <div className="w-full h-px bg-gradient-to-r from-transparent via-[rgba(0,255,136,0.2)] to-transparent" />
                 </div>
 
-                {/* QR Code */}
+                {/* QR Code or Live Camera Scanner */}
                 <div className="flex-1 flex flex-col items-center justify-center w-full py-2 md:py-4 min-h-0">
                     <div
-                        className={`p-3 bg-white rounded-[24px] md:rounded-[28px] border-[6px] md:border-[8px] border-[#00ff88] shadow-[0_0_60px_rgba(0,255,136,0.15)] md:shadow-[0_0_100px_rgba(0,255,136,0.25)] flex items-center justify-center overflow-hidden transition-all duration-500 ${
-                            isFullscreen
-                                ? 'w-[min(75vw,65vh,580px)] md:w-[min(42vw,70vh,580px)]'
-                                : 'w-[min(82vw,55vh,380px)] md:w-[min(32vw,58vh,430px)]'
+                        className={`transition-all duration-500 ${
+                            scannerMode === 'camera'
+                                ? (isFullscreen
+                                    ? 'w-[min(92vw,75vh,620px)] md:w-[min(42vw,75vh,620px)]'
+                                    : 'w-[min(92vw,64vh,490px)] md:w-[min(38vw,68vh,530px)]')
+                                : 'p-3 bg-white rounded-[24px] md:rounded-[28px] border-[6px] md:border-[8px] border-[#00ff88] shadow-[0_0_60px_rgba(0,255,136,0.15)] md:shadow-[0_0_100px_rgba(0,255,136,0.25)] flex items-center justify-center overflow-hidden ' + (isFullscreen ? 'w-[min(75vw,65vh,580px)] md:w-[min(42vw,70vh,580px)]' : 'w-[min(82vw,55vh,380px)] md:w-[min(32vw,58vh,430px)]')
                         }`}
                         style={{ aspectRatio: '1/1' }}
                     >
-                        {qrData ? (
+                        {scannerMode === 'camera' ? (
+                            <GateCameraScanner isFullscreen={isFullscreen} standbyMinutes={standbyMinutes} />
+                        ) : qrData ? (
                             <QRCodeCanvas data={qrData} size={isFullscreen ? 580 : 450} />
                         ) : (
                             <div className="w-full h-full flex flex-col items-center justify-center gap-4 text-[rgba(255,255,255,0.5)] text-base">

@@ -73,6 +73,9 @@ function LoginForm() {
   const [hostels, setHostels] = useState<Array<{ _id: string; name: string }>>(
     [],
   );
+  const [gates, setGates] = useState<Array<{ id: string; name: string }>>([
+    { id: "main-gate", name: "MAIN GATE" }
+  ]);
 
   const [selectedHostelId, setSelectedHostelId] = useState("");
 
@@ -408,6 +411,13 @@ function LoginForm() {
 
           if (data.hostels && Array.isArray(data.hostels)) {
             setHostels(data.hostels);
+          try {
+            const sRes = await fetch("/api/admin/settings");
+            const sData = await sRes.json();
+            if (sData?.success && Array.isArray(sData.gatepassGates) && sData.gatepassGates.length > 0) {
+              setGates(sData.gatepassGates);
+            }
+          } catch (_) {}
           }
         }
       }
@@ -1058,7 +1068,7 @@ function LoginForm() {
 
     // Special case for Gatepass Monitor
 
-    if (selectedHostelId === "getpass") {
+    if (selectedHostelId === "getpass" || selectedHostelId.startsWith("getpass_")) {
       if (!wardenPassword.trim()) {
         const errMsg = "Please enter the gatepass authentication key";
 
@@ -1096,7 +1106,10 @@ function LoginForm() {
 
           localStorage.setItem("userType", "getpass");
 
-          router.push("/getpass");
+                    if (data.gateId) localStorage.setItem("activeGateId", data.gateId);
+          if (data.gateName) localStorage.setItem("activeGateName", data.gateName);
+          if (data.gateMode) localStorage.setItem("activeGateMode", data.gateMode);
+router.push("/getpass");
 
           return;
         }
@@ -2997,27 +3010,34 @@ function LoginForm() {
                                             Select role
                                           </option>
 
-                                          <option
-                                            value="getpass"
-                                            className="font-bold text-blue-600"
-                                          >
-                                            🎟️ GATEPASS MONITOR
-                                          </option>
+                                          <optgroup label="🚪 CAMPUS GATES">
+                                            {gates.map((g) => (
+                                              <option
+                                                key={g.id}
+                                                value={`getpass_${g.id}`}
+                                                className="font-bold text-blue-600"
+                                              >
+                                                🚪 {g.name.toUpperCase()}
+                                              </option>
+                                            ))}
+                                          </optgroup>
 
-                                          {hostels.map((hostel) => (
-                                            <option
-                                              key={hostel._id}
-                                              value={hostel._id}
-                                            >
-                                              {hostel.name}
-                                            </option>
-                                          ))}
+                                          <optgroup label="🏢 HOSTELS">
+                                            {hostels.map((hostel) => (
+                                              <option
+                                                key={hostel._id}
+                                                value={hostel._id}
+                                              >
+                                                {hostel.name}
+                                              </option>
+                                            ))}
+                                          </optgroup>
                                         </select>
                                       </div>
 
                                       {/* Phone Number & Password (side-by-side when hostel selected, as drawn by blue arrow) */}
                                       {selectedHostelId &&
-                                      selectedHostelId !== "getpass" ? (
+                                      !selectedHostelId.startsWith("getpass") ? (
                                         <div className="grid grid-cols-2 gap-2 animate-in fade-in duration-200">
                                           <div className="flex flex-col">
                                             <label className="block text-[9px] sm:text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1 truncate">
@@ -3335,7 +3355,7 @@ function LoginForm() {
                                   )}
                                   {showWardenPassword &&
                                     !wardenOtpSent &&
-                                    selectedHostelId !== "getpass" && (
+                                    !selectedHostelId.startsWith("getpass") && (
                                       <button
                                         type="button"
                                         onClick={() => {

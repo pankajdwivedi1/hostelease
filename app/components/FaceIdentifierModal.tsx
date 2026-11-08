@@ -26,6 +26,7 @@ import {
   assessPhotoQuality 
 } from "@/lib/faceMatching";
 import { loadPhoneDetector, detectMobilePhone } from "@/lib/objectDetection";
+import { loadBiometricGalleryWithSync } from "@/lib/localFaceGallery";
 
 interface IdentifiedStudent {
   id: string;
@@ -455,33 +456,14 @@ export default function FaceIdentifierModal({
     if (!isOpen) return;
 
     let isMounted = true;
-    const fetchGallery = async () => {
-      try {
-        setIsLoadingGallery(true);
-        // Check session cache first
-        const cached = sessionStorage.getItem("hosteleaze_identifier_gallery_v6");
-        if (cached) {
-          const parsed = JSON.parse(cached);
-          if (Array.isArray(parsed) && parsed.length > 0 && isMounted) {
-            setGallery(parsed);
-            setIsLoadingGallery(false);
-          }
-        }
+    setIsLoadingGallery(true);
 
-        const res = await fetch("/api/students/identifier-gallery");
-        const data = await res.json();
-        if (data.success && Array.isArray(data.students) && isMounted) {
-          setGallery(data.students);
-          try {
-            sessionStorage.setItem("hosteleaze_identifier_gallery_v6", JSON.stringify(data.students));
-          } catch (_) {}
-        }
-      } catch (err) {
-        console.error("Failed to load identifier gallery:", err);
-      } finally {
-        if (isMounted) setIsLoadingGallery(false);
+    loadBiometricGalleryWithSync((students) => {
+      if (isMounted && Array.isArray(students) && students.length > 0) {
+        setGallery(students);
+        setIsLoadingGallery(false);
       }
-    };
+    });
 
     const initAI = async () => {
       try {
@@ -494,7 +476,6 @@ export default function FaceIdentifierModal({
       }
     };
 
-    fetchGallery();
     initAI();
 
     return () => {

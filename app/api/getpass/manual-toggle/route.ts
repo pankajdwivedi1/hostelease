@@ -39,7 +39,7 @@ function getISTStrings(date: Date) {
 export async function POST(request: NextRequest) {
     try {
         const body = await request.json();
-        const { studentId, studentIds, searchId, action, requestType = 'HOME-LEAVE', reason = 'Manual Management Override', operator = 'Admin', fromDateTime, toDateTime } = body;
+        const { studentId, studentIds, searchId, action, requestType = 'HOME-LEAVE', reason = 'Manual Management Override', operator = 'Admin', fromDateTime, toDateTime, source } = body;
         const targetIds: string[] = studentIds || (studentId ? [studentId] : []);
 
         // 1. Subscription Guard: Block toggling student status if subscription is expired
@@ -149,6 +149,92 @@ export async function POST(request: NextRequest) {
 
             const currentStatus = student.studentStatus || "in";
             const isTargetOut = action === 'out' ? true : (action === 'in' ? false : (currentStatus === "in"));
+
+            // ⚡ GATE FACE CAMERA COOLDOWN GUARD: Enforce the EXACT same Anti-Spoof Cooldown as QR Scanning!
+            // (Manual entry by Admins/Wardens is completely preserved without cooldown)
+            if (source === "face_camera" || source === "camera") {
+                try {
+                    const studentDbId = (student._id || student.id).toString();
+                    const recentPasses = await db.gatePasses.list(
+                        { studentId: studentDbId },
+                        { limit: 1, sortField: 'checkOutTime', sortOrder: 'desc' }
+                    );
+                    const last = recentPasses?.records?.[0] as any;
+                    if (last) {
+                        const nowMs = Date.now();
+                        const parseSafeDate = (timeVal: any, dateVal: any) => {
+                            if (!timeVal) return 0;
+                            const timeStr = String(timeVal);
+                            if (timeStr.includes('T') || timeStr.includes('Z') || timeStr.length > 10) {
+                                const parsed = new Date(timeStr);
+                                if (!isNaN(parsed.getTime())) return parsed.getTime();
+                            }
+                            if (dateVal && timeStr.includes(':')) {
+                                const dateStr = String(dateVal);
+                                const dateParts = dateStr.split(/[-/]/);
+                                const timeParts = timeStr.split(':');
+                                if (dateParts.length === 3 && timeParts.length >= 2) {
+                                    const day = parseInt(dateParts[0]);
+                                    const month = parseInt(dateParts[1]) - 1;
+                                    const year = parseInt(dateParts[2]);
+                                    const hour = parseInt(timeParts[0]);
+                                    const minute = parseInt(timeParts[1]);
+                                    const second = timeParts[2] ? parseInt(timeParts[2]) : 0;
+                                    const parsed = new Date(year, month, day, hour, minute, second);
+                                    if (!isNaN(parsed.getTime())) return parsed.getTime();
+                                }
+                            }
+                            const parsed = new Date(timeVal);
+                            return isNaN(parsed.getTime()) ? 0 : parsed.getTime();
+                        };
+
+                        const lastOutMs = parseSafeDate(last.checkOutTime, last.checkOutISTDate);
+                        const lastInMs = parseSafeDate(last.checkInTime, last.checkInISTDate);
+                        const mostRecentMs = Math.max(lastOutMs, lastInMs);
+                        const timeDiff = nowMs - mostRecentMs;
+
+                        let cooldownMinutes = 5;
+                        let allowEmergencyExit = true;
+                        try {
+                            const settings = await db.settings.get();
+                            if (settings?.qrScanCooldownMinutes !== undefined) {
+                                cooldownMinutes = Number(settings.qrScanCooldownMinutes);
+                            }
+                            if (settings?.allowEmergencyExitWithoutCooldown !== undefined) {
+                                allowEmergencyExit = Boolean(settings.allowEmergencyExitWithoutCooldown);
+                            }
+                        } catch (sErr) {}
+
+                        const isExitAction = currentStatus === "in";
+                        const shouldBypassCooldown = isExitAction && allowEmergencyExit && timeDiff >= 3000;
+                        const cooldownMs = Math.max(15000, cooldownMinutes * 60 * 1000);
+
+                        if (!shouldBypassCooldown && timeDiff < cooldownMs) {
+                            const elapsedSecs = Math.floor(timeDiff / 1000);
+                            const remainingSecs = Math.max(1, Math.ceil((cooldownMs - timeDiff) / 1000));
+                            const remainingMins = Math.ceil(remainingSecs / 60);
+                            const isSeconds = remainingSecs < 60;
+                            const remainingText = isSeconds ? `${remainingSecs} second(s)` : `${remainingMins} minute(s)`;
+
+                            console.log(`🚫 [FACE_CAM_GUARD]: Blocked scan for ${student.name}. Cooldown Active (${elapsedSecs}s < ${cooldownMs / 1000}s)`);
+
+                            return NextResponse.json({
+                                success: false,
+                                action: "cooldown_blocked",
+                                error: `Anti-Spoof Cooldown: You scanned ${Math.floor(elapsedSecs / 60) > 0 ? `${Math.floor(elapsedSecs / 60)}m ago` : `${elapsedSecs}s ago`}. Please wait ${remainingText} before scanning again.`,
+                                message: `Anti-Spoof Cooldown: Please wait ${remainingText} before scanning again.`,
+                                newStatus: currentStatus,
+                                studentName: student.name,
+                                hostelName: student.hostelName,
+                                isDuplicate: true,
+                                remainingSeconds: remainingSecs
+                            }, { status: 400 });
+                        }
+                    }
+                } catch (guardErr) {
+                    console.warn("⚠️ Face camera cooldown check failed:", guardErr);
+                }
+            }
 
             if (isTargetOut) {
                 // MARK OUT (HOME-LEAVE or GATE-PASS)

@@ -46,6 +46,7 @@ import TenantSettingsView from "./TenantSettingsView";
 import { formTemplates, collegeTemplate } from "@/lib/formTemplates";
 
 import HostelManagementModal from "./HostelManagementModal";
+import GatepassManagementModal from "./GatepassManagementModal";
 import ParentConsentVideoModal from "./ParentConsentVideoModal";
 import {
   resolveConsentVideoSrc,
@@ -1660,6 +1661,7 @@ export default function AdminDashboard({
     return [];
   });
   const [showHostelSettingsModal, setShowHostelSettingsModal] = useState(false);
+  const [showGatepassManagementModal, setShowGatepassManagementModal] = useState(false);
   const [updatingHostelId, setUpdatingHostelId] = useState<string | null>(null);
   const [studentsLoading, setStudentsLoading] = useState(false);
   const [attendanceSummary, setAttendanceSummary] = useState<Record<string, number>>({});
@@ -2540,6 +2542,7 @@ export default function AdminDashboard({
   const [enforceUniqueFace, setEnforceUniqueFace] = useState(false);
   const [qrScanCooldownMinutes, setQrScanCooldownMinutes] = useState(5);
   const [allowEmergencyExitWithoutCooldown, setAllowEmergencyExitWithoutCooldown] = useState(true);
+  const [enableGateCameraScan, setEnableGateCameraScan] = useState(false);
   const [allowWardenAddStudent, setAllowWardenAddStudent] = useState(false);
   const [allowDeanAddStudent, setAllowDeanAddStudent] = useState(false);
   const [allowWardenEditProfile, setAllowWardenEditProfile] = useState(false);
@@ -4089,6 +4092,7 @@ export default function AdminDashboard({
           if (settingsData.enforceUniqueFace !== undefined) setEnforceUniqueFace(settingsData.enforceUniqueFace);
           if (settingsData.qrScanCooldownMinutes !== undefined) setQrScanCooldownMinutes(settingsData.qrScanCooldownMinutes);
           if (settingsData.allowEmergencyExitWithoutCooldown !== undefined) setAllowEmergencyExitWithoutCooldown(settingsData.allowEmergencyExitWithoutCooldown);
+          if (settingsData.enableGateCameraScan !== undefined) setEnableGateCameraScan(Boolean(settingsData.enableGateCameraScan));
           if (settingsData.allowWardenAddStudent !== undefined) setAllowWardenAddStudent(settingsData.allowWardenAddStudent);
           if (settingsData.allowDeanAddStudent !== undefined) setAllowDeanAddStudent(settingsData.allowDeanAddStudent);
           if (settingsData.allowWardenEditProfile !== undefined) setAllowWardenEditProfile(settingsData.allowWardenEditProfile);
@@ -4158,6 +4162,7 @@ export default function AdminDashboard({
       enforceUniqueEmail: setEnforceUniqueEmail,
       enforceUniqueFace: setEnforceUniqueFace,
       allowEmergencyExitWithoutCooldown: setAllowEmergencyExitWithoutCooldown,
+      enableGateCameraScan: setEnableGateCameraScan,
       allowWardenAddStudent: setAllowWardenAddStudent,
       allowDeanAddStudent: setAllowDeanAddStudent,
       allowWardenEditProfile: setAllowWardenEditProfile,
@@ -5878,9 +5883,11 @@ export default function AdminDashboard({
   };
 
   const handleUpdateHostelMode = async (hostelId: string, mode: 'strict' | 'gps-only' | 'biometric') => {
+    const previousHostel = hostels.find(h => h._id === hostelId || h.id === hostelId);
+    const previousMode = previousHostel?.attendanceMode || 'strict';
     try {
       setUpdatingHostelId(hostelId);
-      const hostelToUpdate = hostels.find(h => h._id === hostelId || h.id === hostelId);
+      const hostelToUpdate = previousHostel;
       if (!hostelToUpdate) throw new Error("Hostel not found");
 
       const updateList = (prev: any[]) => prev.map(h => ((h._id === hostelId || h.id === hostelId) ? { ...h, attendanceMode: mode } : h));
@@ -5910,7 +5917,10 @@ export default function AdminDashboard({
       }
     } catch (e) {
       console.error(e);
-      alert("Failed to update attendance mode");
+      const revertList = (prev: any[]) => prev.map(h => ((h._id === hostelId || h.id === hostelId) ? { ...h, attendanceMode: previousMode } : h));
+      setHostels(revertList);
+      setHostelsConfig(revertList);
+      showToast("Failed to update attendance mode. Reverted.", "error");
     } finally {
       setUpdatingHostelId(null);
     }
@@ -9345,7 +9355,7 @@ export default function AdminDashboard({
                   {title === "Super Admin Dashboard" && (
                     <button
                       onClick={() => setShowAttendanceTimeModal(true)}
-                      className="flex-1 md:flex-none flex items-center justify-center gap-2 px-3 py-2 bg-green-50 text-green-700 border border-green-200 rounded-lg text-[10px] font-bold uppercase tracking-tight hover:bg-green-100 transition-all whitespace-nowrap"
+                      className="flex-1 md:flex-none flex items-center justify-center gap-1 sm:gap-2 px-1.5 sm:px-3 py-2 bg-green-50 text-green-700 border border-green-200 rounded-lg text-[8.5px] sm:text-[10px] font-bold uppercase tracking-tight hover:bg-green-100 transition-all whitespace-nowrap shadow-xs active:scale-95"
                     >
                       ⏰ Set Attendance Time
                     </button>
@@ -9353,7 +9363,7 @@ export default function AdminDashboard({
                   {title === "Super Admin Dashboard" && (
                     <button
                       onClick={() => setShowHostelSettingsModal(true)}
-                      className="flex-1 md:flex-none flex items-center justify-center gap-2 px-3 py-2 bg-indigo-50 text-indigo-700 border border-indigo-200 rounded-lg text-[10px] font-bold uppercase tracking-tight hover:bg-indigo-100 transition-all whitespace-nowrap"
+                      className="flex-1 md:flex-none flex items-center justify-center gap-1 sm:gap-2 px-1.5 sm:px-3 py-2 bg-indigo-50 text-indigo-700 border border-indigo-200 rounded-lg text-[8.5px] sm:text-[10px] font-bold uppercase tracking-tight hover:bg-indigo-100 transition-all whitespace-nowrap shadow-xs active:scale-95"
                     >
                       🏢 Manage Hostels
                     </button>
@@ -9361,8 +9371,17 @@ export default function AdminDashboard({
 
                   {title === "Super Admin Dashboard" && (
                     <button
+                      onClick={() => setShowGatepassManagementModal(true)}
+                      className="flex-1 md:flex-none flex items-center justify-center gap-1 sm:gap-2 px-1.5 sm:px-3 py-2 bg-purple-50 text-purple-700 border border-purple-200 rounded-lg text-[8.5px] sm:text-[10px] font-bold uppercase tracking-tight hover:bg-purple-100 transition-all whitespace-nowrap shadow-xs active:scale-95"
+                    >
+                      🚪 Manage Gatepass
+                    </button>
+                  )}
+
+                  {title === "Super Admin Dashboard" && (
+                    <button
                       onClick={() => setShowDBExportModal(true)}
-                      className="flex-1 md:flex-none flex items-center justify-center gap-2 px-3 py-2 bg-emerald-50 text-emerald-700 border border-emerald-200 rounded-lg text-[10px] font-bold uppercase tracking-tight hover:bg-emerald-100 transition-all whitespace-nowrap"
+                      className="flex-1 md:flex-none flex items-center justify-center gap-1 sm:gap-2 px-1.5 sm:px-3 py-2 bg-emerald-50 text-emerald-700 border border-emerald-200 rounded-lg text-[8.5px] sm:text-[10px] font-bold uppercase tracking-tight hover:bg-emerald-100 transition-all whitespace-nowrap shadow-xs active:scale-95"
                     >
                       💾 Export DB
                     </button>
@@ -9403,9 +9422,9 @@ export default function AdminDashboard({
                         }
                       }}
                       disabled={isSyncingData}
-                      className="flex-1 md:flex-none flex items-center justify-center gap-2 px-3 py-2 bg-gray-50 text-gray-700 border border-gray-200 rounded-lg text-[10px] font-bold uppercase tracking-tight hover:bg-gray-100 transition-all whitespace-nowrap active:scale-95 disabled:opacity-60 cursor-pointer"
+                      className="flex-1 md:flex-none flex items-center justify-center gap-1 sm:gap-2 px-1.5 sm:px-3 py-2 bg-gray-50 text-gray-700 border border-gray-200 rounded-lg text-[8.5px] sm:text-[10px] font-bold uppercase tracking-tight hover:bg-gray-100 transition-all whitespace-nowrap active:scale-95 disabled:opacity-60 cursor-pointer shadow-xs"
                     >
-                      <span className={`text-xs ${isSyncingData ? 'animate-spin inline-block' : 'inline-block'}`}>🔄</span>
+                      <span className={`text-[10px] sm:text-xs ${isSyncingData ? 'animate-spin inline-block' : 'inline-block'}`}>🔄</span>
                       <span>{isSyncingData ? "Syncing..." : "Sync Data"}</span>
                     </button>
                   )}
@@ -9431,7 +9450,7 @@ export default function AdminDashboard({
                         setShowAllStudents(true);
                         if (students.length === 0) fetchStudents(true);
                     }}
-                    className="flex-1 md:flex-none px-4 py-2 rounded-lg bg-blue-600 text-background font-medium transition-colors hover:bg-blue-700 text-sm whitespace-nowrap"
+                    className="flex-1 md:flex-none px-2 sm:px-4 py-2 rounded-lg bg-blue-600 text-white font-bold transition-colors hover:bg-blue-700 text-[8.5px] sm:text-[10px] uppercase tracking-tight whitespace-nowrap active:scale-95 shadow-xs"
                   >
                     All Students
                   </button>
@@ -19500,6 +19519,28 @@ export default function AdminDashboard({
                         </div>
                       </div>
 
+                      {/* 📸 Gate Face Camera Scanner Toggle */}
+                      <div className="bg-white p-2.5 sm:p-4 rounded-xl sm:rounded-2xl border sm:border-2 border-emerald-100 flex items-center justify-between shadow-sm hover:border-emerald-200 transition-all gap-2">
+                        <div className="flex items-center gap-2 sm:gap-3 min-w-0">
+                          <div className="p-1 sm:p-2 bg-emerald-50 rounded-lg text-emerald-600 font-bold text-xs sm:text-base shrink-0">
+                            📸
+                          </div>
+                          <div className="min-w-0">
+                            <h3 className="text-[10px] sm:text-sm font-bold text-slate-900 leading-tight">Gate Face Camera Scanner</h3>
+                            <p className="hidden sm:block text-[9px] sm:text-[10px] text-slate-500 font-medium mt-0.5">Enable instant camera face recognition for campus gate outings & returns</p>
+                          </div>
+                        </div>
+                        <label className="relative inline-flex items-center cursor-pointer shrink-0 scale-75 sm:scale-100 origin-right">
+                          <input
+                            type="checkbox"
+                            checked={enableGateCameraScan}
+                            onChange={(e) => handleToggleDeveloperSetting('enableGateCameraScan', e.target.checked)}
+                            className="sr-only peer"
+                          />
+                          <div className="w-11 h-6 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-emerald-600"></div>
+                        </label>
+                      </div>
+
                       {/* WiFi IP Whitelist Management */}
                       <div className="bg-white p-4 sm:p-6 rounded-2xl border-2 border-amber-100 shadow-sm hover:border-amber-200 transition-all space-y-4">
                         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 sm:gap-4">
@@ -20611,11 +20652,11 @@ export default function AdminDashboard({
                     <div className="bg-blue-50/80 border border-blue-100 px-3 py-2 sm:px-4 sm:py-2.5 rounded-xl sm:rounded-2xl flex items-center gap-2.5 sm:gap-3">
                       <span className="text-sm sm:text-base leading-none">🔑</span>
                       <p className="text-[9.5px] sm:text-xs text-blue-800 font-medium font-sans leading-tight">
-                        Configure your campus authentication keys and gatepass access passwords.
+                        Configure your campus authentication keys and administrative passwords.
                       </p>
                     </div>
 
-                    <div className={showRemoveButton ? "grid grid-cols-1 lg:grid-cols-3 gap-3.5 sm:gap-5" : "grid grid-cols-1 md:grid-cols-2 gap-3.5 sm:gap-5"}>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5 sm:gap-5">
                       {/* 1. Dean Credentials */}
                       <div className="p-3 sm:p-5 rounded-2xl sm:rounded-3xl border-2 border-gray-100 bg-gray-50/30 flex flex-col space-y-2 sm:space-y-3">
                         <div className="flex items-baseline flex-wrap gap-1">
@@ -20751,47 +20792,6 @@ export default function AdminDashboard({
                           </div>
                         </div>
                       )}
-
-                      {/* 3. Gatepass Credentials */}
-                      <div className="p-3 sm:p-5 rounded-2xl sm:rounded-3xl border-2 border-gray-100 bg-gray-50/30 flex flex-col space-y-2 sm:space-y-3">
-                        <div className="flex items-baseline flex-wrap gap-1">
-                          <h4 className="font-black text-gray-900 uppercase tracking-tight text-[10px] sm:text-xs whitespace-nowrap">Gatepass Credentials :</h4>
-                          <span className="text-[9px] sm:text-[10.5px] text-gray-500 font-medium font-sans">Set an independent access password</span>
-                        </div>
-
-                        <div className="flex flex-row sm:flex-col items-end sm:items-stretch gap-1.5 sm:gap-2">
-                          <div className="flex-1 sm:w-full min-w-0 space-y-1">
-                            <label className="block text-[8.5px] sm:text-[9.5px] font-black text-emerald-600/70 uppercase tracking-wider px-1">Independent Password</label>
-                            <input
-                              type="text"
-                              value={getpassPassword}
-                              onChange={(e) => setGetpassPassword(e.target.value)}
-                              className="w-full px-2.5 py-1.5 sm:px-3 sm:py-2.5 rounded-xl bg-white border-2 border-gray-100 font-bold text-gray-800 outline-none focus:border-emerald-500 transition-all text-xs sm:text-sm"
-                              placeholder="GET456"
-                            />
-                          </div>
-
-                          <button
-                            onClick={async () => {
-                              try {
-                                const res = await fetch("/api/admin/passwords", {
-                                  method: "PATCH",
-                                  headers: { "Content-Type": "application/json" },
-                                  body: JSON.stringify({ newPassword: getpassPassword, type: "getpass" })
-                                });
-                                const data = await res.json();
-                                if (data.success) alert("✅ GATEPASS password updated successfully!");
-                                else alert("Error: " + data.error);
-                              } catch (e) {
-                                alert("Failed to update password");
-                              }
-                            }}
-                            className="shrink-0 sm:w-full px-2.5 py-2 sm:px-3.5 sm:py-2.5 bg-emerald-600 text-white font-black text-[8px] sm:text-[10px] uppercase tracking-wider rounded-md hover:bg-emerald-700 transition-all shadow-sm active:scale-95 disabled:opacity-50 whitespace-nowrap text-center"
-                          >
-                            Update Password
-                          </button>
-                        </div>
-                      </div>
                     </div>
                   </div>
                 )}
@@ -21043,6 +21043,17 @@ export default function AdminDashboard({
           </div>
         )
       }
+
+      {showGatepassManagementModal && (
+        <GatepassManagementModal
+          isOpen={showGatepassManagementModal}
+          onClose={() => setShowGatepassManagementModal(false)}
+          onGatesUpdated={(updatedGates) => {
+            const hasCamera = updatedGates.some((g: any) => g.mode === "camera");
+            setEnableGateCameraScan(hasCamera);
+          }}
+        />
+      )}
 
       {showHostelSettingsModal && (
         <HostelManagementModal
@@ -21868,7 +21879,7 @@ export default function AdminDashboard({
       {/* ⚡ LIVE GATEPASS OVERLAY */}
       {showGatepassOverlay && (
         <div className="fixed inset-0 z-[9999] bg-[#0a0a1a] overflow-y-auto touch-pan-y animate-in fade-in duration-300 [webkit-overflow-scrolling:touch]">
-          <GatepassView onClose={() => window.history.back()} />
+          <GatepassView onClose={() => window.history.back()} initialScannerMode={enableGateCameraScan ? "camera" : "qr"} />
         </div>
       )}
 
