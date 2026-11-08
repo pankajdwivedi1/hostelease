@@ -330,7 +330,7 @@ export default function FaceIdentifierModal({
 
   const [gallery, setGallery] = useState<IdentifiedStudent[]>([]);
   const [isLoadingGallery, setIsLoadingGallery] = useState(true);
-  const [isAIWarming, setIsAIWarming] = useState(true);
+  const [isModelsReady, setIsModelsReady] = useState(false);
   const [isCameraActive, setIsCameraActive] = useState(false);
   const [cameraError, setCameraError] = useState<string | null>(null);
   const [facingMode, setFacingMode] = useState<"environment" | "user">("environment");
@@ -383,12 +383,10 @@ export default function FaceIdentifierModal({
 
     const initAI = async () => {
       try {
-        setIsAIWarming(true);
         await loadFaceApiModels(false);
+        if (isMounted) setIsModelsReady(true);
       } catch (err) {
-        console.warn("AI warmup error:", err);
-      } finally {
-        if (isMounted) setIsAIWarming(false);
+        console.warn("AI models background load error:", err);
       }
     };
 
@@ -400,14 +398,16 @@ export default function FaceIdentifierModal({
     };
   }, [isOpen]);
 
-  // 2. Camera Management
+  // 2. Camera Management with Instant Startup & Android Multi-Tier Hardware Fallback
   const stopCamera = useCallback(() => {
     if (animFrameRef.current) {
       cancelAnimationFrame(animFrameRef.current);
       animFrameRef.current = null;
     }
     if (streamRef.current) {
-      streamRef.current.getTracks().forEach((t) => t.stop());
+      streamRef.current.getTracks().forEach((t) => {
+        try { t.stop(); } catch (_) {}
+      });
       streamRef.current = null;
     }
     if (videoRef.current) {
@@ -417,53 +417,107 @@ export default function FaceIdentifierModal({
     setActiveFaceBox(null);
   }, []);
 
-  const startCamera = useCallback(async () => {
+  const startCamera = useCallback(async (retryCount = 0) => {
     stopCamera();
     setCameraError(null);
     setSpoofWarning(null);
     setActiveFaceBox(null);
 
+    // Yield briefly to let Android Camera HAL release sensor
+    await new Promise((r) => setTimeout(r, 150));
+
+    let stream: MediaStream | null = null;
+
+    // Tier 1: Ideal facingMode + 720p resolution
     try {
-      const constraints: MediaStreamConstraints = {
+      stream = await navigator.mediaDevices.getUserMedia({
         video: {
           facingMode: { ideal: facingMode },
           width: { ideal: 1280 },
           height: { ideal: 720 }
         },
         audio: false
-      };
-
-      const stream = await navigator.mediaDevices.getUserMedia(constraints);
-      streamRef.current = stream;
-
-      if (videoRef.current) {
-        videoRef.current.srcObject = stream;
-        await videoRef.current.play();
-        setIsCameraActive(true);
-        setScanStatus("Point camera at student's face...");
+      });
+    } catch (e1: any) {
+      console.warn("Tier 1 camera constraints failed, attempting fallback tier 2:", e1);
+      // Tier 2: Loose facingMode without strict resolution constraints
+      try {
+        await new Promise((r) => setTimeout(r, 150));
+        stream = await navigator.mediaDevices.getUserMedia({
+          video: { facingMode: { ideal: facingMode } },
+          audio: false
+        });
+      } catch (e2: any) {
+        console.warn("Tier 2 camera constraints failed, attempting universal tier 3:", e2);
+        // Tier 3: Universal fallback (any camera available)
+        try {
+          await new Promise((r) => setTimeout(r, 200));
+          stream = await navigator.mediaDevices.getUserMedia({
+            video: true,
+            audio: false
+          });
+        } catch (e3: any) {
+          console.error("All camera tiers failed:", e3);
+          if (retryCount < 1) {
+            console.log("Retrying camera once after brief delay for Android HAL release...");
+            setTimeout(() => {
+              startCamera(retryCount + 1);
+            }, 350);
+            return;
+          }
+          if (e3.name === "NotAllowedError" || e3.name === "PermissionDeniedError") {
+            setCameraError("Camera permission denied. Please allow camera access in your browser settings.");
+          } else if (e3.name === "NotFoundError" || e3.name === "DevicesNotFoundError") {
+            setCameraError("No camera found on this device.");
+          } else if (e3.name === "NotReadableError" || e3.message?.includes("Could not start video source")) {
+            setCameraError("Camera is currently in use by another app or tab. Please close other camera tabs and tap Retry.");
+          } else {
+            setCameraError(e3.message || "Could not start camera. Please tap Retry.");
+          }
+          setIsCameraActive(false);
+          return;
+        }
       }
-    } catch (err: any) {
-      console.error("Camera access error:", err);
-      setCameraError(err?.message || "Failed to access camera. Please allow camera permissions.");
+    }
+
+    if (!stream) {
+      setCameraError("Unable to acquire camera stream. Please tap Retry.");
       setIsCameraActive(false);
+      return;
+    }
+
+    streamRef.current = stream;
+
+    if (videoRef.current) {
+      videoRef.current.srcObject = stream;
+      videoRef.current.muted = true;
+      videoRef.current.setAttribute("playsinline", "true");
+      videoRef.current.setAttribute("autoplay", "true");
+      try {
+        await videoRef.current.play();
+      } catch (playErr) {
+        console.warn("Video play error:", playErr);
+      }
+      setIsCameraActive(true);
+      setScanStatus("Point camera at student's face...");
     }
   }, [facingMode, stopCamera]);
 
-  // Start camera when modal opens and models are ready
+  // Start camera IMMEDIATELY when modal opens (instant camera start, no waiting for AI models)
   useEffect(() => {
-    if (isOpen && !isAIWarming) {
-      startCamera();
+    if (isOpen) {
+      startCamera(0);
     } else {
       stopCamera();
     }
     return () => {
       stopCamera();
     };
-  }, [isOpen, isAIWarming, startCamera, stopCamera]);
+  }, [isOpen, startCamera, stopCamera]);
 
   // 3. Real-Time 60FPS Synchronized Face Tracking & Instant In-Memory 1:N Identification
   useEffect(() => {
-    if (!isCameraActive || isAIWarming || matchedStudent || !videoRef.current || gallery.length === 0) {
+    if (!isCameraActive || !isModelsReady || matchedStudent || !videoRef.current || gallery.length === 0) {
       return;
     }
 
@@ -658,7 +712,7 @@ export default function FaceIdentifierModal({
         animFrameRef.current = null;
       }
     };
-  }, [isCameraActive, isAIWarming, matchedStudent, gallery, facingMode]);
+  }, [isCameraActive, isModelsReady, matchedStudent, gallery, facingMode]);
 
   const toggleCameraFacing = () => {
     setFacingMode((prev) => (prev === "environment" ? "user" : "environment"));
@@ -670,7 +724,7 @@ export default function FaceIdentifierModal({
     setSpoofWarning(null);
     setActiveFaceBox(null);
     setScanStatus("Point camera at student's face...");
-    startCamera();
+    startCamera(0);
   };
 
   if (!isOpen) return null;
@@ -739,20 +793,13 @@ export default function FaceIdentifierModal({
                 ? "border-emerald-500 shadow-[0_0_25px_rgba(16,185,129,0.45)]" 
                 : "border-slate-700"
           }`}>
-            {isAIWarming ? (
-              <div className="flex flex-col items-center gap-2 text-slate-400">
-                <Sparkles className="w-8 h-8 text-purple-400 animate-spin" />
-                <span className="text-xs font-bold uppercase tracking-wider text-slate-300">
-                  Warming Neural AI Models...
-                </span>
-              </div>
-            ) : cameraError ? (
+            {cameraError ? (
               <div className="p-4 text-center text-red-400 text-xs font-semibold flex flex-col items-center gap-2">
                 <Camera className="w-8 h-8 text-red-400/60" />
                 <span>{cameraError}</span>
                 <button
-                  onClick={startCamera}
-                  className="mt-2 px-3 py-1 bg-red-600/30 hover:bg-red-600/50 text-red-200 border border-red-500/40 rounded-lg text-xs font-bold"
+                  onClick={() => startCamera(0)}
+                  className="mt-2 px-4 py-1.5 bg-red-600/30 hover:bg-red-600/50 text-red-200 border border-red-500/40 rounded-lg text-xs font-bold cursor-pointer"
                 >
                   Retry Camera
                 </button>
@@ -837,6 +884,10 @@ export default function FaceIdentifierModal({
                     ) : activeFaceBox ? (
                       <span className="text-emerald-400 flex items-center gap-1 font-bold">
                         <Sparkles className="w-3.5 h-3.5 animate-spin" /> Face Locked • Identifying...
+                      </span>
+                    ) : !isModelsReady ? (
+                      <span className="text-purple-300 flex items-center gap-1 font-semibold">
+                        <Sparkles className="w-3.5 h-3.5 animate-spin" /> Readying Biometric Engine...
                       </span>
                     ) : isScanning ? (
                       <span className="text-purple-300 flex items-center gap-1 font-bold">
