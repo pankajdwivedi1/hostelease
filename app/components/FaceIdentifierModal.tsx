@@ -189,39 +189,39 @@ function checkScreenAndPhotoSpoof(
       return { isSpoof: true, reason: "Digital Display Screen Moiré Pattern Detected! Mobile screen rejected." };
     }
 
-    // 2. SECONDARY PHONE CASING & BORDER DETECTION (Works on tilted phones)
-    // Sample surrounding rectangular margins around face (margins of 32% around face)
-    const marginX = Math.floor(bw * 0.32);
-    const marginY = Math.floor(bh * 0.32);
-    const outerX = Math.max(0, bx - marginX);
-    const outerY = Math.max(0, by - marginY);
-    const outerW = Math.min(imgWidth - outerX, bw + marginX * 2);
-    const outerH = Math.min(imgHeight - outerY, bh + marginY * 1.5);
+    // 2. SECONDARY PHONE CASING & MULTI-DEPTH BORDER DETECTION
+    // Sample surrounding rectangular margins around face (sampling near at 32% and mid at 60%)
+    for (const marginFactor of [0.32, 0.60]) {
+      const marginX = Math.floor(bw * marginFactor);
+      const marginY = Math.floor(bh * marginFactor);
+      const outerX = Math.max(0, bx - marginX);
+      const outerY = Math.max(0, by - marginY);
+      const outerW = Math.min(imgWidth - outerX, bw + marginX * 2);
+      const outerH = Math.min(imgHeight - outerY, bh + marginY * 1.4);
 
-    if (outerW > bw + 12 && outerH > bh + 12) {
-      const outerData = ctx.getImageData(outerX, outerY, outerW, outerH).data;
-      let darkMarginPixels = 0;
-      let totalMarginPixels = 0;
+      if (outerW > bw + 14 && outerH > bh + 14) {
+        const outerData = ctx.getImageData(outerX, outerY, outerW, outerH).data;
+        let darkMarginPixels = 0;
+        let totalMarginPixels = 0;
 
-      for (let y = 0; y < outerH; y++) {
-        for (let x = 0; x < outerW; x++) {
-          const isMargin = (x < marginX || x >= outerW - marginX || y < marginY);
-          if (isMargin) {
-            const idx = (y * outerW + x) * 4;
-            const brightness = 0.299 * outerData[idx] + 0.587 * outerData[idx + 1] + 0.114 * outerData[idx + 2];
-            // Black/dark mobile phone bezel or phone border
-            if (brightness < 55) {
-              darkMarginPixels++;
+        for (let y = 0; y < outerH; y += 2) {
+          for (let x = 0; x < outerW; x += 2) {
+            const isMargin = (x < marginX || x >= outerW - marginX || y < marginY);
+            if (isMargin) {
+              const idx = (y * outerW + x) * 4;
+              const brightness = 0.299 * outerData[idx] + 0.587 * outerData[idx + 1] + 0.114 * outerData[idx + 2];
+              if (brightness < 55) {
+                darkMarginPixels++;
+              }
+              totalMarginPixels++;
             }
-            totalMarginPixels++;
           }
         }
-      }
 
-      const darkBezelRatio = darkMarginPixels / Math.max(1, totalMarginPixels);
-      // If > 42% of the surrounding margin is a dark phone casing / bezel:
-      if (darkBezelRatio > 0.42) {
-        return { isSpoof: true, reason: "Secondary Mobile Phone Casing / Frame Detected! Please present real face directly." };
+        const darkBezelRatio = darkMarginPixels / Math.max(1, totalMarginPixels);
+        if (darkBezelRatio > 0.38) {
+          return { isSpoof: true, reason: "Secondary Mobile Phone Casing / Frame Detected! Please present real face directly." };
+        }
       }
     }
 
@@ -484,7 +484,10 @@ export default function FaceIdentifierModal({
 
     const initAI = async () => {
       try {
-        await loadFaceApiModels(false);
+        await Promise.allSettled([
+          loadFaceApiModels(false),
+          loadPhoneDetector()
+        ]);
       } catch (err) {
         console.warn("AI warmup warning:", err);
       }
@@ -745,6 +748,61 @@ export default function FaceIdentifierModal({
 
         // Instant face match on live video by 128-D Euclidean vector (distance <= 0.46 = >= 78% Match)
         if (bestMatch && minDistance <= 0.46) {
+          if (isVerifyingLiveRef.current) {
+            animFrameRef.current = requestAnimationFrame(processFrame);
+            return;
+          }
+
+          const nowCheck = Date.now();
+          if (nowCheck - lastLiveCheckRef.current < 900) {
+            animFrameRef.current = requestAnimationFrame(processFrame);
+            return;
+          }
+
+          isVerifyingLiveRef.current = true;
+          // 🛡️ Bank-Grade Neural Verification: Validate frame with MiniFASNetV2 ONNX
+          // Status text remains clean ("Face Locked • Identifying...")
+          const dataUrl = offCanvas.toDataURL("image/jpeg", 0.90);
+
+          try {
+            const liveRes = await fetch("/api/biometrics/verify-live", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                image: dataUrl,
+                box: {
+                  x: rawBox.x,
+                  y: rawBox.y,
+                  width: rawBox.width,
+                  height: rawBox.height,
+                  canvasWidth: vw,
+                  canvasHeight: vh
+                },
+                descriptor: liveDescriptor
+              })
+            });
+
+            if (liveRes.ok) {
+              const liveData = await liveRes.json();
+              if (liveData.isSpoof) {
+                lastLiveCheckRef.current = Date.now();
+                isVerifyingLiveRef.current = false;
+                const reasonMsg = liveData.message || liveData.reason || "Fraud Prevented: Mobile Phone Screen or Photo Spoof Detected! Please present your real physical face directly.";
+                setSpoofWarning(reasonMsg);
+                setScanStatus(`🛑 FRAUD DETECTED: Synthetic Mobile Screen / Photo Rejected!`);
+                setActiveFaceBox(null);
+                isDetecting = false;
+                animFrameRef.current = requestAnimationFrame(processFrame);
+                return;
+              }
+            }
+          } catch (liveErr) {
+            console.warn("Live neural verification error:", liveErr);
+          } finally {
+            isVerifyingLiveRef.current = false;
+          }
+
+          // ✅ Genuine physical live human face confirmed
           const score = calculateScore(minDistance);
           setMatchedStudent(bestMatch);
           setMatchScore(score);
