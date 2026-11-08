@@ -595,14 +595,47 @@ export default function FaceIdentifierModal({
           }
         }
 
-        // Calibrated 1:N threshold for instant matching (distance <= 0.42 = >= 85% Match)
-        if (bestMatch && minDistance <= 0.42 && (secondMinDistance - minDistance) >= 0.02) {
-          const score = calculateScore(minDistance);
-          setMatchedStudent(bestMatch);
-          setMatchScore(score);
-          setScanStatus(`Verified: ${bestMatch.name} (${score}% match)`);
-          isDetecting = false;
-          return; // Stop scan loop once verified
+        // Calibrated 1:N threshold for matching (distance <= 0.40 = >= 86% Match)
+        if (bestMatch && minDistance <= 0.40 && (secondMinDistance - minDistance) >= 0.02) {
+          // 🛡️ BANK-GRADE SERVER NEURAL ANTI-SPOOFING (MiniFASNetV2 ONNX Runtime)
+          // Mandatory check: Inspects real physical human skin vs phone screen / video replay / printed photo
+          setScanStatus("Verifying physical human liveness with neural anti-spoof...");
+
+          try {
+            const frameDataUrl = offCanvas.toDataURL("image/jpeg", 0.85);
+            const liveRes = await fetch("/api/biometrics/verify-live", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                image: frameDataUrl,
+                box: rawBox,
+                descriptor: liveDescriptor
+              })
+            });
+
+            if (liveRes.ok) {
+              const liveData = await liveRes.json();
+              if (liveData.isSpoof) {
+                // 🛑 FRAUD DETECTED: Secondary phone screen or photo spoof!
+                setSpoofWarning(`🛑 FRAUD DETECTED: ${liveData.message || liveData.reason || "Mobile Screen or Photo Detected! Present Real Face."}`);
+                setScanStatus("🛑 Fake Identity Rejected: Mobile display / photo detected!");
+                setActiveFaceBox(null);
+                isDetecting = false;
+                animFrameRef.current = requestAnimationFrame(processFrame);
+                return;
+              }
+
+              // ✅ Genuine physical human skin passed!
+              const score = calculateScore(minDistance);
+              setMatchedStudent(bestMatch);
+              setMatchScore(score);
+              setScanStatus(`Verified: ${bestMatch.name} (${score}% match)`);
+              isDetecting = false;
+              return; // Stop scan loop once verified
+            }
+          } catch (liveErr) {
+            console.warn("Anti-spoof check error:", liveErr);
+          }
         } else {
           setScanStatus("Scanning face against student roster...");
         }

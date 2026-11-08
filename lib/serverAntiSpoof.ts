@@ -340,6 +340,12 @@ export async function verifyFaceAndLivenessServer(
     } else if (isNeuralSpoof) {
         isSpoof = true;
         spoofReason = `${neuralReason}. Please present your real physical face in person.`;
+    } else if (glareRatio > 0.08) {
+        isSpoof = true;
+        spoofReason = "Specular Glass Glare Reflection Detected (Mobile Phone Screen). Please present your real face directly.";
+    } else if (moireRatio > 0.12) {
+        isSpoof = true;
+        spoofReason = "Digital Screen Moiré Lattice Grid Detected. Please present your real physical face in person.";
     }
 
     const livenessScore = Math.round(livenessProb * 100);
