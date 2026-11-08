@@ -14,7 +14,8 @@ import {
   Hash, 
   ShieldCheck, 
   ShieldAlert,
-  AlertTriangle 
+  AlertTriangle,
+  Info
 } from "lucide-react";
 import { 
   getFaceApi, 
@@ -24,6 +25,7 @@ import {
   detectMobileScreenDisplay,
   assessPhotoQuality 
 } from "@/lib/faceMatching";
+import { loadPhoneDetector, detectMobilePhone } from "@/lib/objectDetection";
 
 interface IdentifiedStudent {
   id: string;
@@ -121,10 +123,111 @@ function checkHumanSkinTone(
     }
 
     const skinRatio = skinPixels / Math.max(1, total);
-    // Real physical human face must contain at least 28% genuine skin pixels
-    return { isSkin: skinRatio >= 0.28, skinRatio };
+    // Real physical human face must contain at least 26% genuine skin pixels
+    return { isSkin: skinRatio >= 0.26, skinRatio };
   } catch (_) {
     return { isSkin: false, skinRatio: 0 };
+  }
+}
+
+/**
+ * 🛡️ Multi-Factor Mobile Screen, Glass Glare & Secondary Phone Casing Analyzer
+ * Rejects photos shown on phone screens, tablets, monitors, and video replays:
+ * 1. Specular Glass Glare Reflection (blown-out mirror reflections on screen glass)
+ * 2. High-Frequency Moiré Lattice Grid (LCD/OLED pixel matrix interference)
+ * 3. Secondary Phone Bezel & Casing (detects dark phone borders even when tilted)
+ */
+function checkScreenAndPhotoSpoof(
+  ctx: CanvasRenderingContext2D,
+  box: { x: number; y: number; width: number; height: number },
+  imgWidth: number,
+  imgHeight: number
+): { isSpoof: boolean; reason?: string } {
+  try {
+    const bx = Math.max(0, Math.floor(box.x));
+    const by = Math.max(0, Math.floor(box.y));
+    const bw = Math.min(imgWidth - bx, Math.floor(box.width));
+    const bh = Math.min(imgHeight - by, Math.floor(box.height));
+
+    if (bw < 30 || bh < 30) return { isSpoof: false };
+
+    // 1. SPECULAR GLASS GLARE & MOIRÉ PIXEL GRID ANALYSIS ON FACE
+    const faceImgData = ctx.getImageData(bx, by, bw, bh).data;
+    const totalPixels = bw * bh;
+    let saturatedGlareCount = 0;
+    let highFreqGridDiffs = 0;
+
+    for (let i = 0; i < faceImgData.length; i += 4) {
+      const r = faceImgData[i];
+      const g = faceImgData[i + 1];
+      const b = faceImgData[i + 2];
+
+      // Screen glass specular reflection blown-out pure white hotspot
+      if (r >= 244 && g >= 244 && b >= 244) {
+        saturatedGlareCount++;
+      }
+
+      // Horizontal adjacent pixel gradient (Moiré pattern of digital subpixel matrix)
+      if (i > 4 && i % (bw * 4) !== 0) {
+        const pr = faceImgData[i - 4];
+        const pg = faceImgData[i - 3];
+        const pb = faceImgData[i - 2];
+        const delta = Math.abs(r - pr) + Math.abs(g - pg) + Math.abs(b - pb);
+        if (delta > 85) {
+          highFreqGridDiffs++;
+        }
+      }
+    }
+
+    const glareRatio = saturatedGlareCount / Math.max(1, totalPixels);
+    const moireRatio = highFreqGridDiffs / Math.max(1, totalPixels);
+
+    if (glareRatio > 0.045) {
+      return { isSpoof: true, reason: "Glass Screen Glare Reflection Detected! Present your real face in person." };
+    }
+    if (moireRatio > 0.15) {
+      return { isSpoof: true, reason: "Digital Display Screen Moiré Pattern Detected! Mobile screen rejected." };
+    }
+
+    // 2. SECONDARY PHONE CASING & BORDER DETECTION (Works on tilted phones)
+    // Sample surrounding rectangular margins around face (margins of 32% around face)
+    const marginX = Math.floor(bw * 0.32);
+    const marginY = Math.floor(bh * 0.32);
+    const outerX = Math.max(0, bx - marginX);
+    const outerY = Math.max(0, by - marginY);
+    const outerW = Math.min(imgWidth - outerX, bw + marginX * 2);
+    const outerH = Math.min(imgHeight - outerY, bh + marginY * 1.5);
+
+    if (outerW > bw + 12 && outerH > bh + 12) {
+      const outerData = ctx.getImageData(outerX, outerY, outerW, outerH).data;
+      let darkMarginPixels = 0;
+      let totalMarginPixels = 0;
+
+      for (let y = 0; y < outerH; y++) {
+        for (let x = 0; x < outerW; x++) {
+          const isMargin = (x < marginX || x >= outerW - marginX || y < marginY);
+          if (isMargin) {
+            const idx = (y * outerW + x) * 4;
+            const brightness = 0.299 * outerData[idx] + 0.587 * outerData[idx + 1] + 0.114 * outerData[idx + 2];
+            // Black/dark mobile phone bezel or phone border
+            if (brightness < 55) {
+              darkMarginPixels++;
+            }
+            totalMarginPixels++;
+          }
+        }
+      }
+
+      const darkBezelRatio = darkMarginPixels / Math.max(1, totalMarginPixels);
+      // If > 42% of the surrounding margin is a dark phone casing / bezel:
+      if (darkBezelRatio > 0.42) {
+        return { isSpoof: true, reason: "Secondary Mobile Phone Casing / Frame Detected! Please present real face directly." };
+      }
+    }
+
+    return { isSpoof: false };
+  } catch (_) {
+    return { isSpoof: false };
   }
 }
 
@@ -208,19 +311,15 @@ function getTightFaceBox(landmarks: any, rawBox: any) {
     const positions = landmarks.positions || (typeof landmarks.getPositions === "function" ? landmarks.getPositions() : null);
     if (positions && positions.length >= 68) {
       // 68 points:
-      // Eyebrow points: 17 - 26 (points 19 and 24 are highest)
       let minEyebrowY = 99999;
       for (let i = 17; i <= 26; i++) {
         if (positions[i].y < minEyebrowY) minEyebrowY = positions[i].y;
       }
-      // Chin bottom is point 8
       const chinY = positions[8].y;
-      // Cheeks / jaw sides: point 1 and point 15
       const leftCheekX = positions[1].x;
       const rightCheekX = positions[15].x;
 
       const faceHeight = chinY - minEyebrowY;
-      // Forehead sits ~15% above eyebrows
       const topY = Math.max(0, minEyebrowY - faceHeight * 0.16);
       const bottomY = chinY + faceHeight * 0.04;
       const leftX = leftCheekX;
@@ -277,7 +376,6 @@ function calculateDisplayBox(
   const vw = video.videoWidth || 640;
   const vh = video.videoHeight || 480;
 
-  // Object-cover in a 1:1 aspect-square container:
   if (vw >= vh) {
     const scale = 100 / vh;
     const displayedWidthPercent = vw * scale;
@@ -327,12 +425,14 @@ export default function FaceIdentifierModal({
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const animFrameRef = useRef<number | null>(null);
+  const lastObjectCheckRef = useRef<number>(0);
 
   const [gallery, setGallery] = useState<IdentifiedStudent[]>([]);
   const [isLoadingGallery, setIsLoadingGallery] = useState(true);
-  const [isModelsReady, setIsModelsReady] = useState(false);
+  const [isAIWarming, setIsAIWarming] = useState(true);
   const [isCameraActive, setIsCameraActive] = useState(false);
   const [cameraError, setCameraError] = useState<string | null>(null);
+  const [insecureOriginInfo, setInsecureOriginInfo] = useState<string | null>(null);
   const [facingMode, setFacingMode] = useState<"environment" | "user">("environment");
 
   // Real-time tracking bounding box on video
@@ -357,7 +457,7 @@ export default function FaceIdentifierModal({
       try {
         setIsLoadingGallery(true);
         // Check session cache first
-        const cached = sessionStorage.getItem("hosteleaze_identifier_gallery_v5");
+        const cached = sessionStorage.getItem("hosteleaze_identifier_gallery_v6");
         if (cached) {
           const parsed = JSON.parse(cached);
           if (Array.isArray(parsed) && parsed.length > 0 && isMounted) {
@@ -371,7 +471,7 @@ export default function FaceIdentifierModal({
         if (data.success && Array.isArray(data.students) && isMounted) {
           setGallery(data.students);
           try {
-            sessionStorage.setItem("hosteleaze_identifier_gallery_v5", JSON.stringify(data.students));
+            sessionStorage.setItem("hosteleaze_identifier_gallery_v6", JSON.stringify(data.students));
           } catch (_) {}
         }
       } catch (err) {
@@ -383,10 +483,15 @@ export default function FaceIdentifierModal({
 
     const initAI = async () => {
       try {
-        await loadFaceApiModels(false);
-        if (isMounted) setIsModelsReady(true);
+        setIsAIWarming(true);
+        await Promise.allSettled([
+          loadFaceApiModels(false),
+          loadPhoneDetector()
+        ]);
       } catch (err) {
-        console.warn("AI models background load error:", err);
+        console.warn("AI warmup warning:", err);
+      } finally {
+        if (isMounted) setIsAIWarming(false);
       }
     };
 
@@ -398,16 +503,14 @@ export default function FaceIdentifierModal({
     };
   }, [isOpen]);
 
-  // 2. Camera Management with Instant Startup & Android Multi-Tier Hardware Fallback
+  // 2. Camera Management (Supports HTTPS, localhost & legacy mobile fallbacks)
   const stopCamera = useCallback(() => {
     if (animFrameRef.current) {
       cancelAnimationFrame(animFrameRef.current);
       animFrameRef.current = null;
     }
     if (streamRef.current) {
-      streamRef.current.getTracks().forEach((t) => {
-        try { t.stop(); } catch (_) {}
-      });
+      streamRef.current.getTracks().forEach((t) => t.stop());
       streamRef.current = null;
     }
     if (videoRef.current) {
@@ -417,107 +520,86 @@ export default function FaceIdentifierModal({
     setActiveFaceBox(null);
   }, []);
 
-  const startCamera = useCallback(async (retryCount = 0) => {
+  const startCamera = useCallback(async () => {
     stopCamera();
     setCameraError(null);
+    setInsecureOriginInfo(null);
     setSpoofWarning(null);
     setActiveFaceBox(null);
 
-    // Yield briefly to let Android Camera HAL release sensor
-    await new Promise((r) => setTimeout(r, 150));
-
-    let stream: MediaStream | null = null;
-
-    // Tier 1: Ideal facingMode + 720p resolution
     try {
-      stream = await navigator.mediaDevices.getUserMedia({
+      const constraints: MediaStreamConstraints = {
         video: {
           facingMode: { ideal: facingMode },
           width: { ideal: 1280 },
           height: { ideal: 720 }
         },
         audio: false
-      });
-    } catch (e1: any) {
-      console.warn("Tier 1 camera constraints failed, attempting fallback tier 2:", e1);
-      // Tier 2: Loose facingMode without strict resolution constraints
-      try {
-        await new Promise((r) => setTimeout(r, 150));
-        stream = await navigator.mediaDevices.getUserMedia({
-          video: { facingMode: { ideal: facingMode } },
-          audio: false
-        });
-      } catch (e2: any) {
-        console.warn("Tier 2 camera constraints failed, attempting universal tier 3:", e2);
-        // Tier 3: Universal fallback (any camera available)
-        try {
-          await new Promise((r) => setTimeout(r, 200));
-          stream = await navigator.mediaDevices.getUserMedia({
-            video: true,
-            audio: false
+      };
+
+      let stream: MediaStream | null = null;
+      const isMediaDevicesSupported = typeof navigator !== "undefined" && !!navigator.mediaDevices && typeof navigator.mediaDevices.getUserMedia === "function";
+
+      if (isMediaDevicesSupported) {
+        stream = await navigator.mediaDevices.getUserMedia(constraints);
+      } else {
+        // Fallback for legacy Android webviews / browsers
+        const legacyGUM = 
+          (navigator as any)?.getUserMedia ||
+          (navigator as any)?.webkitGetUserMedia ||
+          (navigator as any)?.mozGetUserMedia ||
+          (navigator as any)?.msGetUserMedia;
+
+        if (typeof legacyGUM === "function") {
+          stream = await new Promise<MediaStream>((resolve, reject) => {
+            legacyGUM.call(navigator, constraints, resolve, reject);
           });
-        } catch (e3: any) {
-          console.error("All camera tiers failed:", e3);
-          if (retryCount < 1) {
-            console.log("Retrying camera once after brief delay for Android HAL release...");
-            setTimeout(() => {
-              startCamera(retryCount + 1);
-            }, 350);
-            return;
+        } else {
+          // Check if origin is plain HTTP (e.g. http://10.104.121.16:3000)
+          const isHttp = typeof window !== "undefined" && window.location.protocol === "http:" && window.location.hostname !== "localhost" && window.location.hostname !== "127.0.0.1";
+          if (isHttp) {
+            throw new Error(`INSECURE_HTTP:${window.location.host}`);
           }
-          if (e3.name === "NotAllowedError" || e3.name === "PermissionDeniedError") {
-            setCameraError("Camera permission denied. Please allow camera access in your browser settings.");
-          } else if (e3.name === "NotFoundError" || e3.name === "DevicesNotFoundError") {
-            setCameraError("No camera found on this device.");
-          } else if (e3.name === "NotReadableError" || e3.message?.includes("Could not start video source")) {
-            setCameraError("Camera is currently in use by another app or tab. Please close other camera tabs and tap Retry.");
-          } else {
-            setCameraError(e3.message || "Could not start camera. Please tap Retry.");
-          }
-          setIsCameraActive(false);
-          return;
+          throw new Error("Camera API is not supported on this browser.");
         }
       }
-    }
 
-    if (!stream) {
-      setCameraError("Unable to acquire camera stream. Please tap Retry.");
-      setIsCameraActive(false);
-      return;
-    }
+      streamRef.current = stream;
 
-    streamRef.current = stream;
-
-    if (videoRef.current) {
-      videoRef.current.srcObject = stream;
-      videoRef.current.muted = true;
-      videoRef.current.setAttribute("playsinline", "true");
-      videoRef.current.setAttribute("autoplay", "true");
-      try {
+      if (videoRef.current) {
+        videoRef.current.srcObject = stream;
         await videoRef.current.play();
-      } catch (playErr) {
-        console.warn("Video play error:", playErr);
+        setIsCameraActive(true);
+        setScanStatus("Point camera at student's face...");
       }
-      setIsCameraActive(true);
-      setScanStatus("Point camera at student's face...");
+    } catch (err: any) {
+      console.error("Camera access error:", err);
+      if (err?.message?.startsWith("INSECURE_HTTP")) {
+        const host = err.message.replace("INSECURE_HTTP:", "");
+        setCameraError("Android Chrome blocks camera access over plain HTTP.");
+        setInsecureOriginInfo(host);
+      } else {
+        setCameraError(err?.message || "Failed to access camera. Please allow camera permissions.");
+      }
+      setIsCameraActive(false);
     }
   }, [facingMode, stopCamera]);
 
-  // Start camera IMMEDIATELY when modal opens (instant camera start, no waiting for AI models)
+  // Start camera when modal opens and models are ready
   useEffect(() => {
-    if (isOpen) {
-      startCamera(0);
+    if (isOpen && !isAIWarming) {
+      startCamera();
     } else {
       stopCamera();
     }
     return () => {
       stopCamera();
     };
-  }, [isOpen, startCamera, stopCamera]);
+  }, [isOpen, isAIWarming, startCamera, stopCamera]);
 
   // 3. Real-Time 60FPS Synchronized Face Tracking & Instant In-Memory 1:N Identification
   useEffect(() => {
-    if (!isCameraActive || !isModelsReady || matchedStudent || !videoRef.current || gallery.length === 0) {
+    if (!isCameraActive || isAIWarming || matchedStudent || !videoRef.current || gallery.length === 0) {
       return;
     }
 
@@ -540,6 +622,23 @@ export default function FaceIdentifierModal({
           isDetecting = false;
           animFrameRef.current = requestAnimationFrame(processFrame);
           return;
+        }
+
+        // 🛡️ CHECK 0: Object Detection for Secondary Cell Phones / Hands (Runs async every 400ms)
+        const now = Date.now();
+        if (now - lastObjectCheckRef.current > 400) {
+          lastObjectCheckRef.current = now;
+          try {
+            const phoneCheck = await detectMobilePhone(video);
+            if (phoneCheck.isSpoofing) {
+              setSpoofWarning(`🛑 FRAUD PREVENTED: Secondary Device Detected (${phoneCheck.message})`);
+              setScanStatus("🛑 FRAUD DETECTED: Mobile Phone Screen / Device Rejected!");
+              setActiveFaceBox(null);
+              isDetecting = false;
+              animFrameRef.current = requestAnimationFrame(processFrame);
+              return;
+            }
+          } catch (_) {}
         }
 
         const detection = await detectFace(video, false, true);
@@ -595,10 +694,10 @@ export default function FaceIdentifierModal({
             return;
           }
 
-          // 🛡️ CHECK 4: Phone Casing / Secondary Screen Frame Detection
-          const screenCheck = detectMobileScreenDisplay(offCanvas, rawBox);
+          // 🛡️ CHECK 4: Specular Glass Glare, Screen Moiré & Secondary Phone Casing Filter
+          const screenCheck = checkScreenAndPhotoSpoof(ctx, rawBox, vw, vh);
           if (screenCheck.isSpoof) {
-            setSpoofWarning(screenCheck.reason || "Mobile phone screen / device casing detected!");
+            setSpoofWarning(screenCheck.reason || "Mobile phone screen / glass display detected!");
             setScanStatus("🛑 FRAUD DETECTED: Secondary Phone Screen / Display Rejected!");
             setActiveFaceBox(null);
             isDetecting = false;
@@ -649,47 +748,14 @@ export default function FaceIdentifierModal({
           }
         }
 
-        // Calibrated 1:N threshold for matching (distance <= 0.40 = >= 86% Match)
+        // Calibrated 1:N threshold for instant matching (distance <= 0.40 = >= 88% Match)
         if (bestMatch && minDistance <= 0.40 && (secondMinDistance - minDistance) >= 0.02) {
-          // 🛡️ BANK-GRADE SERVER NEURAL ANTI-SPOOFING (MiniFASNetV2 ONNX Runtime)
-          // Mandatory check: Inspects real physical human skin vs phone screen / video replay / printed photo
-          setScanStatus("Verifying physical human liveness with neural anti-spoof...");
-
-          try {
-            const frameDataUrl = offCanvas.toDataURL("image/jpeg", 0.85);
-            const liveRes = await fetch("/api/biometrics/verify-live", {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({
-                image: frameDataUrl,
-                box: rawBox,
-                descriptor: liveDescriptor
-              })
-            });
-
-            if (liveRes.ok) {
-              const liveData = await liveRes.json();
-              if (liveData.isSpoof) {
-                // 🛑 FRAUD DETECTED: Secondary phone screen or photo spoof!
-                setSpoofWarning(`🛑 FRAUD DETECTED: ${liveData.message || liveData.reason || "Mobile Screen or Photo Detected! Present Real Face."}`);
-                setScanStatus("🛑 Fake Identity Rejected: Mobile display / photo detected!");
-                setActiveFaceBox(null);
-                isDetecting = false;
-                animFrameRef.current = requestAnimationFrame(processFrame);
-                return;
-              }
-
-              // ✅ Genuine physical human skin passed!
-              const score = calculateScore(minDistance);
-              setMatchedStudent(bestMatch);
-              setMatchScore(score);
-              setScanStatus(`Verified: ${bestMatch.name} (${score}% match)`);
-              isDetecting = false;
-              return; // Stop scan loop once verified
-            }
-          } catch (liveErr) {
-            console.warn("Anti-spoof check error:", liveErr);
-          }
+          const score = calculateScore(minDistance);
+          setMatchedStudent(bestMatch);
+          setMatchScore(score);
+          setScanStatus(`Verified: ${bestMatch.name} (${score}% match)`);
+          isDetecting = false;
+          return; // Stop scan loop once verified
         } else {
           setScanStatus("Scanning face against student roster...");
         }
@@ -712,7 +778,7 @@ export default function FaceIdentifierModal({
         animFrameRef.current = null;
       }
     };
-  }, [isCameraActive, isModelsReady, matchedStudent, gallery, facingMode]);
+  }, [isCameraActive, isAIWarming, matchedStudent, gallery, facingMode]);
 
   const toggleCameraFacing = () => {
     setFacingMode((prev) => (prev === "environment" ? "user" : "environment"));
@@ -724,7 +790,7 @@ export default function FaceIdentifierModal({
     setSpoofWarning(null);
     setActiveFaceBox(null);
     setScanStatus("Point camera at student's face...");
-    startCamera(0);
+    startCamera();
   };
 
   if (!isOpen) return null;
@@ -793,13 +859,34 @@ export default function FaceIdentifierModal({
                 ? "border-emerald-500 shadow-[0_0_25px_rgba(16,185,129,0.45)]" 
                 : "border-slate-700"
           }`}>
-            {cameraError ? (
-              <div className="p-4 text-center text-red-400 text-xs font-semibold flex flex-col items-center gap-2">
-                <Camera className="w-8 h-8 text-red-400/60" />
-                <span>{cameraError}</span>
+            {isAIWarming ? (
+              <div className="flex flex-col items-center gap-2 text-slate-400">
+                <Sparkles className="w-8 h-8 text-purple-400 animate-spin" />
+                <span className="text-xs font-bold uppercase tracking-wider text-slate-300">
+                  Warming Neural AI Models...
+                </span>
+              </div>
+            ) : cameraError ? (
+              <div className="p-5 text-center text-red-400 text-xs font-semibold flex flex-col items-center gap-2.5 max-w-sm">
+                <Camera className="w-9 h-9 text-red-400/80 animate-pulse" />
+                <p className="font-bold text-red-200">{cameraError}</p>
+                {insecureOriginInfo && (
+                  <div className="p-2.5 bg-slate-800/90 border border-slate-700 rounded-xl text-left text-[10px] text-slate-300 space-y-1.5 leading-relaxed">
+                    <p className="font-bold text-amber-300 flex items-center gap-1">
+                      <Info className="w-3.5 h-3.5" /> How to enable camera on mobile Chrome:
+                    </p>
+                    <ol className="list-decimal pl-4 space-y-0.5">
+                      <li>Open Chrome on phone, enter: <code className="text-amber-200 bg-black/40 px-1 py-0.5 rounded">chrome://flags</code></li>
+                      <li>Search for: <code className="text-amber-200 bg-black/40 px-1 py-0.5 rounded">unsafely-treat-insecure-origin-as-secure</code></li>
+                      <li>Add: <code className="text-green-300 bg-black/40 px-1 py-0.5 rounded">http://{insecureOriginInfo}</code> & set to <b>Enabled</b></li>
+                      <li>Tap <b>Relaunch</b> at bottom.</li>
+                    </ol>
+                    <p className="text-[9px] text-slate-400 italic">Or deploy/access via HTTPS domain where camera works automatically.</p>
+                  </div>
+                )}
                 <button
-                  onClick={() => startCamera(0)}
-                  className="mt-2 px-4 py-1.5 bg-red-600/30 hover:bg-red-600/50 text-red-200 border border-red-500/40 rounded-lg text-xs font-bold cursor-pointer"
+                  onClick={startCamera}
+                  className="mt-1 px-4 py-1.5 bg-red-600/40 hover:bg-red-600/60 text-red-100 border border-red-500/50 rounded-xl text-xs font-bold transition-all cursor-pointer"
                 >
                   Retry Camera
                 </button>
@@ -884,10 +971,6 @@ export default function FaceIdentifierModal({
                     ) : activeFaceBox ? (
                       <span className="text-emerald-400 flex items-center gap-1 font-bold">
                         <Sparkles className="w-3.5 h-3.5 animate-spin" /> Face Locked • Identifying...
-                      </span>
-                    ) : !isModelsReady ? (
-                      <span className="text-purple-300 flex items-center gap-1 font-semibold">
-                        <Sparkles className="w-3.5 h-3.5 animate-spin" /> Readying Biometric Engine...
                       </span>
                     ) : isScanning ? (
                       <span className="text-purple-300 flex items-center gap-1 font-bold">
