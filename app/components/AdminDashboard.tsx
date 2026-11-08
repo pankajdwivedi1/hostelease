@@ -2803,6 +2803,32 @@ export default function AdminDashboard({
     } catch (e) { }
   }, []);
 
+  // ⚡ AUTO-PREWARM Face Biometric AI Models & Student Gallery on App Start
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const prewarm = async () => {
+      try {
+        const { loadFaceApiModels } = await import("@/lib/faceMatching");
+        loadFaceApiModels(false);
+        if (!sessionStorage.getItem("hosteleaze_identifier_gallery_v6")) {
+          fetch("/api/students/identifier-gallery")
+            .then(res => res.json())
+            .then(data => {
+              if (Array.isArray(data.students)) {
+                sessionStorage.setItem("hosteleaze_identifier_gallery_v6", JSON.stringify(data.students));
+              }
+            })
+            .catch(() => {});
+        }
+      } catch (_) {}
+    };
+    if ("requestIdleCallback" in window) {
+      (window as any).requestIdleCallback(prewarm, { timeout: 2000 });
+    } else {
+      setTimeout(prewarm, 500);
+    }
+  }, []);
+
   // Map view switcher outside click handler
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
