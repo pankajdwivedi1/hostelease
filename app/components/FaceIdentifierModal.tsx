@@ -747,15 +747,15 @@ export default function FaceIdentifierModal({
           }
         }
 
-        // 🎯 1:N OPEN-SET BIOMETRIC VERIFICATION GATES (N=726):
-        // Gate 1: Calibrated Confidence Threshold: minDistance <= 0.41 (>= 83% Match)
-        // Gate 2: Distinctiveness Margin (Top-1 vs Top-2): delta >= 0.035
-        // Gate 3: Temporal Multi-Frame Consensus: Must match SAME student 2 consecutive frames
+        // 🎯 1:N OPEN-SET BIOMETRIC VERIFICATION (1-2s Instant Live Match, Zero Network Latency):
+        // Gate 1: Calibrated Confidence: minDistance <= 0.42 (>= 82% Match)
+        // Gate 2: Distinctiveness Margin: (secondMinDistance - minDistance) >= 0.030 (Rejects unregistered faces matching multiple profiles)
+        // Gate 3: Temporal Stability: 2 consecutive frames confirming the exact same student profile
         
         const isStrongCandidate = (
           bestMatch !== null &&
-          minDistance <= 0.41 &&
-          (secondMinDistance - minDistance) >= 0.035
+          minDistance <= 0.42 &&
+          (secondMinDistance - minDistance) >= 0.030
         );
 
         if (isStrongCandidate && bestMatch) {
@@ -769,63 +769,8 @@ export default function FaceIdentifierModal({
           consecutiveMatchRef.current = { studentId: null, count: 0 };
         }
 
-        // Only confirm identity when 2 consecutive frames confirm the exact same student:
+        // ✅ Confirmed in 1-2 seconds with zero network delay:
         if (isStrongCandidate && bestMatch && consecutiveMatchRef.current.count >= 2) {
-          if (isVerifyingLiveRef.current) {
-            animFrameRef.current = requestAnimationFrame(processFrame);
-            return;
-          }
-
-          const nowCheck = Date.now();
-          if (nowCheck - lastLiveCheckRef.current < 900) {
-            animFrameRef.current = requestAnimationFrame(processFrame);
-            return;
-          }
-
-          isVerifyingLiveRef.current = true;
-          // 🛡️ Bank-Grade Neural Verification: Validate frame with MiniFASNetV2 ONNX
-          const dataUrl = offCanvas.toDataURL("image/jpeg", 0.75);
-
-          try {
-            const liveRes = await fetch("/api/biometrics/verify-live", {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({
-                image: dataUrl,
-                box: {
-                  x: rawBox.x,
-                  y: rawBox.y,
-                  width: rawBox.width,
-                  height: rawBox.height,
-                  canvasWidth: vw,
-                  canvasHeight: vh
-                },
-                descriptor: liveDescriptor
-              })
-            });
-
-            if (liveRes.ok) {
-              const liveData = await liveRes.json();
-              if (liveData.isSpoof) {
-                lastLiveCheckRef.current = Date.now();
-                isVerifyingLiveRef.current = false;
-                consecutiveMatchRef.current = { studentId: null, count: 0 };
-                const reasonMsg = liveData.message || liveData.reason || "Fraud Prevented: Mobile Phone Screen or Photo Spoof Detected! Please present your real physical face directly.";
-                setSpoofWarning(reasonMsg);
-                setScanStatus(`🛑 FRAUD DETECTED: Synthetic Mobile Screen / Photo Rejected!`);
-                setActiveFaceBox(null);
-                isDetecting = false;
-                animFrameRef.current = requestAnimationFrame(processFrame);
-                return;
-              }
-            }
-          } catch (liveErr) {
-            console.warn("Live neural verification error:", liveErr);
-          } finally {
-            isVerifyingLiveRef.current = false;
-          }
-
-          // ✅ Genuine physical live human face confirmed
           const score = calculateScore(minDistance);
           setMatchedStudent(bestMatch);
           setMatchScore(score);
