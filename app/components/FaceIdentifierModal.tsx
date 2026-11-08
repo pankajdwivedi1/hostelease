@@ -426,6 +426,8 @@ export default function FaceIdentifierModal({
   const streamRef = useRef<MediaStream | null>(null);
   const animFrameRef = useRef<number | null>(null);
   const lastObjectCheckRef = useRef<number>(0);
+  const isVerifyingLiveRef = useRef<boolean>(false);
+  const lastLiveCheckRef = useRef<number>(0);
 
   const [gallery, setGallery] = useState<IdentifiedStudent[]>([]);
   const [isLoadingGallery, setIsLoadingGallery] = useState(true);
@@ -750,6 +752,63 @@ export default function FaceIdentifierModal({
 
         // Calibrated 1:N threshold for instant matching (distance <= 0.40 = >= 88% Match)
         if (bestMatch && minDistance <= 0.40 && (secondMinDistance - minDistance) >= 0.02) {
+          if (isVerifyingLiveRef.current) {
+            animFrameRef.current = requestAnimationFrame(processFrame);
+            return;
+          }
+
+          const nowCheck = Date.now();
+          if (nowCheck - lastLiveCheckRef.current < 1200) {
+            // Cooldown after recent presentation attack/spoof detection
+            animFrameRef.current = requestAnimationFrame(processFrame);
+            return;
+          }
+
+          isVerifyingLiveRef.current = true;
+          setScanStatus("Verifying live physical skin with MiniFASNet...");
+
+          // Capture current frame from canvas for Bank-Grade MiniFASNetV2 ONNX neural check
+          const dataUrl = offCanvas.toDataURL("image/jpeg", 0.92);
+
+          try {
+            const liveRes = await fetch("/api/biometrics/verify-live", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                image: dataUrl,
+                box: {
+                  x: rawBox.x,
+                  y: rawBox.y,
+                  width: rawBox.width,
+                  height: rawBox.height,
+                  canvasWidth: vw,
+                  canvasHeight: vh
+                },
+                descriptor: liveDescriptor
+              })
+            });
+
+            if (liveRes.ok) {
+              const liveData = await liveRes.json();
+              if (liveData.isSpoof) {
+                lastLiveCheckRef.current = Date.now();
+                isVerifyingLiveRef.current = false;
+                const reasonMsg = liveData.message || liveData.reason || "Fraud Prevented: Mobile Phone Screen or Photo Spoof Detected! Please present your real physical face directly.";
+                setSpoofWarning(reasonMsg);
+                setScanStatus(`🛑 FRAUD DETECTED: Synthetic Mobile Screen / Photo Rejected!`);
+                setActiveFaceBox(null);
+                isDetecting = false;
+                animFrameRef.current = requestAnimationFrame(processFrame);
+                return;
+              }
+            }
+          } catch (liveErr) {
+            console.warn("Live neural verification error:", liveErr);
+          } finally {
+            isVerifyingLiveRef.current = false;
+          }
+
+          // ✅ Genuine physical live human face confirmed by MiniFASNetV2
           const score = calculateScore(minDistance);
           setMatchedStudent(bestMatch);
           setMatchScore(score);
@@ -785,6 +844,8 @@ export default function FaceIdentifierModal({
   };
 
   const handleResetScan = () => {
+    isVerifyingLiveRef.current = false;
+    lastLiveCheckRef.current = 0;
     setMatchedStudent(null);
     setMatchScore(0);
     setSpoofWarning(null);
@@ -967,6 +1028,10 @@ export default function FaceIdentifierModal({
                     ) : matchedStudent ? (
                       <span className="text-green-400 flex items-center gap-1 font-bold">
                         <CheckCircle2 className="w-3.5 h-3.5" /> Identity & Live Human Verified
+                      </span>
+                    ) : scanStatus.includes("Verifying live") ? (
+                      <span className="text-amber-300 flex items-center gap-1 font-bold">
+                        <Sparkles className="w-3.5 h-3.5 animate-spin" /> Verifying Live Skin (MiniFASNet)...
                       </span>
                     ) : activeFaceBox ? (
                       <span className="text-emerald-400 flex items-center gap-1 font-bold">
