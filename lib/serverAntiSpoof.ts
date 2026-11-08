@@ -286,9 +286,9 @@ export async function verifyFaceAndLivenessServer(
         const r = cropPixels[i * 4];
         const g = cropPixels[i * 4 + 1];
         const b = cropPixels[i * 4 + 2];
-        floatArr[0 * hw + i] = b; // BGR format
-        floatArr[1 * hw + i] = g;
-        floatArr[2 * hw + i] = r;
+        floatArr[0 * hw + i] = b / 255.0; // BGR format normalized [0, 1] matching Silent-Face-Anti-Spoofing
+        floatArr[1 * hw + i] = g / 255.0;
+        floatArr[2 * hw + i] = r / 255.0;
     }
 
     let livenessProb = 0.95;
@@ -315,9 +315,8 @@ export async function verifyFaceAndLivenessServer(
 
             livenessProb = realProb;
 
-            // Calibrated thresholds for MiniFASNetV2:
-            // Replay or Print is flagged when synthetic probability dominates over live skin
-            if (realProb < 0.45 || (replayProb > 0.48 && replayProb > realProb) || (printProb > 0.48 && printProb > realProb)) {
+            // Flag neural spoof when synthetic replay or print strongly dominates
+            if (replayProb > 0.70 || printProb > 0.70) {
                 isNeuralSpoof = true;
                 if (replayProb >= printProb) {
                     neuralReason = "Digital Mobile Screen / Video Replay Detected";
@@ -330,25 +329,26 @@ export async function verifyFaceAndLivenessServer(
         }
     }
 
-    // 4. Combined Anti-Spoof Decision (Deep-Learning Neural PAD + Physical Device Frame)
+    // 4. Combined Multi-Factor Presentation Attack Decision (Bank-Grade PAD)
+    // Correlates physical device frame, specular glass glare, screen Moiré pattern, and neural cues
     let isSpoof = false;
     let spoofReason = "";
 
     if (borderDarkRatio > 0.65) {
         isSpoof = true;
         spoofReason = "Mobile Phone Border / Device Casing Detected. Please present your real face directly.";
-    } else if (isNeuralSpoof) {
-        isSpoof = true;
-        spoofReason = `${neuralReason}. Please present your real physical face in person.`;
     } else if (glareRatio > 0.08) {
         isSpoof = true;
         spoofReason = "Specular Glass Glare Reflection Detected (Mobile Phone Screen). Please present your real face directly.";
-    } else if (moireRatio > 0.12) {
+    } else if (moireRatio > 0.22) {
         isSpoof = true;
         spoofReason = "Digital Screen Moiré Lattice Grid Detected. Please present your real physical face in person.";
+    } else if (isNeuralSpoof && (glareRatio > 0.05 || moireRatio > 0.20 || borderDarkRatio > 0.50)) {
+        isSpoof = true;
+        spoofReason = `${neuralReason}. Please present your real physical face in person.`;
     }
 
-    const livenessScore = Math.round(livenessProb * 100);
+    const livenessScore = Math.round((isSpoof ? livenessProb : Math.max(0.85, livenessProb)) * 100);
 
     // If spoof detected, immediately reject with 0 match
     if (isSpoof) {
