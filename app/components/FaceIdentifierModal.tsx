@@ -428,6 +428,7 @@ export default function FaceIdentifierModal({
   const lastObjectCheckRef = useRef<number>(0);
   const isVerifyingLiveRef = useRef<boolean>(false);
   const lastLiveCheckRef = useRef<number>(0);
+  const consecutiveMatchRef = useRef<{ studentId: string | null; count: number }>({ studentId: null, count: 0 });
 
   const [gallery, setGallery] = useState<IdentifiedStudent[]>([]);
   const [isLoadingGallery, setIsLoadingGallery] = useState(false);
@@ -746,8 +747,31 @@ export default function FaceIdentifierModal({
           }
         }
 
-        // Instant face match on live video by 128-D Euclidean vector (distance <= 0.46 = >= 78% Match)
-        if (bestMatch && minDistance <= 0.46) {
+        // 🎯 1:N OPEN-SET BIOMETRIC VERIFICATION GATES (N=726):
+        // Gate 1: High-Confidence Threshold: minDistance <= 0.38 (Minimum 88% Match)
+        // Gate 2: Distinctiveness Margin (Top-1 vs Top-2): delta >= 0.045
+        // Gate 3: Temporal Multi-Frame Consensus: Must match SAME student 3 consecutive frames
+        
+        const isStrongCandidate = (
+          bestMatch !== null &&
+          minDistance <= 0.38 &&
+          (secondMinDistance - minDistance) >= 0.045 &&
+          (minDistance / Math.max(0.01, secondMinDistance)) <= 0.88
+        );
+
+        if (isStrongCandidate && bestMatch) {
+          const currentCandidateId = bestMatch.id || bestMatch.registrationId;
+          if (consecutiveMatchRef.current.studentId === currentCandidateId) {
+            consecutiveMatchRef.current.count += 1;
+          } else {
+            consecutiveMatchRef.current = { studentId: currentCandidateId, count: 1 };
+          }
+        } else {
+          consecutiveMatchRef.current = { studentId: null, count: 0 };
+        }
+
+        // Only confirm identity when 3 consecutive frames confirm the exact same student:
+        if (isStrongCandidate && bestMatch && consecutiveMatchRef.current.count >= 3) {
           if (isVerifyingLiveRef.current) {
             animFrameRef.current = requestAnimationFrame(processFrame);
             return;
@@ -761,7 +785,6 @@ export default function FaceIdentifierModal({
 
           isVerifyingLiveRef.current = true;
           // 🛡️ Bank-Grade Neural Verification: Validate frame with MiniFASNetV2 ONNX
-          // Status text remains clean ("Face Locked • Identifying...")
           const dataUrl = offCanvas.toDataURL("image/jpeg", 0.90);
 
           try {
@@ -787,6 +810,7 @@ export default function FaceIdentifierModal({
               if (liveData.isSpoof) {
                 lastLiveCheckRef.current = Date.now();
                 isVerifyingLiveRef.current = false;
+                consecutiveMatchRef.current = { studentId: null, count: 0 };
                 const reasonMsg = liveData.message || liveData.reason || "Fraud Prevented: Mobile Phone Screen or Photo Spoof Detected! Please present your real physical face directly.";
                 setSpoofWarning(reasonMsg);
                 setScanStatus(`🛑 FRAUD DETECTED: Synthetic Mobile Screen / Photo Rejected!`);
@@ -807,6 +831,7 @@ export default function FaceIdentifierModal({
           setMatchedStudent(bestMatch);
           setMatchScore(score);
           setScanStatus(`Verified: ${bestMatch.name} (${score}% match)`);
+          consecutiveMatchRef.current = { studentId: null, count: 0 };
           isDetecting = false;
           return; // Stop scan loop once verified
         } else {
@@ -840,6 +865,7 @@ export default function FaceIdentifierModal({
   const handleResetScan = () => {
     isVerifyingLiveRef.current = false;
     lastLiveCheckRef.current = 0;
+    consecutiveMatchRef.current = { studentId: null, count: 0 };
     setMatchedStudent(null);
     setMatchScore(0);
     setSpoofWarning(null);
