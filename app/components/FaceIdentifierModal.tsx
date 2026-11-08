@@ -200,6 +200,73 @@ function verifyFacialAnatomy(
 }
 
 /**
+ * 🎯 Extracts the tight anatomical face box (forehead to chin, cheek to cheek)
+ * Hugs the actual human face tightly without empty outer space or shoulders.
+ */
+function getTightFaceBox(landmarks: any, rawBox: any) {
+  if (landmarks) {
+    const positions = landmarks.positions || (typeof landmarks.getPositions === "function" ? landmarks.getPositions() : null);
+    if (positions && positions.length >= 68) {
+      // 68 points:
+      // Eyebrow points: 17 - 26 (points 19 and 24 are highest)
+      let minEyebrowY = 99999;
+      for (let i = 17; i <= 26; i++) {
+        if (positions[i].y < minEyebrowY) minEyebrowY = positions[i].y;
+      }
+      // Chin bottom is point 8
+      const chinY = positions[8].y;
+      // Cheeks / jaw sides: point 1 and point 15
+      const leftCheekX = positions[1].x;
+      const rightCheekX = positions[15].x;
+
+      const faceHeight = chinY - minEyebrowY;
+      // Forehead sits ~15% above eyebrows
+      const topY = Math.max(0, minEyebrowY - faceHeight * 0.16);
+      const bottomY = chinY + faceHeight * 0.04;
+      const leftX = leftCheekX;
+      const rightX = rightCheekX;
+
+      return {
+        x: leftX,
+        y: topY,
+        width: Math.max(20, rightX - leftX),
+        height: Math.max(20, bottomY - topY)
+      };
+    } else if (positions && positions.length >= 5) {
+      // 5-point landmarks
+      const leftEye = positions[0];
+      const rightEye = positions[1];
+      const leftMouth = positions[3];
+      const rightMouth = positions[4];
+
+      const eyeCenterY = (leftEye.y + rightEye.y) / 2;
+      const mouthCenterY = (leftMouth.y + rightMouth.y) / 2;
+      const eyeDist = Math.abs(rightEye.x - leftEye.x);
+
+      const topY = Math.max(0, eyeCenterY - eyeDist * 0.50);
+      const bottomY = mouthCenterY + eyeDist * 0.60;
+      const leftX = Math.min(leftEye.x, leftMouth.x) - eyeDist * 0.22;
+      const rightX = Math.max(rightEye.x, rightMouth.x) + eyeDist * 0.22;
+
+      return {
+        x: leftX,
+        y: topY,
+        width: Math.max(20, rightX - leftX),
+        height: Math.max(20, bottomY - topY)
+      };
+    }
+  }
+
+  // Fallback: Tighten raw detector box by 18% width and 15% height
+  return {
+    x: rawBox.x + rawBox.width * 0.10,
+    y: rawBox.y + rawBox.height * 0.10,
+    width: rawBox.width * 0.80,
+    height: rawBox.height * 0.82
+  };
+}
+
+/**
  * Converts raw video bounding box coordinates to percentage relative to a 1:1 square container
  */
 function calculateDisplayBox(
@@ -259,7 +326,7 @@ export default function FaceIdentifierModal({
 }: FaceIdentifierModalProps) {
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
-  const scanIntervalRef = useRef<any>(null);
+  const animFrameRef = useRef<number | null>(null);
 
   const [gallery, setGallery] = useState<IdentifiedStudent[]>([]);
   const [isLoadingGallery, setIsLoadingGallery] = useState(true);
@@ -290,7 +357,7 @@ export default function FaceIdentifierModal({
       try {
         setIsLoadingGallery(true);
         // Check session cache first
-        const cached = sessionStorage.getItem("hosteleaze_identifier_gallery_v4");
+        const cached = sessionStorage.getItem("hosteleaze_identifier_gallery_v5");
         if (cached) {
           const parsed = JSON.parse(cached);
           if (Array.isArray(parsed) && parsed.length > 0 && isMounted) {
@@ -304,7 +371,7 @@ export default function FaceIdentifierModal({
         if (data.success && Array.isArray(data.students) && isMounted) {
           setGallery(data.students);
           try {
-            sessionStorage.setItem("hosteleaze_identifier_gallery_v4", JSON.stringify(data.students));
+            sessionStorage.setItem("hosteleaze_identifier_gallery_v5", JSON.stringify(data.students));
           } catch (_) {}
         }
       } catch (err) {
@@ -335,9 +402,9 @@ export default function FaceIdentifierModal({
 
   // 2. Camera Management
   const stopCamera = useCallback(() => {
-    if (scanIntervalRef.current) {
-      clearInterval(scanIntervalRef.current);
-      scanIntervalRef.current = null;
+    if (animFrameRef.current) {
+      cancelAnimationFrame(animFrameRef.current);
+      animFrameRef.current = null;
     }
     if (streamRef.current) {
       streamRef.current.getTracks().forEach((t) => t.stop());
@@ -394,51 +461,67 @@ export default function FaceIdentifierModal({
     };
   }, [isOpen, isAIWarming, startCamera, stopCamera]);
 
-  // 3. Instant In-Memory 1:N Facial Identification Loop (<10ms local V8 execution)
+  // 3. Real-Time 60FPS Synchronized Face Tracking & Instant In-Memory 1:N Identification
   useEffect(() => {
     if (!isCameraActive || isAIWarming || matchedStudent || !videoRef.current || gallery.length === 0) {
       return;
     }
 
-    let isBusy = false;
+    let isCancelled = false;
+    let isDetecting = false;
 
-    // Fast 120ms scan interval for ultra-responsive instant detection
-    scanIntervalRef.current = setInterval(async () => {
-      if (isBusy || !videoRef.current || matchedStudent) return;
-      isBusy = true;
+    const processFrame = async () => {
+      if (isCancelled || !videoRef.current || matchedStudent) return;
+
+      if (isDetecting) {
+        animFrameRef.current = requestAnimationFrame(processFrame);
+        return;
+      }
+
+      isDetecting = true;
 
       try {
-        const detection = await detectFace(videoRef.current, false, true);
+        const video = videoRef.current;
+        if (!video || video.readyState < 2 || video.paused) {
+          isDetecting = false;
+          animFrameRef.current = requestAnimationFrame(processFrame);
+          return;
+        }
+
+        const detection = await detectFace(video, false, true);
 
         if (!detection || !detection.descriptor) {
           setScanStatus("Looking for student face...");
           setSpoofWarning(null);
           setActiveFaceBox(null);
-          isBusy = false;
+          isDetecting = false;
+          animFrameRef.current = requestAnimationFrame(processFrame);
           return;
         }
 
-        const box = detection.detection?.box || (detection as any).box;
+        const rawBox = detection.detection?.box || (detection as any).box;
         const detectionScore = detection.detection?.score ?? (detection as any).score ?? 0;
 
         // 🛡️ CHECK 1: Detection Confidence Score (Must be high confidence human face >= 0.60)
-        if (detectionScore < 0.60 || !box || box.width < 50 || box.height < 50) {
-          setScanStatus("Face too small or low confidence. Bring camera closer...");
+        if (detectionScore < 0.60 || !rawBox || rawBox.width < 50 || rawBox.height < 50) {
+          setScanStatus("Looking for student face...");
           setActiveFaceBox(null);
-          isBusy = false;
+          isDetecting = false;
+          animFrameRef.current = requestAnimationFrame(processFrame);
           return;
         }
 
         // 🛡️ CHECK 2: Facial Landmark Geometry (Eyes, Nose, Mouth Anatomy)
-        if (!verifyFacialAnatomy(detection.landmarks, box)) {
+        if (!verifyFacialAnatomy(detection.landmarks, rawBox)) {
           setScanStatus("Looking for student face...");
           setActiveFaceBox(null);
-          isBusy = false;
+          isDetecting = false;
+          animFrameRef.current = requestAnimationFrame(processFrame);
           return;
         }
 
-        const vw = videoRef.current.videoWidth || 640;
-        const vh = videoRef.current.videoHeight || 480;
+        const vw = video.videoWidth || 640;
+        const vh = video.videoHeight || 480;
 
         const offCanvas = document.createElement("canvas");
         offCanvas.width = vw;
@@ -446,24 +529,26 @@ export default function FaceIdentifierModal({
         const ctx = offCanvas.getContext("2d", { willReadFrequently: true });
 
         if (ctx) {
-          ctx.drawImage(videoRef.current, 0, 0, vw, vh);
+          ctx.drawImage(video, 0, 0, vw, vh);
 
           // 🛡️ CHECK 3: Real Human Physical Skin Tone Chromaticity Filter
-          const skinCheck = checkHumanSkinTone(ctx, box);
+          const skinCheck = checkHumanSkinTone(ctx, rawBox);
           if (!skinCheck.isSkin) {
             setScanStatus("Looking for student face...");
             setActiveFaceBox(null);
-            isBusy = false;
+            isDetecting = false;
+            animFrameRef.current = requestAnimationFrame(processFrame);
             return;
           }
 
           // 🛡️ CHECK 4: Phone Casing / Secondary Screen Frame Detection
-          const screenCheck = detectMobileScreenDisplay(offCanvas, box);
+          const screenCheck = detectMobileScreenDisplay(offCanvas, rawBox);
           if (screenCheck.isSpoof) {
             setSpoofWarning(screenCheck.reason || "Mobile phone screen / device casing detected!");
             setScanStatus("🛑 FRAUD DETECTED: Secondary Phone Screen / Display Rejected!");
             setActiveFaceBox(null);
-            isBusy = false;
+            isDetecting = false;
+            animFrameRef.current = requestAnimationFrame(processFrame);
             return;
           }
 
@@ -473,16 +558,19 @@ export default function FaceIdentifierModal({
             setSpoofWarning("Secondary photo border / screen bezel detected!");
             setScanStatus("🛑 FRAUD DETECTED: Printed Photo or Screen Border Detected!");
             setActiveFaceBox(null);
-            isBusy = false;
+            isDetecting = false;
+            animFrameRef.current = requestAnimationFrame(processFrame);
             return;
           }
         }
 
-        // Real human face verified! Update active green square box on screen immediately
+        // 🎯 TIGHT ACTUAL FACE BOX (Hugs forehead, chin, and cheeks tightly)
+        const tightBox = getTightFaceBox(detection.landmarks, rawBox);
         const isMirrored = facingMode === "user";
-        const displayBox = calculateDisplayBox(box, videoRef.current, isMirrored);
-        setActiveFaceBox(displayBox);
+        const displayBox = calculateDisplayBox(tightBox, video, isMirrored);
 
+        // Update green bounding box position synchronously with face movement
+        setActiveFaceBox(displayBox);
         setSpoofWarning(null);
         setIsScanning(true);
 
@@ -509,30 +597,32 @@ export default function FaceIdentifierModal({
 
         // Calibrated 1:N threshold for instant matching (distance <= 0.42 = >= 85% Match)
         if (bestMatch && minDistance <= 0.42 && (secondMinDistance - minDistance) >= 0.02) {
-          // Instant match confirmed!
           const score = calculateScore(minDistance);
           setMatchedStudent(bestMatch);
           setMatchScore(score);
           setScanStatus(`Verified: ${bestMatch.name} (${score}% match)`);
-          if (scanIntervalRef.current) {
-            clearInterval(scanIntervalRef.current);
-            scanIntervalRef.current = null;
-          }
+          isDetecting = false;
+          return; // Stop scan loop once verified
         } else {
           setScanStatus("Scanning face against student roster...");
         }
       } catch (err) {
         console.warn("Scan frame error:", err);
       } finally {
-        isBusy = false;
-        setIsScanning(false);
+        isDetecting = false;
+        if (!isCancelled && !matchedStudent) {
+          animFrameRef.current = requestAnimationFrame(processFrame);
+        }
       }
-    }, 120);
+    };
+
+    animFrameRef.current = requestAnimationFrame(processFrame);
 
     return () => {
-      if (scanIntervalRef.current) {
-        clearInterval(scanIntervalRef.current);
-        scanIntervalRef.current = null;
+      isCancelled = true;
+      if (animFrameRef.current) {
+        cancelAnimationFrame(animFrameRef.current);
+        animFrameRef.current = null;
       }
     };
   }, [isCameraActive, isAIWarming, matchedStudent, gallery, facingMode]);
@@ -570,7 +660,7 @@ export default function FaceIdentifierModal({
   return (
     <div className="fixed inset-0 z-[99999] flex items-center justify-center p-3 sm:p-4 bg-black/80 backdrop-blur-md animate-in fade-in duration-200">
       <div className="relative w-full max-w-lg bg-slate-900 border border-slate-700/80 rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[92vh]">
-        {/* Header - Marked subtitle text removed as requested */}
+        {/* Header - Subtitle text removed */}
         <div className="px-4 py-3 bg-slate-800/90 border-b border-slate-700 flex items-center justify-between">
           <div className="flex items-center gap-2">
             <div className="w-8 h-8 rounded-lg bg-purple-500/20 border border-purple-400/30 flex items-center justify-center text-purple-300">
@@ -659,10 +749,10 @@ export default function FaceIdentifierModal({
                   </div>
                 )}
 
-                {/* 🟩 REAL-TIME GREEN SQUARE BOUNDING BOX WITH REAL MEASURES ON FACE */}
+                {/* 🟩 REAL-TIME GREEN SQUARE BOX TIGHTLY HUGGING ACTUAL FACE (Cheek to cheek, Forehead to chin) */}
                 {activeFaceBox && !spoofWarning && (
                   <div
-                    className="absolute z-10 pointer-events-none transition-all duration-100 ease-out"
+                    className="absolute z-10 pointer-events-none"
                     style={{
                       left: `${activeFaceBox.left}%`,
                       top: `${activeFaceBox.top}%`,
@@ -670,42 +760,26 @@ export default function FaceIdentifierModal({
                       height: `${activeFaceBox.height}%`,
                     }}
                   >
-                    <div className={`w-full h-full border-2 rounded-xl relative transition-all ${
+                    <div className={`w-full h-full border-2 rounded-lg relative ${
                       matchedStudent 
-                        ? "border-emerald-400 bg-emerald-500/15 shadow-[0_0_25px_rgba(52,211,153,0.6)]" 
-                        : "border-green-400/90 bg-green-400/10 shadow-[0_0_15px_rgba(74,222,128,0.35)]"
+                        ? "border-emerald-400 bg-emerald-500/10 shadow-[0_0_20px_rgba(52,211,153,0.5)]" 
+                        : "border-green-400 bg-green-400/5 shadow-[0_0_12px_rgba(74,222,128,0.3)]"
                     }`}>
-                      {/* High-Tech 4 Corner Accents */}
-                      <div className="absolute -top-1 -left-1 w-3.5 h-3.5 border-t-2 border-l-2 border-emerald-300"></div>
-                      <div className="absolute -top-1 -right-1 w-3.5 h-3.5 border-t-2 border-r-2 border-emerald-300"></div>
-                      <div className="absolute -bottom-1 -left-1 w-3.5 h-3.5 border-b-2 border-l-2 border-emerald-300"></div>
-                      <div className="absolute -bottom-1 -right-1 w-3.5 h-3.5 border-b-2 border-r-2 border-emerald-300"></div>
+                      {/* Corner Targeting Accents */}
+                      <div className="absolute -top-1 -left-1 w-3 h-3 border-t-2 border-l-2 border-emerald-300"></div>
+                      <div className="absolute -top-1 -right-1 w-3 h-3 border-t-2 border-r-2 border-emerald-300"></div>
+                      <div className="absolute -bottom-1 -left-1 w-3 h-3 border-b-2 border-l-2 border-emerald-300"></div>
+                      <div className="absolute -bottom-1 -right-1 w-3 h-3 border-b-2 border-r-2 border-emerald-300"></div>
 
-                      {/* Real Measurement & Target Badge */}
-                      <div className="absolute -top-7 left-1/2 -translate-x-1/2 whitespace-nowrap px-2 py-0.5 rounded-md bg-emerald-950/90 border border-emerald-400/60 text-emerald-300 text-[9px] font-black tracking-wider uppercase flex items-center gap-1 shadow-md">
+                      {/* Real Measurement & Name Badge */}
+                      <div className="absolute -top-6 left-1/2 -translate-x-1/2 whitespace-nowrap px-2 py-0.5 rounded-md bg-emerald-950/90 border border-emerald-400/60 text-emerald-300 text-[9px] font-black tracking-wider uppercase flex items-center gap-1 shadow-md">
                         <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
                         {matchedStudent ? (
                           <span>{matchedStudent.name} • {matchScore}%</span>
                         ) : (
-                          <span>{activeFaceBox.pixelW}×{activeFaceBox.pixelH}px • Live Face</span>
+                          <span>{activeFaceBox.pixelW}×{activeFaceBox.pixelH}px</span>
                         )}
                       </div>
-                    </div>
-                  </div>
-                )}
-
-                {/* Default Target Frame (when no face is in view yet) */}
-                {!matchedStudent && !activeFaceBox && (
-                  <div className="absolute inset-0 pointer-events-none flex items-center justify-center">
-                    <div className="relative w-48 h-48 sm:w-56 sm:h-56 border-2 border-dashed border-purple-400/40 rounded-3xl flex items-center justify-center">
-                      <div className="absolute top-2 left-2 w-4 h-4 border-t-2 border-l-2 border-purple-400"></div>
-                      <div className="absolute top-2 right-2 w-4 h-4 border-t-2 border-r-2 border-purple-400"></div>
-                      <div className="absolute bottom-2 left-2 w-4 h-4 border-b-2 border-l-2 border-purple-400"></div>
-                      <div className="absolute bottom-2 right-2 w-4 h-4 border-b-2 border-r-2 border-purple-400"></div>
-
-                      {isScanning && !spoofWarning && (
-                        <div className="absolute inset-x-2 h-0.5 bg-gradient-to-r from-transparent via-purple-400 to-transparent animate-bounce"></div>
-                      )}
                     </div>
                   </div>
                 )}
@@ -729,7 +803,7 @@ export default function FaceIdentifierModal({
                       </span>
                     ) : activeFaceBox ? (
                       <span className="text-emerald-400 flex items-center gap-1 font-bold">
-                        <Sparkles className="w-3.5 h-3.5 animate-spin" /> Matching Face Instantly...
+                        <Sparkles className="w-3.5 h-3.5 animate-spin" /> Face Locked • Identifying...
                       </span>
                     ) : isScanning ? (
                       <span className="text-purple-300 flex items-center gap-1 font-bold">
