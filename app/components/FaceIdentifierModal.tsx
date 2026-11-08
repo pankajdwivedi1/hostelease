@@ -748,15 +748,14 @@ export default function FaceIdentifierModal({
         }
 
         // 🎯 1:N OPEN-SET BIOMETRIC VERIFICATION GATES (N=726):
-        // Gate 1: High-Confidence Threshold: minDistance <= 0.38 (Minimum 88% Match)
-        // Gate 2: Distinctiveness Margin (Top-1 vs Top-2): delta >= 0.045
-        // Gate 3: Temporal Multi-Frame Consensus: Must match SAME student 3 consecutive frames
+        // Gate 1: Calibrated Confidence Threshold: minDistance <= 0.41 (>= 83% Match)
+        // Gate 2: Distinctiveness Margin (Top-1 vs Top-2): delta >= 0.035
+        // Gate 3: Temporal Multi-Frame Consensus: Must match SAME student 2 consecutive frames
         
         const isStrongCandidate = (
           bestMatch !== null &&
-          minDistance <= 0.38 &&
-          (secondMinDistance - minDistance) >= 0.045 &&
-          (minDistance / Math.max(0.01, secondMinDistance)) <= 0.88
+          minDistance <= 0.41 &&
+          (secondMinDistance - minDistance) >= 0.035
         );
 
         if (isStrongCandidate && bestMatch) {
@@ -770,8 +769,8 @@ export default function FaceIdentifierModal({
           consecutiveMatchRef.current = { studentId: null, count: 0 };
         }
 
-        // Only confirm identity when 3 consecutive frames confirm the exact same student:
-        if (isStrongCandidate && bestMatch && consecutiveMatchRef.current.count >= 3) {
+        // Only confirm identity when 2 consecutive frames confirm the exact same student:
+        if (isStrongCandidate && bestMatch && consecutiveMatchRef.current.count >= 2) {
           if (isVerifyingLiveRef.current) {
             animFrameRef.current = requestAnimationFrame(processFrame);
             return;
@@ -785,7 +784,7 @@ export default function FaceIdentifierModal({
 
           isVerifyingLiveRef.current = true;
           // 🛡️ Bank-Grade Neural Verification: Validate frame with MiniFASNetV2 ONNX
-          const dataUrl = offCanvas.toDataURL("image/jpeg", 0.90);
+          const dataUrl = offCanvas.toDataURL("image/jpeg", 0.75);
 
           try {
             const liveRes = await fetch("/api/biometrics/verify-live", {
