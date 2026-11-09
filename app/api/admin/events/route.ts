@@ -31,8 +31,17 @@ export async function GET(request: NextRequest) {
                 }
             };
 
+            const onGateSettingsUpdate = (data: any) => {
+                try {
+                    controller.enqueue(encoder.encode(`event: gate_settings\ndata: ${JSON.stringify(data)}\n\n`));
+                } catch (e) {
+                    console.warn("⚠️ Error pushing SSE gate_settings message:", e);
+                }
+            };
+
             gateEventEmitter.on("gate_status_change", onGateStatusChange);
             gateEventEmitter.on("hostel_activity", onHostelActivity);
+            gateEventEmitter.on("gate_settings_update", onGateSettingsUpdate);
 
             // Heartbeat ping every 20 seconds to keep connection alive
             const interval = setInterval(() => {
@@ -48,6 +57,7 @@ export async function GET(request: NextRequest) {
                 clearInterval(interval);
                 gateEventEmitter.off("gate_status_change", onGateStatusChange);
                 gateEventEmitter.off("hostel_activity", onHostelActivity);
+                gateEventEmitter.off("gate_settings_update", onGateSettingsUpdate);
                 try {
                     controller.close();
                 } catch (e) {}

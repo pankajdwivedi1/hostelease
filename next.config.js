@@ -188,6 +188,8 @@ const nextConfig = {
                 ...(config.resolve.fallback || {}),
                 canvas: false,
                 'onnxruntime-node': false,
+                fs: false,
+                path: false,
                 encoding: false,
             };
         } else {

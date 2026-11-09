@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/dbAdapter";
 import { createCachedResponse } from "@/lib/cacheHelper";
 import { getAuthSession, isPrivilegedSession, unauthorizedJson } from "@/lib/authSession";
+import { broadcastGateSettingsUpdate } from "@/lib/eventEmitter";
 
 export const dynamic = "force-dynamic";
 
@@ -239,6 +240,14 @@ export async function POST(request: NextRequest) {
         }
 
         const settings = await db.settings.update(updateData);
+
+        // ⚡ INSTANT REALTIME BROADCAST: Notify all active gatepass screens across campus immediately
+        if (updateData.gatepassGates !== undefined || updateData.enableGateCameraScan !== undefined) {
+            broadcastGateSettingsUpdate({
+                gatepassGates: updateData.gatepassGates,
+                enableGateCameraScan: updateData.enableGateCameraScan
+            });
+        }
 
         return NextResponse.json({
             success: true,

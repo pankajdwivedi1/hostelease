@@ -376,7 +376,7 @@ export default function GatepassView({
         };
     }, []);
     const router = useRouter();
-    const lastSpokenScanIdRef = useRef<string | null>(null);
+    const recentPassMapRef = useRef<Map<string, number>>(new Map());
     const [qrData, setQrData] = useState<string>("");
     const [qrToken, setQrToken] = useState<string>("");
     const [qrExpiry, setQrExpiry] = useState<Date | null>(null);
@@ -700,6 +700,197 @@ export default function GatepassView({
         return () => clearInterval(qrInterval);
     }, [fetchNewQR, qrSeconds, scannerMode]);
 
+    // ===================== Audio Synth & Speech Synthesis Helpers =====================
+    const playSuccessChime = useCallback(() => {
+        try {
+            const ctx = new (window.AudioContext || (window as any).webkitAudioContext)();
+            const now = ctx.currentTime;
+            const notes = [523.25, 659.25, 783.99]; // C5, E5, G5
+            notes.forEach((freq, index) => {
+                const osc = ctx.createOscillator();
+                const gain = ctx.createGain();
+                osc.type = "sine";
+                osc.frequency.setValueAtTime(freq, now + index * 0.08);
+                gain.gain.setValueAtTime(0.12, now + index * 0.08);
+                gain.gain.exponentialRampToValueAtTime(0.01, now + index * 0.08 + 0.25);
+                osc.connect(gain);
+                gain.connect(ctx.destination);
+                osc.start(now + index * 0.08);
+                osc.stop(now + index * 0.08 + 0.3);
+            });
+        } catch (e) {
+            console.error("Audio chime error:", e);
+        }
+    }, []);
+
+    const playWarningBuzz = useCallback(() => {
+        try {
+            const ctx = new (window.AudioContext || (window as any).webkitAudioContext)();
+            const now = ctx.currentTime;
+            const osc = ctx.createOscillator();
+            const gain = ctx.createGain();
+            osc.type = "sawtooth";
+            osc.frequency.setValueAtTime(120, now);
+            osc.frequency.linearRampToValueAtTime(70, now + 0.35);
+            gain.gain.setValueAtTime(0.18, now);
+            gain.gain.exponentialRampToValueAtTime(0.01, now + 0.35);
+            osc.connect(gain);
+            gain.connect(ctx.destination);
+            osc.start(now);
+            osc.stop(now + 0.38);
+        } catch (e) {
+            console.error("Audio buzzer error:", e);
+        }
+    }, []);
+
+    const speakStatus = useCallback((text: string) => {
+        try {
+            if ('speechSynthesis' in window) {
+                window.speechSynthesis.cancel();
+                const utterance = new SpeechSynthesisUtterance(text);
+                utterance.rate = 1.25;
+                utterance.volume = 1.0;
+                window.speechSynthesis.speak(utterance);
+            }
+        } catch (e) {
+            console.error("Speech synthesis error:", e);
+        }
+    }, []);
+
+    // ===================== Central Optimistic Gatepass Processor (Instant 0ms Display & Single Sound) =====================
+    const applyOptimisticGateUpdate = useCallback((studentData: any, action: "in" | "out" | "checkout" | "checkin") => {
+        if (!studentData) return;
+
+        const isCheckOut = action === "checkout" || action === "out" || studentData.studentStatus === "out";
+        const actionText = isCheckOut ? "Check out" : "Check in";
+        const studentId = String(studentData.studentId || studentData._id || studentData.id || "");
+        const regId = String(studentData.registrationId || "");
+        const studentName = String(studentData.name || studentData.studentName || "");
+
+        // ⚡ Deduplication: prevent repeat sound/echo within 4000ms for this student
+        const idsToCheck = [studentId, regId, studentName].filter(Boolean);
+        const nowMs = Date.now();
+        const alreadyDone = idsToCheck.some(id => {
+            const lastTime = recentPassMapRef.current.get(id);
+            return lastTime && (nowMs - lastTime < 4000);
+        });
+
+        if (!alreadyDone) {
+            idsToCheck.forEach(id => recentPassMapRef.current.set(id, nowMs));
+            if (typeof window !== "undefined") {
+                (window as any).__lastGatepassSpoken = {
+                    key: `${studentId || regId || studentName}_${isCheckOut ? "checkout" : "checkin"}`,
+                    time: nowMs
+                };
+            }
+            playSuccessChime();
+            speakStatus(actionText);
+        }
+
+        // ⚡ INSTANT 0MS FEEDBACK: Update gate screen list immediately without waiting for network!
+        setLiveData((prev: any) => {
+            if (!prev) return prev;
+            const newSummary = { ...prev.summary };
+            const newCurrentlyOut = [...(prev.currentlyOut || [])];
+            const newRecent = [...(prev.recentActivity || [])];
+
+            const now = new Date();
+            const nowIso = now.toISOString();
+            const currentIstTime = studentData.checkOutISTTime || studentData.checkInISTTime || studentData.istTime || now.toLocaleTimeString('en-US', {
+                timeZone: 'Asia/Kolkata',
+                hour: '2-digit',
+                minute: '2-digit',
+                second: '2-digit',
+                hour12: true
+            });
+
+            const mapped: any = {
+                _id: studentId,
+                studentId: studentId,
+                studentName: studentName,
+                name: studentName,
+                hostelName: studentData.hostelName || "",
+                roomNumber: studentData.roomNumber || "",
+                registrationId: regId,
+                profilePicture: studentData.profilePicture || studentData.photo || "",
+                photo: studentData.profilePicture || studentData.photo || "",
+                year: studentData.year || "",
+                semester: studentData.semester || "",
+                status: isCheckOut ? "out" : "in",
+                type: (studentData.outingType || studentData.type || "outing").toLowerCase().includes("leave") ? "leave" : "outing",
+                phoneNumber: studentData.phoneNumber || studentData.fatherNumber || studentData.motherNumber || "",
+                currentDurationText: "Just now",
+                currentDurationMinutes: 0,
+                checkOutTime: isCheckOut ? (studentData.checkOutTime || nowIso) : (studentData.checkOutTime || ""),
+                checkOutISTTime: isCheckOut ? (studentData.checkOutISTTime || currentIstTime) : (studentData.checkOutISTTime || ""),
+                checkInTime: !isCheckOut ? (studentData.checkInTime || nowIso) : undefined,
+                checkInISTTime: !isCheckOut ? (studentData.checkInISTTime || currentIstTime) : undefined,
+            };
+
+            const isSameStudent = (r: any) => {
+                const rStudentId = String(typeof r.studentId === 'object' ? (r.studentId?._id || r.studentId?.id || "") : (r.studentId || "")).trim();
+                const rRegId = String(r.registrationId || (typeof r.studentId === 'object' ? r.studentId?.registrationId : "") || "").trim().toLowerCase();
+                const rName = String(r.studentName || r.name || (typeof r.studentId === 'object' ? r.studentId?.name : "") || "").trim().toLowerCase();
+
+                const targetStudentId = String(studentId).trim();
+                const targetRegId = String(regId).trim().toLowerCase();
+                const targetName = String(studentName).trim().toLowerCase();
+
+                return (targetStudentId && (rStudentId === targetStudentId || r._id === targetStudentId)) ||
+                       (targetRegId && rRegId && rRegId === targetRegId) ||
+                       (targetName && rName && rName === targetName);
+            };
+
+            if (isCheckOut) {
+                // Add to Outside list immediately if not already there
+                if (!newCurrentlyOut.some(isSameStudent)) {
+                    newCurrentlyOut.unshift(mapped);
+                    newSummary.studentsOut = (newSummary.studentsOut || 0) + 1;
+                    newSummary.studentsIn = Math.max(0, (newSummary.studentsIn || 0) - 1);
+                    if (mapped.type === "leave") {
+                        newSummary.leaveCount = (newSummary.leaveCount || 0) + 1;
+                    } else {
+                        newSummary.gatePassCount = (newSummary.gatePassCount || 0) + 1;
+                    }
+                }
+                // ⚡ Student is now OUTSIDE: completely remove from Returns Today list
+                const cleanRecent = newRecent.filter(r => !isSameStudent(r));
+                newRecent.length = 0;
+                newRecent.push(...cleanRecent);
+            } else {
+                // ⚡ Check in (RETURNED): completely remove from Outside list immediately
+                const cleanOut = newCurrentlyOut.filter(r => !isSameStudent(r));
+                if (cleanOut.length !== newCurrentlyOut.length) {
+                    newSummary.studentsOut = Math.max(0, (newSummary.studentsOut || 0) - (newCurrentlyOut.length - cleanOut.length));
+                    newSummary.studentsIn = (newSummary.studentsIn || 0) + (newCurrentlyOut.length - cleanOut.length);
+                }
+                newCurrentlyOut.length = 0;
+                newCurrentlyOut.push(...cleanOut);
+
+                // Student has returned: Add to Returns Today list immediately
+                const cleanRecent = newRecent.filter(r => !isSameStudent(r));
+                cleanRecent.unshift(mapped);
+                if (cleanRecent.length > 20) cleanRecent.pop();
+                newRecent.length = 0;
+                newRecent.push(...cleanRecent);
+            }
+
+            if (newRecent.length > 20) newRecent.pop();
+
+            return {
+                ...prev,
+                summary: newSummary,
+                currentlyOut: newCurrentlyOut,
+                recentActivity: newRecent
+            };
+        });
+
+        // 🔄 Silently re-sync with canonical server state in the background
+        setTimeout(() => {
+            fetchLiveData(true);
+        }, 300);
+    }, [playSuccessChime, speakStatus, fetchLiveData]);
+
     // ===================== Real-time SSE Connection (/api/admin/events) =====================
     useEffect(() => {
         // Initial load is ALWAYS FULL for instant visibility
@@ -718,96 +909,18 @@ export default function GatepassView({
 
                         if (!data) return;
 
-                        const isCheckOut = data.action === "checkout" || data.studentStatus === "out";
-                        const actionText = isCheckOut ? "Check out" : "Check in";
-                        playSuccessChime();
-                        speakStatus(actionText);
-
-                        // ⚡ INSTANT 0MS FEEDBACK: Update gate screen list immediately without waiting for network!
-                        setLiveData((prev: any) => {
-                            if (!prev) return prev;
-                            const newSummary = { ...prev.summary };
-                            const newCurrentlyOut = [...(prev.currentlyOut || [])];
-                            const newRecent = [...(prev.recentActivity || [])];
-
-                            const now = new Date();
-                            const nowIso = now.toISOString();
-                            const currentIstTime = data.checkOutISTTime || data.checkInISTTime || data.istTime || now.toLocaleTimeString('en-US', {
-                                timeZone: 'Asia/Kolkata',
-                                hour: '2-digit',
-                                minute: '2-digit',
-                                second: '2-digit',
-                                hour12: true
-                            });
-
-                            const mapped: any = {
-                                _id: data.studentId,
-                                studentId: data.studentId,
-                                studentName: data.studentName,
-                                hostelName: data.hostelName,
-                                roomNumber: data.roomNumber,
-                                registrationId: data.registrationId || "",
-                                profilePicture: data.profilePicture || "",
-                                photo: data.profilePicture || "",
-                                year: data.year || "",
-                                semester: data.semester || "",
-                                status: isCheckOut ? "out" : "in",
-                                type: data.outingType || "outing",
-                                phoneNumber: data.phoneNumber || "",
-                                currentDurationText: "Just now",
-                                currentDurationMinutes: 0,
-                                checkOutTime: isCheckOut ? (data.checkOutTime || nowIso) : (data.checkOutTime || ""),
-                                checkOutISTTime: isCheckOut ? (data.checkOutISTTime || currentIstTime) : (data.checkOutISTTime || ""),
-                                checkInTime: !isCheckOut ? (data.checkInTime || nowIso) : undefined,
-                                checkInISTTime: !isCheckOut ? (data.checkInISTTime || currentIstTime) : undefined,
-                            };
-
-                            if (isCheckOut) {
-                                // Add to Outside list immediately
-                                if (!newCurrentlyOut.some(r => r._id === mapped._id || r.studentId === mapped.studentId)) {
-                                    newCurrentlyOut.unshift(mapped);
-                                    newSummary.studentsOut = (newSummary.studentsOut || 0) + 1;
-                                    newSummary.studentsIn = Math.max(0, (newSummary.studentsIn || 0) - 1);
-                                    if (data.outingType === "leave") {
-                                        newSummary.leaveCount = (newSummary.leaveCount || 0) + 1;
-                                    } else {
-                                        newSummary.gatePassCount = (newSummary.gatePassCount || 0) + 1;
-                                    }
-                                }
-                                // Student is outside: Remove from Returns Today list
-                                const retIdx = newRecent.findIndex(r => r._id === mapped._id || r.studentId === mapped.studentId);
-                                if (retIdx !== -1) {
-                                    newRecent.splice(retIdx, 1);
-                                }
-                            } else {
-                                // Check in: Remove from Outside list immediately
-                                const idx = newCurrentlyOut.findIndex(r => r._id === mapped._id || r.studentId === mapped.studentId);
-                                if (idx !== -1) {
-                                    newCurrentlyOut.splice(idx, 1);
-                                    newSummary.studentsOut = Math.max(0, (newSummary.studentsOut || 0) - 1);
-                                    newSummary.studentsIn = (newSummary.studentsIn || 0) + 1;
-                                }
-                                // Student has returned: Add to Returns Today list
-                                const retIdx = newRecent.findIndex(r => r._id === mapped._id || r.studentId === mapped.studentId);
-                                if (retIdx !== -1) {
-                                    newRecent.splice(retIdx, 1);
-                                }
-                                newRecent.unshift(mapped);
-                            }
-
-                            if (newRecent.length > 20) newRecent.pop();
-
-                            return {
-                                ...prev,
-                                summary: newSummary,
-                                currentlyOut: newCurrentlyOut,
-                                recentActivity: newRecent
-                            };
-                        });
-
+                        applyOptimisticGateUpdate(data, data.action || data.studentStatus);
                     } catch (parseErr) {
                         console.warn("Error parsing SSE gate_status:", parseErr);
                     }
+                });
+
+                // ⚡ Instant remote mode change (QR Code <-> Face Camera) in milliseconds via SSE
+                eventSource.addEventListener("gate_settings", () => {
+                    try {
+                        console.log("⚡ [GATEPASS_SSE] Remote gate mode change received - updating mode in milliseconds!");
+                        syncGateSettings();
+                    } catch (_) {}
                 });
 
                 eventSource.onerror = () => {
@@ -859,64 +972,9 @@ export default function GatepassView({
                 eventSource.close();
             }
         };
-    }, [fetchLiveData]);
+    }, [fetchLiveData, applyOptimisticGateUpdate]);
 
-    // ===================== Audio Synth & Speech Synthesis Helpers =====================
-    const playSuccessChime = () => {
-        try {
-            const ctx = new (window.AudioContext || (window as any).webkitAudioContext)();
-            const now = ctx.currentTime;
-            const notes = [523.25, 659.25, 783.99]; // C5, E5, G5
-            notes.forEach((freq, index) => {
-                const osc = ctx.createOscillator();
-                const gain = ctx.createGain();
-                osc.type = "sine";
-                osc.frequency.setValueAtTime(freq, now + index * 0.08);
-                gain.gain.setValueAtTime(0.12, now + index * 0.08);
-                gain.gain.exponentialRampToValueAtTime(0.01, now + index * 0.08 + 0.25);
-                osc.connect(gain);
-                gain.connect(ctx.destination);
-                osc.start(now + index * 0.08);
-                osc.stop(now + index * 0.08 + 0.3);
-            });
-        } catch (e) {
-            console.error("Audio chime error:", e);
-        }
-    };
 
-    const playWarningBuzz = () => {
-        try {
-            const ctx = new (window.AudioContext || (window as any).webkitAudioContext)();
-            const now = ctx.currentTime;
-            const osc = ctx.createOscillator();
-            const gain = ctx.createGain();
-            osc.type = "sawtooth";
-            osc.frequency.setValueAtTime(120, now);
-            osc.frequency.linearRampToValueAtTime(70, now + 0.35);
-            gain.gain.setValueAtTime(0.18, now);
-            gain.gain.exponentialRampToValueAtTime(0.01, now + 0.35);
-            osc.connect(gain);
-            gain.connect(ctx.destination);
-            osc.start(now);
-            osc.stop(now + 0.38);
-        } catch (e) {
-            console.error("Audio buzzer error:", e);
-        }
-    };
-
-    const speakStatus = (text: string) => {
-        try {
-            if ('speechSynthesis' in window) {
-                window.speechSynthesis.cancel();
-                const utterance = new SpeechSynthesisUtterance(text);
-                utterance.rate = 1.25;
-                utterance.volume = 1.0;
-                window.speechSynthesis.speak(utterance);
-            }
-        } catch (e) {
-            console.error("Speech synthesis error:", e);
-        }
-    };
 
     // Cleanup: Heartbeat fetcher and timer removed as they are no longer needed
     // fetchActivityHeartbeat was here - removed to save 200MB/day bandwidth.
@@ -1252,20 +1310,20 @@ export default function GatepassView({
     return (
         <div className="flex flex-col md:flex-row w-full min-h-screen md:h-screen bg-[#0a0a1a] font-sans text-white overflow-x-hidden overflow-y-auto touch-pan-y scrollbar-thin scrollbar-thumb-blue-500/20 scrollbar-track-transparent">
             {/* =================== LEFT PANEL: QR CODE =================== */}
-            <div className="w-full md:w-[42%] flex flex-col items-center justify-center gap-6 p-6 md:p-6 bg-gradient-to-b from-[#0a0a1a] via-[#0d1420] to-[#0a0a1a] border-b md:border-b-0 md:border-r border-[#00ff881a] relative shrink-0 transition-all duration-300 overflow-visible md:overflow-hidden touch-pan-y">
+            <div className="w-full md:w-[42%] flex flex-col items-center justify-center gap-4 sm:gap-6 p-3 sm:p-5 md:p-6 bg-gradient-to-b from-[#0a0a1a] via-[#0d1420] to-[#0a0a1a] border-b md:border-b-0 md:border-r border-[#00ff881a] relative shrink-0 transition-all duration-300 overflow-visible md:overflow-hidden touch-pan-y">
 
-                {/* ── TOP ROW: Logo left + Instructions / Mobile Gate info right ── */}
-                <div className="flex items-start justify-between w-full mb-2">
-                    {/* Logo block */}
-                    <div className="flex flex-col">
-                        <div className="flex items-center gap-2.5 sm:gap-3">
+                {/* ── TOP HEADER: Row 1 (GATEPASS + Instructions) | Row 2 (Gate Name + Face Camera + Subtitle) ── */}
+                <div className="flex flex-col w-full mb-2">
+                    {/* Top Row: GATEPASS title (Left) + Desktop Instructions / Mobile Badges (Right) */}
+                    <div className="flex items-center justify-between w-full">
+                        <div className="flex items-center gap-2 sm:gap-3">
                             {onClose && (
                                 <button
                                     onClick={onClose}
                                     className="md:hidden p-1.5 bg-blue-500/10 border border-blue-500/30 rounded-lg text-blue-400 active:scale-90 transition-all shrink-0"
                                     title="Back to Dashboard"
                                 >
-                                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M15 19l-7-7 7-7" />
                                     </svg>
                                 </button>
@@ -1274,82 +1332,83 @@ export default function GatepassView({
                                 GATEPASS
                             </h1>
                         </div>
-                        {/* Desktop: under GATEPASS */}
-                        <div className="hidden sm:flex flex-wrap items-center gap-2 mt-1">
-                            <span className="inline-block px-2 py-0.5 bg-[rgba(0,255,136,0.1)] border border-[rgba(0,255,136,0.3)] rounded-full text-[10px] md:text-xs text-[#00ff88] font-bold">
-                                📍 {gateName}
-                            </span>
-                            <span className={`inline-block px-2 py-0.5 rounded-full text-[10px] md:text-xs font-bold border ${
-                                scannerMode === "camera"
-                                    ? "bg-purple-500/10 border-purple-500/30 text-purple-400"
-                                    : "bg-blue-500/10 border-blue-500/30 text-blue-400"
-                            }`}>
-                                {scannerMode === "camera" ? "📸 FACE CAMERA" : "📱 QR CODE"}
-                            </span>
-                            <p className="text-[10px] md:text-[11px] text-[rgba(255,255,255,0.45)] tracking-widest uppercase m-0 leading-none">
-                                Campus Outing System
-                            </p>
-                        </div>
-                    </div>
 
-                    {/* Mobile: Gate tag in top right corner, Campus Outing System just below */}
-                    <div className="flex flex-col items-end sm:hidden shrink-0 pt-0.5">
-                        <div className="flex items-center gap-1">
-                            <span className="inline-block px-2 py-0.5 bg-[rgba(0,255,136,0.1)] border border-[rgba(0,255,136,0.3)] rounded-full text-[10px] text-[#00ff88] font-bold whitespace-nowrap">
-                                📍 {gateName}
-                            </span>
-                            <span className={`inline-block px-1.5 py-0.5 rounded-full text-[9px] font-bold border ${
+                        {/* Mobile: Top Right Mode Badge & System Label */}
+                        <div className="flex flex-col items-end sm:hidden shrink-0">
+                            <span className={`inline-block px-2 py-0.5 rounded-lg text-[8.5px] font-bold border tracking-wider uppercase ${
                                 scannerMode === "camera"
                                     ? "bg-purple-500/10 border-purple-500/30 text-purple-400"
                                     : "bg-blue-500/10 border-blue-500/30 text-blue-400"
                             }`}>
                                 {scannerMode === "camera" ? "📸 FACE" : "📱 QR"}
                             </span>
+                            <p className="text-[7.5px] text-[rgba(255,255,255,0.45)] tracking-wider uppercase m-0 mt-0.5 leading-none">
+                                Campus Outing
+                            </p>
                         </div>
-                        <p className="text-[9px] text-[rgba(255,255,255,0.45)] tracking-wider uppercase m-0 mt-1 leading-none text-right whitespace-nowrap">
+
+                        {/* Desktop: Instructions bar (Aligned horizontally with GATEPASS height) */}
+                        <div className="hidden sm:flex items-center gap-2 px-3 h-8 md:h-[34px] bg-[rgba(0,255,136,0.07)] rounded-xl border border-[rgba(0,255,136,0.3)] shadow-[0_0_12px_rgba(0,255,136,0.08)] flex-shrink-0">
+                            {scannerMode === "camera" ? (
+                                <>
+                                    <div className="flex items-center gap-1.5 text-[11px] md:text-xs font-semibold text-white">
+                                        <span className="text-sm">🚶</span>
+                                        <span>Face Camera</span>
+                                    </div>
+                                    <div className="text-[#00ff88] font-black text-xs">→</div>
+                                    <div className="flex items-center gap-1.5 text-[11px] md:text-xs font-semibold text-white">
+                                        <span className="text-sm">👤</span>
+                                        <span>Match Face</span>
+                                    </div>
+                                    <div className="text-[#00ff88] font-black text-xs">→</div>
+                                    <div className="flex items-center gap-1.5 text-[11px] md:text-xs font-semibold text-white">
+                                        <span className="text-base">✅</span>
+                                        <span>Auto Pass</span>
+                                    </div>
+                                </>
+                            ) : (
+                                <>
+                                    <div className="flex items-center gap-1.5 text-[11px] md:text-xs font-semibold text-white">
+                                        <span className="text-sm">📱</span>
+                                        <span>Open App</span>
+                                    </div>
+                                    <div className="text-[#00ff88] font-black text-xs">→</div>
+                                    <div className="flex items-center gap-1.5 text-[11px] md:text-xs font-semibold text-white">
+                                        <span className="text-sm">📸</span>
+                                        <span>Scan QR</span>
+                                    </div>
+                                    <div className="text-[#00ff88] font-black text-xs">→</div>
+                                    <div className="flex items-center gap-1.5 text-[11px] md:text-xs font-semibold text-white">
+                                        <span className="text-base">✅</span>
+                                        <span>Done</span>
+                                    </div>
+                                </>
+                            )}
+                        </div>
+                    </div>
+
+                    {/* Desktop Subtitle Row: under GATEPASS on a single line */}
+                    <div className="hidden sm:flex items-center gap-2 mt-1.5 whitespace-nowrap overflow-x-auto no-scrollbar">
+                        <span className="inline-block px-2.5 py-0.5 bg-[rgba(0,255,136,0.1)] border border-[rgba(0,255,136,0.3)] rounded-xl text-[9px] md:text-[11px] text-[#00ff88] font-bold whitespace-nowrap shrink-0">
+                            📍 {gateName}
+                        </span>
+                        <span className={`inline-block px-2.5 py-0.5 rounded-xl text-[9px] md:text-[11px] font-bold border whitespace-nowrap shrink-0 ${
+                            scannerMode === "camera"
+                                ? "bg-purple-500/10 border-purple-500/30 text-purple-400"
+                                : "bg-blue-500/10 border-blue-500/30 text-blue-400"
+                        }`}>
+                            {scannerMode === "camera" ? "📸 FACE CAMERA" : "📱 QR CODE"}
+                        </span>
+                        <p className="text-[10px] md:text-[11px] text-[rgba(255,255,255,0.45)] tracking-widest uppercase m-0 leading-none whitespace-nowrap shrink-0">
                             Campus Outing System
                         </p>
                     </div>
 
-
-
-                    {/* Instructions bar */}
-                    <div className="hidden sm:flex items-center gap-2 px-3 py-2 bg-[rgba(0,255,136,0.07)] rounded-xl border border-[rgba(0,255,136,0.3)] shadow-[0_0_12px_rgba(0,255,136,0.08)] flex-shrink-0">
-                        {scannerMode === "camera" ? (
-                            <>
-                                <div className="flex items-center gap-1.5 text-[11px] md:text-xs font-semibold text-white">
-                                    <span className="text-sm">🚶</span>
-                                    <span>Face Camera</span>
-                                </div>
-                                <div className="text-[#00ff88] font-black text-xs">→</div>
-                                <div className="flex items-center gap-1.5 text-[11px] md:text-xs font-semibold text-white">
-                                    <span className="text-sm">👤</span>
-                                    <span>Match Face</span>
-                                </div>
-                                <div className="text-[#00ff88] font-black text-xs">→</div>
-                                <div className="flex items-center gap-1.5 text-[11px] md:text-xs font-semibold text-white">
-                                    <span className="text-base">✅</span>
-                                    <span>Auto Pass</span>
-                                </div>
-                            </>
-                        ) : (
-                            <>
-                                <div className="flex items-center gap-1.5 text-[11px] md:text-xs font-semibold text-white">
-                                    <span className="text-sm">📱</span>
-                                    <span>Open App</span>
-                                </div>
-                                <div className="text-[#00ff88] font-black text-xs">→</div>
-                                <div className="flex items-center gap-1.5 text-[11px] md:text-xs font-semibold text-white">
-                                    <span className="text-sm">📸</span>
-                                    <span>Scan QR</span>
-                                </div>
-                                <div className="text-[#00ff88] font-black text-xs">→</div>
-                                <div className="flex items-center gap-1.5 text-[11px] md:text-xs font-semibold text-white">
-                                    <span className="text-base">✅</span>
-                                    <span>Done</span>
-                                </div>
-                            </>
-                        )}
+                    {/* Mobile: Full-width clean single-line Campus Gate Pill right under GATEPASS */}
+                    <div className="flex sm:hidden items-center gap-1.5 mt-1.5 w-full overflow-hidden">
+                        <span className="inline-block px-2 py-0.5 bg-[rgba(0,255,136,0.1)] border border-[rgba(0,255,136,0.3)] rounded-lg text-[8px] text-[#00ff88] font-bold truncate max-w-full">
+                            📍 {gateName}
+                        </span>
                     </div>
                 </div>
 
@@ -1390,14 +1449,20 @@ export default function GatepassView({
                         className={`transition-all duration-500 ${
                             scannerMode === 'camera'
                                 ? (isFullscreen
-                                    ? 'w-[min(92vw,75vh,620px)] md:w-[min(42vw,75vh,620px)]'
-                                    : 'w-[min(92vw,64vh,490px)] md:w-[min(38vw,68vh,530px)]')
+                                    ? 'w-[min(75vw,65vh,580px)] md:w-[min(42vw,75vh,620px)]'
+                                    : 'w-[min(82vw,55vh,380px)] md:w-[min(38vw,68vh,530px)]')
                                 : 'p-3 bg-white rounded-[24px] md:rounded-[28px] border-[6px] md:border-[8px] border-[#00ff88] shadow-[0_0_60px_rgba(0,255,136,0.15)] md:shadow-[0_0_100px_rgba(0,255,136,0.25)] flex items-center justify-center overflow-hidden ' + (isFullscreen ? 'w-[min(75vw,65vh,580px)] md:w-[min(42vw,70vh,580px)]' : 'w-[min(82vw,55vh,380px)] md:w-[min(32vw,58vh,430px)]')
                         }`}
                         style={{ aspectRatio: '1/1' }}
                     >
                         {scannerMode === 'camera' ? (
-                            <GateCameraScanner isFullscreen={isFullscreen} standbyMinutes={standbyMinutes} />
+                            <GateCameraScanner 
+                                isFullscreen={isFullscreen} 
+                                standbyMinutes={standbyMinutes} 
+                                onPassProcessed={(student, action) => {
+                                    applyOptimisticGateUpdate(student, action);
+                                }}
+                            />
                         ) : qrData ? (
                             <QRCodeCanvas data={qrData} size={isFullscreen ? 580 : 450} />
                         ) : (

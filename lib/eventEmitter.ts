@@ -64,3 +64,11 @@ export function broadcastHostelActivity(eventData: Omit<HostelActivityEvent, "ti
         console.warn("⚠️ Failed to broadcast hostel activity event:", err);
     }
 }
+
+export function broadcastGateSettingsUpdate(settingsData?: any) {
+    try {
+        gateEventEmitter.emit("gate_settings_update", settingsData || {});
+    } catch (err) {
+        console.warn("⚠️ Failed to broadcast gate settings update:", err);
+    }
+}

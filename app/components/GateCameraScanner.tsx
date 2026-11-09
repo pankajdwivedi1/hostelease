@@ -3,6 +3,13 @@
 import React, { useState, useEffect, useRef, useCallback } from "react";
 import FastAvatar from "@/app/components/FastAvatar";
 import { 
+  CheckCircle2, 
+  ShieldAlert, 
+  AlertTriangle, 
+  Sparkles, 
+  RefreshCw 
+} from "lucide-react";
+import { 
   loadFaceApiModels, 
   detectFace, 
   calculateScore, 
@@ -10,6 +17,7 @@ import {
 } from "@/lib/faceMatching";
 import { loadPhoneDetector, detectMobilePhone } from "@/lib/objectDetection";
 import { loadBiometricGalleryWithSync } from "@/lib/localFaceGallery";
+import { initClientMiniFASNet, checkLivenessClient } from "@/lib/clientMiniFASNet";
 
 interface IdentifiedStudent {
     id: string;
@@ -36,8 +44,8 @@ interface ActiveFaceBox {
     top: number;
     width: number;
     height: number;
-    pixelW?: number;
-    pixelH?: number;
+    pixelW: number;
+    pixelH: number;
 }
 
 function euclideanDistance(a: number[], b: number[]): number {
@@ -52,8 +60,6 @@ function euclideanDistance(a: number[], b: number[]): number {
 
 /**
  * 🛡️ Real Human Physical Skin Tone Analyzer
- * Converts central face pixels to YCbCr & RGB space and verifies live human skin chromaticity.
- * Instantly rejects curtains, floral bedsheets, blankets, clothes, walls, and screens (<10% skin).
  */
 function checkHumanSkinTone(
   ctx: CanvasRenderingContext2D,
@@ -105,7 +111,7 @@ function checkHumanSkinTone(
 }
 
 /**
- * 🛡️ Multi-Factor Mobile Screen, Glass Glare & Secondary Phone Casing Analyzer
+ * 🛡️ Multi-Factor Mobile Screen, Glass Glare & Secondary Device Chassis Analyzer
  */
 function checkScreenAndPhotoSpoof(
   ctx: CanvasRenderingContext2D,
@@ -121,24 +127,28 @@ function checkScreenAndPhotoSpoof(
 
     if (bw < 30 || bh < 30) return { isSpoof: false };
 
-    const faceImgData = ctx.getImageData(bx, by, bw, bh).data;
+    // 1. SPECULAR GLASS GLARE REFLECTION HOTSPOT
+    // Checks strictly the facial skin zone for unnatural flat glass mirror reflections
+    const faceData = ctx.getImageData(bx, by, bw, bh).data;
     const totalPixels = bw * bh;
     let saturatedGlareCount = 0;
     let highFreqGridDiffs = 0;
 
-    for (let i = 0; i < faceImgData.length; i += 4) {
-      const r = faceImgData[i];
-      const g = faceImgData[i + 1];
-      const b = faceImgData[i + 2];
+    for (let i = 0; i < faceData.length; i += 4) {
+      const r = faceData[i];
+      const g = faceData[i + 1];
+      const b = faceData[i + 2];
 
-      if (r >= 244 && g >= 244 && b >= 244) {
+      // Specular glass glare reflection hotspot (pure blown-out white glass reflection)
+      if (r >= 252 && g >= 252 && b >= 252 && Math.abs(r - g) < 6 && Math.abs(r - b) < 6) {
         saturatedGlareCount++;
       }
 
+      // Horizontal adjacent pixel gradient (Moiré pattern of digital subpixel matrix)
       if (i > 4 && i % (bw * 4) !== 0) {
-        const pr = faceImgData[i - 4];
-        const pg = faceImgData[i - 3];
-        const pb = faceImgData[i - 2];
+        const pr = faceData[i - 4];
+        const pg = faceData[i - 3];
+        const pb = faceData[i - 2];
         const delta = Math.abs(r - pr) + Math.abs(g - pg) + Math.abs(b - pb);
         if (delta > 85) {
           highFreqGridDiffs++;
@@ -149,44 +159,123 @@ function checkScreenAndPhotoSpoof(
     const glareRatio = saturatedGlareCount / Math.max(1, totalPixels);
     const moireRatio = highFreqGridDiffs / Math.max(1, totalPixels);
 
-    if (glareRatio > 0.045) {
-      return { isSpoof: true, reason: "Glass Screen Glare Detected! Present your real face in person." };
+    if (glareRatio > 0.12) {
+      return { isSpoof: true, reason: "Glass Screen Glare Reflection Detected! Mobile phone presentation rejected." };
     }
-    if (moireRatio > 0.15) {
-      return { isSpoof: true, reason: "Display Screen Moiré Pattern Detected! Mobile screen rejected." };
+    if (moireRatio > 0.12) {
+      return { isSpoof: true, reason: "Digital Screen Moiré Pixel Grid Detected! Mobile display rejected." };
     }
 
-    for (const marginFactor of [0.32, 0.60]) {
-      const marginX = Math.floor(bw * marginFactor);
-      const marginY = Math.floor(bh * marginFactor);
-      const outerX = Math.max(0, bx - marginX);
-      const outerY = Math.max(0, by - marginY);
-      const outerW = Math.min(imgWidth - outerX, bw + marginX * 2);
-      const outerH = Math.min(imgHeight - outerY, bh + marginY * 1.4);
+    // 2. 📐 PURE MATHEMATICAL COLLINEAR BORDER & DEVICE CHASSIS DETECTOR
+    const searchLeftMin = Math.max(0, Math.floor(bx - bw * 0.55));
+    const searchLeftMax = Math.min(imgWidth - 4, Math.floor(bx + bw * 0.10));
+    const searchRightMin = Math.max(0, Math.floor(bx + bw * 0.90));
+    const searchRightMax = Math.min(imgWidth - 4, Math.floor(bx + bw * 1.55));
 
-      if (outerW > bw + 14 && outerH > bh + 14) {
-        const outerData = ctx.getImageData(outerX, outerY, outerW, outerH).data;
-        let darkMarginPixels = 0;
-        let totalMarginPixels = 0;
+    const yStart = Math.max(0, Math.floor(by + bh * 0.05));
+    const yEnd = Math.min(imgHeight - 1, Math.floor(by + bh * 0.85));
+    const ySpan = yEnd - yStart;
 
-        for (let y = 0; y < outerH; y += 2) {
-          for (let x = 0; x < outerW; x += 2) {
-            const isMargin = (x < marginX || x >= outerW - marginX || y < marginY);
-            if (isMargin) {
-              const idx = (y * outerW + x) * 4;
-              const brightness = 0.299 * outerData[idx] + 0.587 * outerData[idx + 1] + 0.114 * outerData[idx + 2];
-              if (brightness < 55) {
-                darkMarginPixels++;
-              }
-              totalMarginPixels++;
-            }
+    if (ySpan > 30 && searchLeftMax > searchLeftMin && searchRightMax > searchRightMin) {
+      const scanData = ctx.getImageData(0, yStart, imgWidth, ySpan).data;
+      const leftHist: { [x: number]: number } = {};
+      const rightHist: { [x: number]: number } = {};
+      let sampledRows = 0;
+
+      for (let relY = 0; relY < ySpan; relY += 3) {
+        sampledRows++;
+        const rowOffset = relY * imgWidth * 4;
+
+        let maxGradL = 0;
+        let peakXL = -1;
+        for (let x = searchLeftMin + 2; x <= searchLeftMax - 2; x += 2) {
+          const idxL = rowOffset + (x - 2) * 4;
+          const idxR = rowOffset + (x + 2) * 4;
+          const bL = 0.299 * scanData[idxL] + 0.587 * scanData[idxL + 1] + 0.114 * scanData[idxL + 2];
+          const bR = 0.299 * scanData[idxR] + 0.587 * scanData[idxR + 1] + 0.114 * scanData[idxR + 2];
+          const grad = Math.abs(bR - bL);
+          if (grad > maxGradL) {
+            maxGradL = grad;
+            peakXL = x;
           }
         }
-
-        const darkBezelRatio = darkMarginPixels / Math.max(1, totalMarginPixels);
-        if (darkBezelRatio > 0.38) {
-          return { isSpoof: true, reason: "Secondary Mobile Phone Casing Detected! Please present real face directly." };
+        if (maxGradL > 45 && peakXL !== -1) {
+          const bin = Math.round(peakXL / 6) * 6;
+          leftHist[bin] = (leftHist[bin] || 0) + 1;
         }
+
+        let maxGradR = 0;
+        let peakXR = -1;
+        for (let x = searchRightMin + 2; x <= searchRightMax - 2; x += 2) {
+          const idxL = rowOffset + (x - 2) * 4;
+          const idxR = rowOffset + (x + 2) * 4;
+          const bL = 0.299 * scanData[idxL] + 0.587 * scanData[idxL + 1] + 0.114 * scanData[idxL + 2];
+          const bR = 0.299 * scanData[idxR] + 0.587 * scanData[idxR + 1] + 0.114 * scanData[idxR + 2];
+          const grad = Math.abs(bR - bL);
+          if (grad > maxGradR) {
+            maxGradR = grad;
+            peakXR = x;
+          }
+        }
+        if (maxGradR > 45 && peakXR !== -1) {
+          const bin = Math.round(peakXR / 6) * 6;
+          rightHist[bin] = (rightHist[bin] || 0) + 1;
+        }
+      }
+
+      let maxLeftCollinear = 0;
+      for (const b in leftHist) {
+        if (leftHist[b] > maxLeftCollinear) maxLeftCollinear = leftHist[b];
+      }
+      let maxRightCollinear = 0;
+      for (const b in rightHist) {
+        if (rightHist[b] > maxRightCollinear) maxRightCollinear = rightHist[b];
+      }
+
+      const leftRatio = sampledRows > 0 ? maxLeftCollinear / sampledRows : 0;
+      const rightRatio = sampledRows > 0 ? maxRightCollinear / sampledRows : 0;
+
+      const topSearchYMin = Math.max(0, Math.floor(by - bh * 0.45));
+      const topSearchYMax = Math.max(0, Math.floor(by - bh * 0.05));
+      let topRatio = 0;
+      if (topSearchYMax > topSearchYMin) {
+        const topYSpan = topSearchYMax - topSearchYMin;
+        const topData = ctx.getImageData(bx, topSearchYMin, bw, topYSpan).data;
+        const topHist: { [y: number]: number } = {};
+        let sampledCols = 0;
+
+        for (let relX = 0; relX < bw; relX += 4) {
+          sampledCols++;
+          let maxGradT = 0;
+          let peakYT = -1;
+          for (let relY = 2; relY < topYSpan - 2; relY += 2) {
+            const idxT = (relY - 2) * bw * 4 + relX * 4;
+            const idxB = (relY + 2) * bw * 4 + relX * 4;
+            const bT = 0.299 * topData[idxT] + 0.587 * topData[idxT + 1] + 0.114 * topData[idxT + 2];
+            const bB = 0.299 * topData[idxB] + 0.587 * topData[idxB + 1] + 0.114 * topData[idxB + 2];
+            const grad = Math.abs(bB - bT);
+            if (grad > maxGradT) {
+              maxGradT = grad;
+              peakYT = relY;
+            }
+          }
+          if (maxGradT > 45 && peakYT !== -1) {
+            const bin = Math.round(peakYT / 4) * 4;
+            topHist[bin] = (topHist[bin] || 0) + 1;
+          }
+        }
+        let maxTopCollinear = 0;
+        for (const b in topHist) {
+          if (topHist[b] > maxTopCollinear) maxTopCollinear = topHist[b];
+        }
+        topRatio = sampledCols > 0 ? maxTopCollinear / sampledCols : 0;
+      }
+
+      if (leftRatio >= 0.40 && rightRatio >= 0.40) {
+        return { isSpoof: true, reason: "Mobile Phone Screen / Bezel Border Detected! Real human face required." };
+      }
+      if ((leftRatio >= 0.42 || rightRatio >= 0.42) && topRatio >= 0.38) {
+        return { isSpoof: true, reason: "Rectangular Device Casing / Paper Photo Border Detected! Real human face required." };
       }
     }
 
@@ -198,27 +287,13 @@ function checkScreenAndPhotoSpoof(
 
 /**
  * 🛡️ Facial Landmark & Geometric Anatomy Validator
- * Ensures detected contours match genuine human facial anatomy (eyes, nose, mouth positioning).
- * Rejects pareidolia on floral cloth, curtain folds, t-shirt graphics, and arm creases.
  */
-function verifyFacialAnatomy(
-  landmarks: any,
-  box: { x: number; y: number; width: number; height: number }
-): boolean {
+function verifyFacialAnatomy(landmarks: any, box: any): boolean {
   if (!landmarks || !box) return false;
-
-  if (box.width < 50 || box.height < 50) return false;
-
-  const aspect = box.width / box.height;
-  if (aspect < 0.60 || aspect > 1.35) return false;
-
   const positions = landmarks.positions || (typeof landmarks.getPositions === "function" ? landmarks.getPositions() : null);
   if (!positions || positions.length < 5) return false;
 
-  let leftEye: { x: number; y: number };
-  let rightEye: { x: number; y: number };
-  let nose: { x: number; y: number };
-  let mouth: { x: number; y: number };
+  let leftEye: any, rightEye: any, nose: any, mouth: any;
 
   if (positions.length >= 68) {
     leftEye = {
@@ -321,7 +396,7 @@ function getTightFaceBox(landmarks: any, rawBox: any) {
 }
 
 /**
- * Converts raw video bounding box coordinates to percentage relative to container
+ * Converts raw video bounding box coordinates to percentage relative to a 1:1 square container
  */
 function calculateDisplayBox(
   box: { x: number; y: number; width: number; height: number },
@@ -375,7 +450,7 @@ function calculateDisplayBox(
 interface GateCameraScannerProps {
     isFullscreen?: boolean;
     standbyMinutes?: number;
-    onPassProcessed?: (studentName: string, action: "in" | "out", passType: string) => void;
+    onPassProcessed?: (student: any, action: "in" | "out", passType: string) => void;
 }
 
 export default function GateCameraScanner({
@@ -386,12 +461,13 @@ export default function GateCameraScanner({
     const videoRef = useRef<HTMLVideoElement | null>(null);
     const streamRef = useRef<MediaStream | null>(null);
     const animFrameRef = useRef<number | null>(null);
-    const lastObjectCheckRef = useRef<number>(0);
     const consecutiveMatchRef = useRef<{ studentId: string | null; count: number }>({ studentId: null, count: 0 });
     const lastProcessedRef = useRef<{ studentId: string | null; timestamp: number }>({ studentId: null, timestamp: 0 });
     const lastActivityRef = useRef<number>(Date.now());
     const isStandbyRef = useRef<boolean>(false);
     const standbyMinutesRef = useRef<number>(3);
+    const faceLockStartTimeRef = useRef<number | null>(null);
+    const lastFaceSeenTimeRef = useRef<number>(0);
 
     const updateStandbyState = (newVal: boolean) => {
         isStandbyRef.current = newVal;
@@ -400,17 +476,17 @@ export default function GateCameraScanner({
 
     // States
     const [gallery, setGallery] = useState<IdentifiedStudent[]>([]);
-    const [isLoadingGallery, setIsLoadingGallery] = useState(true);
     const [isCameraActive, setIsCameraActive] = useState(false);
     const [cameraError, setCameraError] = useState<string | null>(null);
-    const [facingMode, setFacingMode] = useState<"environment" | "user">("environment");
+    const [facingMode, setFacingMode] = useState<"environment" | "user">("user");
 
     // Face detection & tracking
     const [activeFaceBox, setActiveFaceBox] = useState<ActiveFaceBox | null>(null);
-    const [scanStatus, setScanStatus] = useState<string>("Align face with camera...");
+    const [scanStatus, setScanStatus] = useState<string>("Initializing Gatepass Camera...");
     const [matchedStudent, setMatchedStudent] = useState<IdentifiedStudent | null>(null);
     const [matchScore, setMatchScore] = useState<number>(0);
     const [spoofWarning, setSpoofWarning] = useState<string | null>(null);
+    const [unrecognizedWarning, setUnrecognizedWarning] = useState<string | null>(null);
 
     // Processing & feedback state
     const [isProcessingPass, setIsProcessingPass] = useState(false);
@@ -456,40 +532,26 @@ export default function GateCameraScanner({
         window.addEventListener("storage", handleStorage);
         return () => window.removeEventListener("storage", handleStorage);
     }, []);
-    const [standbyClock, setStandbyClock] = useState({ time: "", date: "" });
+    const [standbyClock, setStandbyClock] = useState({ time: "", date: "", day: "" });
 
-    // Sound feedback
-    const playWarningBuzz = useCallback(() => {
-        try {
-            const ctx = new (window.AudioContext || (window as any).webkitAudioContext)();
-            const now = ctx.currentTime;
-            const osc = ctx.createOscillator();
-            const gain = ctx.createGain();
-            osc.connect(gain);
-            gain.connect(ctx.destination);
-            osc.type = "sawtooth";
-            osc.frequency.setValueAtTime(150, now);
-            gain.gain.setValueAtTime(0.3, now);
-            gain.gain.exponentialRampToValueAtTime(0.01, now + 0.3);
-            osc.start(now);
-            osc.stop(now + 0.3);
-        } catch (_) {}
-    }, []);
+    // Sound feedback - Identical to Gatepass QR Scan sound & announcement
     const playSuccessChime = useCallback(() => {
         try {
             const ctx = new (window.AudioContext || (window as any).webkitAudioContext)();
             const now = ctx.currentTime;
-            const osc = ctx.createOscillator();
-            const gain = ctx.createGain();
-            osc.connect(gain);
-            gain.connect(ctx.destination);
-            osc.type = "sine";
-            osc.frequency.setValueAtTime(587.33, now); // D5
-            osc.frequency.exponentialRampToValueAtTime(880, now + 0.12); // A5
-            gain.gain.setValueAtTime(0.25, now);
-            gain.gain.exponentialRampToValueAtTime(0.01, now + 0.35);
-            osc.start(now);
-            osc.stop(now + 0.35);
+            const notes = [523.25, 659.25, 783.99]; // C5, E5, G5 identical arpeggio chord
+            notes.forEach((freq, index) => {
+                const osc = ctx.createOscillator();
+                const gain = ctx.createGain();
+                osc.type = "sine";
+                osc.frequency.setValueAtTime(freq, now + index * 0.08);
+                gain.gain.setValueAtTime(0.12, now + index * 0.08);
+                gain.gain.exponentialRampToValueAtTime(0.01, now + index * 0.08 + 0.25);
+                osc.connect(gain);
+                gain.connect(ctx.destination);
+                osc.start(now + index * 0.08);
+                osc.stop(now + index * 0.08 + 0.3);
+            });
         } catch (_) {}
     }, []);
 
@@ -498,22 +560,37 @@ export default function GateCameraScanner({
             if ("speechSynthesis" in window) {
                 window.speechSynthesis.cancel();
                 const utter = new SpeechSynthesisUtterance(text);
-                utter.rate = 1.05;
-                utter.pitch = 1.0;
+                utter.rate = 1.25;
+                utter.volume = 1.0;
                 window.speechSynthesis.speak(utter);
             }
         } catch (_) {}
     }, []);
 
-    // 1. Load Biometric Gallery into RAM from permanent local IndexedDB + Silent Server Sync
+    const playWarningBuzz = useCallback(() => {
+        try {
+            const ctx = new (window.AudioContext || (window as any).webkitAudioContext)();
+            const now = ctx.currentTime;
+            const osc = ctx.createOscillator();
+            const gain = ctx.createGain();
+            osc.type = "sawtooth";
+            osc.frequency.setValueAtTime(120, now);
+            osc.frequency.linearRampToValueAtTime(70, now + 0.35);
+            gain.gain.setValueAtTime(0.18, now);
+            gain.gain.exponentialRampToValueAtTime(0.01, now + 0.35);
+            osc.connect(gain);
+            gain.connect(ctx.destination);
+            osc.start(now);
+            osc.stop(now + 0.38);
+        } catch (_) {}
+    }, []);
+
+    // 1. Load Biometric Gallery into RAM
     useEffect(() => {
         let isMounted = true;
-        setIsLoadingGallery(true);
-
         loadBiometricGalleryWithSync((students) => {
             if (isMounted && Array.isArray(students) && students.length > 0) {
                 setGallery(students);
-                setIsLoadingGallery(false);
             }
         });
 
@@ -521,7 +598,7 @@ export default function GateCameraScanner({
             try {
                 await Promise.allSettled([
                     loadFaceApiModels(false),
-                    loadPhoneDetector()
+                    initClientMiniFASNet()
                 ]);
             } catch (err) {
                 console.warn("AI warmup warning:", err);
@@ -534,7 +611,7 @@ export default function GateCameraScanner({
         };
     }, []);
 
-    // 2. Camera Stream Lifecycle
+    // 2. Camera Stream Lifecycle (Exact Copy of Identifier Modal Settings)
     const stopCamera = useCallback(() => {
         if (animFrameRef.current) {
             cancelAnimationFrame(animFrameRef.current);
@@ -556,17 +633,30 @@ export default function GateCameraScanner({
         setCameraError(null);
         setSpoofWarning(null);
         setActiveFaceBox(null);
+
+        // Give mobile hardware camera driver 100ms to cleanly release sensor
+        await new Promise((resolve) => setTimeout(resolve, 100));
+
         try {
             const constraints: MediaStreamConstraints = {
                 video: {
                     facingMode: { ideal: facingMode },
-                    width: { ideal: 1280 },
-                    height: { ideal: 720 },
+                    width: { ideal: 1280, max: 1920 },
+                    height: { ideal: 720, max: 1080 },
                 },
                 audio: false,
             };
 
-            const stream = await navigator.mediaDevices.getUserMedia(constraints);
+            let stream: MediaStream | null = null;
+            try {
+                stream = await navigator.mediaDevices.getUserMedia(constraints);
+            } catch (_) {
+                // Mobile hardware fallback if 1280x720 is rejected
+                stream = await navigator.mediaDevices.getUserMedia({
+                    video: { facingMode: { ideal: facingMode } },
+                    audio: false,
+                });
+            }
             streamRef.current = stream;
 
             if (videoRef.current) {
@@ -584,11 +674,7 @@ export default function GateCameraScanner({
             }
         } catch (err: any) {
             console.error("Camera access error:", err);
-            if (facingMode === "environment") {
-                setFacingMode("user");
-                return;
-            }
-            setCameraError(err.message || "Camera permission denied or camera not found");
+            setCameraError("Unable to access camera device.");
         }
     }, [facingMode, stopCamera]);
 
@@ -599,41 +685,22 @@ export default function GateCameraScanner({
         };
     }, [startCamera, stopCamera]);
 
-    // 3. Process Gatepass Action (Instant 0ms Screen Display + Millisecond Async Server Sync)
+    // 3. Process Gatepass Action
     const handleGatepassAction = async (student: IdentifiedStudent) => {
         if (isProcessingPass) return;
         setIsProcessingPass(true);
 
-        const isOuting = student.studentStatus !== "out";
-        const badgeType = isOuting
-            ? (student.outingType?.toLowerCase().includes("leave") ? "HOME-LEAVE" : "GATE-PASS")
-            : "RETURNED";
-
+        const studentId = student.id || student._id;
         const now = new Date();
         const timeStr = now.toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit", hour12: true });
 
-        // ⚡ 1. INSTANT ON-SCREEN CONFIRMATION (0 milliseconds): Show student photo, card & audio feedback immediately
-        setRecentEvent({
-            student,
-            action: isOuting ? "out" : "in",
-            badge: badgeType,
-            time: timeStr,
-        });
-
-        playSuccessChime();
-        speak(isOuting ? `${student.name}, checked out` : `${student.name}, checked in`);
-
-        if (onPassProcessed) {
-            onPassProcessed(student.name, isOuting ? "out" : "in", badgeType);
-        }
-
-        // ⚡ 2. MILLISECOND BACKGROUND SERVER SYNC: Record outing/return in database
         try {
+            // 🔒 Send request to enforce the strict Anti-Spoof Cooldown & Emergency Outing rules
             const res = await fetch("/api/getpass/manual-toggle", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({
-                    studentId: student.id,
+                    studentId: studentId,
                     userType: "gatekeeper",
                     requestType: "GATE-PASS",
                     source: "face_camera"
@@ -642,58 +709,77 @@ export default function GateCameraScanner({
 
             const data = await res.json();
 
-            // 🚫 Check for cooldown block
-            if (!data.success && (data.action === "cooldown_blocked" || data.isDuplicate)) {
+            if (data.success) {
+                // ✅ PASS ALLOWED: Cooldown rules passed, state updated in database
+                const effectiveAction: "in" | "out" = data.newStatus === "out" ? "out" : (data.newStatus === "in" ? "in" : (student.studentStatus === "out" ? "in" : "out"));
+                const isEffectiveOut = effectiveAction === "out";
+                const badgeType = isEffectiveOut
+                    ? (student.outingType?.toLowerCase().includes("leave") ? "HOME-LEAVE" : "GATE-PASS")
+                    : "RETURNED";
+
+                setRecentEvent({
+                    student,
+                    action: effectiveAction,
+                    badge: badgeType,
+                    time: timeStr,
+                });
+
+                const actionText = isEffectiveOut ? "Check out" : "Check in";
+                const eventKey = `${studentId}_${isEffectiveOut ? "checkout" : "checkin"}`;
+                if (typeof window !== "undefined") {
+                    (window as any).__lastGatepassSpoken = { key: eventKey, time: Date.now() };
+                }
+
+                if (onPassProcessed) {
+                    onPassProcessed(student, effectiveAction, badgeType);
+                } else {
+                    playSuccessChime();
+                    speak(actionText);
+                }
+            } else {
+                // 🚫 COOLDOWN OR VALIDATION REJECTED:
                 setRecentEvent(null);
-                const warnMsg = data.message || data.error || "Anti-Spoof Cooldown Active";
-                setSpoofWarning(`⏳ ${warnMsg}`);
-                setScanStatus(warnMsg);
                 playWarningBuzz();
-                speak("Cooldown active. Please wait.");
-                setTimeout(() => {
-                    setSpoofWarning(null);
-                    setMatchedStudent(null);
-                    setActiveFaceBox(null);
-                    setScanStatus("Ready • Align face with camera");
-                    setIsProcessingPass(false);
-                }, 4000);
-                return;
+
+                if (data.action === "cooldown_blocked" || data.isDuplicate) {
+                    speak("Cooldown active. Please wait.");
+                    setScanStatus(`⏳ ${data.message || data.error || "Anti-Spoof Cooldown: Please wait before scanning again."}`);
+                    setSpoofWarning(data.message || "Anti-Spoof Cooldown: Please wait before scanning again.");
+                } else {
+                    speak("Access denied.");
+                    setScanStatus(`⚠️ ${data.error || "Failed to verify gatepass"}`);
+                }
             }
-
-            // Immediately update local student status in RAM
-            setGallery((prev) =>
-                prev.map((s) => (s.id === student.id ? { ...s, studentStatus: isOuting ? "out" : "in" } : s))
-            );
-
         } catch (err) {
-            console.error("Gatepass action background sync note:", err);
+            console.error("Failed to sync gatepass toggle:", err);
+            playWarningBuzz();
+            speak("Network error.");
         } finally {
-            // Keep confirmation on screen for 3.5 seconds
             setTimeout(() => {
                 setRecentEvent(null);
                 setMatchedStudent(null);
                 setActiveFaceBox(null);
-                setScanStatus("Ready • Align face with camera");
                 setIsProcessingPass(false);
             }, 3500);
         }
     };
 
-    // 4. Standby Clock Updater (Method A)
+    // 4. Standby Clock Updater
     useEffect(() => {
         if (!isStandby) return;
         const updateClock = () => {
             const now = new Date();
             const timeStr = now.toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: true });
-            const dateStr = now.toLocaleDateString("en-GB", { day: "2-digit", month: "2-digit", year: "numeric" });
-            setStandbyClock({ time: timeStr, date: dateStr });
+            const dateStr = now.toLocaleDateString("en-GB", { day: "2-digit", month: "2-digit", year: "numeric" }).replace(/\//g, "-");
+            const dayStr = now.toLocaleDateString("en-US", { weekday: "long" });
+            setStandbyClock({ time: timeStr, date: dateStr, day: dayStr });
         };
         updateClock();
         const interval = setInterval(updateClock, 1000);
         return () => clearInterval(interval);
     }, [isStandby]);
 
-    // 5. Detection & 1:N Identification Loop (Exact Copy of Identifier Modal Pipeline)
+    // 5. ⚡ 60FPS Synchronized Face Tracking & Instant 1-2s Identification (Exact Identifier Modal Engine)
     useEffect(() => {
         if (!isCameraActive || gallery.length === 0) return;
 
@@ -701,7 +787,7 @@ export default function GateCameraScanner({
         let isDetecting = false;
 
         const processFrame = async () => {
-            if (!isRunning || !videoRef.current || isProcessingPass) return;
+            if (!isRunning || !videoRef.current || isProcessingPass || matchedStudent) return;
 
             if (isDetecting) {
                 animFrameRef.current = requestAnimationFrame(processFrame);
@@ -718,49 +804,33 @@ export default function GateCameraScanner({
                     return;
                 }
 
-                // Method A: Check for idle standby based on exact configured standbyMinutes
+                // Check for idle standby
                 const currentStandbyMins = Math.max(1, standbyMinutesRef.current || 1);
                 const standbyMs = currentStandbyMins * 60 * 1000;
                 const idleTime = Date.now() - lastActivityRef.current;
-                if (idleTime > standbyMs) {
-                    if (!isStandbyRef.current) {
-                        updateStandbyState(true);
-                    }
+                if (idleTime > standbyMs && !isStandbyRef.current) {
+                    updateStandbyState(true);
                 }
 
-                // 🛡️ CHECK 0: Object Detection for Secondary Cell Phones (Runs async every 400ms)
-                const now = Date.now();
-                if (now - lastObjectCheckRef.current > 400) {
-                    lastObjectCheckRef.current = now;
-                    try {
-                        const phoneCheck = await detectMobilePhone(video);
-                        if (phoneCheck.isSpoofing) {
-                            setSpoofWarning(`🛑 FRAUD PREVENTED: Secondary Device Detected (${phoneCheck.message})`);
-                            setScanStatus("🛑 FRAUD DETECTED: Mobile Phone Screen / Device Rejected!");
-                            setActiveFaceBox(null);
-                            isDetecting = false;
-                            animFrameRef.current = requestAnimationFrame(processFrame);
-                            return;
-                        }
-                    } catch (_) {}
-                }
-
-                // 🎯 Landmark Extraction with withLandmarks = true (Same as Identifier Modal!)
+                // ⚡ Instant Face Detection & 128-D Descriptors
                 const detection = await detectFace(video, false, true);
 
                 if (!detection || !detection.descriptor) {
+                    if (Date.now() - lastFaceSeenTimeRef.current > 1500) {
+                        faceLockStartTimeRef.current = null;
+                        setUnrecognizedWarning(null);
+                    }
                     setActiveFaceBox(null);
                     setSpoofWarning(null);
                     consecutiveMatchRef.current = { studentId: null, count: 0 };
                     if (!recentEvent) {
-                        setScanStatus("Looking for student face...");
+                        setScanStatus(unrecognizedWarning || "Looking for student face...");
                     }
                     isDetecting = false;
                     animFrameRef.current = requestAnimationFrame(processFrame);
                     return;
                 }
 
-                // ⚡ INSTANT WAKE-UP (Milliseconds): As soon as any person steps in front of the camera
                 lastActivityRef.current = Date.now();
                 if (isStandbyRef.current) {
                     updateStandbyState(false);
@@ -769,7 +839,7 @@ export default function GateCameraScanner({
                 const rawBox = detection.detection?.box || (detection as any).box;
                 const detectionScore = detection.detection?.score ?? (detection as any).score ?? 0;
 
-                // 🛡️ CHECK 1: Detection Confidence Score (Must be high confidence human face >= 0.60)
+                // CHECK 1: Confidence
                 if (detectionScore < 0.60 || !rawBox || rawBox.width < 50 || rawBox.height < 50) {
                     setScanStatus("Looking for student face...");
                     setActiveFaceBox(null);
@@ -779,7 +849,7 @@ export default function GateCameraScanner({
                     return;
                 }
 
-                // 🛡️ CHECK 2: Facial Landmark Geometry Anatomy Validator
+                // CHECK 2: Anatomy & Landmark Geometry
                 if (!verifyFacialAnatomy(detection.landmarks, rawBox)) {
                     setScanStatus("Looking for student face...");
                     setActiveFaceBox(null);
@@ -789,64 +859,31 @@ export default function GateCameraScanner({
                     return;
                 }
 
-                const vw = video.videoWidth || 640;
-                const vh = video.videoHeight || 480;
-
-                const offCanvas = document.createElement("canvas");
-                offCanvas.width = vw;
-                offCanvas.height = vh;
-                const ctx = offCanvas.getContext("2d", { willReadFrequently: true });
-
-                if (ctx) {
-                    ctx.drawImage(video, 0, 0, vw, vh);
-
-                    // 🛡️ CHECK 3: Real Human Physical Skin Tone Chromaticity Filter (Melanin/Hemoglobin >= 26%)
-                    const skinCheck = checkHumanSkinTone(ctx, rawBox);
-                    if (!skinCheck.isSkin) {
-                        setScanStatus("Looking for student face...");
-                        setActiveFaceBox(null);
-                        consecutiveMatchRef.current = { studentId: null, count: 0 };
-                        isDetecting = false;
-                        animFrameRef.current = requestAnimationFrame(processFrame);
-                        return;
-                    }
-
-                    // 🛡️ CHECK 4: Specular Glass Glare, Screen Moiré & Secondary Phone Casing Filter
-                    const screenCheck = checkScreenAndPhotoSpoof(ctx, rawBox, vw, vh);
-                    if (screenCheck.isSpoof) {
-                        setSpoofWarning(screenCheck.reason || "Mobile phone screen / glass display detected!");
-                        setScanStatus("🛑 FRAUD DETECTED: Secondary Phone Screen / Display Rejected!");
-                        setActiveFaceBox(null);
-                        consecutiveMatchRef.current = { studentId: null, count: 0 };
-                        isDetecting = false;
-                        animFrameRef.current = requestAnimationFrame(processFrame);
-                        return;
-                    }
-
-                    // 🛡️ CHECK 5: Photo-of-photo Bezel / Border Detection
-                    const photoCheck = assessPhotoQuality(offCanvas);
-                    if (photoCheck.isPhotoOfPhoto) {
-                        setSpoofWarning("Secondary photo border / screen bezel detected!");
-                        setScanStatus("🛑 FRAUD DETECTED: Printed Photo or Screen Border Detected!");
-                        setActiveFaceBox(null);
-                        consecutiveMatchRef.current = { studentId: null, count: 0 };
-                        isDetecting = false;
-                        animFrameRef.current = requestAnimationFrame(processFrame);
-                        return;
-                    }
-                }
-
-                // If genuine face passed all checks, wake standby and update activity
-                lastActivityRef.current = Date.now();
-                if (isStandby) setIsStandby(false);
-
-                // 🎯 TIGHT ACTUAL FACE BOX (Hugs forehead, chin, and cheeks tightly)
+                // 🎯 TIGHT ACTUAL FACE BOX (forehead to chin, cheek to cheek)
                 const tightBox = getTightFaceBox(detection.landmarks, rawBox);
                 const isMirrored = facingMode === "user";
                 const displayBox = calculateDisplayBox(tightBox, video, isMirrored);
 
+                // Update box on screen in real time at 60 FPS
                 setActiveFaceBox(displayBox);
                 setSpoofWarning(null);
+
+                lastFaceSeenTimeRef.current = Date.now();
+                if (faceLockStartTimeRef.current === null) {
+                    faceLockStartTimeRef.current = Date.now();
+                }
+
+                // ⏱️ 5-6 SECONDS UNRECOGNIZED FACE GUARD:
+                const elapsedLockTime = Date.now() - faceLockStartTimeRef.current;
+                if (elapsedLockTime >= 5500 && !matchedStudent) {
+                    const unrecMsg = "❌ Face Not Recognized — contact hostel dean/warden";
+                    setUnrecognizedWarning(unrecMsg);
+                    setScanStatus(unrecMsg);
+                    consecutiveMatchRef.current = { studentId: null, count: 0 };
+                    isDetecting = false;
+                    animFrameRef.current = requestAnimationFrame(processFrame);
+                    return;
+                }
 
                 const liveDescriptor = Array.from(detection.descriptor) as number[];
 
@@ -854,7 +891,7 @@ export default function GateCameraScanner({
                 let minDistance = 999.0;
                 let secondMinDistance = 999.0;
 
-                // 1:N Euclidean vector comparison across all students (< 2ms)
+                // ⚡ Instant In-Memory 1:N Euclidean vector comparison across all students (< 1.5ms)
                 for (let i = 0; i < gallery.length; i++) {
                     const candidate = gallery[i];
                     if (!candidate.faceDescriptor || candidate.faceDescriptor.length === 0) continue;
@@ -869,16 +906,60 @@ export default function GateCameraScanner({
                     }
                 }
 
-                // 🎯 Calibrated Match Criteria:
-                // Gate 1: Distance <= 0.42
-                // Gate 2: Distinctiveness Margin (second - best) >= 0.030
-                const isStrongCandidate = (
+                const currentScore = calculateScore(minDistance);
+                const isEligibleMatch = (
                     bestMatch !== null &&
-                    minDistance <= 0.42 &&
-                    (secondMinDistance - minDistance) >= 0.030
+                    currentScore >= 85 &&
+                    (secondMinDistance - minDistance) >= 0.010
                 );
 
-                if (isStrongCandidate && bestMatch) {
+                if (isEligibleMatch && bestMatch) {
+                    // 🛡️ High-Confidence Match Found! Perform Ultra-Fast Anti-Spoof Checks
+                    const vw = video.videoWidth || 640;
+                    const vh = video.videoHeight || 480;
+
+                    const offCanvas = document.createElement("canvas");
+                    offCanvas.width = vw;
+                    offCanvas.height = vh;
+                    const ctx = offCanvas.getContext("2d", { willReadFrequently: true });
+
+                    if (ctx) {
+                        ctx.drawImage(video, 0, 0, vw, vh);
+
+                        // Anti-Spoof 1: Skin Chromaticity
+                        const skinCheck = checkHumanSkinTone(ctx, rawBox);
+                        if (!skinCheck.isSkin) {
+                            setScanStatus("Looking for student face...");
+                            consecutiveMatchRef.current = { studentId: null, count: 0 };
+                            isDetecting = false;
+                            animFrameRef.current = requestAnimationFrame(processFrame);
+                            return;
+                        }
+
+                        // Anti-Spoof 2: MiniFASNetV2 Neural Liveness Engine (<15ms)
+                        const neuralCheck = await checkLivenessClient(offCanvas, rawBox, vw, vh);
+                        if (neuralCheck.isSpoof) {
+                            const warnText = neuralCheck.reason || "Mobile phone display or printed photo detected!";
+                            setSpoofWarning(warnText);
+                            setScanStatus(`🛑 FRAUD DETECTED: ${warnText}`);
+                            consecutiveMatchRef.current = { studentId: null, count: 0 };
+                            isDetecting = false;
+                            animFrameRef.current = requestAnimationFrame(processFrame);
+                            return;
+                        }
+
+                        // Anti-Spoof 3: Screen Glare, Moiré & Collinear Device Border
+                        const screenCheck = checkScreenAndPhotoSpoof(ctx, rawBox, vw, vh);
+                        if (screenCheck.isSpoof) {
+                            setSpoofWarning(screenCheck.reason || "Mobile phone screen / glass display detected!");
+                            setScanStatus("🛑 FRAUD DETECTED: Secondary Phone Screen / Display Rejected!");
+                            consecutiveMatchRef.current = { studentId: null, count: 0 };
+                            isDetecting = false;
+                            animFrameRef.current = requestAnimationFrame(processFrame);
+                            return;
+                        }
+                    }
+
                     const currentCandidateId = bestMatch.id || bestMatch.registrationId;
                     if (consecutiveMatchRef.current.studentId === currentCandidateId) {
                         consecutiveMatchRef.current.count += 1;
@@ -889,14 +970,21 @@ export default function GateCameraScanner({
                     consecutiveMatchRef.current = { studentId: null, count: 0 };
                 }
 
-                // ✅ 2-frame temporal stability consensus reached
-                if (isStrongCandidate && bestMatch && consecutiveMatchRef.current.count >= 2) {
+                // ✅ Confirmed in 1-2 seconds (clean hands-free consensus):
+                const isVerified = (
+                    bestMatch !== null &&
+                    consecutiveMatchRef.current.count >= 2
+                );
+
+                if (isVerified && bestMatch) {
                     const score = calculateScore(minDistance);
                     setMatchedStudent(bestMatch);
                     setMatchScore(score);
                     setScanStatus(`Verified: ${bestMatch.name} (${score}% match)`);
+                    faceLockStartTimeRef.current = null;
+                    setUnrecognizedWarning(null);
+                    consecutiveMatchRef.current = { studentId: null, count: 0 };
 
-                    // Anti-bounce check: prevent re-triggering within 5 seconds for same student
                     const nowMs = Date.now();
                     if (
                         lastProcessedRef.current.studentId !== bestMatch.id ||
@@ -905,6 +993,8 @@ export default function GateCameraScanner({
                         lastProcessedRef.current = { studentId: bestMatch.id, timestamp: nowMs };
                         handleGatepassAction(bestMatch);
                     }
+                    isDetecting = false;
+                    return;
                 } else {
                     setScanStatus("Scanning face against student roster...");
                 }
@@ -913,7 +1003,7 @@ export default function GateCameraScanner({
                 console.warn("Scan frame error:", frameErr);
             } finally {
                 isDetecting = false;
-                if (isRunning && !recentEvent) {
+                if (isRunning && !recentEvent && !matchedStudent) {
                     animFrameRef.current = requestAnimationFrame(processFrame);
                 }
             }
@@ -928,10 +1018,18 @@ export default function GateCameraScanner({
                 animFrameRef.current = null;
             }
         };
-    }, [isCameraActive, gallery, isProcessingPass, recentEvent, facingMode, standbyMinutes]);
+    }, [isCameraActive, gallery, isProcessingPass, recentEvent, matchedStudent, facingMode, standbyMinutes]);
 
     return (
-        <div className="relative w-full h-full flex flex-col items-center justify-center overflow-hidden bg-black rounded-2xl md:rounded-[28px] border-[4px] md:border-[6px] border-[#00ff884d] shadow-[0_0_50px_rgba(0,255,136,0.15)]">
+        <div className={`relative w-full h-full aspect-square rounded-2xl md:rounded-[28px] overflow-hidden bg-black flex items-center justify-center border-2 md:border-[4px] transition-all shadow-2xl ${
+            spoofWarning 
+              ? "border-red-500 shadow-[0_0_25px_rgba(239,68,68,0.5)] animate-pulse" 
+              : unrecognizedWarning
+                ? "border-amber-500 shadow-[0_0_25px_rgba(245,158,11,0.4)]"
+                : matchedStudent 
+                  ? "border-emerald-500 shadow-[0_0_30px_rgba(16,185,129,0.5)]" 
+                  : "border-emerald-500/30 shadow-[0_0_30px_rgba(16,185,129,0.15)]"
+        }`}>
             {/* Camera Video Element */}
             <video
                 ref={videoRef}
@@ -941,25 +1039,55 @@ export default function GateCameraScanner({
                 className={`w-full h-full object-cover transition-opacity duration-500 ${isStandby ? "opacity-20" : "opacity-100"} ${facingMode === "user" ? "scale-x-[-1]" : ""}`}
             />
 
-            {/* Camera Switch Pill (Top Right) */}
-            <div className="absolute top-3 right-3 z-20 flex items-center gap-1.5 bg-[#000000a6] backdrop-blur-md px-2.5 py-1 rounded-full border border-white/10 text-[10px] text-white/80 font-bold">
+            {/* Camera Switch Pill (Top Left on Mobile, Top Right on Desktop - Compact rounded-md) */}
+            <div className="absolute top-2 left-2 md:left-auto md:top-3 md:right-3 z-20 flex items-center gap-1 bg-slate-900/85 backdrop-blur-md px-1.5 py-0.5 rounded-md border border-slate-700 text-[8px] text-white font-bold shadow-md">
                 <button
                     type="button"
                     onClick={() => setFacingMode((prev) => (prev === "environment" ? "user" : "environment"))}
-                    className="flex items-center gap-1 hover:text-[#00ff88] transition-colors"
-                    title="Switch Camera"
+                    className="flex items-center gap-1 hover:text-emerald-400 transition-colors cursor-pointer"
+                    title="Switch Camera (Front/Rear)"
                 >
-                    <span>🔄</span>
-                    <span className="uppercase">{facingMode === "environment" ? "Rear Cam" : "Front Cam"}</span>
+                    <RefreshCw className="w-2.5 h-2.5 text-emerald-400" />
+                    <span className="uppercase">{facingMode === "environment" ? "REAR CAMERA" : "FRONT CAMERA"}</span>
                 </button>
             </div>
 
+            {/* 🛑 ANTI-SPOOF FRAUD WARNING OVERLAY */}
+            {spoofWarning && (
+                <div className="absolute top-2 inset-x-2 z-30 bg-red-600/95 backdrop-blur-md px-3 py-2 rounded-xl border border-red-400 shadow-xl text-white flex items-center gap-2.5 animate-in slide-in-from-top-2 duration-150">
+                    <ShieldAlert className="w-5 h-5 text-yellow-300 shrink-0 animate-bounce" />
+                    <div className="min-w-0 flex-1">
+                        <p className="text-[9px] font-black uppercase tracking-wider text-yellow-200 flex items-center gap-1">
+                            🛑 Anti-Spoof Protection Triggered
+                        </p>
+                        <p className="text-[11px] font-black leading-tight text-white drop-shadow">
+                            {spoofWarning}
+                        </p>
+                    </div>
+                </div>
+            )}
 
+            {/* ⏱️ UNRECOGNIZED FACE TIMEOUT WARNING (5-6 SECONDS) */}
+            {unrecognizedWarning && !spoofWarning && !matchedStudent && (
+                <div className="absolute top-2 inset-x-2 z-30 bg-amber-600/95 backdrop-blur-md px-3 py-2 rounded-xl border border-amber-400 shadow-xl text-white flex items-center justify-between gap-2 animate-in slide-in-from-top-2 duration-150">
+                    <div className="flex items-center gap-2 min-w-0 flex-1">
+                        <AlertTriangle className="w-5 h-5 text-yellow-200 shrink-0 animate-bounce" />
+                        <div className="min-w-0">
+                            <p className="text-[11px] font-black leading-tight text-white drop-shadow">
+                                {unrecognizedWarning}
+                            </p>
+                            <p className="text-[9px] text-amber-100/90 font-medium mt-0.5">
+                                Not registered or match confidence &lt; 85%
+                            </p>
+                        </div>
+                    </div>
+                </div>
+            )}
 
-            {/* Face Tracking Bounding Box */}
-            {activeFaceBox && !isStandby && !recentEvent && (
+            {/* 🟩 REAL-TIME GREEN SQUARE BOX TIGHTLY HUGGING ACTUAL FACE (Exact Identifier Modal Bracket Box) */}
+            {activeFaceBox && !spoofWarning && !isStandby && (
                 <div
-                    className="absolute border-2 border-[#00ff88] rounded-xl pointer-events-none transition-all duration-75 shadow-[0_0_15px_rgba(0,255,136,0.5)]"
+                    className="absolute z-10 pointer-events-none"
                     style={{
                         left: `${activeFaceBox.left}%`,
                         top: `${activeFaceBox.top}%`,
@@ -967,33 +1095,78 @@ export default function GateCameraScanner({
                         height: `${activeFaceBox.height}%`,
                     }}
                 >
-                    {matchedStudent && (
-                        <div className="absolute -top-7 left-1/2 -translate-x-1/2 bg-[#00ff88] text-black text-[10px] font-black px-2 py-0.5 rounded-full whitespace-nowrap shadow-md">
-                            ● {matchedStudent.name} • {matchScore}%
+                    <div className={`w-full h-full border-2 rounded-lg relative ${
+                        unrecognizedWarning
+                            ? "border-amber-400 bg-amber-500/10 shadow-[0_0_15px_rgba(251,191,36,0.4)]"
+                            : matchedStudent 
+                                ? "border-emerald-400 bg-emerald-500/10 shadow-[0_0_20px_rgba(52,211,153,0.5)]" 
+                                : "border-green-400 bg-green-400/5 shadow-[0_0_12px_rgba(74,222,128,0.3)]"
+                    }`}>
+                        {/* Corner Targeting Accents */}
+                        <div className="absolute -top-1 -left-1 w-3 h-3 border-t-2 border-l-2 border-emerald-300"></div>
+                        <div className="absolute -top-1 -right-1 w-3 h-3 border-t-2 border-r-2 border-emerald-300"></div>
+                        <div className="absolute -bottom-1 -left-1 w-3 h-3 border-b-2 border-l-2 border-emerald-300"></div>
+                        <div className="absolute -bottom-1 -right-1 w-3 h-3 border-b-2 border-r-2 border-emerald-300"></div>
+
+                        {/* Real Measurement & Name Badge */}
+                        <div className={`absolute -top-6 left-1/2 -translate-x-1/2 whitespace-nowrap px-2 py-0.5 rounded-md border text-[9px] font-black tracking-wider uppercase flex items-center gap-1 shadow-md ${
+                            unrecognizedWarning
+                                ? "bg-amber-950/90 border-amber-400/60 text-amber-300"
+                                : "bg-emerald-950/90 border-emerald-400/60 text-emerald-300"
+                        }`}>
+                            <span className={`w-1.5 h-1.5 rounded-full ${unrecognizedWarning ? "bg-amber-400" : "bg-emerald-400 animate-pulse"}`}></span>
+                            {unrecognizedWarning ? (
+                                <span>UNREGISTERED</span>
+                            ) : matchedStudent ? (
+                                <span>{matchedStudent.name} • {matchScore}%</span>
+                            ) : (
+                                <span>{activeFaceBox.pixelW}×{activeFaceBox.pixelH}px</span>
+                            )}
                         </div>
+                    </div>
+                </div>
+            )}
+
+            {/* Bottom Status Bar (Exact Identifier Modal Bar) */}
+            <div className={`absolute bottom-2 inset-x-2 backdrop-blur-md px-3 py-1.5 rounded-lg border flex items-center justify-between transition-colors z-20 ${
+                spoofWarning 
+                    ? "bg-red-950/90 border-red-700/80" 
+                    : unrecognizedWarning
+                        ? "bg-amber-950/90 border-amber-700/80"
+                        : matchedStudent 
+                            ? "bg-emerald-950/90 border-emerald-700/80" 
+                            : "bg-slate-900/80 border-slate-700/60"
+            }`}>
+                <p className="text-[11px] font-semibold truncate flex items-center gap-1.5">
+                    {spoofWarning ? (
+                        <span className="text-red-300 flex items-center gap-1 font-black truncate">
+                            <ShieldAlert className="w-3.5 h-3.5 text-red-400 shrink-0" /> Synthetic Display / Photo Rejected
+                        </span>
+                    ) : unrecognizedWarning ? (
+                        <span className="text-amber-300 flex items-center gap-1 font-black truncate">
+                            <AlertTriangle className="w-3.5 h-3.5 text-amber-400 shrink-0" /> {unrecognizedWarning}
+                        </span>
+                    ) : matchedStudent ? (
+                        <span className="text-green-400 flex items-center gap-1 font-bold truncate">
+                            <CheckCircle2 className="w-3.5 h-3.5 shrink-0" /> Identity & Live Human Verified
+                        </span>
+                    ) : activeFaceBox ? (
+                        <span className="text-emerald-400 flex items-center gap-1 font-bold truncate">
+                            <Sparkles className="w-3.5 h-3.5 animate-spin shrink-0" /> Face Locked • Identifying...
+                        </span>
+                    ) : (
+                        <span className="text-slate-200 truncate flex items-center gap-1.5">
+                            <span className="w-2 h-2 rounded-full bg-blue-400 animate-pulse shrink-0" />
+                            {scanStatus}
+                        </span>
                     )}
-                </div>
-            )}
-
-            {/* Fraud Warning Banner (if spoofing / phone screen detected) */}
-            {spoofWarning && (
-                <div className="absolute top-12 inset-x-3 z-30 bg-red-600/90 backdrop-blur-md px-3 py-1.5 rounded-xl border border-red-400 text-white text-[11px] font-bold text-center animate-in slide-in-from-top-2">
-                    {spoofWarning}
-                </div>
-            )}
-
-            {/* Bottom Status Bar */}
-            <div className="absolute bottom-3 inset-x-3 z-20 flex items-center justify-between bg-[#000000cc] backdrop-blur-md px-3.5 py-2 rounded-xl border border-white/10">
-                <div className="flex items-center gap-2 text-xs font-semibold text-white truncate">
-                    <span className={`w-2 h-2 rounded-full shrink-0 ${matchedStudent ? "bg-[#00ff88] animate-ping" : "bg-blue-400 animate-pulse"}`} />
-                    <span className="truncate">{scanStatus}</span>
-                </div>
-                <div className="text-[10px] text-gray-400 font-mono shrink-0">
+                </p>
+                <span className="text-[9px] text-slate-400 uppercase font-black tracking-widest shrink-0 ml-2">
                     1:N BIOMETRIC
-                </div>
+                </span>
             </div>
 
-            {/* Method A: Standby Dark Clock Overlay */}
+            {/* Standby Dark Clock Overlay */}
             {isStandby && (
                 <div 
                     onClick={() => {
@@ -1004,19 +1177,21 @@ export default function GateCameraScanner({
                         lastActivityRef.current = Date.now();
                         updateStandbyState(false);
                     }}
-                    className="absolute inset-0 z-30 flex flex-col items-center justify-center bg-black/90 backdrop-blur-sm p-4 text-center animate-in fade-in duration-300 cursor-pointer"
+                    className="absolute inset-0 z-40 flex flex-col items-center justify-center bg-black/90 backdrop-blur-sm p-4 text-center animate-in fade-in duration-300 cursor-pointer"
                     title="Click or step in front of camera to wake up"
                 >
-                    <div className="p-3 bg-[rgba(0,255,136,0.08)] border border-[rgba(0,255,136,0.3)] rounded-2xl mb-3">
+                    <div className="p-3 bg-emerald-500/10 border border-emerald-400/30 rounded-2xl mb-3">
                         <span className="text-3xl">🌙</span>
                     </div>
-                    <div className="text-3xl sm:text-5xl font-black text-white tabular-nums tracking-wider mb-1">
+                    <div className="text-3xl sm:text-5xl font-black text-white tabular-nums tracking-wider mb-2">
                         {standbyClock.time}
                     </div>
-                    <div className="text-sm font-semibold text-gray-400 mb-4">
-                        {standbyClock.date}
+                    <div className="text-base sm:text-2xl md:text-3xl font-bold text-white tracking-wide mb-4 flex items-center justify-center gap-2 sm:gap-3 whitespace-nowrap">
+                        <span>{standbyClock.date}</span>
+                        <span className="text-[rgba(255,255,255,0.4)] font-normal">•</span>
+                        <span>{standbyClock.day}</span>
                     </div>
-                    <div className="flex items-center gap-2 px-4 py-2 bg-[rgba(0,255,136,0.12)] border border-[#00ff884d] rounded-full text-[#00ff88] text-xs font-bold animate-pulse">
+                    <div className="flex items-center gap-2 px-4 py-2 bg-emerald-500/15 border border-emerald-400/30 rounded-full text-emerald-300 text-xs font-bold animate-pulse">
                         <span>🚶</span>
                         <span>Step in front of gate camera to wake & scan</span>
                     </div>
@@ -1028,54 +1203,31 @@ export default function GateCameraScanner({
 
             {/* Recent Pass Confirmation Card Overlay */}
             {recentEvent && (
-                <div className="absolute inset-x-4 bottom-14 z-40 bg-[#0d1420f2] border-2 border-[#00ff88] rounded-2xl p-3 shadow-[0_0_30px_rgba(0,255,136,0.35)] animate-in slide-in-from-bottom-4 duration-300">
+                <div className="absolute inset-x-3 bottom-12 z-40 bg-slate-900/95 border-2 border-emerald-400 rounded-2xl p-3 shadow-[0_0_30px_rgba(16,185,129,0.4)] animate-in slide-in-from-bottom-4 duration-300">
                     <div className="flex items-center gap-3">
-                        <div className="w-14 h-14 rounded-xl overflow-hidden border-2 border-[#00ff88] shrink-0 bg-gray-900">
+                        <div className="w-14 h-14 rounded-xl overflow-hidden border-2 border-emerald-400 shrink-0 bg-gray-900">
                             <FastAvatar
                                 src={recentEvent.student.profilePicture}
                                 name={recentEvent.student.name}
+                                size={56}
                                 className="w-full h-full object-cover"
                             />
                         </div>
-                        <div className="min-w-0 flex-1">
-                            <div className="flex items-center gap-2">
-                                <h4 className="text-sm font-black text-white truncate">
-                                    {recentEvent.student.name}
-                                </h4>
-                                <span className={`px-2 py-0.5 rounded-full text-[9px] font-black uppercase tracking-wider ${
-                                    recentEvent.badge === "HOME-LEAVE"
-                                        ? "bg-amber-500/20 text-amber-300 border border-amber-500/40"
-                                        : recentEvent.badge === "GATE-PASS"
-                                        ? "bg-blue-500/20 text-blue-300 border border-blue-500/40"
-                                        : "bg-emerald-500/20 text-emerald-300 border border-emerald-500/40"
+                        <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-2 mb-0.5">
+                                <span className={`px-2 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider ${
+                                    recentEvent.action === "out" ? "bg-amber-500/20 text-amber-300 border border-amber-400/40" : "bg-emerald-500/20 text-emerald-300 border border-emerald-400/40"
                                 }`}>
                                     {recentEvent.badge}
                                 </span>
+                                <span className="text-[10px] text-gray-400 font-mono ml-auto">{recentEvent.time}</span>
                             </div>
-                            <p className="text-[11px] text-gray-300 truncate mt-0.5">
-                                {recentEvent.student.registrationId || recentEvent.student.erpId} • {recentEvent.student.hostelName} #{recentEvent.student.roomNumber}
+                            <h4 className="text-sm font-black text-white truncate">{recentEvent.student.name}</h4>
+                            <p className="text-[11px] text-gray-300 font-medium truncate">
+                                {recentEvent.student.registrationId} • Room {recentEvent.student.roomNumber}
                             </p>
-                            <div className="flex items-center gap-1.5 mt-1 text-[10px] font-bold text-[#00ff88]">
-                                <span>{recentEvent.action === "out" ? "🚪 Checked OUT at" : "🏠 Checked IN at"}</span>
-                                <span>{recentEvent.time}</span>
-                            </div>
                         </div>
                     </div>
-                </div>
-            )}
-
-            {/* Camera Error Message */}
-            {cameraError && (
-                <div className="absolute inset-0 z-30 flex flex-col items-center justify-center bg-black/95 p-6 text-center">
-                    <span className="text-3xl mb-2">⚠️</span>
-                    <p className="text-red-400 text-xs font-bold mb-3">{cameraError}</p>
-                    <button
-                        type="button"
-                        onClick={startCamera}
-                        className="px-4 py-1.5 bg-[#00ff88] text-black font-bold text-xs rounded-xl shadow-lg active:scale-95 transition-transform"
-                    >
-                        Retry Camera
-                    </button>
                 </div>
             )}
         </div>

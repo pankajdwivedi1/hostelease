@@ -22,11 +22,10 @@ import {
   loadFaceApiModels, 
   detectFace, 
   calculateScore,
-  detectMobileScreenDisplay,
-  assessPhotoQuality 
+  detectMobileScreenDisplay
 } from "@/lib/faceMatching";
-import { loadPhoneDetector, detectMobilePhone } from "@/lib/objectDetection";
 import { loadBiometricGalleryWithSync } from "@/lib/localFaceGallery";
+import { initClientMiniFASNet, checkLivenessClient } from "@/lib/clientMiniFASNet";
 
 interface IdentifiedStudent {
   id: string;
@@ -132,11 +131,12 @@ function checkHumanSkinTone(
 }
 
 /**
- * 🛡️ Multi-Factor Mobile Screen, Glass Glare & Secondary Phone Casing Analyzer
+ * 🛡️ Multi-Factor Mobile Screen, Glass Glare & Secondary Device Chassis Analyzer
+ * Pure synchronous client-side presentation attack detection running on raw canvas in < 4ms.
  * Rejects photos shown on phone screens, tablets, monitors, and video replays:
  * 1. Specular Glass Glare Reflection (blown-out mirror reflections on screen glass)
  * 2. High-Frequency Moiré Lattice Grid (LCD/OLED pixel matrix interference)
- * 3. Secondary Phone Bezel & Casing (detects dark phone borders even when tilted)
+ * 3. Secondary Device Casing / Multi-Scale Enclosing Frame Bezel (top, left, right)
  */
 function checkScreenAndPhotoSpoof(
   ctx: CanvasRenderingContext2D,
@@ -152,27 +152,28 @@ function checkScreenAndPhotoSpoof(
 
     if (bw < 30 || bh < 30) return { isSpoof: false };
 
-    // 1. SPECULAR GLASS GLARE & MOIRÉ PIXEL GRID ANALYSIS ON FACE
-    const faceImgData = ctx.getImageData(bx, by, bw, bh).data;
+    // 1. SPECULAR GLASS GLARE REFLECTION HOTSPOT
+    // Checks strictly the facial skin zone for unnatural flat glass mirror reflections
+    const faceData = ctx.getImageData(bx, by, bw, bh).data;
     const totalPixels = bw * bh;
     let saturatedGlareCount = 0;
     let highFreqGridDiffs = 0;
 
-    for (let i = 0; i < faceImgData.length; i += 4) {
-      const r = faceImgData[i];
-      const g = faceImgData[i + 1];
-      const b = faceImgData[i + 2];
+    for (let i = 0; i < faceData.length; i += 4) {
+      const r = faceData[i];
+      const g = faceData[i + 1];
+      const b = faceData[i + 2];
 
-      // Screen glass specular reflection blown-out pure white hotspot
-      if (r >= 244 && g >= 244 && b >= 244) {
+      // Specular glass glare reflection hotspot (pure blown-out white glass reflection)
+      if (r >= 252 && g >= 252 && b >= 252 && Math.abs(r - g) < 6 && Math.abs(r - b) < 6) {
         saturatedGlareCount++;
       }
 
       // Horizontal adjacent pixel gradient (Moiré pattern of digital subpixel matrix)
       if (i > 4 && i % (bw * 4) !== 0) {
-        const pr = faceImgData[i - 4];
-        const pg = faceImgData[i - 3];
-        const pb = faceImgData[i - 2];
+        const pr = faceData[i - 4];
+        const pg = faceData[i - 3];
+        const pb = faceData[i - 2];
         const delta = Math.abs(r - pr) + Math.abs(g - pg) + Math.abs(b - pb);
         if (delta > 85) {
           highFreqGridDiffs++;
@@ -183,46 +184,130 @@ function checkScreenAndPhotoSpoof(
     const glareRatio = saturatedGlareCount / Math.max(1, totalPixels);
     const moireRatio = highFreqGridDiffs / Math.max(1, totalPixels);
 
-    if (glareRatio > 0.045) {
-      return { isSpoof: true, reason: "Glass Screen Glare Reflection Detected! Present your real face in person." };
+    if (glareRatio > 0.12) {
+      return { isSpoof: true, reason: "Glass Screen Glare Reflection Detected! Mobile phone presentation rejected." };
     }
-    if (moireRatio > 0.15) {
-      return { isSpoof: true, reason: "Digital Display Screen Moiré Pattern Detected! Mobile screen rejected." };
+    if (moireRatio > 0.12) {
+      return { isSpoof: true, reason: "Digital Screen Moiré Pixel Grid Detected! Mobile display rejected." };
     }
 
-    // 2. SECONDARY PHONE CASING & MULTI-DEPTH BORDER DETECTION
-    // Sample surrounding rectangular margins around face (sampling near at 32% and mid at 60%)
-    for (const marginFactor of [0.32, 0.60]) {
-      const marginX = Math.floor(bw * marginFactor);
-      const marginY = Math.floor(bh * marginFactor);
-      const outerX = Math.max(0, bx - marginX);
-      const outerY = Math.max(0, by - marginY);
-      const outerW = Math.min(imgWidth - outerX, bw + marginX * 2);
-      const outerH = Math.min(imgHeight - outerY, bh + marginY * 1.4);
+    // 2. 📐 PURE MATHEMATICAL COLLINEAR BORDER & DEVICE CHASSIS DETECTOR
+    // Detects sharp parallel vertical knife-edge boundaries (phone bezels/paper edges) and horizontal borders enclosing the face.
+    const searchLeftMin = Math.max(0, Math.floor(bx - bw * 0.55));
+    const searchLeftMax = Math.min(imgWidth - 4, Math.floor(bx + bw * 0.10));
+    const searchRightMin = Math.max(0, Math.floor(bx + bw * 0.90));
+    const searchRightMax = Math.min(imgWidth - 4, Math.floor(bx + bw * 1.55));
 
-      if (outerW > bw + 14 && outerH > bh + 14) {
-        const outerData = ctx.getImageData(outerX, outerY, outerW, outerH).data;
-        let darkMarginPixels = 0;
-        let totalMarginPixels = 0;
+    const yStart = Math.max(0, Math.floor(by + bh * 0.05));
+    const yEnd = Math.min(imgHeight - 1, Math.floor(by + bh * 0.85));
+    const ySpan = yEnd - yStart;
 
-        for (let y = 0; y < outerH; y += 2) {
-          for (let x = 0; x < outerW; x += 2) {
-            const isMargin = (x < marginX || x >= outerW - marginX || y < marginY);
-            if (isMargin) {
-              const idx = (y * outerW + x) * 4;
-              const brightness = 0.299 * outerData[idx] + 0.587 * outerData[idx + 1] + 0.114 * outerData[idx + 2];
-              if (brightness < 55) {
-                darkMarginPixels++;
-              }
-              totalMarginPixels++;
-            }
+    if (ySpan > 30 && searchLeftMax > searchLeftMin && searchRightMax > searchRightMin) {
+      const scanData = ctx.getImageData(0, yStart, imgWidth, ySpan).data;
+      const leftHist: { [x: number]: number } = {};
+      const rightHist: { [x: number]: number } = {};
+      let sampledRows = 0;
+
+      for (let relY = 0; relY < ySpan; relY += 3) {
+        sampledRows++;
+        const rowOffset = relY * imgWidth * 4;
+
+        // Peak gradient search in left band
+        let maxGradL = 0;
+        let peakXL = -1;
+        for (let x = searchLeftMin + 2; x <= searchLeftMax - 2; x += 2) {
+          const idxL = rowOffset + (x - 2) * 4;
+          const idxR = rowOffset + (x + 2) * 4;
+          const bL = 0.299 * scanData[idxL] + 0.587 * scanData[idxL + 1] + 0.114 * scanData[idxL + 2];
+          const bR = 0.299 * scanData[idxR] + 0.587 * scanData[idxR + 1] + 0.114 * scanData[idxR + 2];
+          const grad = Math.abs(bR - bL);
+          if (grad > maxGradL) {
+            maxGradL = grad;
+            peakXL = x;
           }
         }
-
-        const darkBezelRatio = darkMarginPixels / Math.max(1, totalMarginPixels);
-        if (darkBezelRatio > 0.38) {
-          return { isSpoof: true, reason: "Secondary Mobile Phone Casing / Frame Detected! Please present real face directly." };
+        if (maxGradL > 45 && peakXL !== -1) {
+          const bin = Math.round(peakXL / 6) * 6;
+          leftHist[bin] = (leftHist[bin] || 0) + 1;
         }
+
+        // Peak gradient search in right band
+        let maxGradR = 0;
+        let peakXR = -1;
+        for (let x = searchRightMin + 2; x <= searchRightMax - 2; x += 2) {
+          const idxL = rowOffset + (x - 2) * 4;
+          const idxR = rowOffset + (x + 2) * 4;
+          const bL = 0.299 * scanData[idxL] + 0.587 * scanData[idxL + 1] + 0.114 * scanData[idxL + 2];
+          const bR = 0.299 * scanData[idxR] + 0.587 * scanData[idxR + 1] + 0.114 * scanData[idxR + 2];
+          const grad = Math.abs(bR - bL);
+          if (grad > maxGradR) {
+            maxGradR = grad;
+            peakXR = x;
+          }
+        }
+        if (maxGradR > 45 && peakXR !== -1) {
+          const bin = Math.round(peakXR / 6) * 6;
+          rightHist[bin] = (rightHist[bin] || 0) + 1;
+        }
+      }
+
+      let maxLeftCollinear = 0;
+      for (const b in leftHist) {
+        if (leftHist[b] > maxLeftCollinear) maxLeftCollinear = leftHist[b];
+      }
+      let maxRightCollinear = 0;
+      for (const b in rightHist) {
+        if (rightHist[b] > maxRightCollinear) maxRightCollinear = rightHist[b];
+      }
+
+      const leftRatio = sampledRows > 0 ? maxLeftCollinear / sampledRows : 0;
+      const rightRatio = sampledRows > 0 ? maxRightCollinear / sampledRows : 0;
+
+      // Top horizontal border check (phone notch / top bezel / paper border)
+      const topSearchYMin = Math.max(0, Math.floor(by - bh * 0.45));
+      const topSearchYMax = Math.max(0, Math.floor(by - bh * 0.05));
+      let topRatio = 0;
+      if (topSearchYMax > topSearchYMin) {
+        const topYSpan = topSearchYMax - topSearchYMin;
+        const topData = ctx.getImageData(bx, topSearchYMin, bw, topYSpan).data;
+        const topHist: { [y: number]: number } = {};
+        let sampledCols = 0;
+
+        for (let relX = 0; relX < bw; relX += 4) {
+          sampledCols++;
+          let maxGradT = 0;
+          let peakYT = -1;
+          for (let relY = 2; relY < topYSpan - 2; relY += 2) {
+            const idxT = (relY - 2) * bw * 4 + relX * 4;
+            const idxB = (relY + 2) * bw * 4 + relX * 4;
+            const bT = 0.299 * topData[idxT] + 0.587 * topData[idxT + 1] + 0.114 * topData[idxT + 2];
+            const bB = 0.299 * topData[idxB] + 0.587 * topData[idxB + 1] + 0.114 * topData[idxB + 2];
+            const grad = Math.abs(bB - bT);
+            if (grad > maxGradT) {
+              maxGradT = grad;
+              peakYT = relY;
+            }
+          }
+          if (maxGradT > 45 && peakYT !== -1) {
+            const bin = Math.round(peakYT / 4) * 4;
+            topHist[bin] = (topHist[bin] || 0) + 1;
+          }
+        }
+        let maxTopCollinear = 0;
+        for (const b in topHist) {
+          if (topHist[b] > maxTopCollinear) maxTopCollinear = topHist[b];
+        }
+        topRatio = sampledCols > 0 ? maxTopCollinear / sampledCols : 0;
+      }
+
+      // Detection condition:
+      // Parallel straight vertical phone bezels / paper edges:
+      if (leftRatio >= 0.40 && rightRatio >= 0.40) {
+        return { isSpoof: true, reason: "Mobile Phone Screen / Bezel Border Detected! Real human face required." };
+      }
+      // Vertical device edge + horizontal top notch / status bar / paper cut:
+      if ((leftRatio >= 0.42 || rightRatio >= 0.42) && topRatio >= 0.38) {
+        return { isSpoof: true, reason: "Rectangular Device Casing / Paper Photo Border Detected! Real human face required." };
       }
     }
 
@@ -430,13 +515,15 @@ export default function FaceIdentifierModal({
   const isVerifyingLiveRef = useRef<boolean>(false);
   const lastLiveCheckRef = useRef<number>(0);
   const consecutiveMatchRef = useRef<{ studentId: string | null; count: number }>({ studentId: null, count: 0 });
+  const faceLockStartTimeRef = useRef<number | null>(null);
+  const lastFaceSeenTimeRef = useRef<number>(0);
 
   const [gallery, setGallery] = useState<IdentifiedStudent[]>([]);
   const [isLoadingGallery, setIsLoadingGallery] = useState(false);
   const [isCameraActive, setIsCameraActive] = useState(false);
   const [cameraError, setCameraError] = useState<string | null>(null);
   const [insecureOriginInfo, setInsecureOriginInfo] = useState<string | null>(null);
-  const [facingMode, setFacingMode] = useState<"environment" | "user">("environment");
+  const [facingMode, setFacingMode] = useState<"environment" | "user">("user");
 
   // Real-time tracking bounding box on video
   const [activeFaceBox, setActiveFaceBox] = useState<ActiveFaceBox | null>(null);
@@ -447,6 +534,7 @@ export default function FaceIdentifierModal({
   const [matchScore, setMatchScore] = useState<number>(0);
   const [scanStatus, setScanStatus] = useState<string>("Initializing Identifier...");
   const [spoofWarning, setSpoofWarning] = useState<string | null>(null);
+  const [unrecognizedWarning, setUnrecognizedWarning] = useState<string | null>(null);
 
   // Manual search fallback
   const [searchQuery, setSearchQuery] = useState("");
@@ -469,7 +557,7 @@ export default function FaceIdentifierModal({
       try {
         await Promise.allSettled([
           loadFaceApiModels(false),
-          loadPhoneDetector()
+          initClientMiniFASNet()
         ]);
       } catch (err) {
         console.warn("AI warmup warning:", err);
@@ -484,13 +572,17 @@ export default function FaceIdentifierModal({
   }, [isOpen]);
 
   // 2. Camera Management (Supports HTTPS, localhost & legacy mobile fallbacks)
+  const isSwitchingCameraRef = useRef(false);
+
   const stopCamera = useCallback(() => {
     if (animFrameRef.current) {
       cancelAnimationFrame(animFrameRef.current);
       animFrameRef.current = null;
     }
     if (streamRef.current) {
-      streamRef.current.getTracks().forEach((t) => t.stop());
+      streamRef.current.getTracks().forEach((t) => {
+        try { t.stop(); } catch (_) {}
+      });
       streamRef.current = null;
     }
     if (videoRef.current) {
@@ -507,12 +599,15 @@ export default function FaceIdentifierModal({
     setSpoofWarning(null);
     setActiveFaceBox(null);
 
+    // Give Android/mobile hardware camera driver 100ms to cleanly release sensor
+    await new Promise((resolve) => setTimeout(resolve, 100));
+
     try {
       const constraints: MediaStreamConstraints = {
         video: {
           facingMode: { ideal: facingMode },
-          width: { ideal: 1280 },
-          height: { ideal: 720 }
+          width: { ideal: 1280, max: 1920 },
+          height: { ideal: 720, max: 1080 }
         },
         audio: false
       };
@@ -521,7 +616,15 @@ export default function FaceIdentifierModal({
       const isMediaDevicesSupported = typeof navigator !== "undefined" && !!navigator.mediaDevices && typeof navigator.mediaDevices.getUserMedia === "function";
 
       if (isMediaDevicesSupported) {
-        stream = await navigator.mediaDevices.getUserMedia(constraints);
+        try {
+          stream = await navigator.mediaDevices.getUserMedia(constraints);
+        } catch (_) {
+          // Mobile hardware fallback if 1280x720 is rejected
+          stream = await navigator.mediaDevices.getUserMedia({
+            video: { facingMode: { ideal: facingMode } },
+            audio: false
+          });
+        }
       } else {
         // Fallback for legacy Android webviews / browsers
         const legacyGUM = 
@@ -548,9 +651,14 @@ export default function FaceIdentifierModal({
 
       if (videoRef.current) {
         videoRef.current.srcObject = stream;
-        await videoRef.current.play();
-        setIsCameraActive(true);
-        setScanStatus("Point camera at student's face...");
+        videoRef.current.onloadedmetadata = () => {
+          videoRef.current?.play().then(() => {
+            setIsCameraActive(true);
+            setScanStatus("Point camera at student's face...");
+          }).catch((err) => {
+            console.warn("Video play interrupted:", err);
+          });
+        };
       }
     } catch (err: any) {
       console.error("Camera access error:", err);
@@ -604,29 +712,17 @@ export default function FaceIdentifierModal({
           return;
         }
 
-        // 🛡️ CHECK 0: Object Detection for Secondary Cell Phones / Hands (Runs async every 400ms)
-        const now = Date.now();
-        if (now - lastObjectCheckRef.current > 400) {
-          lastObjectCheckRef.current = now;
-          try {
-            const phoneCheck = await detectMobilePhone(video);
-            if (phoneCheck.isSpoofing) {
-              setSpoofWarning(`🛑 FRAUD PREVENTED: Secondary Device Detected (${phoneCheck.message})`);
-              setScanStatus("🛑 FRAUD DETECTED: Mobile Phone Screen / Device Rejected!");
-              setActiveFaceBox(null);
-              isDetecting = false;
-              animFrameRef.current = requestAnimationFrame(processFrame);
-              return;
-            }
-          } catch (_) {}
-        }
-
         const detection = await detectFace(video, false, true);
 
         if (!detection || !detection.descriptor) {
-          setScanStatus("Looking for student face...");
+          if (Date.now() - lastFaceSeenTimeRef.current > 1500) {
+            faceLockStartTimeRef.current = null;
+            setUnrecognizedWarning(null);
+          }
+          setScanStatus(unrecognizedWarning || "Looking for student face...");
           setSpoofWarning(null);
           setActiveFaceBox(null);
+          consecutiveMatchRef.current = { studentId: null, count: 0 };
           isDetecting = false;
           animFrameRef.current = requestAnimationFrame(processFrame);
           return;
@@ -639,6 +735,7 @@ export default function FaceIdentifierModal({
         if (detectionScore < 0.60 || !rawBox || rawBox.width < 50 || rawBox.height < 50) {
           setScanStatus("Looking for student face...");
           setActiveFaceBox(null);
+          consecutiveMatchRef.current = { studentId: null, count: 0 };
           isDetecting = false;
           animFrameRef.current = requestAnimationFrame(processFrame);
           return;
@@ -648,53 +745,10 @@ export default function FaceIdentifierModal({
         if (!verifyFacialAnatomy(detection.landmarks, rawBox)) {
           setScanStatus("Looking for student face...");
           setActiveFaceBox(null);
+          consecutiveMatchRef.current = { studentId: null, count: 0 };
           isDetecting = false;
           animFrameRef.current = requestAnimationFrame(processFrame);
           return;
-        }
-
-        const vw = video.videoWidth || 640;
-        const vh = video.videoHeight || 480;
-
-        const offCanvas = document.createElement("canvas");
-        offCanvas.width = vw;
-        offCanvas.height = vh;
-        const ctx = offCanvas.getContext("2d", { willReadFrequently: true });
-
-        if (ctx) {
-          ctx.drawImage(video, 0, 0, vw, vh);
-
-          // 🛡️ CHECK 3: Real Human Physical Skin Tone Chromaticity Filter
-          const skinCheck = checkHumanSkinTone(ctx, rawBox);
-          if (!skinCheck.isSkin) {
-            setScanStatus("Looking for student face...");
-            setActiveFaceBox(null);
-            isDetecting = false;
-            animFrameRef.current = requestAnimationFrame(processFrame);
-            return;
-          }
-
-          // 🛡️ CHECK 4: Specular Glass Glare, Screen Moiré & Secondary Phone Casing Filter
-          const screenCheck = checkScreenAndPhotoSpoof(ctx, rawBox, vw, vh);
-          if (screenCheck.isSpoof) {
-            setSpoofWarning(screenCheck.reason || "Mobile phone screen / glass display detected!");
-            setScanStatus("🛑 FRAUD DETECTED: Secondary Phone Screen / Display Rejected!");
-            setActiveFaceBox(null);
-            isDetecting = false;
-            animFrameRef.current = requestAnimationFrame(processFrame);
-            return;
-          }
-
-          // 🛡️ CHECK 5: Photo-of-photo Bezel / Border Detection
-          const photoCheck = assessPhotoQuality(offCanvas);
-          if (photoCheck.isPhotoOfPhoto) {
-            setSpoofWarning("Secondary photo border / screen bezel detected!");
-            setScanStatus("🛑 FRAUD DETECTED: Printed Photo or Screen Border Detected!");
-            setActiveFaceBox(null);
-            isDetecting = false;
-            animFrameRef.current = requestAnimationFrame(processFrame);
-            return;
-          }
         }
 
         // 🎯 TIGHT ACTUAL FACE BOX (Hugs forehead, chin, and cheeks tightly)
@@ -707,13 +761,30 @@ export default function FaceIdentifierModal({
         setSpoofWarning(null);
         setIsScanning(true);
 
+        lastFaceSeenTimeRef.current = Date.now();
+        if (faceLockStartTimeRef.current === null) {
+          faceLockStartTimeRef.current = Date.now();
+        }
+
+        // ⏱️ 5-6 SECONDS UNRECOGNIZED FACE GUARD:
+        const elapsedLockTime = Date.now() - faceLockStartTimeRef.current;
+        if (elapsedLockTime >= 5500 && !matchedStudent) {
+          const unrecMsg = "❌ Face Not Recognized — contact hostel dean/warden";
+          setUnrecognizedWarning(unrecMsg);
+          setScanStatus(unrecMsg);
+          consecutiveMatchRef.current = { studentId: null, count: 0 };
+          isDetecting = false;
+          animFrameRef.current = requestAnimationFrame(processFrame);
+          return;
+        }
+
         const liveDescriptor = Array.from(detection.descriptor) as number[];
 
         let bestMatch: IdentifiedStudent | null = null;
         let minDistance = 999.0;
         let secondMinDistance = 999.0;
 
-        // Perform instant in-memory 1:N Euclidean vector comparison across all 720+ student descriptors (<2ms)
+        // ⚡ Perform instant in-memory 1:N Euclidean vector comparison across all students (< 1.5ms)
         for (let i = 0; i < gallery.length; i++) {
           const candidate = gallery[i];
           if (!candidate.faceDescriptor || candidate.faceDescriptor.length === 0) continue;
@@ -728,18 +799,60 @@ export default function FaceIdentifierModal({
           }
         }
 
-        // 🎯 1:N OPEN-SET BIOMETRIC VERIFICATION (1-2s Instant Live Match, Zero Network Latency):
-        // Gate 1: Calibrated Confidence: minDistance <= 0.42 (>= 82% Match)
-        // Gate 2: Distinctiveness Margin: (secondMinDistance - minDistance) >= 0.030 (Rejects unregistered faces matching multiple profiles)
-        // Gate 3: Temporal Stability: 2 consecutive frames confirming the exact same student profile
-        
-        const isStrongCandidate = (
+        const currentScore = calculateScore(minDistance);
+        const isEligibleMatch = (
           bestMatch !== null &&
-          minDistance <= 0.42 &&
-          (secondMinDistance - minDistance) >= 0.030
+          currentScore >= 85 &&
+          (secondMinDistance - minDistance) >= 0.010
         );
 
-        if (isStrongCandidate && bestMatch) {
+        if (isEligibleMatch && bestMatch) {
+          // 🛡️ High-Confidence Match Found! Perform Ultra-Fast Bank-Grade PAD Anti-Spoof Checks
+          const vw = video.videoWidth || 640;
+          const vh = video.videoHeight || 480;
+
+          const offCanvas = document.createElement("canvas");
+          offCanvas.width = vw;
+          offCanvas.height = vh;
+          const ctx = offCanvas.getContext("2d", { willReadFrequently: true });
+
+          if (ctx) {
+            ctx.drawImage(video, 0, 0, vw, vh);
+
+            // Anti-Spoof 1: Real Human Physical Skin Tone Chromaticity Filter
+            const skinCheck = checkHumanSkinTone(ctx, rawBox);
+            if (!skinCheck.isSkin) {
+              setScanStatus("Looking for student face...");
+              consecutiveMatchRef.current = { studentId: null, count: 0 };
+              isDetecting = false;
+              animFrameRef.current = requestAnimationFrame(processFrame);
+              return;
+            }
+
+            // Anti-Spoof 2: In-Process MiniFASNetV2 Neural Anti-Spoofing (<15ms)
+            const neuralCheck = await checkLivenessClient(offCanvas, rawBox, vw, vh);
+            if (neuralCheck.isSpoof) {
+              const warnText = neuralCheck.reason || "Mobile phone display or printed photo detected!";
+              setSpoofWarning(warnText);
+              setScanStatus(`🛑 FRAUD DETECTED: ${warnText}`);
+              consecutiveMatchRef.current = { studentId: null, count: 0 };
+              isDetecting = false;
+              animFrameRef.current = requestAnimationFrame(processFrame);
+              return;
+            }
+
+            // Anti-Spoof 3: Specular Glass Glare, Screen Moiré & Secondary Phone Casing Filter
+            const screenCheck = checkScreenAndPhotoSpoof(ctx, rawBox, vw, vh);
+            if (screenCheck.isSpoof) {
+              setSpoofWarning(screenCheck.reason || "Mobile phone screen / glass display detected!");
+              setScanStatus("🛑 FRAUD DETECTED: Secondary Phone Screen / Display Rejected!");
+              consecutiveMatchRef.current = { studentId: null, count: 0 };
+              isDetecting = false;
+              animFrameRef.current = requestAnimationFrame(processFrame);
+              return;
+            }
+          }
+
           const currentCandidateId = bestMatch.id || bestMatch.registrationId;
           if (consecutiveMatchRef.current.studentId === currentCandidateId) {
             consecutiveMatchRef.current.count += 1;
@@ -750,12 +863,19 @@ export default function FaceIdentifierModal({
           consecutiveMatchRef.current = { studentId: null, count: 0 };
         }
 
-        // ✅ Confirmed in 1-2 seconds with zero network delay:
-        if (isStrongCandidate && bestMatch && consecutiveMatchRef.current.count >= 2) {
+        // ✅ Confirmed in under 1 second (pure hands-free walk-through, requiring 2 consecutive clean fraud-free frames):
+        const isVerified = (
+          bestMatch !== null &&
+          consecutiveMatchRef.current.count >= 2
+        );
+
+        if (isVerified && bestMatch) {
           const score = calculateScore(minDistance);
           setMatchedStudent(bestMatch);
           setMatchScore(score);
           setScanStatus(`Verified: ${bestMatch.name} (${score}% match)`);
+          faceLockStartTimeRef.current = null;
+          setUnrecognizedWarning(null);
           consecutiveMatchRef.current = { studentId: null, count: 0 };
           isDetecting = false;
           return; // Stop scan loop once verified
@@ -784,13 +904,21 @@ export default function FaceIdentifierModal({
   }, [isCameraActive, matchedStudent, gallery, facingMode]);
 
   const toggleCameraFacing = () => {
+    if (isSwitchingCameraRef.current) return;
+    isSwitchingCameraRef.current = true;
     setFacingMode((prev) => (prev === "environment" ? "user" : "environment"));
+    setTimeout(() => {
+      isSwitchingCameraRef.current = false;
+    }, 400);
   };
 
   const handleResetScan = () => {
     isVerifyingLiveRef.current = false;
     lastLiveCheckRef.current = 0;
     consecutiveMatchRef.current = { studentId: null, count: 0 };
+    faceLockStartTimeRef.current = null;
+    lastFaceSeenTimeRef.current = 0;
+    setUnrecognizedWarning(null);
     setMatchedStudent(null);
     setMatchScore(0);
     setSpoofWarning(null);
@@ -861,9 +989,11 @@ export default function FaceIdentifierModal({
           <div className={`relative w-full aspect-square rounded-2xl overflow-hidden bg-black flex items-center justify-center border-2 transition-all ${
             spoofWarning 
               ? "border-red-500 shadow-[0_0_20px_rgba(239,68,68,0.5)] animate-pulse" 
-              : matchedStudent 
-                ? "border-emerald-500 shadow-[0_0_25px_rgba(16,185,129,0.45)]" 
-                : "border-slate-700"
+              : unrecognizedWarning
+                ? "border-amber-500 shadow-[0_0_20px_rgba(245,158,11,0.4)]"
+                : matchedStudent 
+                  ? "border-emerald-500 shadow-[0_0_25px_rgba(16,185,129,0.45)]" 
+                  : "border-slate-700"
           }`}>
             {cameraError ? (
               <div className="p-5 text-center text-red-400 text-xs font-semibold flex flex-col items-center gap-2.5 max-w-sm">
@@ -900,6 +1030,17 @@ export default function FaceIdentifierModal({
                   className={`w-full h-full object-cover ${facingMode === "user" ? "scale-x-[-1]" : ""}`}
                 />
 
+                {/* 📷 Camera Mode Badge (Top Left Corner - Compact with rounded-md) */}
+                <button
+                  type="button"
+                  onClick={toggleCameraFacing}
+                  className="absolute top-2 left-2 z-20 flex items-center gap-1 bg-slate-900/85 hover:bg-slate-800/90 backdrop-blur-md px-1.5 py-0.5 rounded-md border border-slate-700/80 text-[8px] text-slate-200 font-bold uppercase tracking-wider shadow-md transition-all active:scale-95 cursor-pointer"
+                  title="Switch Camera (Front / Rear)"
+                >
+                  <RefreshCw className="w-2.5 h-2.5 text-emerald-400" />
+                  <span>{facingMode === "environment" ? "REAR CAMERA" : "FRONT CAMERA"}</span>
+                </button>
+
                 {/* ANTI-SPOOF FRAUD WARNING OVERLAY */}
                 {spoofWarning && (
                   <div className="absolute top-2 inset-x-2 z-20 bg-red-600/95 backdrop-blur-md px-3 py-2 rounded-xl border border-red-400 shadow-xl text-white flex items-center gap-2.5 animate-in slide-in-from-top-2 duration-150">
@@ -915,6 +1056,29 @@ export default function FaceIdentifierModal({
                   </div>
                 )}
 
+                {/* ⏱️ UNRECOGNIZED FACE TIMEOUT WARNING (5-6 SECONDS) */}
+                {unrecognizedWarning && !spoofWarning && !matchedStudent && (
+                  <div className="absolute top-2 inset-x-2 z-20 bg-amber-600/95 backdrop-blur-md px-3 py-2.5 rounded-xl border border-amber-400 shadow-xl text-white flex items-center justify-between gap-2 animate-in slide-in-from-top-2 duration-150">
+                    <div className="flex items-center gap-2 min-w-0 flex-1">
+                      <AlertTriangle className="w-5 h-5 text-yellow-200 shrink-0 animate-bounce" />
+                      <div className="min-w-0">
+                        <p className="text-[11px] font-black leading-tight text-white drop-shadow">
+                          {unrecognizedWarning}
+                        </p>
+                        <p className="text-[9px] text-amber-100/90 font-medium mt-0.5">
+                          Not registered or match confidence &lt; 85%
+                        </p>
+                      </div>
+                    </div>
+                    <button
+                      onClick={handleResetScan}
+                      className="px-2.5 py-1 bg-white text-amber-900 rounded-lg text-[10px] font-black tracking-wider uppercase shadow hover:bg-amber-50 cursor-pointer shrink-0"
+                    >
+                      Retry
+                    </button>
+                  </div>
+                )}
+
                 {/* 🟩 REAL-TIME GREEN SQUARE BOX TIGHTLY HUGGING ACTUAL FACE (Cheek to cheek, Forehead to chin) */}
                 {activeFaceBox && !spoofWarning && (
                   <div
@@ -927,9 +1091,11 @@ export default function FaceIdentifierModal({
                     }}
                   >
                     <div className={`w-full h-full border-2 rounded-lg relative ${
-                      matchedStudent 
-                        ? "border-emerald-400 bg-emerald-500/10 shadow-[0_0_20px_rgba(52,211,153,0.5)]" 
-                        : "border-green-400 bg-green-400/5 shadow-[0_0_12px_rgba(74,222,128,0.3)]"
+                      unrecognizedWarning
+                        ? "border-amber-400 bg-amber-500/10 shadow-[0_0_15px_rgba(251,191,36,0.4)]"
+                        : matchedStudent 
+                          ? "border-emerald-400 bg-emerald-500/10 shadow-[0_0_20px_rgba(52,211,153,0.5)]" 
+                          : "border-green-400 bg-green-400/5 shadow-[0_0_12px_rgba(74,222,128,0.3)]"
                     }`}>
                       {/* Corner Targeting Accents */}
                       <div className="absolute -top-1 -left-1 w-3 h-3 border-t-2 border-l-2 border-emerald-300"></div>
@@ -938,9 +1104,15 @@ export default function FaceIdentifierModal({
                       <div className="absolute -bottom-1 -right-1 w-3 h-3 border-b-2 border-r-2 border-emerald-300"></div>
 
                       {/* Real Measurement & Name Badge */}
-                      <div className="absolute -top-6 left-1/2 -translate-x-1/2 whitespace-nowrap px-2 py-0.5 rounded-md bg-emerald-950/90 border border-emerald-400/60 text-emerald-300 text-[9px] font-black tracking-wider uppercase flex items-center gap-1 shadow-md">
-                        <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
-                        {matchedStudent ? (
+                      <div className={`absolute -top-6 left-1/2 -translate-x-1/2 whitespace-nowrap px-2 py-0.5 rounded-md border text-[9px] font-black tracking-wider uppercase flex items-center gap-1 shadow-md ${
+                        unrecognizedWarning
+                          ? "bg-amber-950/90 border-amber-400/60 text-amber-300"
+                          : "bg-emerald-950/90 border-emerald-400/60 text-emerald-300"
+                      }`}>
+                        <span className={`w-1.5 h-1.5 rounded-full ${unrecognizedWarning ? "bg-amber-400" : "bg-emerald-400 animate-pulse"}`}></span>
+                        {unrecognizedWarning ? (
+                          <span>UNREGISTERED</span>
+                        ) : matchedStudent ? (
                           <span>{matchedStudent.name} • {matchScore}%</span>
                         ) : (
                           <span>{activeFaceBox.pixelW}×{activeFaceBox.pixelH}px</span>
@@ -950,40 +1122,38 @@ export default function FaceIdentifierModal({
                   </div>
                 )}
 
-                {/* Status Bar */}
-                <div className={`absolute bottom-2 inset-x-2 backdrop-blur-md px-3 py-1.5 rounded-lg border flex items-center justify-between transition-colors z-20 ${
-                  spoofWarning 
-                    ? "bg-red-950/90 border-red-700/80" 
-                    : matchedStudent 
-                      ? "bg-emerald-950/90 border-emerald-700/80" 
-                      : "bg-slate-900/80 border-slate-700/60"
-                }`}>
-                  <p className="text-[11px] font-semibold truncate flex items-center gap-1.5">
-                    {spoofWarning ? (
-                      <span className="text-red-300 flex items-center gap-1 font-black">
-                        <ShieldAlert className="w-3.5 h-3.5 text-red-400" /> Synthetic Display / Photo Rejected
-                      </span>
-                    ) : matchedStudent ? (
-                      <span className="text-green-400 flex items-center gap-1 font-bold">
-                        <CheckCircle2 className="w-3.5 h-3.5" /> Identity & Live Human Verified
-                      </span>
-
-                    ) : activeFaceBox ? (
-                      <span className="text-emerald-400 flex items-center gap-1 font-bold">
-                        <Sparkles className="w-3.5 h-3.5 animate-spin" /> Face Locked • Identifying...
-                      </span>
-                    ) : isScanning ? (
-                      <span className="text-purple-300 flex items-center gap-1 font-bold">
-                        <Sparkles className="w-3.5 h-3.5 animate-spin" /> Looking for Student Face...
-                      </span>
-                    ) : (
-                      <span className="text-slate-200">{scanStatus}</span>
-                    )}
-                  </p>
-                  <span className="text-[9px] text-slate-400 uppercase font-black tracking-widest shrink-0">
-                    {facingMode === "environment" ? "Rear Cam" : "Front Cam"}
-                  </span>
-                </div>
+                {/* Status Bar (Active during scan, moves to Verified Card upon match) */}
+                {!matchedStudent && (
+                  <div className={`absolute bottom-2 inset-x-2 backdrop-blur-md px-3 py-1.5 rounded-lg border flex items-center justify-between transition-colors z-20 ${
+                    spoofWarning 
+                      ? "bg-red-950/90 border-red-700/80" 
+                      : unrecognizedWarning
+                        ? "bg-amber-950/90 border-amber-700/80"
+                        : "bg-slate-900/80 border-slate-700/60"
+                  }`}>
+                    <p className="text-[11px] font-semibold truncate flex items-center gap-1.5">
+                      {spoofWarning ? (
+                        <span className="text-red-300 flex items-center gap-1 font-black">
+                          <ShieldAlert className="w-3.5 h-3.5 text-red-400" /> Synthetic Display / Photo Rejected
+                        </span>
+                      ) : unrecognizedWarning ? (
+                        <span className="text-amber-300 flex items-center gap-1 font-black truncate">
+                          <AlertTriangle className="w-3.5 h-3.5 text-amber-400 shrink-0" /> {unrecognizedWarning}
+                        </span>
+                      ) : activeFaceBox ? (
+                        <span className="text-emerald-400 flex items-center gap-1 font-bold">
+                          <Sparkles className="w-3.5 h-3.5 animate-spin" /> Face Locked • Identifying...
+                        </span>
+                      ) : isScanning ? (
+                        <span className="text-purple-300 flex items-center gap-1 font-bold">
+                          <Sparkles className="w-3.5 h-3.5 animate-spin" /> Looking for Student Face...
+                        </span>
+                      ) : (
+                        <span className="text-slate-200">{scanStatus}</span>
+                      )}
+                    </p>
+                  </div>
+                )}
               </>
             )}
           </div>
@@ -1018,9 +1188,30 @@ export default function FaceIdentifierModal({
                     </span>
                   </div>
 
-                  <p className="text-[11px] font-bold text-slate-300 mt-0.5">
-                    {matchedStudent.registrationId} • {matchedStudent.erpId || "No ERP"}
-                  </p>
+                  {/* Registration ID & Rectangular Status Badge ('IN') */}
+                  <div className="flex items-center gap-2 mt-0.5 flex-wrap">
+                    <p className="text-[11px] font-bold text-slate-300">
+                      {matchedStudent.registrationId} • {matchedStudent.erpId || "No ERP"}
+                    </p>
+                    <span
+                      className={`px-1.5 py-0.5 rounded text-[8px] font-black uppercase tracking-wider border ${
+                        matchedStudent.outingType === "leave" || matchedStudent.outingType === "HOME-LEAVE"
+                          ? "bg-amber-500/20 text-amber-300 border-amber-500/40"
+                          : matchedStudent.studentStatus === "IN CAMPUS" || matchedStudent.studentStatus === "IN"
+                          ? "bg-green-500/20 text-green-300 border-green-500/40"
+                          : "bg-blue-500/20 text-blue-300 border-blue-500/40"
+                      }`}
+                    >
+                      {matchedStudent.outingType === "leave" || matchedStudent.outingType === "HOME-LEAVE"
+                        ? "HOME-LEAVE"
+                        : matchedStudent.studentStatus}
+                    </span>
+                    {matchedStudent.leaveTo && (
+                      <span className="text-[8px] text-slate-400 font-semibold">
+                        Until {matchedStudent.leaveTo}
+                      </span>
+                    )}
+                  </div>
 
                   <div className="flex items-center gap-2 mt-1.5 text-[10px] text-slate-300 font-medium">
                     <span className="flex items-center gap-1">
@@ -1034,26 +1225,10 @@ export default function FaceIdentifierModal({
                     </span>
                   </div>
 
-                  {/* Status Badge */}
-                  <div className="mt-2 flex items-center gap-2">
-                    <span
-                      className={`px-2 py-0.5 rounded-full text-[9px] font-black uppercase tracking-wider ${
-                        matchedStudent.outingType === "leave" || matchedStudent.outingType === "HOME-LEAVE"
-                          ? "bg-amber-500/20 text-amber-300 border border-amber-500/40"
-                          : matchedStudent.studentStatus === "IN CAMPUS"
-                          ? "bg-green-500/20 text-green-300 border border-green-500/40"
-                          : "bg-blue-500/20 text-blue-300 border border-blue-500/40"
-                      }`}
-                    >
-                      {matchedStudent.outingType === "leave" || matchedStudent.outingType === "HOME-LEAVE"
-                        ? "HOME-LEAVE"
-                        : matchedStudent.studentStatus}
-                    </span>
-                    {matchedStudent.leaveTo && (
-                      <span className="text-[9px] text-slate-400 font-semibold">
-                        Until {matchedStudent.leaveTo}
-                      </span>
-                    )}
+                  {/* Red Marked Area: Identity & Live Human Verified Badge */}
+                  <div className="mt-2 flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-emerald-950/80 border border-emerald-500/40 text-emerald-400 text-[10px] font-bold animate-in fade-in duration-150">
+                    <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+                    <span>Identity & Live Human Verified</span>
                   </div>
                 </div>
               </div>

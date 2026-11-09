@@ -22,21 +22,23 @@ export async function loadPhoneDetector() {
         await new Promise(resolve => setTimeout(resolve, 30));
 
         const cocoSsd = await import('@tensorflow-models/coco-ssd');
-        cocoModel = await cocoSsd.load({ base: 'lite_mobilenet_v2' });
-        console.log("✅ Mobile Phone Detector (COCO-SSD Lite) Loaded Successfully");
+        const hpModule = await import('@tensorflow-models/handpose');
 
-        // Load handpose asynchronously in background so phone detection is available immediately
-        import('@tensorflow-models/handpose')
-            .then(hp => hp.load())
-            .then(hand => {
-                handposeModel = hand;
-                console.log("✅ Hand Detector Loaded Successfully");
-            })
-            .catch(err => {
-                console.warn("⚠️ Hand detector background load deferred:", err?.message);
-            });
+        const [loadedCoco, loadedHand] = await Promise.allSettled([
+            cocoSsd.load({ base: 'lite_mobilenet_v2' }),
+            hpModule.load()
+        ]);
 
-        return true;
+        if (loadedCoco.status === 'fulfilled') {
+            cocoModel = loadedCoco.value;
+            console.log("✅ Mobile Phone Detector (COCO-SSD Lite) Loaded Successfully");
+        }
+        if (loadedHand.status === 'fulfilled') {
+            handposeModel = loadedHand.value;
+            console.log("✅ Hand Detector (Handpose) Loaded Successfully");
+        }
+
+        return !!cocoModel;
     } catch (error) {
         console.error("❌ Failed to load Object Detectors:", error);
         return false;
@@ -88,20 +90,20 @@ export async function detectMobilePhone(imageElement: HTMLVideoElement | HTMLCan
         // 1. Check for Phone/Device Spoofing (COCO-SSD)
         const spoofClasses = ['cell phone', 'book', 'laptop', 'tv', 'monitor', 'tablet', 'paper', 'keyboard', 'mouse'];
         for (const prediction of predictions) {
-            if (spoofClasses.includes(prediction.class) && prediction.score > 0.35) {
+            if (spoofClasses.includes(prediction.class) && prediction.score > 0.22) {
                 console.warn(`🛑 SPOOF ATTEMPT DETECTED! Found a ${prediction.class} (${Math.round(prediction.score * 100)}% confidence)`);
                 return { isSpoofing: true, message: `SECONDARY DEVICE DETECTED (${prediction.class.toUpperCase()})` }; 
             }
         }
 
-        // 2. Check for Hand Spoofing (holding a photo/device)
+        // 2. Check for Hand Spoofing (holding a photo/device in front of camera)
         if (handposeModel) {
             const hands = await handposeModel.estimateHands(imageElement);
             if (hands && hands.length > 0) {
                 const handConfidence = hands[0].handInViewConfidence || (hands[0] as any).score || 0.8;
-                if (handConfidence > 0.4) {
+                if (handConfidence > 0.30) {
                     console.warn(`🛑 SPOOF ATTEMPT DETECTED! Found a Hand (${Math.round(handConfidence * 100)}%)`);
-                    return { isSpoofing: true, message: "HAND DETECTED! DROP PHOTO" };
+                    return { isSpoofing: true, message: "HOLDING HAND / FINGERS DETECTED! PLEASE DROP PHONE / PHOTO" };
                 }
             }
         }
