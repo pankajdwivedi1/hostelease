@@ -1,0 +1,7 @@
+# Desktop App build outputs and binaries (hosted on Cloudflare R2)
+dist/
+build/
+*.spec
+*.db
+__pycache__/
+*.pyc

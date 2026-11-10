@@ -1,0 +1,36 @@
+"""
+HOSTELEAZE Desktop Gatepass App
+requirements.txt — All Python dependencies
+"""
+# Native Edge WebView2 desktop runtime
+pywebview>=5.0.0
+pythonnet>=3.0.0
+
+# UI framework (fallback)
+customtkinter>=6.0.0
+
+# Camera + Computer Vision
+opencv-python>=4.8.0
+
+# QR Code generation
+qrcode[pil]>=7.4.2
+
+# QR Code scanning from camera
+pyzbar>=0.1.9
+
+# Image processing
+Pillow>=10.0.0
+
+# HTTP requests to Railway API
+requests>=2.31.0
+
+# Numerical computation (must be <2 for dlib C-extensions compatibility)
+numpy<2.0.0,>=1.24.0
+
+# Face recognition (optional — needed for face scan mode)
+# Note: requires cmake and dlib, install separately if needed:
+# pip install cmake dlib face_recognition
+# face_recognition>=1.3.0
+
+# Packaging to .exe
+# pyinstaller>=6.0.0

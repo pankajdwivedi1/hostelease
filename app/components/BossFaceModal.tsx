@@ -154,7 +154,7 @@ export default function BossFaceModal({ isOpen, mode, onClose, onSuccess }: Boss
             }
 
             const dataUrl = aiCanvas.toDataURL("image/jpeg", 0.90);
-            setStatusMessage("🛡️ Verifying bank-grade physical liveness...");
+            setStatusMessage("🛡️ Verifying physical liveness...");
 
             if (mode === "login") {
                 // VERIFY LOGIN
@@ -322,10 +322,6 @@ export default function BossFaceModal({ isOpen, mode, onClose, onSuccess }: Boss
                     <Camera className="w-4 h-4" />
                     <span>{mode === "login" ? "Scan Face to Unlock" : "Capture & Save Face ID"}</span>
                 </button>
-
-                <p className="mt-3 text-[10px] text-gray-500 font-bold uppercase tracking-widest">
-                    Bank-Grade MiniFASNet Anti-Spoof Liveness Protection
-                </p>
             </div>
         </div>
     );
