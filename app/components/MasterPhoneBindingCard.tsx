@@ -14,7 +14,17 @@ function urlBase64ToUint8Array(base64String: string) {
   return outputArray;
 }
 
-export default function MasterPhoneBindingCard() {
+interface MasterPhoneBindingCardProps {
+  tenantId?: string | null;
+  tenantName?: string;
+  onStatusChange?: (isBound: boolean) => void;
+}
+
+export default function MasterPhoneBindingCard({
+  tenantId,
+  tenantName,
+  onStatusChange
+}: MasterPhoneBindingCardProps = {}) {
   const [loading, setLoading] = useState(true);
   const [deviceStatus, setDeviceStatus] = useState<{
     isBound: boolean;
@@ -31,9 +41,11 @@ export default function MasterPhoneBindingCard() {
   const fetchStatus = async () => {
     try {
       setLoading(true);
-      const res = await fetch("/api/super-admin/auth/google-prompt/device");
+      const url = `/api/super-admin/auth/google-prompt/device${tenantId ? `?tenantId=${encodeURIComponent(tenantId)}` : ""}`;
+      const res = await fetch(url);
       const data = await res.json();
       setDeviceStatus(data);
+      onStatusChange?.(Boolean(data?.isBound));
     } catch (e) {
       console.warn("Failed to load device binding status:", e);
     } finally {
@@ -43,7 +55,7 @@ export default function MasterPhoneBindingCard() {
 
   useEffect(() => {
     fetchStatus();
-  }, []);
+  }, [tenantId]);
 
   // Register current phone as master security device
   const handleRegisterPhone = async () => {
@@ -96,7 +108,8 @@ export default function MasterPhoneBindingCard() {
         body: JSON.stringify({
           action: "bind",
           subscription,
-          deviceName
+          deviceName,
+          tenantId: tenantId || null
         })
       });
 
@@ -124,7 +137,10 @@ export default function MasterPhoneBindingCard() {
       const res = await fetch("/api/super-admin/auth/google-prompt/device", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: "unbind" })
+        body: JSON.stringify({
+          action: "unbind",
+          tenantId: tenantId || null
+        })
       });
 
       if (!res.ok) throw new Error("Failed to unbind phone.");
@@ -155,7 +171,7 @@ export default function MasterPhoneBindingCard() {
           </div>
           <div>
             <h4 className="text-sm font-black text-white uppercase tracking-wider">
-              Instant Security Phone Prompt
+              {tenantName ? `${tenantName} Super Admin Phone` : "Instant Security Phone Prompt"}
             </h4>
             <p className="text-[11px] text-gray-400 font-medium">
               Zero-SMS Instant Login Approval via Internet Push

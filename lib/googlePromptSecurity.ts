@@ -15,6 +15,7 @@ if (publicKey && privateKey) {
 
 export interface PromptChallenge {
   id: string;
+  tenantId?: string | null;
   correctNumber: number;
   options: number[];
   status: "PENDING" | "APPROVED" | "REJECTED" | "EXPIRED";
@@ -71,6 +72,18 @@ function generateChallengeNumbers(): { correct: number; options: number[] } {
 }
 
 /**
+ * Resolves the settings key in platformSetting table based on tenant context.
+ * Single platform boss -> "boss_master_security_phone"
+ * Multi-tenant campus superadmin -> "superadmin_phone_<tenantId>"
+ */
+export function getPhoneSecurityKey(tenantId?: string | null): string {
+  if (tenantId && tenantId.trim() && tenantId !== "default") {
+    return `superadmin_phone_${tenantId.trim()}`;
+  }
+  return "boss_master_security_phone";
+}
+
+/**
  * Creates a new Instant Number Match Challenge and sends a Push Alert to the Master Phone
  */
 export async function createPromptChallenge(clientInfo: {
@@ -78,6 +91,7 @@ export async function createPromptChallenge(clientInfo: {
   browser: string;
   os: string;
   location?: string;
+  tenantId?: string | null;
 }): Promise<{ challengeId: string; correctNumber: number; expiresAt: number }> {
   const challengeId = "prompt_" + Math.random().toString(36).substring(2, 10) + Date.now().toString(36);
   const { correct, options } = generateChallengeNumbers();
@@ -86,6 +100,7 @@ export async function createPromptChallenge(clientInfo: {
 
   const challenge: PromptChallenge = {
     id: challengeId,
+    tenantId: clientInfo.tenantId || null,
     correctNumber: correct,
     options,
     status: "PENDING",
@@ -195,16 +210,17 @@ export function checkChallengeStatus(challengeId: string): { status: "PENDING" |
  * Sends a high-priority Web Push Notification to the bound Master Phone
  */
 async function sendPushToMasterPhone(challenge: PromptChallenge) {
+  const phoneKey = getPhoneSecurityKey(challenge.tenantId);
   // 1. Fetch Master Phone binding from platform_settings
   const phoneRecord = await prisma.platformSetting.findUnique({
-    where: { id: "boss_master_security_phone" }
+    where: { id: phoneKey }
   });
 
   const settings = (phoneRecord?.settings as any) || {};
   const subscription = settings.subscription;
 
   if (!subscription || !subscription.endpoint) {
-    console.log("No Master Security Phone currently paired for push alerts.");
+    console.log(`[Push] No Security Phone paired under key "${phoneKey}" for push alerts.`);
     return;
   }
 
@@ -221,36 +237,43 @@ async function sendPushToMasterPhone(challenge: PromptChallenge) {
   });
 
   await webpush.sendNotification(subscription, payload);
-  console.log(`📡 [Push] Security challenge dispatched to Master Phone: ${challenge.id}`);
+  console.log(`📡 [Push] Security challenge dispatched to Phone (${phoneKey}): ${challenge.id}`);
 }
 
 /**
  * Saves/Binds the current device as the Master Security Phone
  */
-export async function bindMasterSecurityPhone(subscription: any, deviceInfo: { name?: string; userAgent?: string }) {
+export async function bindMasterSecurityPhone(
+  subscription: any,
+  deviceInfo: { name?: string; userAgent?: string },
+  tenantId?: string | null
+) {
+  const phoneKey = getPhoneSecurityKey(tenantId);
   const data = {
     isBound: true,
     boundAt: new Date().toISOString(),
     deviceName: deviceInfo.name || "Master Phone",
     userAgent: deviceInfo.userAgent || "",
-    subscription
+    subscription,
+    tenantId: tenantId || null
   };
 
   await prisma.platformSetting.upsert({
-    where: { id: "boss_master_security_phone" },
+    where: { id: phoneKey },
     update: { settings: data },
-    create: { id: "boss_master_security_phone", settings: data }
+    create: { id: phoneKey, settings: data }
   });
 
-  return { success: true, boundAt: data.boundAt };
+  return { success: true, boundAt: data.boundAt, key: phoneKey };
 }
 
 /**
  * Unbinds the Master Security Phone
  */
-export async function unbindMasterSecurityPhone() {
+export async function unbindMasterSecurityPhone(tenantId?: string | null) {
+  const phoneKey = getPhoneSecurityKey(tenantId);
   await prisma.platformSetting.deleteMany({
-    where: { id: "boss_master_security_phone" }
+    where: { id: phoneKey }
   });
   return { success: true };
 }
@@ -258,15 +281,17 @@ export async function unbindMasterSecurityPhone() {
 /**
  * Checks whether a Master Security Phone is bound
  */
-export async function getMasterSecurityPhoneStatus() {
+export async function getMasterSecurityPhoneStatus(tenantId?: string | null) {
+  const phoneKey = getPhoneSecurityKey(tenantId);
   const phoneRecord = await prisma.platformSetting.findUnique({
-    where: { id: "boss_master_security_phone" }
+    where: { id: phoneKey }
   });
 
   const settings = (phoneRecord?.settings as any) || {};
   return {
     isBound: Boolean(settings.isBound && settings.subscription),
     boundAt: settings.boundAt || null,
-    deviceName: settings.deviceName || null
+    deviceName: settings.deviceName || null,
+    tenantId: tenantId || null
   };
 }
