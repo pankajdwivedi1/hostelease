@@ -1,7 +1,8 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
-import { Smartphone, ShieldCheck, CheckCircle2, Trash2, RefreshCw, AlertCircle } from "lucide-react";
+import { Smartphone, ShieldCheck, CheckCircle2, Trash2, RefreshCw } from "lucide-react";
+import { showToast, showConfirm } from "@/lib/toast";
 
 function urlBase64ToUint8Array(base64String: string) {
   const padding = "=".repeat((4 - (base64String.length % 4)) % 4);
@@ -36,7 +37,6 @@ export default function MasterPhoneBindingCard({
     deviceName: null
   });
   const [isProcessing, setIsProcessing] = useState(false);
-  const [message, setMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
 
   const fetchStatus = async () => {
     try {
@@ -60,7 +60,6 @@ export default function MasterPhoneBindingCard({
   // Register current phone as master security device
   const handleRegisterPhone = async () => {
     setIsProcessing(true);
-    setMessage(null);
 
     try {
       if (typeof window === "undefined" || !("serviceWorker" in navigator) || !("PushManager" in window)) {
@@ -118,20 +117,21 @@ export default function MasterPhoneBindingCard({
         throw new Error(data.error || "Failed to bind device.");
       }
 
-      setMessage({ type: "success", text: "This phone is now your Master Security Phone!" });
+      showToast("This phone is now your Master Security Phone!", "success");
       await fetchStatus();
     } catch (err: any) {
-      setMessage({ type: "error", text: err.message || "Failed to register phone." });
+      showToast(err.message || "Failed to register phone.", "error");
     } finally {
       setIsProcessing(false);
     }
   };
 
-  // Unbind Master Phone
+  // Unbind Master Phone (using in-app custom confirmation dialog and toast)
   const handleUnbind = async () => {
-    if (!confirm("Are you sure you want to unbind your Master Security Phone?")) return;
+    const confirmed = await showConfirm("Are you sure you want to unbind this Master Security Phone?");
+    if (!confirmed) return;
+
     setIsProcessing(true);
-    setMessage(null);
 
     try {
       const res = await fetch("/api/super-admin/auth/google-prompt/device", {
@@ -145,10 +145,10 @@ export default function MasterPhoneBindingCard({
 
       if (!res.ok) throw new Error("Failed to unbind phone.");
 
-      setMessage({ type: "success", text: "Master Security Phone removed." });
+      showToast("Master Security Phone removed successfully", "info");
       await fetchStatus();
     } catch (err: any) {
-      setMessage({ type: "error", text: err.message || "Failed to unbind." });
+      showToast(err.message || "Failed to unbind phone.", "error");
     } finally {
       setIsProcessing(false);
     }
@@ -156,91 +156,73 @@ export default function MasterPhoneBindingCard({
 
   if (loading) {
     return (
-      <div className="p-4 bg-white/[0.03] border border-white/10 rounded-2xl flex items-center justify-center">
-        <RefreshCw className="w-5 h-5 text-blue-400 animate-spin" />
+      <div className="p-3 bg-white/[0.03] border border-white/10 rounded-xl flex items-center justify-center">
+        <RefreshCw className="w-4 h-4 text-blue-400 animate-spin" />
       </div>
     );
   }
 
   return (
-    <div className="p-5 bg-gradient-to-br from-[#0c1322] to-[#070b12] border border-blue-500/20 rounded-2xl shadow-lg shadow-black/40">
-      <div className="flex items-start justify-between gap-3 mb-3">
-        <div className="flex items-center gap-2.5">
-          <div className="p-2.5 bg-blue-500/10 border border-blue-500/30 rounded-xl text-blue-400">
-            <Smartphone className="w-5 h-5" />
+    <div className="p-3 sm:p-3.5 bg-gradient-to-br from-[#0c1322] to-[#070b12] border border-blue-500/20 rounded-xl sm:rounded-2xl shadow-md">
+      <div className="flex items-start justify-between gap-2 mb-2">
+        <div className="flex items-center gap-2">
+          <div className="p-1.5 bg-blue-500/10 border border-blue-500/30 rounded-lg text-blue-400 shrink-0">
+            <Smartphone className="w-3.5 h-3.5" />
           </div>
           <div>
-            <h4 className="text-sm font-black text-white uppercase tracking-wider">
+            <h4 className="text-[10.5px] sm:text-[11.5px] font-black text-white uppercase tracking-tight leading-tight">
               {tenantName ? `${tenantName} Super Admin Phone` : "Instant Security Phone Prompt"}
             </h4>
-            <p className="text-[11px] text-gray-400 font-medium">
+            <p className="text-[8.5px] sm:text-[9.5px] text-gray-400 font-medium leading-tight mt-0.5">
               Zero-SMS Instant Login Approval via Internet Push
             </p>
           </div>
         </div>
 
         {deviceStatus.isBound && (
-          <span className="inline-flex items-center gap-1 px-2.5 py-1 bg-emerald-500/10 border border-emerald-500/30 rounded-lg text-emerald-400 text-[10px] font-black uppercase tracking-wider">
-            <CheckCircle2 className="w-3.5 h-3.5" />
+          <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-emerald-500/10 border border-emerald-500/30 rounded-md text-emerald-400 text-[8.5px] font-black uppercase tracking-wider shrink-0">
+            <CheckCircle2 className="w-3 h-3" />
             <span>Active</span>
           </span>
         )}
       </div>
 
-      <p className="text-xs text-gray-300 leading-relaxed mb-4">
-        When someone tries to log into Super Admin on a computer, your paired phone will pop up with a matching number prompt (e.g. <strong>Tap 64</strong>) to approve or block the attempt instantly over Wi-Fi/4G.
+      <p className="text-[9px] sm:text-[10px] text-gray-400 leading-snug mb-2.5">
+        When someone tries to log into Super Admin on a computer, your paired phone will pop up with a matching number prompt (e.g. <strong>Tap 64</strong>) to approve or block instantly over Wi-Fi/4G.
       </p>
-
-      {/* Messages */}
-      {message && (
-        <div
-          className={`mb-4 p-3 rounded-xl text-xs font-bold flex items-center gap-2 ${
-            message.type === "success"
-              ? "bg-emerald-500/10 border border-emerald-500/30 text-emerald-300"
-              : "bg-red-500/10 border border-red-500/30 text-red-300"
-          }`}
-        >
-          {message.type === "success" ? (
-            <CheckCircle2 className="w-4 h-4 shrink-0" />
-          ) : (
-            <AlertCircle className="w-4 h-4 shrink-0" />
-          )}
-          <span>{message.text}</span>
-        </div>
-      )}
 
       {/* Device Info if Bound */}
       {deviceStatus.isBound ? (
-        <div className="bg-white/[0.04] border border-white/10 rounded-xl p-3.5 mb-4 flex items-center justify-between">
+        <div className="bg-white/[0.04] border border-white/10 rounded-lg p-2 sm:p-2.5 flex items-center justify-between gap-2">
           <div>
-            <p className="text-xs font-bold text-white">
+            <p className="text-[10.5px] sm:text-xs font-bold text-white">
               {deviceStatus.deviceName || "Personal Mobile Phone"}
             </p>
-            <p className="text-[10px] text-gray-400 mt-0.5">
+            <p className="text-[8.5px] sm:text-[9px] text-gray-400 mt-0.5">
               Paired: {deviceStatus.boundAt ? new Date(deviceStatus.boundAt).toLocaleDateString() : "Active"}
             </p>
           </div>
           <button
             onClick={handleUnbind}
             disabled={isProcessing}
-            className="p-2 bg-red-500/10 hover:bg-red-500/20 text-red-400 border border-red-500/30 rounded-lg text-xs font-bold transition-all active:scale-95 cursor-pointer disabled:opacity-50"
+            className="p-1.5 bg-red-500/10 hover:bg-red-500/20 text-red-400 border border-red-500/30 rounded-md transition-all active:scale-95 cursor-pointer disabled:opacity-50 shrink-0"
             title="Unbind Phone"
           >
-            <Trash2 className="w-4 h-4" />
+            <Trash2 className="w-3.5 h-3.5" />
           </button>
         </div>
       ) : (
         <button
           onClick={handleRegisterPhone}
           disabled={isProcessing}
-          className="w-full py-3 px-4 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white text-xs font-black uppercase tracking-wider rounded-xl shadow-lg shadow-blue-600/30 transition-all active:scale-98 cursor-pointer disabled:opacity-50 flex items-center justify-center gap-2"
+          className="w-full py-2 px-3 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white text-[9.5px] sm:text-[10.5px] font-black uppercase tracking-wider rounded-lg shadow-sm transition-all active:scale-98 cursor-pointer disabled:opacity-50 flex items-center justify-center gap-1.5"
         >
           {isProcessing ? (
-            <RefreshCw className="w-4 h-4 animate-spin" />
+            <RefreshCw className="w-3.5 h-3.5 animate-spin" />
           ) : (
-            <ShieldCheck className="w-4 h-4" />
+            <ShieldCheck className="w-3.5 h-3.5" />
           )}
-          <span>{isProcessing ? "Registering Phone..." : "Register This Phone as Master Security Device"}</span>
+          <span>{isProcessing ? "Registering Phone..." : "Register This Phone as Security Device"}</span>
         </button>
       )}
     </div>

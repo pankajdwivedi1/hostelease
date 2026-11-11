@@ -2177,10 +2177,6 @@ export default function AdminDashboard({
   const [showSetupWizard, setShowSetupWizard] = useState(false);
   const [guideDismissed, setGuideDismissed] = useState(true); // Default true to prevent flicker
   
-  // Master Phone Security State for Campus Super Admin
-  const [showPhoneBindingModal, setShowPhoneBindingModal] = useState(false);
-  const [isPhoneBound, setIsPhoneBound] = useState<boolean | null>(null);
-
   useEffect(() => {
     if (typeof window !== 'undefined') {
       setGuideDismissed(!!localStorage.getItem("hosteleaze_setup_dismissed"));
@@ -2934,21 +2930,6 @@ export default function AdminDashboard({
   const [paymentMethod, setPaymentMethod] = useState<"razorpay" | "bank">("razorpay");
   const [utrNumber, setUtrNumber] = useState("");
   const [isSubmittingDirect, setIsSubmittingDirect] = useState(false);
-
-  // Load campus Super Admin Phone binding status
-  useEffect(() => {
-    if (title === "Super Admin Dashboard") {
-      const tid = subscriptionStatus?.tenantId || subscriptionStatus?.id;
-      fetch(`/api/super-admin/auth/google-prompt/device${tid ? `?tenantId=${encodeURIComponent(tid)}` : ""}`)
-        .then(r => r.json())
-        .then(d => {
-          if (d && typeof d.isBound === "boolean") {
-            setIsPhoneBound(d.isBound);
-          }
-        })
-        .catch(() => {});
-    }
-  }, [title, subscriptionStatus?.tenantId, subscriptionStatus?.id]);
 
   // Preload Razorpay Checkout SDK script in background for instant modal popup performance
   useEffect(() => {
@@ -9349,21 +9330,6 @@ export default function AdminDashboard({
                         <span className="text-[10px]">📋</span>
                       </button>
                     )}
-                    {title === "Super Admin Dashboard" && (
-                      <button
-                        type="button"
-                        onClick={() => setShowPhoneBindingModal(true)}
-                        className={`px-2 py-1 w-[76px] rounded-lg border border-solid text-[9px] font-black uppercase tracking-tight active:scale-95 transition-all flex items-center justify-center gap-1 cursor-pointer ${
-                          isPhoneBound
-                            ? "border-emerald-200 bg-emerald-50 text-emerald-700"
-                            : "border-purple-200 bg-purple-50 text-purple-700"
-                        }`}
-                        title={isPhoneBound ? "Master Security Phone Active" : "Pair Mobile Phone"}
-                      >
-                        {isPhoneBound ? "BOUND" : "PAIR"}
-                        <span className="text-[10px]">📱</span>
-                      </button>
-                    )}
                   </div>
                 </div>
 
@@ -9482,21 +9448,6 @@ export default function AdminDashboard({
                       className={`hidden md:flex px-4 py-2 rounded-lg border border-solid ${!guideDismissed ? 'border-blue-400 bg-blue-100 animate-pulse shadow-[0_0_15px_rgba(59,130,246,0.5)]' : 'border-blue-100 bg-blue-50'} text-blue-700 text-[10px] font-black uppercase tracking-tight active:scale-95 transition-all items-center gap-2 hover:bg-blue-100`}
                     >
                       📋 Setup Guide
-                    </button>
-                  )}
-                  {title === "Super Admin Dashboard" && (
-                    <button
-                      type="button"
-                      onClick={() => setShowPhoneBindingModal(true)}
-                      className={`hidden md:flex px-3 py-2 rounded-lg border text-[10px] font-black uppercase tracking-tight active:scale-95 transition-all items-center gap-1.5 cursor-pointer shadow-xs ${
-                        isPhoneBound
-                          ? "border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100"
-                          : "border-purple-200 bg-purple-50 text-purple-700 hover:bg-purple-100"
-                      }`}
-                      title={isPhoneBound ? "Master Security Phone Active" : "Pair Mobile Phone for Instant 2FA"}
-                    >
-                      <span className="text-xs">📱</span>
-                      <span>{isPhoneBound ? "Phone Bound" : "Pair Phone"}</span>
                     </button>
                   )}
                   <button
@@ -18538,25 +18489,6 @@ export default function AdminDashboard({
           );
         })()
       }
-      {showPhoneBindingModal && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/75 backdrop-blur-sm animate-in fade-in duration-200">
-          <div className="relative w-full max-w-md animate-in zoom-in-95 duration-200">
-            <button
-              onClick={() => setShowPhoneBindingModal(false)}
-              className="absolute top-4 right-4 text-gray-400 hover:text-white p-1 rounded-full z-10 transition-colors cursor-pointer"
-            >
-              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-              </svg>
-            </button>
-            <MasterPhoneBindingCard
-              tenantId={subscriptionStatus?.tenantId || subscriptionStatus?.id}
-              tenantName={subscriptionStatus?.name || title}
-              onStatusChange={(bound) => setIsPhoneBound(bound)}
-            />
-          </div>
-        </div>
-      )}
       {showIdentifierModal && (
         <FaceIdentifierModal
           isOpen={showIdentifierModal}
@@ -20868,11 +20800,10 @@ export default function AdminDashboard({
 
                       {/* 3. Super Admin Mobile Security Device Binding */}
                       {showRemoveButton && (
-                        <div className="mt-3">
+                        <div className="mt-2.5">
                           <MasterPhoneBindingCard
                             tenantId={subscriptionStatus?.tenantId || subscriptionStatus?.id}
                             tenantName={subscriptionStatus?.name || title}
-                            onStatusChange={(bound) => setIsPhoneBound(bound)}
                           />
                         </div>
                       )}
