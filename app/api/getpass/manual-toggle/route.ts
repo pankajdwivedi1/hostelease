@@ -325,10 +325,10 @@ export async function POST(request: NextRequest) {
                             toDateTime: leaveToDateToUse,
                             reason: passReason,
                             requestType: "leave",
-                            status: "allowed",
-                            wardenStatus: "allowed",
-                            deanStatus: "allowed",
-                            parentStatus: "allowed",
+                            status: "pending",
+                            wardenStatus: userType === "warden" ? "allowed" : "pending",
+                            deanStatus: (userType === "dean" || userType === "admin" || userType === "superadmin") ? "allowed" : "pending",
+                            parentStatus: "pending",
                         });
                         if (newPerm) permIdToUse = (newPerm._id || newPerm.id)?.toString();
                     } catch (permCreateErr) {
