@@ -366,13 +366,9 @@ export default function GatepassView({
         };
         window.addEventListener("storage", handleStorageChange);
 
-        // Auto-poll settings every 10 seconds to catch remote admin changes on kiosk
-        const pollTimer = setInterval(syncGateSettings, 10000);
-
         return () => {
             isMounted = false;
             window.removeEventListener("storage", handleStorageChange);
-            clearInterval(pollTimer);
         };
     }, []);
     const router = useRouter();

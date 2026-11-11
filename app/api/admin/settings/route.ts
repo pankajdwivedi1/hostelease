@@ -241,13 +241,12 @@ export async function POST(request: NextRequest) {
 
         const settings = await db.settings.update(updateData);
 
-        // ⚡ INSTANT REALTIME BROADCAST: Notify all active gatepass screens across campus immediately
-        if (updateData.gatepassGates !== undefined || updateData.enableGateCameraScan !== undefined) {
-            broadcastGateSettingsUpdate({
-                gatepassGates: updateData.gatepassGates,
-                enableGateCameraScan: updateData.enableGateCameraScan
-            });
-        }
+        // ⚡ INSTANT REALTIME BROADCAST: Notify all active gatepass screens across campus immediately on any change
+        broadcastGateSettingsUpdate({
+            gatepassGates: updateData.gatepassGates,
+            enableGateCameraScan: updateData.enableGateCameraScan,
+            timestamp: Date.now()
+        });
 
         return NextResponse.json({
             success: true,
