@@ -22,6 +22,10 @@ export function createCachedResponse(
         const hash = crypto.createHash("md5").update(jsonString).digest("hex");
         const etag = `"${hash}"`;
 
+        const cacheControl = maxAgeSeconds > 0
+            ? `private, max-age=${maxAgeSeconds}, stale-while-revalidate=${maxAgeSeconds * 2}`
+            : "private, no-cache, must-revalidate";
+
         if (req) {
             const ifNoneMatch = req.headers.get("if-none-match");
             if (ifNoneMatch) {
@@ -32,7 +36,7 @@ export function createCachedResponse(
                         status: 304,
                         headers: {
                             "ETag": etag,
-                            "Cache-Control": "private, no-cache, must-revalidate",
+                            "Cache-Control": cacheControl,
                             "Access-Control-Allow-Origin": "*",
                         },
                     });
@@ -45,7 +49,7 @@ export function createCachedResponse(
             headers: {
                 "Content-Type": "application/json",
                 "ETag": etag,
-                "Cache-Control": "private, no-cache, must-revalidate",
+                "Cache-Control": cacheControl,
                 "Access-Control-Allow-Origin": "*",
             },
         });

@@ -97,7 +97,7 @@ export async function GET(request: NextRequest) {
             })(),
             gatepassGates: (settings?.notificationSettings as any)?.gatepassGates || (settings as any)?.gatepassGates || [],
             enforceMandatoryPush
-        }, request, 30);
+        }, request, 60);
     } catch (error: any) {
         console.error("Error fetching admin settings:", error);
         return NextResponse.json(
