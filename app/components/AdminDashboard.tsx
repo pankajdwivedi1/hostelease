@@ -2187,20 +2187,6 @@ export default function AdminDashboard({
     }
   }, []);
 
-  useEffect(() => {
-    if (title === "Super Admin Dashboard") {
-      const tid = subscriptionStatus?.tenantId || subscriptionStatus?.id;
-      fetch(`/api/super-admin/auth/google-prompt/device${tid ? `?tenantId=${encodeURIComponent(tid)}` : ""}`)
-        .then(r => r.json())
-        .then(d => {
-          if (d && typeof d.isBound === "boolean") {
-            setIsPhoneBound(d.isBound);
-          }
-        })
-        .catch(() => {});
-    }
-  }, [title, subscriptionStatus?.tenantId, subscriptionStatus?.id]);
-
   // Web Push Notification State & Toggle for Dean / Warden
   const [isNotificationEnabled, setIsNotificationEnabled] = useState<boolean>(false);
   const [isTogglingNotification, setIsTogglingNotification] = useState<boolean>(false);
@@ -2948,6 +2934,21 @@ export default function AdminDashboard({
   const [paymentMethod, setPaymentMethod] = useState<"razorpay" | "bank">("razorpay");
   const [utrNumber, setUtrNumber] = useState("");
   const [isSubmittingDirect, setIsSubmittingDirect] = useState(false);
+
+  // Load campus Super Admin Phone binding status
+  useEffect(() => {
+    if (title === "Super Admin Dashboard") {
+      const tid = subscriptionStatus?.tenantId || subscriptionStatus?.id;
+      fetch(`/api/super-admin/auth/google-prompt/device${tid ? `?tenantId=${encodeURIComponent(tid)}` : ""}`)
+        .then(r => r.json())
+        .then(d => {
+          if (d && typeof d.isBound === "boolean") {
+            setIsPhoneBound(d.isBound);
+          }
+        })
+        .catch(() => {});
+    }
+  }, [title, subscriptionStatus?.tenantId, subscriptionStatus?.id]);
 
   // Preload Razorpay Checkout SDK script in background for instant modal popup performance
   useEffect(() => {
