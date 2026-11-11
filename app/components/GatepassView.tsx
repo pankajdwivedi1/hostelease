@@ -299,45 +299,60 @@ export default function GatepassView({
         return initialScannerMode;
     });
 
+    // Apply gatepass settings directly to state and local storage
+    const applyGateSettings = useCallback((data: any) => {
+        if (!data) return;
+        const gates: any[] = data.gatepassGates || [];
+        const activeId = typeof window !== "undefined" ? localStorage.getItem("activeGateId") : null;
+        const activeName = typeof window !== "undefined" ? localStorage.getItem("activeGateName") : null;
+
+        const currentGate = gates.find((g: any) =>
+            (activeId && g.id === activeId) ||
+            (activeName && g.name?.toUpperCase() === activeName?.toUpperCase())
+        ) || gates[0];
+
+        if (currentGate) {
+            const targetMode: "qr" | "camera" = currentGate.mode === "camera" ? "camera" : "qr";
+            const targetSeconds: number = currentGate.qrSeconds || 15;
+            const targetStandby: number = currentGate.standbyMinutes || 3;
+            setScannerMode(targetMode);
+            setGateName(currentGate.name);
+            setQrSeconds(targetSeconds);
+            setStandbyMinutes(targetStandby);
+            if (typeof window !== "undefined") {
+                localStorage.setItem("activeGateId", currentGate.id);
+                localStorage.setItem("activeGateName", currentGate.name);
+                localStorage.setItem("activeGateMode", targetMode);
+                localStorage.setItem("activeGateQrSeconds", String(targetSeconds));
+                localStorage.setItem("activeGateStandbyMinutes", String(targetStandby));
+            }
+        } else if (data.enableGateCameraScan) {
+            setScannerMode("camera");
+        } else {
+            setScannerMode("qr");
+        }
+    }, []);
+
     // Auto-sync scanner mode and gate identity from settings & storage
     useEffect(() => {
         let isMounted = true;
 
         const syncGateSettings = async () => {
             try {
+                // Instantly load from localStorage if present
+                const activeMode = typeof window !== "undefined" ? localStorage.getItem("activeGateMode") : null;
+                const activeName = typeof window !== "undefined" ? localStorage.getItem("activeGateName") : null;
+                if (activeMode === "camera" || activeMode === "qr") {
+                    setScannerMode(activeMode);
+                }
+                if (activeName) {
+                    setGateName(activeName);
+                }
+
                 const res = await fetch("/api/admin/settings");
                 const data = await res.json();
                 if (!isMounted || !data?.success) return;
-
-                const gates: any[] = data.gatepassGates || [];
-                const activeId = typeof window !== "undefined" ? localStorage.getItem("activeGateId") : null;
-                const activeName = typeof window !== "undefined" ? localStorage.getItem("activeGateName") : null;
-
-                const currentGate = gates.find((g: any) =>
-                    (activeId && g.id === activeId) ||
-                    (activeName && g.name?.toUpperCase() === activeName?.toUpperCase())
-                ) || gates[0];
-
-                if (currentGate) {
-                    const targetMode: "qr" | "camera" = currentGate.mode === "camera" ? "camera" : "qr";
-                    const targetSeconds: number = currentGate.qrSeconds || 15;
-                    const targetStandby: number = currentGate.standbyMinutes || 3;
-                    setScannerMode(targetMode);
-                    setGateName(currentGate.name);
-                    setQrSeconds(targetSeconds);
-                    setStandbyMinutes(targetStandby);
-                    if (typeof window !== "undefined") {
-                        localStorage.setItem("activeGateId", currentGate.id);
-                        localStorage.setItem("activeGateName", currentGate.name);
-                        localStorage.setItem("activeGateMode", targetMode);
-                        localStorage.setItem("activeGateQrSeconds", String(targetSeconds));
-                        localStorage.setItem("activeGateStandbyMinutes", String(targetStandby));
-                    }
-                } else if (data.enableGateCameraScan) {
-                    setScannerMode("camera");
-                } else {
-                    setScannerMode("qr");
-                }
+                applyGateSettings(data);
             } catch (err) {
                 console.warn("Gate mode auto-sync error:", err);
             }
@@ -370,7 +385,7 @@ export default function GatepassView({
             isMounted = false;
             window.removeEventListener("storage", handleStorageChange);
         };
-    }, []);
+    }, [applyGateSettings]);
     const router = useRouter();
     const recentPassMapRef = useRef<Map<string, number>>(new Map());
     const [qrData, setQrData] = useState<string>("");
@@ -911,11 +926,14 @@ export default function GatepassView({
                     }
                 });
 
-                // ⚡ Instant remote mode change (QR Code <-> Face Camera) in milliseconds via SSE
-                eventSource.addEventListener("gate_settings", () => {
+                // ⚡ Instant remote mode change (QR Code <-> Face Camera) in milliseconds via SSE (0 HTTP network calls!)
+                eventSource.addEventListener("gate_settings", (event: MessageEvent) => {
                     try {
-                        console.log("⚡ [GATEPASS_SSE] Remote gate mode change received - updating mode in milliseconds!");
-                        syncGateSettings();
+                        const data = event.data ? JSON.parse(event.data) : null;
+                        console.log("⚡ [GATEPASS_SSE] Remote gate mode change received in milliseconds:", data);
+                        if (data) {
+                            applyGateSettings(data);
+                        }
                     } catch (_) {}
                 });
 
