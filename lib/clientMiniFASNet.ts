@@ -94,20 +94,28 @@ export async function checkLivenessClient(
   const bx = Math.max(0, box.x);
   const by = Math.max(0, box.y);
 
-  // Context Crop at Scale 2.7 (Official MiniFASNetV2 input geometry)
+  // Wide 3D Context Crop (Preserves shoulders, room background & prevents tight-crop false phone spoof)
   const scale = 2.7;
-  const s = Math.min((sourceHeight - 1) / bh, (sourceWidth - 1) / bw, scale);
-  const new_w = bw * s;
-  const new_h = bh * s;
   const center_x = bx + bw / 2;
   const center_y = by + bh / 2;
 
-  const x1 = Math.max(0, Math.floor(center_x - new_w / 2));
-  const y1 = Math.max(0, Math.floor(center_y - new_h / 2));
-  const x2 = Math.min(sourceWidth - 1, Math.floor(center_x + new_w / 2));
-  const y2 = Math.min(sourceHeight - 1, Math.floor(center_y + new_h / 2));
-  const crop_w = Math.max(1, x2 - x1);
-  const crop_h = Math.max(1, y2 - y1);
+  const maxS_x = Math.max(1.0, (Math.min(center_x, sourceWidth - 1 - center_x) * 2) / bw);
+  const maxS_y = Math.max(1.0, (Math.min(center_y, sourceHeight - 1 - center_y) * 2) / bh);
+  const s = Math.min(scale, Math.max(2.0, Math.min(maxS_x, maxS_y, (sourceWidth - 1) / bw, (sourceHeight - 1) / bh)));
+
+  const new_w = Math.round(bw * s);
+  const new_h = Math.round(bh * s);
+
+  let x1 = Math.round(center_x - new_w / 2);
+  let y1 = Math.round(center_y - new_h / 2);
+
+  if (x1 < 0) x1 = 0;
+  if (y1 < 0) y1 = 0;
+  if (x1 + new_w >= sourceWidth) x1 = Math.max(0, sourceWidth - 1 - new_w);
+  if (y1 + new_h >= sourceHeight) y1 = Math.max(0, sourceHeight - 1 - new_h);
+
+  const crop_w = Math.max(1, Math.min(new_w, sourceWidth - x1));
+  const crop_h = Math.max(1, Math.min(new_h, sourceHeight - y1));
 
   if (!cachedCropCanvas) {
     cachedCropCanvas = document.createElement("canvas");
@@ -154,13 +162,13 @@ export async function checkLivenessClient(
       let isSpoof = false;
       let reason = "";
 
-      if (replayProb > 0.40 && replayProb > realProb) {
+      if (replayProb >= 0.70 && replayProb > realProb) {
         isSpoof = true;
         reason = `Mobile Phone Screen Detected (${replayScore}% confidence)! Please present your real physical face.`;
-      } else if (printProb > 0.40 && printProb > realProb) {
+      } else if (printProb >= 0.65 && printProb > realProb) {
         isSpoof = true;
         reason = `Printed Paper Photo Detected (${printScore}% confidence)! Please present your real physical face.`;
-      } else if (realProb < 0.42) {
+      } else if (realProb < 0.28) {
         isSpoof = true;
         reason = `Electronic Screen / Synthetic Display Detected!`;
       }

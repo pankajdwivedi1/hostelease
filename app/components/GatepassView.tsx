@@ -1333,16 +1333,26 @@ export default function GatepassView({
                             </h1>
                         </div>
 
-                        {/* Mobile: Top Right Mode Badge & System Label */}
+                        {/* Mobile: Top Right Mode Badge & Logout */}
                         <div className="flex flex-col items-end sm:hidden shrink-0">
-                            <span className={`inline-block px-2 py-0.5 rounded-lg text-[8.5px] font-bold border tracking-wider uppercase ${
-                                scannerMode === "camera"
-                                    ? "bg-purple-500/10 border-purple-500/30 text-purple-400"
-                                    : "bg-blue-500/10 border-blue-500/30 text-blue-400"
-                            }`}>
-                                {scannerMode === "camera" ? "📸 FACE" : "📱 QR"}
-                            </span>
-                            <p className="text-[7.5px] text-[rgba(255,255,255,0.45)] tracking-wider uppercase m-0 mt-0.5 leading-none">
+                            <div className="flex items-center gap-1.5">
+                                <span className={`inline-flex items-center justify-center h-5 px-2 rounded-[5px] text-[8.5px] font-bold border tracking-wider uppercase leading-none ${
+                                    scannerMode === "camera"
+                                        ? "bg-purple-500/10 border-purple-500/30 text-purple-400"
+                                        : "bg-blue-500/10 border-blue-500/30 text-blue-400"
+                                }`}>
+                                    {scannerMode === "camera" ? "📸 FACE" : "📱 QR"}
+                                </span>
+                                <button
+                                    onClick={handleLogout}
+                                    className="inline-flex items-center justify-center h-5 px-2 bg-[rgba(255,68,68,0.1)] border border-[rgba(255,68,68,0.25)] text-[#ff6b6b] rounded-[5px] gap-1 font-bold text-[8.5px] tracking-wider uppercase leading-none transition-all hover:bg-[rgba(255,68,68,0.2)] active:scale-95 shadow-sm"
+                                    title="Logout"
+                                >
+                                    <span>Logout</span>
+                                    <span className="text-[10px]">🚪</span>
+                                </button>
+                            </div>
+                            <p className="text-[7px] text-[rgba(255,255,255,0.45)] tracking-wider uppercase m-0 mt-0.5 leading-none pr-0.5">
                                 Campus Outing
                             </p>
                         </div>
@@ -1406,7 +1416,7 @@ export default function GatepassView({
 
                     {/* Mobile: Full-width clean single-line Campus Gate Pill right under GATEPASS */}
                     <div className="flex sm:hidden items-center gap-1.5 mt-1.5 w-full overflow-hidden">
-                        <span className="inline-block px-2 py-0.5 bg-[rgba(0,255,136,0.1)] border border-[rgba(0,255,136,0.3)] rounded-lg text-[8px] text-[#00ff88] font-bold truncate max-w-full">
+                        <span className="inline-block px-2 py-0.5 bg-[rgba(0,255,136,0.1)] border border-[rgba(0,255,136,0.3)] rounded-[5px] text-[8px] text-[#00ff88] font-bold truncate max-w-full">
                             📍 {gateName}
                         </span>
                     </div>
@@ -1485,22 +1495,22 @@ export default function GatepassView({
             {/* =================== RIGHT PANEL: LIVE OUTING HISTORY =================== */}
             <div className="w-full md:w-[58%] flex flex-col p-2 sm:p-3 md:px-2.5 md:py-4 bg-gradient-to-b from-[#0d1117] to-[#0a0e14] min-h-[500px] md:h-full md:overflow-hidden overflow-visible">
                 {/* Summary Cards */}
-                <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-4 mb-2">
-                    <h2 className="text-lg md:text-xl font-bold text-white m-0 flex items-center gap-2">
-                        <span className="p-2 bg-[rgba(59,130,246,0.1)] rounded-lg text-blue-400">📊</span>
-                        Live Campus Status
+                <div className="flex flex-row justify-between items-center gap-1.5 sm:gap-4 mb-2">
+                    <h2 className="text-xs sm:text-base md:text-xl font-bold text-white m-0 flex items-center gap-1.5 sm:gap-2 shrink-0">
+                        <span className="p-1 sm:p-2 bg-[rgba(59,130,246,0.1)] rounded-[5px] sm:rounded-lg text-blue-400 text-xs sm:text-base">📊</span>
+                        <span>Live Campus Status</span>
                     </h2>
-                    <div className="flex gap-2 self-end sm:self-auto">
+                    <div className="flex items-center gap-1 sm:gap-2 shrink-0">
                         <button
                             onClick={() => {
                                 resetManualSearch();
                                 setIsManualModalOpen(true);
                             }}
-                            className="bg-[rgba(59,130,246,0.1)] border border-[rgba(59,130,246,0.2)] text-[#60a5fa] px-3 py-1.5 rounded-xl flex items-center gap-1.5 font-bold transition-all hover:bg-[rgba(59,130,246,0.2)] active:scale-95"
+                            className="bg-[rgba(59,130,246,0.1)] border border-[rgba(59,130,246,0.2)] text-[#60a5fa] px-2 sm:px-3 py-1 sm:py-1.5 rounded-[5px] sm:rounded-xl flex items-center gap-1 sm:gap-1.5 font-bold transition-all hover:bg-[rgba(59,130,246,0.2)] active:scale-95"
                             title="Manual ID Entry"
                         >
-                            <span className="text-[10px] uppercase tracking-wider">Manual Entry</span>
-                            <span className="text-sm">⌨️</span>
+                            <span className="text-[8.5px] sm:text-[10px] uppercase tracking-wider">Manual Entry</span>
+                            <span className="text-xs sm:text-sm">⌨️</span>
                         </button>
                         {onClose && (
                             <button
@@ -1513,7 +1523,7 @@ export default function GatepassView({
                         )}
                         <button
                             onClick={handleLogout}
-                            className="bg-[rgba(255,68,68,0.1)] border border-[rgba(255,68,68,0.2)] text-[#ff6b6b] px-3 py-1.5 rounded-xl flex items-center gap-1.5 font-bold transition-all hover:bg-[rgba(255,68,68,0.2)] active:scale-95"
+                            className="hidden sm:flex bg-[rgba(255,68,68,0.1)] border border-[rgba(255,68,68,0.2)] text-[#ff6b6b] px-3 py-1.5 rounded-xl items-center gap-1.5 font-bold transition-all hover:bg-[rgba(255,68,68,0.2)] active:scale-95"
                             title="Logout"
                         >
                             <span className="text-[10px] uppercase tracking-wider">Logout</span>
@@ -1521,7 +1531,7 @@ export default function GatepassView({
                         </button>
                         <button
                             onClick={toggleFullscreen}
-                            className="bg-[rgba(255,255,255,0.05)] border border-[rgba(255,255,255,0.1)] text-white w-9 h-9 rounded-xl flex items-center justify-center transition-all hover:bg-[rgba(255,255,255,0.1)] active:scale-95"
+                            className="bg-[rgba(255,255,255,0.05)] border border-[rgba(255,255,255,0.1)] text-white w-7 h-7 sm:w-9 sm:h-9 rounded-[5px] sm:rounded-xl flex items-center justify-center text-xs sm:text-base transition-all hover:bg-[rgba(255,255,255,0.1)] active:scale-95"
                         >
                             {isFullscreen ? "⊡" : "⊞"}
                         </button>
@@ -1586,15 +1596,15 @@ export default function GatepassView({
                                 </div>
                             </div>
                         ) : (
-                            <div className="bg-[rgba(59,130,246,0.05)] border border-[rgba(59,130,246,0.3)] rounded-[24px] p-4 md:p-6 animate-in zoom-in-95 duration-300 relative shadow-[0_0_30px_rgba(59,130,246,0.1)]">
-                                <div className="flex items-center justify-between mb-4">
+                            <div className="bg-[rgba(59,130,246,0.05)] border border-[rgba(59,130,246,0.3)] rounded-2xl sm:rounded-[24px] p-3 sm:p-4 md:p-6 animate-in zoom-in-95 duration-300 relative shadow-[0_0_30px_rgba(59,130,246,0.1)]">
+                                <div className="flex items-center justify-between mb-3 sm:mb-4">
                                     <div className="flex items-center gap-2">
-                                        <span className="text-xl">🔑</span>
+                                        <span className="text-lg sm:text-xl">🔑</span>
                                         <div className="flex flex-col">
-                                            <span className="text-sm font-black text-white uppercase tracking-wider">
+                                            <span className="text-xs sm:text-sm font-black text-white uppercase tracking-wider">
                                                 {showProfileCard ? "Verify Profile" : "Manual Entry"}
                                             </span>
-                                            <span className="text-[10px] text-gray-400 font-medium tracking-tight whitespace-nowrap">
+                                            <span className="text-[9px] sm:text-[10px] text-gray-400 font-medium tracking-tight whitespace-nowrap">
                                                 {showProfileCard ? "Verify student details below" : "Enter Name, Registration or ERP ID"}
                                             </span>
                                         </div>
@@ -1604,7 +1614,7 @@ export default function GatepassView({
                                             resetManualSearch();
                                             setIsManualModalOpen(false);
                                         }}
-                                        className="text-gray-500 hover:text-white transition-colors text-xl p-1"
+                                        className="text-gray-500 hover:text-white transition-colors text-lg sm:text-xl p-1"
                                     >
                                         ✕
                                     </button>
@@ -1612,111 +1622,114 @@ export default function GatepassView({
 
                                 {!showProfileCard ? (
                                     <form onSubmit={handleManualSearch} className="relative animate-in slide-in-from-bottom-2 duration-300">
-                                        <input
-                                            ref={manualInputRef}
-                                            type="text"
-                                            placeholder="Enter Name, Registration or ERP ID..."
-                                            value={manualSearchId}
-                                            onChange={e => {
-                                                setManualSearchId(e.target.value);
-                                                setManualError("");
-                                            }}
-                                            className="w-full bg-[#0a0f18] border border-white/10 rounded-2xl px-6 py-4 text-xl font-bold text-white placeholder:text-white/10 focus:outline-none focus:border-blue-500 transition-all text-center tracking-wide"
-                                            disabled={isProcessingManual}
-                                            autoComplete="off"
-                                        />
-
-                                        {manualError && (
-                                            <div className="mt-3 text-red-400 text-xs font-bold text-center animate-shake">
-                                                ⚠️ {manualError}
-                                            </div>
-                                        )}
-
-                                        {manualSuccess && (
-                                            <div className="mt-3 text-green-400 text-xs font-bold text-center">
-                                                ✅ {manualSuccess}
-                                            </div>
-                                        )}
-
-                                        <div className="mt-4 flex gap-2">
+                                        <div className="flex flex-row items-center gap-1.5 sm:gap-2">
+                                            <input
+                                                ref={manualInputRef}
+                                                type="text"
+                                                placeholder="Name, Reg or ERP ID..."
+                                                value={manualSearchId}
+                                                onChange={e => {
+                                                    setManualSearchId(e.target.value);
+                                                    setManualError("");
+                                                }}
+                                                className="flex-1 min-w-0 bg-[#0a0f18] border border-white/10 rounded-xl sm:rounded-2xl px-3 sm:px-5 py-2 sm:py-3.5 text-xs sm:text-base font-bold text-white placeholder:text-white/20 focus:outline-none focus:border-blue-500 transition-all tracking-wide"
+                                                disabled={isProcessingManual}
+                                                autoComplete="off"
+                                            />
                                             <button
                                                 type="button"
                                                 onClick={() => {
                                                     resetManualSearch();
                                                     setIsManualModalOpen(false);
                                                 }}
-                                                className="flex-1 px-4 py-3 bg-white/5 text-white text-sm font-bold rounded-xl hover:bg-white/10 transition-all active:scale-95"
+                                                className="px-2.5 sm:px-4 py-2 sm:py-3.5 bg-white/5 text-white text-[11px] sm:text-xs font-bold rounded-xl hover:bg-white/10 transition-all active:scale-95 shrink-0"
                                             >
                                                 Cancel
                                             </button>
                                             <button
                                                 type="submit"
                                                 disabled={isProcessingManual || !manualSearchId.trim()}
-                                                className="flex-[2] px-4 py-3 bg-blue-600 hover:bg-blue-700 text-white text-sm font-black rounded-xl transition-all active:scale-95 disabled:opacity-50"
+                                                className="px-3 sm:px-5 py-2 sm:py-3.5 bg-blue-600 hover:bg-blue-700 text-white text-[11px] sm:text-xs font-black rounded-xl transition-all active:scale-95 disabled:opacity-50 whitespace-nowrap shrink-0"
                                             >
                                                 {isProcessingManual ? "Searching..." : "FIND STUDENT"}
                                             </button>
                                         </div>
-                                    </form>
-                                ) : (
-                                    <div className="animate-in zoom-in-95 duration-200">
-                                        <div className="flex items-center gap-4 bg-white/5 p-4 rounded-2xl border border-white/10 mb-4 shadow-inner">
-                                            <div className="w-16 h-16 rounded-xl overflow-hidden bg-white/10 flex-shrink-0 border border-white/20">
-                                                {foundStudent.profilePicture ? (
-                                                    <img src={foundStudent.profilePicture} alt="" className="w-full h-full object-cover" />
-                                                ) : (
-                                                    <div className="w-full h-full flex items-center justify-center text-2xl bg-blue-500/10 text-blue-400 font-bold">
-                                                        {foundStudent.name?.charAt(0)}
-                                                    </div>
-                                                )}
-                                            </div>
-                                            <div className="min-w-0">
-                                                <h4 className="text-lg font-black text-white m-0 truncate">{foundStudent.name}</h4>
-                                                <p className="text-xs text-blue-400 font-bold m-0 mt-0.5 tracking-wider">{foundStudent.registrationId}</p>
-                                                <div className="flex items-center gap-1.5 mt-1.5">
-                                                    <span className={`w-2 h-2 rounded-full ${foundStudent.studentStatus === 'out' ? 'bg-[#ff6b6b]' : 'bg-[#00ff88]'}`} />
-                                                    <span className={`text-[10px] font-black uppercase tracking-widest ${foundStudent.studentStatus === 'out' ? 'text-[#ff6b6b]' : 'text-[#00ff88]'}`}>
-                                                        {foundStudent.studentStatus === 'out' ? 'Currently Outside' : 'Inside Campus'}
-                                                    </span>
-                                                </div>
-                                            </div>
-                                        </div>
 
                                         {manualError && (
-                                            <div className="mb-3 text-red-400 text-xs font-bold text-center">
+                                            <div className="mt-2 text-red-400 text-xs font-bold text-center animate-shake">
                                                 ⚠️ {manualError}
                                             </div>
                                         )}
 
                                         {manualSuccess && (
-                                            <div className="mb-3 text-green-400 text-xs font-bold text-center">
+                                            <div className="mt-2 text-green-400 text-xs font-bold text-center">
                                                 ✅ {manualSuccess}
                                             </div>
                                         )}
-
-                                        {!manualSuccess && (
-                                            <div className="flex gap-2">
-                                                <button
-                                                    onClick={resetManualSearch}
-                                                    className="flex-1 px-4 py-3 bg-white/5 text-white text-sm font-bold rounded-xl hover:bg-white/10 transition-all active:scale-95"
-                                                    disabled={isProcessingManual}
-                                                >
-                                                    Back
-                                                </button>
-                                                <button
-                                                    onClick={handleFinalToggle}
-                                                    disabled={isProcessingManual}
-                                                    className={`flex-[2] px-4 py-3 ${foundStudent.studentStatus === 'out' ? 'bg-green-600 hover:bg-green-700' : 'bg-red-600 hover:bg-red-700'} text-white text-sm font-black rounded-xl transition-all active:scale-95 disabled:opacity-50 flex items-center justify-center gap-2`}
-                                                >
-                                                    {isProcessingManual ? (
-                                                        <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                                    </form>
+                                ) : (
+                                    <div className="animate-in zoom-in-95 duration-200">
+                                        <div className="flex flex-row items-center justify-between gap-2 sm:gap-4 bg-white/5 p-2 sm:p-3 md:p-4 rounded-xl sm:rounded-2xl border border-white/10 mb-2 sm:mb-4 shadow-inner">
+                                            {/* Left: Student Image + Details */}
+                                            <div className="flex items-center gap-2 sm:gap-3 md:gap-4 min-w-0 flex-1">
+                                                <div className="w-10 h-10 sm:w-12 sm:h-12 md:w-16 md:h-16 rounded-lg sm:rounded-xl overflow-hidden bg-white/10 flex-shrink-0 border border-white/20">
+                                                    {foundStudent.profilePicture ? (
+                                                        <img src={foundStudent.profilePicture} alt="" className="w-full h-full object-cover" />
                                                     ) : (
-                                                        <>
-                                                            <span>{foundStudent.studentStatus === 'out' ? 'MARK CHECK-IN' : 'MARK CHECK-OUT'}</span>
-                                                            <span className="text-lg">{foundStudent.studentStatus === 'out' ? '🏠' : '🚶'}</span>
-                                                        </>
+                                                        <div className="w-full h-full flex items-center justify-center text-sm sm:text-lg md:text-2xl bg-blue-500/10 text-blue-400 font-bold">
+                                                            {foundStudent.name?.charAt(0)}
+                                                        </div>
                                                     )}
-                                                </button>
+                                                </div>
+                                                <div className="min-w-0">
+                                                    <h4 className="text-xs sm:text-base md:text-lg font-black text-white m-0 truncate">{foundStudent.name}</h4>
+                                                    <p className="text-[9.5px] sm:text-xs text-blue-400 font-bold m-0 mt-0.5 tracking-wider">{foundStudent.registrationId}</p>
+                                                    <div className="flex items-center gap-1 sm:gap-1.5 mt-0.5 sm:mt-1">
+                                                        <span className={`w-1.5 h-1.5 sm:w-2 sm:h-2 rounded-full ${foundStudent.studentStatus === 'out' ? 'bg-[#ff6b6b]' : 'bg-[#00ff88]'}`} />
+                                                        <span className={`text-[8px] sm:text-[10px] font-black uppercase tracking-wider ${foundStudent.studentStatus === 'out' ? 'text-[#ff6b6b]' : 'text-[#00ff88]'}`}>
+                                                            {foundStudent.studentStatus === 'out' ? 'Currently Outside' : 'Inside Campus'}
+                                                        </span>
+                                                    </div>
+                                                </div>
+                                            </div>
+
+                                            {/* Right: Back & Check-In/Out Action Tabs */}
+                                            {!manualSuccess && (
+                                                <div className="flex items-center gap-1 sm:gap-2 shrink-0">
+                                                    <button
+                                                        onClick={resetManualSearch}
+                                                        className="px-2.5 sm:px-3.5 py-1.5 sm:py-2.5 bg-white/5 text-white text-[9.5px] sm:text-xs font-bold rounded-lg sm:rounded-xl hover:bg-white/10 transition-all active:scale-95 shrink-0"
+                                                        disabled={isProcessingManual}
+                                                    >
+                                                        Back
+                                                    </button>
+                                                    <button
+                                                        onClick={handleFinalToggle}
+                                                        disabled={isProcessingManual}
+                                                        className={`px-2.5 sm:px-4 py-1.5 sm:py-2.5 ${foundStudent.studentStatus === 'out' ? 'bg-green-600 hover:bg-green-700' : 'bg-red-600 hover:bg-red-700'} text-white text-[9.5px] sm:text-xs font-black rounded-lg sm:rounded-xl transition-all active:scale-95 disabled:opacity-50 flex items-center justify-center gap-1 shrink-0 whitespace-nowrap shadow-md`}
+                                                    >
+                                                        {isProcessingManual ? (
+                                                            <div className="w-3.5 h-3.5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                                                        ) : (
+                                                            <>
+                                                                <span>{foundStudent.studentStatus === 'out' ? 'MARK CHECK-IN' : 'MARK CHECK-OUT'}</span>
+                                                                <span className="text-xs sm:text-sm">{foundStudent.studentStatus === 'out' ? '🏠' : '🚶'}</span>
+                                                            </>
+                                                        )}
+                                                    </button>
+                                                </div>
+                                            )}
+                                        </div>
+
+                                        {manualError && (
+                                            <div className="mb-2 text-red-400 text-xs font-bold text-center">
+                                                ⚠️ {manualError}
+                                            </div>
+                                        )}
+
+                                        {manualSuccess && (
+                                            <div className="mb-2 text-green-400 text-xs font-bold text-center">
+                                                ✅ {manualSuccess}
                                             </div>
                                         )}
                                     </div>

@@ -462,6 +462,7 @@ export default function GateCameraScanner({
     const streamRef = useRef<MediaStream | null>(null);
     const animFrameRef = useRef<number | null>(null);
     const consecutiveMatchRef = useRef<{ studentId: string | null; count: number }>({ studentId: null, count: 0 });
+    const consecutiveSpoofRef = useRef<{ reason: string; count: number }>({ reason: "", count: 0 });
     const lastProcessedRef = useRef<{ studentId: string | null; timestamp: number }>({ studentId: null, timestamp: 0 });
     const lastActivityRef = useRef<number>(Date.now());
     const isStandbyRef = useRef<boolean>(false);
@@ -487,6 +488,7 @@ export default function GateCameraScanner({
     const [matchScore, setMatchScore] = useState<number>(0);
     const [spoofWarning, setSpoofWarning] = useState<string | null>(null);
     const [unrecognizedWarning, setUnrecognizedWarning] = useState<string | null>(null);
+    const [distanceStatus, setDistanceStatus] = useState<string | null>(null);
 
     // Processing & feedback state
     const [isProcessingPass, setIsProcessingPass] = useState(false);
@@ -841,12 +843,24 @@ export default function GateCameraScanner({
 
                 // CHECK 1: Confidence
                 if (detectionScore < 0.60 || !rawBox || rawBox.width < 50 || rawBox.height < 50) {
+                    setDistanceStatus(null);
                     setScanStatus("Looking for student face...");
                     setActiveFaceBox(null);
                     consecutiveMatchRef.current = { studentId: null, count: 0 };
                     isDetecting = false;
                     animFrameRef.current = requestAnimationFrame(processFrame);
                     return;
+                }
+
+                // 📏 Point 3: Real-Time Distance Guidance (Enforce 1.5 to 2.5 feet / 0.5m – 0.8m)
+                const frameHeight = video.videoHeight || 480;
+                const faceHeightRatio = rawBox.height / frameHeight;
+                if (faceHeightRatio > 0.55) {
+                    setDistanceStatus("Step back slightly (optimal: 1.5–2.5 ft / 0.5–0.8m)");
+                } else if (faceHeightRatio < 0.22) {
+                    setDistanceStatus("Step closer (optimal: 1.5–2.5 ft / 0.5–0.8m)");
+                } else {
+                    setDistanceStatus(null);
                 }
 
                 // CHECK 2: Anatomy & Landmark Geometry
@@ -873,16 +887,19 @@ export default function GateCameraScanner({
                     faceLockStartTimeRef.current = Date.now();
                 }
 
-                // ⏱️ 5-6 SECONDS UNRECOGNIZED FACE GUARD:
+                // ⏱️ 5 SECONDS UNRECOGNIZED FACE GUARD (With Hands-Free Auto-Restart):
                 const elapsedLockTime = Date.now() - faceLockStartTimeRef.current;
-                if (elapsedLockTime >= 5500 && !matchedStudent) {
-                    const unrecMsg = "❌ Face Not Recognized — contact hostel dean/warden";
-                    setUnrecognizedWarning(unrecMsg);
-                    setScanStatus(unrecMsg);
-                    consecutiveMatchRef.current = { studentId: null, count: 0 };
-                    isDetecting = false;
-                    animFrameRef.current = requestAnimationFrame(processFrame);
-                    return;
+                if (elapsedLockTime >= 5000 && !matchedStudent) {
+                    if (elapsedLockTime < 7500) {
+                        const unrecMsg = "❌ Face Not Recognized — contact hostel dean/warden";
+                        setUnrecognizedWarning(unrecMsg);
+                        setScanStatus("❌ Face Not Recognized — auto-retrying...");
+                    } else {
+                        // Automatically restart a fresh scan cycle after 2.5s
+                        faceLockStartTimeRef.current = Date.now();
+                        setUnrecognizedWarning(null);
+                        setScanStatus("Looking for student face...");
+                    }
                 }
 
                 const liveDescriptor = Array.from(detection.descriptor) as number[];
@@ -910,7 +927,7 @@ export default function GateCameraScanner({
                 const isEligibleMatch = (
                     bestMatch !== null &&
                     currentScore >= 85 &&
-                    (secondMinDistance - minDistance) >= 0.010
+                    (secondMinDistance - minDistance) >= 0.015
                 );
 
                 if (isEligibleMatch && bestMatch) {
@@ -940,9 +957,13 @@ export default function GateCameraScanner({
                         const neuralCheck = await checkLivenessClient(offCanvas, rawBox, vw, vh);
                         if (neuralCheck.isSpoof) {
                             const warnText = neuralCheck.reason || "Mobile phone display or printed photo detected!";
-                            setSpoofWarning(warnText);
-                            setScanStatus(`🛑 FRAUD DETECTED: ${warnText}`);
+                            consecutiveSpoofRef.current.count += 1;
+                            consecutiveSpoofRef.current.reason = warnText;
                             consecutiveMatchRef.current = { studentId: null, count: 0 };
+                            if (consecutiveSpoofRef.current.count >= 3) {
+                                setSpoofWarning(warnText);
+                                setScanStatus(`🛑 FRAUD DETECTED: ${warnText}`);
+                            }
                             isDetecting = false;
                             animFrameRef.current = requestAnimationFrame(processFrame);
                             return;
@@ -951,13 +972,21 @@ export default function GateCameraScanner({
                         // Anti-Spoof 3: Screen Glare, Moiré & Collinear Device Border
                         const screenCheck = checkScreenAndPhotoSpoof(ctx, rawBox, vw, vh);
                         if (screenCheck.isSpoof) {
-                            setSpoofWarning(screenCheck.reason || "Mobile phone screen / glass display detected!");
-                            setScanStatus("🛑 FRAUD DETECTED: Secondary Phone Screen / Display Rejected!");
+                            const warnText = screenCheck.reason || "Mobile phone screen / glass display detected!";
+                            consecutiveSpoofRef.current.count += 1;
+                            consecutiveSpoofRef.current.reason = warnText;
                             consecutiveMatchRef.current = { studentId: null, count: 0 };
+                            if (consecutiveSpoofRef.current.count >= 3) {
+                                setSpoofWarning(warnText);
+                                setScanStatus("🛑 FRAUD DETECTED: Secondary Phone Screen / Display Rejected!");
+                            }
                             isDetecting = false;
                             animFrameRef.current = requestAnimationFrame(processFrame);
                             return;
                         }
+
+                        // Valid real physical human confirmed - clear transient spoof counter
+                        consecutiveSpoofRef.current = { reason: "", count: 0 };
                     }
 
                     const currentCandidateId = bestMatch.id || bestMatch.registrationId;
@@ -970,10 +999,10 @@ export default function GateCameraScanner({
                     consecutiveMatchRef.current = { studentId: null, count: 0 };
                 }
 
-                // ✅ Confirmed in 1-2 seconds (clean hands-free consensus):
+                // ⚡ Instantaneous Lock: As soon as a verified, fraud-free match is confirmed, show results immediately:
                 const isVerified = (
                     bestMatch !== null &&
-                    consecutiveMatchRef.current.count >= 2
+                    consecutiveMatchRef.current.count >= 1
                 );
 
                 if (isVerified && bestMatch) {
