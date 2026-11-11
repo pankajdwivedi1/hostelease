@@ -40,9 +40,11 @@ import {
     EyeOff,
     ScanFace,
     Laptop,
-    Wrench
+    Wrench,
+    Smartphone
 } from "lucide-react";
 import BossFaceModal from "./BossFaceModal";
+import MasterPhoneBindingCard from "./MasterPhoneBindingCard";
 import { generateOfficialInvoicePDF } from "@/lib/invoicePdfGenerator";
 import { formatToDDMMYYYY, formatDateDDMMYYYY, formatDateTimeDDMMYYYY } from "@/lib/dateFormat";
 
@@ -572,6 +574,8 @@ export default function SuperAdminDashboard() {
     const [faceModalMode, setFaceModalMode] = useState<"login" | "enroll">("login");
     const [hasFaceEnrolled, setHasFaceEnrolled] = useState(false);
     const [isDesktopBound, setIsDesktopBound] = useState(false);
+    const [phoneBinding, setPhoneBinding] = useState<{ isBound: boolean; deviceName: string | null } | null>(null);
+    const [showPhoneBindingModal, setShowPhoneBindingModal] = useState(false);
 
     const getDesktopDeviceId = () => {
         if (typeof window === "undefined") return "";
@@ -1062,6 +1066,10 @@ export default function SuperAdminDashboard() {
                 else localStorage.removeItem("superadmin_session");
                 if (data.hasFaceEnrolled) setHasFaceEnrolled(true);
                 if (data.isDesktopBound) setIsDesktopBound(true);
+                fetch("/api/super-admin/auth/google-prompt/device")
+                    .then(r => r.json())
+                    .then(d => { if (d && typeof d.isBound === "boolean") setPhoneBinding(d); })
+                    .catch(() => {});
             })
             .catch(() => localStorage.removeItem("superadmin_session"));
     }, []);
@@ -1725,6 +1733,20 @@ export default function SuperAdminDashboard() {
                             <span>Laptop Bound</span>
                         </button>
                     )}
+                    {/* Master Security Phone Button */}
+                    <button
+                        type="button"
+                        onClick={() => setShowPhoneBindingModal(true)}
+                        className={`h-7 sm:h-11 px-2.5 sm:px-4 rounded-lg sm:rounded-xl flex items-center justify-center text-center gap-1.5 text-[10px] sm:text-xs font-black uppercase tracking-wider sm:tracking-widest shadow-xs transition-all cursor-pointer w-full sm:w-auto ${
+                            phoneBinding?.isBound
+                                ? "bg-emerald-50 text-emerald-700 border border-emerald-200 hover:bg-emerald-100"
+                                : "bg-purple-50 text-purple-700 border border-purple-200 hover:bg-purple-100"
+                        }`}
+                        title={phoneBinding?.isBound ? "Master Security Phone Active" : "Pair Master Security Phone"}
+                    >
+                        <Smartphone className="w-3.5 h-3.5 shrink-0 text-purple-600" />
+                        <span>{phoneBinding?.isBound ? "Phone Bound" : "Pair Phone"}</span>
+                    </button>
                     {/* Obsolete buttons (LiveDbSwitch, SyncDbButton, GenerateEmbeddingsButton, Migration) removed for clean production header */}
 
                     <button
@@ -4960,6 +4982,25 @@ export default function SuperAdminDashboard() {
                     }
                 }}
             />
+            {showPhoneBindingModal && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm animate-in fade-in duration-200">
+                    <div className="relative w-full max-w-md animate-in zoom-in-95 duration-200">
+                        <button
+                            onClick={() => {
+                                setShowPhoneBindingModal(false);
+                                fetch("/api/super-admin/auth/google-prompt/device")
+                                    .then(r => r.json())
+                                    .then(d => { if (d && typeof d.isBound === "boolean") setPhoneBinding(d); })
+                                    .catch(() => {});
+                            }}
+                            className="absolute top-4 right-4 text-gray-400 hover:text-white p-1 rounded-full z-10 transition-colors cursor-pointer"
+                        >
+                            <X className="w-5 h-5" />
+                        </button>
+                        <MasterPhoneBindingCard />
+                    </div>
+                </div>
+            )}
         </div>
     );
 }
