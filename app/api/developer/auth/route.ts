@@ -2,7 +2,7 @@ export const dynamic = "force-dynamic";
 
 import { NextResponse } from "next/server";
 import { db } from "@/lib/dbAdapter";
-import { setAuthSessionCookie } from "@/lib/authSession";
+import { createSuperAdminQRChallenge } from "@/lib/superAdminQRStore";
 
 const resolveConfiguredPassword = (value: string | undefined, envKey: string) => {
     const envValue = (process.env[envKey] || "").trim();
@@ -37,19 +37,33 @@ export async function POST(request: Request) {
         }
 
         if (password === allowedPassword) {
-            const response = NextResponse.json({ success: true });
-            setAuthSessionCookie(response, { role: "superadmin" });
-            return response;
+            // Password verified! Generate dynamic 2-Factor QR code challenge
+            const userAgent = request.headers.get("user-agent") || "";
+            const forwardedFor = request.headers.get("x-forwarded-for") || "";
+            const ip = forwardedFor ? forwardedFor.split(",")[0].trim() : "Internal";
+
+            const challenge = createSuperAdminQRChallenge({ userAgent, ip });
+
+            console.log(`🔐 [SUPERADMIN_AUTH] Password verified. Generated QR challenge ${challenge.challengeId}`);
+
+            return NextResponse.json({
+                success: true,
+                requiresQR: true,
+                challengeId: challenge.challengeId,
+                token: challenge.token,
+                qrPayload: challenge.qrPayload,
+                expiresInSeconds: challenge.expiresInSeconds
+            });
         } else {
             return NextResponse.json(
                 { error: "Invalid password" },
                 { status: 401 }
             );
         }
-    } catch (error) {
+    } catch (error: any) {
         console.error("Developer authentication error:", error);
         return NextResponse.json(
-            { error: "Internal server error" },
+            { error: error?.message || "Internal server error" },
             { status: 500 }
         );
     }

@@ -450,12 +450,14 @@ function calculateDisplayBox(
 interface GateCameraScannerProps {
     isFullscreen?: boolean;
     standbyMinutes?: number;
+    cooldownMinutes?: number;
     onPassProcessed?: (student: any, action: "in" | "out", passType: string) => void;
 }
 
 export default function GateCameraScanner({
     isFullscreen = false,
     standbyMinutes: propStandbyMinutes = 3,
+    cooldownMinutes: propCooldownMinutes = 3,
     onPassProcessed,
 }: GateCameraScannerProps) {
     const videoRef = useRef<HTMLVideoElement | null>(null);
@@ -463,10 +465,13 @@ export default function GateCameraScanner({
     const animFrameRef = useRef<number | null>(null);
     const consecutiveMatchRef = useRef<{ studentId: string | null; count: number }>({ studentId: null, count: 0 });
     const consecutiveSpoofRef = useRef<{ reason: string; count: number }>({ reason: "", count: 0 });
-    const lastProcessedRef = useRef<{ studentId: string | null; timestamp: number }>({ studentId: null, timestamp: 0 });
+    const cooldownMapRef = useRef<Map<string, { timestamp: number; action: string }>>(new Map());
+    const cooldownWarningSpokenRef = useRef<Map<string, number>>(new Map());
+    const inFlightStudentsRef = useRef<Set<string>>(new Set());
     const lastActivityRef = useRef<number>(Date.now());
     const isStandbyRef = useRef<boolean>(false);
     const standbyMinutesRef = useRef<number>(3);
+    const cooldownMinutesRef = useRef<number>(3);
     const faceLockStartTimeRef = useRef<number | null>(null);
     const lastFaceSeenTimeRef = useRef<number>(0);
 
@@ -509,6 +514,14 @@ export default function GateCameraScanner({
         return propStandbyMinutes || 3;
     });
 
+    const [cooldownMinutes, setCooldownMinutes] = useState<number>(() => {
+        if (typeof window !== "undefined") {
+            const saved = localStorage.getItem("activeGateCooldownMinutes") || localStorage.getItem("qrScanCooldownMinutes");
+            if (saved && !isNaN(Number(saved))) return Number(saved);
+        }
+        return propCooldownMinutes || 3;
+    });
+
     useEffect(() => {
         if (propStandbyMinutes) {
             setStandbyMinutes(propStandbyMinutes);
@@ -521,6 +534,17 @@ export default function GateCameraScanner({
     }, [standbyMinutes]);
 
     useEffect(() => {
+        if (propCooldownMinutes) {
+            setCooldownMinutes(propCooldownMinutes);
+            cooldownMinutesRef.current = propCooldownMinutes;
+        }
+    }, [propCooldownMinutes]);
+
+    useEffect(() => {
+        cooldownMinutesRef.current = cooldownMinutes;
+    }, [cooldownMinutes]);
+
+    useEffect(() => {
         const handleStorage = () => {
             if (typeof window !== "undefined") {
                 const saved = localStorage.getItem("activeGateStandbyMinutes");
@@ -528,6 +552,12 @@ export default function GateCameraScanner({
                     const parsed = Number(saved);
                     setStandbyMinutes(parsed);
                     standbyMinutesRef.current = parsed;
+                }
+                const savedCooldown = localStorage.getItem("activeGateCooldownMinutes") || localStorage.getItem("qrScanCooldownMinutes");
+                if (savedCooldown && !isNaN(Number(savedCooldown))) {
+                    const parsedCooldown = Number(savedCooldown);
+                    setCooldownMinutes(parsedCooldown);
+                    cooldownMinutesRef.current = parsedCooldown;
                 }
             }
         };
@@ -689,10 +719,12 @@ export default function GateCameraScanner({
 
     // 3. Process Gatepass Action
     const handleGatepassAction = async (student: IdentifiedStudent) => {
-        if (isProcessingPass) return;
+        const studentId = student.id || student._id || student.registrationId;
+        if (!studentId || inFlightStudentsRef.current.has(studentId)) return;
+
+        inFlightStudentsRef.current.add(studentId);
         setIsProcessingPass(true);
 
-        const studentId = student.id || student._id;
         const now = new Date();
         const timeStr = now.toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit", hour12: true });
 
@@ -719,8 +751,14 @@ export default function GateCameraScanner({
                     ? (student.outingType?.toLowerCase().includes("leave") ? "HOME-LEAVE" : "GATE-PASS")
                     : "RETURNED";
 
+                // Update in-memory student status in the gallery
+                student.studentStatus = effectiveAction;
+
+                // Record cooldown timestamp for this student
+                cooldownMapRef.current.set(studentId, { timestamp: Date.now(), action: effectiveAction });
+
                 setRecentEvent({
-                    student,
+                    student: { ...student, studentStatus: effectiveAction },
                     action: effectiveAction,
                     badge: badgeType,
                     time: timeStr,
@@ -733,20 +771,31 @@ export default function GateCameraScanner({
                 }
 
                 if (onPassProcessed) {
-                    onPassProcessed(student, effectiveAction, badgeType);
+                    onPassProcessed({ ...student, studentStatus: effectiveAction }, effectiveAction, badgeType);
                 } else {
                     playSuccessChime();
                     speak(actionText);
                 }
+
+                // Auto-dismiss the floating notification badge after 2.5s without halting video stream
+                setTimeout(() => {
+                    setRecentEvent(null);
+                }, 2500);
             } else {
                 // 🚫 COOLDOWN OR VALIDATION REJECTED:
                 setRecentEvent(null);
                 playWarningBuzz();
 
                 if (data.action === "cooldown_blocked" || data.isDuplicate) {
-                    speak("Cooldown active. Please wait.");
+                    cooldownMapRef.current.set(studentId, { timestamp: Date.now(), action: "cooldown" });
+                    const lastWarning = cooldownWarningSpokenRef.current.get(studentId) || 0;
+                    if (Date.now() - lastWarning > 5000) {
+                        cooldownWarningSpokenRef.current.set(studentId, Date.now());
+                        speak("Cooldown active. Please wait.");
+                    }
                     setScanStatus(`⏳ ${data.message || data.error || "Anti-Spoof Cooldown: Please wait before scanning again."}`);
                     setSpoofWarning(data.message || "Anti-Spoof Cooldown: Please wait before scanning again.");
+                    setTimeout(() => setSpoofWarning(null), 3000);
                 } else {
                     speak("Access denied.");
                     setScanStatus(`⚠️ ${data.error || "Failed to verify gatepass"}`);
@@ -757,12 +806,8 @@ export default function GateCameraScanner({
             playWarningBuzz();
             speak("Network error.");
         } finally {
-            setTimeout(() => {
-                setRecentEvent(null);
-                setMatchedStudent(null);
-                setActiveFaceBox(null);
-                setIsProcessingPass(false);
-            }, 3500);
+            inFlightStudentsRef.current.delete(studentId);
+            setIsProcessingPass(false);
         }
     };
 
@@ -789,7 +834,7 @@ export default function GateCameraScanner({
         let isDetecting = false;
 
         const processFrame = async () => {
-            if (!isRunning || !videoRef.current || isProcessingPass || matchedStudent) return;
+            if (!isRunning || !videoRef.current) return;
 
             if (isDetecting) {
                 animFrameRef.current = requestAnimationFrame(processFrame);
@@ -824,6 +869,7 @@ export default function GateCameraScanner({
                     }
                     setActiveFaceBox(null);
                     setSpoofWarning(null);
+                    setMatchedStudent(null);
                     consecutiveMatchRef.current = { studentId: null, count: 0 };
                     if (!recentEvent) {
                         setScanStatus(unrecognizedWarning || "Looking for student face...");
@@ -1009,22 +1055,46 @@ export default function GateCameraScanner({
                     const score = calculateScore(minDistance);
                     setMatchedStudent(bestMatch);
                     setMatchScore(score);
-                    setScanStatus(`Verified: ${bestMatch.name} (${score}% match)`);
                     faceLockStartTimeRef.current = null;
                     setUnrecognizedWarning(null);
                     consecutiveMatchRef.current = { studentId: null, count: 0 };
 
+                    const studentDbId = (bestMatch.id || (bestMatch as any)._id || bestMatch.registrationId).toString();
+                    const cooldownMs = Math.max(15000, (cooldownMinutesRef.current || 3) * 60 * 1000);
                     const nowMs = Date.now();
-                    if (
-                        lastProcessedRef.current.studentId !== bestMatch.id ||
-                        nowMs - lastProcessedRef.current.timestamp > 5000
-                    ) {
-                        lastProcessedRef.current = { studentId: bestMatch.id, timestamp: nowMs };
+                    const lastScan = cooldownMapRef.current.get(studentDbId);
+                    const isStudentInCooldown = lastScan && (nowMs - lastScan.timestamp < cooldownMs);
+
+                    if (isStudentInCooldown) {
+                        const timeDiff = nowMs - lastScan.timestamp;
+                        if (timeDiff < 4000) {
+                            setScanStatus(`✅ Verified: ${bestMatch.name} (${score}%)`);
+                        } else {
+                            const remainingSecs = Math.max(1, Math.ceil((cooldownMs - timeDiff) / 1000));
+                            const remainingMins = Math.ceil(remainingSecs / 60);
+                            const remainingText = remainingSecs < 60 ? `${remainingSecs}s` : `${remainingMins}m`;
+                            setScanStatus(`⏳ ${bestMatch.name} on cooldown. Wait ${remainingText}`);
+
+                            const lastWarning = cooldownWarningSpokenRef.current.get(studentDbId) || 0;
+                            if (nowMs - lastWarning > 6000) {
+                                cooldownWarningSpokenRef.current.set(studentDbId, nowMs);
+                                speak("Cooldown active. Please wait.");
+                            }
+                        }
+                        isDetecting = false;
+                        return;
+                    }
+
+                    if (!inFlightStudentsRef.current.has(studentDbId)) {
+                        setScanStatus(`Verified: ${bestMatch.name} (${score}% match)`);
                         handleGatepassAction(bestMatch);
                     }
                     isDetecting = false;
                     return;
                 } else {
+                    if (matchedStudent) {
+                        setMatchedStudent(null);
+                    }
                     setScanStatus("Scanning face against student roster...");
                 }
 
@@ -1032,7 +1102,7 @@ export default function GateCameraScanner({
                 console.warn("Scan frame error:", frameErr);
             } finally {
                 isDetecting = false;
-                if (isRunning && !recentEvent && !matchedStudent) {
+                if (isRunning) {
                     animFrameRef.current = requestAnimationFrame(processFrame);
                 }
             }
@@ -1047,7 +1117,7 @@ export default function GateCameraScanner({
                 animFrameRef.current = null;
             }
         };
-    }, [isCameraActive, gallery, isProcessingPass, recentEvent, matchedStudent, facingMode, standbyMinutes]);
+    }, [isCameraActive, gallery, facingMode, standbyMinutes, cooldownMinutes]);
 
     return (
         <div className={`relative w-full h-full aspect-square rounded-2xl md:rounded-[28px] overflow-hidden bg-black flex items-center justify-center border-2 md:border-[4px] transition-all shadow-2xl ${

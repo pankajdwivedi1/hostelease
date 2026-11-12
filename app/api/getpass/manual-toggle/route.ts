@@ -386,6 +386,22 @@ export async function POST(request: NextRequest) {
                     semester: student.semester
                 });
 
+                // Send Web Push Notification to Parent (Fire & Forget)
+                const parentPhone = student.fatherNumber || student.motherNumber || student.localGuardianPhoneNumber;
+                if (parentPhone) {
+                    import("@/lib/pushNotification").then(({ sendPushNotification }) => {
+                        const parentUserId = student.fatherNumber || (student._id.toString() + "_parent");
+                        const studentPhoto = (student as any)?.profilePicture || (student as any)?.photoUrl || (student as any)?.photo || (student as any)?.image;
+                        sendPushNotification(parentUserId, "parent", "parentScanInOut", {
+                            title: "Gate Out-Pass Alert",
+                            body: `Your ward ${student.name} has checked OUT from campus at ${istTime} via Gate Camera.`,
+                            url: "/",
+                            icon: studentPhoto || "/icons/icon-192x192.png",
+                            image: studentPhoto || undefined
+                        }).catch(err => console.error("Web Push to parent failed:", err));
+                    }).catch(e => console.error("Failed to load pushNotification helper:", e));
+                }
+
                 await writeAdminAuditLog({
                     action: "MANUAL_STATUS_OVERRIDE_OUT",
                     entityType: "student",
@@ -485,6 +501,22 @@ export async function POST(request: NextRequest) {
                     year: student.year,
                     semester: student.semester
                 });
+
+                // Send Web Push Notification to Parent (Fire & Forget)
+                const parentPhone = student.fatherNumber || student.motherNumber || student.localGuardianPhoneNumber;
+                if (parentPhone) {
+                    import("@/lib/pushNotification").then(({ sendPushNotification }) => {
+                        const parentUserId = student.fatherNumber || (student._id.toString() + "_parent");
+                        const studentPhoto = (student as any)?.profilePicture || (student as any)?.photoUrl || (student as any)?.photo || (student as any)?.image;
+                        sendPushNotification(parentUserId, "parent", "parentScanInOut", {
+                            title: "Gate Check-In Alert",
+                            body: `Your ward ${student.name} has checked IN to campus at ${istTime} via Gate Camera.`,
+                            url: "/",
+                            icon: studentPhoto || "/icons/icon-192x192.png",
+                            image: studentPhoto || undefined
+                        }).catch(err => console.error("Web Push to parent failed:", err));
+                    }).catch(e => console.error("Failed to load pushNotification helper:", e));
+                }
 
                 await writeAdminAuditLog({
                     action: "MANUAL_STATUS_OVERRIDE_IN",

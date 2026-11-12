@@ -315,20 +315,27 @@ export default function GatepassView({
             const targetMode: "qr" | "camera" = currentGate.mode === "camera" ? "camera" : "qr";
             const targetSeconds: number = currentGate.qrSeconds || 15;
             const targetStandby: number = currentGate.standbyMinutes || 3;
+            const targetCooldown: number = currentGate.cooldownMinutes ?? data.qrScanCooldownMinutes ?? 3;
             setScannerMode(targetMode);
             setGateName(currentGate.name);
             setQrSeconds(targetSeconds);
             setStandbyMinutes(targetStandby);
+            setCooldownMinutes(targetCooldown);
             if (typeof window !== "undefined") {
                 localStorage.setItem("activeGateId", currentGate.id);
                 localStorage.setItem("activeGateName", currentGate.name);
                 localStorage.setItem("activeGateMode", targetMode);
                 localStorage.setItem("activeGateQrSeconds", String(targetSeconds));
                 localStorage.setItem("activeGateStandbyMinutes", String(targetStandby));
+                localStorage.setItem("activeGateCooldownMinutes", String(targetCooldown));
             }
         } else if (data.enableGateCameraScan) {
+            const targetCooldown: number = data.qrScanCooldownMinutes ?? 3;
+            setCooldownMinutes(targetCooldown);
             setScannerMode("camera");
         } else {
+            const targetCooldown: number = data.qrScanCooldownMinutes ?? 3;
+            setCooldownMinutes(targetCooldown);
             setScannerMode("qr");
         }
     }, []);
@@ -401,6 +408,13 @@ export default function GatepassView({
     const [standbyMinutes, setStandbyMinutes] = useState<number>(() => {
         if (typeof window !== "undefined") {
             const saved = localStorage.getItem("activeGateStandbyMinutes");
+            if (saved && !isNaN(Number(saved))) return Number(saved);
+        }
+        return 3;
+    });
+    const [cooldownMinutes, setCooldownMinutes] = useState<number>(() => {
+        if (typeof window !== "undefined") {
+            const saved = localStorage.getItem("activeGateCooldownMinutes") || localStorage.getItem("qrScanCooldownMinutes");
             if (saved && !isNaN(Number(saved))) return Number(saved);
         }
         return 3;
@@ -772,7 +786,10 @@ export default function GatepassView({
     const applyOptimisticGateUpdate = useCallback((studentData: any, action: "in" | "out" | "checkout" | "checkin") => {
         if (!studentData) return;
 
-        const isCheckOut = action === "checkout" || action === "out" || studentData.studentStatus === "out";
+        // ⚡ Strict Action Ground Truth: If action is specified ("in" / "out"), use it explicitly
+        const isCheckOut = action 
+            ? (action === "checkout" || action === "out") 
+            : (studentData.studentStatus === "out");
         const actionText = isCheckOut ? "Check out" : "Check in";
         const studentId = String(studentData.studentId || studentData._id || studentData.id || "");
         const regId = String(studentData.registrationId || "");
@@ -898,8 +915,8 @@ export default function GatepassView({
 
         // 🔄 Silently re-sync with canonical server state in the background
         setTimeout(() => {
-            fetchLiveData(true);
-        }, 300);
+            fetchLiveData(false);
+        }, 500);
     }, [playSuccessChime, speakStatus, fetchLiveData]);
 
     // ===================== Real-time SSE Connection (/api/admin/events) =====================
@@ -1483,6 +1500,7 @@ export default function GatepassView({
                             <GateCameraScanner 
                                 isFullscreen={isFullscreen} 
                                 standbyMinutes={standbyMinutes} 
+                                cooldownMinutes={cooldownMinutes}
                                 onPassProcessed={(student, action) => {
                                     applyOptimisticGateUpdate(student, action);
                                 }}

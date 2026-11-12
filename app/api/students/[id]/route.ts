@@ -281,8 +281,10 @@ export async function PATCH(
         const { verifyFaceAndLivenessServer } = await import("@/lib/serverAntiSpoof");
         const livenessCheck = await verifyFaceAndLivenessServer({
           liveImage: body.profilePicture,
-          clientDescriptor: Array.isArray(body.faceDescriptor) ? body.faceDescriptor : undefined
+          clientDescriptor: Array.isArray(body.faceDescriptor) ? body.faceDescriptor : undefined,
+          box: body.box && typeof body.box === "object" ? body.box : undefined
         });
+        delete body.box;
 
         if (livenessCheck.isSpoof) {
           console.warn(`🛑 [Student Update Blocked] Presentation attack rejected for student ${studentId}: ${livenessCheck.reason}`);

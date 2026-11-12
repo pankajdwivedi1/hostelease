@@ -28,6 +28,12 @@ import { Capacitor } from "@capacitor/core";
 import { showToast, showPrompt } from "@/lib/toast";
 
 import { ALL_COUNTRIES, getCountryLabel } from "@/lib/countries";
+import dynamic from "next/dynamic";
+
+const SuperAdminDesktopQRLogin = dynamic(
+  () => import("@/app/components/SuperAdminDesktopQRLogin"),
+  { ssr: false }
+);
 
 function LoginForm() {
   const router = useRouter();
@@ -65,6 +71,13 @@ function LoginForm() {
   const [showDeveloperPassword, setShowDeveloperPassword] = useState(false);
 
   const [developerPassword, setDeveloperPassword] = useState("");
+
+  const [superAdminQRChallenge, setSuperAdminQRChallenge] = useState<{
+    challengeId: string;
+    token?: string;
+    qrPayload: string;
+    expiresInSeconds?: number;
+  } | null>(null);
 
   const [developerLoading, setDeveloperLoading] = useState(false);
 
@@ -918,6 +931,7 @@ function LoginForm() {
       setShowWardenPassword(false);
 
       setShowDeveloperPassword(false);
+      setSuperAdminQRChallenge(null);
 
       setStaffResetRole("none");
 
@@ -1042,6 +1056,7 @@ function LoginForm() {
       setShowAdminPassword(false);
 
       setShowDeveloperPassword(false);
+      setSuperAdminQRChallenge(null);
 
       setStaffResetRole("none");
 
@@ -1306,6 +1321,17 @@ router.push("/getpass");
 
       if (!response.ok) {
         throw new Error(data.error || "Invalid password");
+      }
+
+      if (data.requiresQR) {
+        setSuperAdminQRChallenge({
+          challengeId: data.challengeId,
+          token: data.token,
+          qrPayload: data.qrPayload,
+          expiresInSeconds: data.expiresInSeconds,
+        });
+        setDeveloperPassword("");
+        return;
       }
 
       if (data.success) {
@@ -1742,6 +1768,7 @@ router.push("/getpass");
 
                   onClick={() => {
                     setShowDeveloperPassword(!showDeveloperPassword);
+                    setSuperAdminQRChallenge(null);
 
                     setShowAdminPassword(false);
 
@@ -3245,6 +3272,17 @@ router.push("/getpass");
                                       </div>
                                     </div>
                                   )
+                                ) : showDeveloperPassword && isDeveloperSetup && superAdminQRChallenge ? (
+                                  <div className="my-1">
+                                    <SuperAdminDesktopQRLogin
+                                      challengeData={superAdminQRChallenge}
+                                      onCancel={() => {
+                                        setSuperAdminQRChallenge(null);
+                                        setDeveloperPassword("");
+                                        setError("");
+                                      }}
+                                    />
+                                  </div>
                                 ) : (
                                   <div className="mb-4 animate-in fade-in duration-300">
                                     <label className="mb-2 sm:mb-3 block text-[9px] sm:text-[10px] font-black uppercase tracking-widest text-slate-400">
@@ -3284,134 +3322,140 @@ router.push("/getpass");
                                   </div>
                                 )}
 
-                                <div className="flex justify-between items-center mt-2 px-1">
-                                  <button
-                                    type="button"
-
-                                    onClick={() => {
-                                      if (showAdminPassword) {
-                                        setShowAdminPassword(false);
-
-                                        setAdminOtpSent(false);
-
-                                        setAdminOtp("");
-                                      }
-
-                                      if (showWardenPassword) {
-                                        setShowWardenPassword(false);
-
-                                        setWardenOtpSent(false);
-
-                                        setWardenOtp("");
-                                      }
-
-                                      if (showDeveloperPassword)
-                                        setShowDeveloperPassword(false);
-                                      setStaffResetRole("none");
-                                      setStaffResetStep("none");
-
-                                      setError("");
-                                    }}
-
-                                    className="text-[9px] font-black text-slate-400 uppercase tracking-widest hover:text-slate-600 transition-colors"
-                                  >
-                                    Cancel
-                                  </button>
-
-                                  {showDeveloperPassword &&
-                                    isDeveloperSetup && (
+                                {!(showDeveloperPassword && isDeveloperSetup && superAdminQRChallenge) && (
+                                  <>
+                                    <div className="flex justify-between items-center mt-2 px-1">
                                       <button
                                         type="button"
 
                                         onClick={() => {
-                                          setSuperAdminResetStep("phone");
+                                          if (showAdminPassword) {
+                                            setShowAdminPassword(false);
 
-                                          setSuperAdminResetPhone("");
+                                            setAdminOtpSent(false);
+
+                                            setAdminOtp("");
+                                          }
+
+                                          if (showWardenPassword) {
+                                            setShowWardenPassword(false);
+
+                                            setWardenOtpSent(false);
+
+                                            setWardenOtp("");
+                                          }
+
+                                          if (showDeveloperPassword) {
+                                            setShowDeveloperPassword(false);
+                                            setSuperAdminQRChallenge(null);
+                                          }
+                                          setStaffResetRole("none");
+                                          setStaffResetStep("none");
 
                                           setError("");
                                         }}
 
-                                        className="text-[9px] font-black text-blue-600 uppercase tracking-widest hover:text-blue-800 hover:underline transition-colors"
+                                        className="text-[9px] font-black text-slate-400 uppercase tracking-widest hover:text-slate-600 transition-colors"
                                       >
-                                        Forgot Password?
+                                        Cancel
                                       </button>
-                                    )}
-                                  {showAdminPassword && !adminOtpSent && (
-                                    <button
-                                      type="button"
-                                      onClick={() => {
-                                        setStaffResetRole("dean");
-                                        setStaffResetStep("phone");
-                                        setStaffResetPhone(adminPhone || "");
-                                        setStaffResetOtp("");
-                                        setStaffResetNewPassword("");
-                                        setStaffResetConfirmPassword("");
-                                        setError("");
-                                      }}
-                                      className="text-[9px] font-black text-blue-600 uppercase tracking-widest hover:text-blue-800 hover:underline transition-colors"
-                                    >
-                                      Forgot Password?
-                                    </button>
-                                  )}
-                                  {showWardenPassword &&
-                                    !wardenOtpSent &&
-                                    !selectedHostelId.startsWith("getpass") && (
+
+                                      {showDeveloperPassword &&
+                                        isDeveloperSetup && (
+                                          <button
+                                            type="button"
+
+                                            onClick={() => {
+                                              setSuperAdminResetStep("phone");
+
+                                              setSuperAdminResetPhone("");
+
+                                              setError("");
+                                            }}
+
+                                            className="text-[9px] font-black text-blue-600 uppercase tracking-widest hover:text-blue-800 hover:underline transition-colors"
+                                          >
+                                            Forgot Password?
+                                          </button>
+                                        )}
+                                      {showAdminPassword && !adminOtpSent && (
+                                        <button
+                                          type="button"
+                                          onClick={() => {
+                                            setStaffResetRole("dean");
+                                            setStaffResetStep("phone");
+                                            setStaffResetPhone(adminPhone || "");
+                                            setStaffResetOtp("");
+                                            setStaffResetNewPassword("");
+                                            setStaffResetConfirmPassword("");
+                                            setError("");
+                                          }}
+                                          className="text-[9px] font-black text-blue-600 uppercase tracking-widest hover:text-blue-800 hover:underline transition-colors"
+                                        >
+                                          Forgot Password?
+                                        </button>
+                                      )}
+                                      {showWardenPassword &&
+                                        !wardenOtpSent &&
+                                        !selectedHostelId.startsWith("getpass") && (
+                                          <button
+                                            type="button"
+                                            onClick={() => {
+                                              setStaffResetRole("warden");
+                                              setStaffResetStep("phone");
+                                              setStaffResetHostelId(
+                                                selectedHostelId || "",
+                                              );
+                                              setStaffResetPhone(wardenPhone || "");
+                                              setStaffResetOtp("");
+                                              setStaffResetNewPassword("");
+                                              setStaffResetConfirmPassword("");
+                                              setError("");
+                                            }}
+                                            className="text-[9px] font-black text-indigo-600 uppercase tracking-widest hover:text-indigo-800 hover:underline transition-colors"
+                                          >
+                                            Forgot Password?
+                                          </button>
+                                        )}
+                                    </div>
+
+                                    <div className="mt-4 flex gap-3">
                                       <button
-                                        type="button"
-                                        onClick={() => {
-                                          setStaffResetRole("warden");
-                                          setStaffResetStep("phone");
-                                          setStaffResetHostelId(
-                                            selectedHostelId || "",
-                                          );
-                                          setStaffResetPhone(wardenPhone || "");
-                                          setStaffResetOtp("");
-                                          setStaffResetNewPassword("");
-                                          setStaffResetConfirmPassword("");
-                                          setError("");
-                                        }}
-                                        className="text-[9px] font-black text-indigo-600 uppercase tracking-widest hover:text-indigo-800 hover:underline transition-colors"
+                                        onClick={
+                                          showAdminPassword
+                                            ? handleAdminLogin
+                                            : showWardenPassword
+                                              ? handleWardenLogin
+                                              : handleDeveloperLogin
+                                        }
+
+                                        disabled={
+                                          adminLoading ||
+                                          wardenLoading ||
+                                          developerLoading
+                                        }
+
+                                        className={`w-full py-2.5 sm:py-3.5 rounded-xl font-black text-xs sm:text-sm uppercase tracking-widest text-white shadow-lg transition-all active:scale-[0.98] disabled:opacity-50 ${showAdminPassword ? "bg-blue-600 shadow-blue-200" : showWardenPassword ? "bg-indigo-600 shadow-indigo-200" : "bg-slate-900 shadow-slate-200"}`}
                                       >
-                                        Forgot Password?
+                                        {adminLoading ||
+                                        wardenLoading ||
+                                        developerLoading
+                                          ? "Processing..."
+                                          : showAdminPassword
+                                            ? adminOtpSent
+                                              ? "VERIFY & ENTER DASHBOARD"
+                                              : "Confirm Identity"
+                                            : showWardenPassword
+                                              ? wardenOtpSent
+                                                ? "UNLOCK CAMPUS DASHBOARD"
+                                                : "Confirm Identity"
+                                              : !isDeveloperSetup
+                                                ? "REGISTER PASSWORD"
+                                                : "Unlock Portal"}
                                       </button>
-                                    )}
-                                </div>
-
-                                <div className="mt-4 flex gap-3">
-                                  <button
-                                    onClick={
-                                      showAdminPassword
-                                        ? handleAdminLogin
-                                        : showWardenPassword
-                                          ? handleWardenLogin
-                                          : handleDeveloperLogin
-                                    }
-
-                                    disabled={
-                                      adminLoading ||
-                                      wardenLoading ||
-                                      developerLoading
-                                    }
-
-                                    className={`w-full py-2.5 sm:py-3.5 rounded-xl font-black text-xs sm:text-sm uppercase tracking-widest text-white shadow-lg transition-all active:scale-[0.98] disabled:opacity-50 ${showAdminPassword ? "bg-blue-600 shadow-blue-200" : showWardenPassword ? "bg-indigo-600 shadow-indigo-200" : "bg-slate-900 shadow-slate-200"}`}
-                                  >
-                                    {adminLoading ||
-                                    wardenLoading ||
-                                    developerLoading
-                                      ? "Processing..."
-                                      : showAdminPassword
-                                        ? adminOtpSent
-                                          ? "VERIFY & ENTER DASHBOARD"
-                                          : "Confirm Identity"
-                                        : showWardenPassword
-                                          ? wardenOtpSent
-                                            ? "UNLOCK CAMPUS DASHBOARD"
-                                            : "Confirm Identity"
-                                          : !isDeveloperSetup
-                                            ? "REGISTER PASSWORD"
-                                            : "Unlock Portal"}
-                                  </button>
-                                </div>
+                                    </div>
+                                  </>
+                                )}
                               </>
                             )}
                           </div>

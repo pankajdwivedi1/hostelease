@@ -2,7 +2,6 @@ export const dynamic = "force-dynamic";
 
 import { NextRequest, NextResponse } from "next/server";
 import { db, supabase } from "@/lib/dbAdapter";
-import { sendMSG91_GatepassAlert } from "@/lib/msg91";
 import { validators } from "@/lib/validation";
 import { broadcastGateEvent } from "@/lib/eventEmitter";
 import { assertTenantActive } from "@/lib/tenant";
@@ -476,15 +475,9 @@ export async function POST(request: NextRequest) {
                 checkOutTime: new Date().toISOString()
             });
 
-            // 🔥 Send MSG91 Gatepass Alert (Fire & Forget)
+            // Send Web Push Notification to Parent (Fire & Forget)
             const parentPhone = student.fatherNumber || student.motherNumber || student.localGuardianPhoneNumber;
             if (parentPhone) {
-                const collegeBranding = student.collegeName || student.hostelName || "Campus";
-                sendMSG91_GatepassAlert(parentPhone, student.name, gateName, istTime, "out", collegeBranding).catch(err => {
-                    console.error("Background SMS send failed:", err);
-                });
-
-                // Send Web Push Notification to Parent (Fire & Forget)
                 import("@/lib/pushNotification").then(({ sendPushNotification }) => {
                     const parentUserId = student.fatherNumber || (student._id.toString() + "_parent");
                     const studentPhoto = (student as any)?.profilePicture || (student as any)?.photoUrl || (student as any)?.photo || (student as any)?.image;
@@ -653,15 +646,9 @@ export async function POST(request: NextRequest) {
                 checkInTime: new Date().toISOString()
             });
 
-            // 🔥 Send MSG91 Gatepass Alert (Fire & Forget)
+            // Send Web Push Notification to Parent (Fire & Forget)
             const parentPhone = student.fatherNumber || student.motherNumber || student.localGuardianPhoneNumber;
             if (parentPhone && lastUpdatedPass) {
-                const collegeBranding = student.collegeName || student.hostelName || "Campus";
-                sendMSG91_GatepassAlert(parentPhone, student.name, lastUpdatedPass.gateName || "Main Gate", istTime, "in", collegeBranding).catch(err => {
-                    console.error("Background SMS send failed:", err);
-                });
-
-                // Send Web Push Notification to Parent (Fire & Forget)
                 import("@/lib/pushNotification").then(({ sendPushNotification }) => {
                     const parentUserId = student.fatherNumber || (student._id.toString() + "_parent");
                     const studentPhoto = (student as any)?.profilePicture || (student as any)?.photoUrl || (student as any)?.photo || (student as any)?.image;
