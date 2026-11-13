@@ -3,7 +3,7 @@
 import React, { useState, useEffect, useRef } from "react";
 import QRCode from "qrcode";
 import { useRouter } from "next/navigation";
-import { RefreshCw, CheckCircle2, ShieldCheck, ArrowLeft, Smartphone } from "lucide-react";
+import { RefreshCw, CheckCircle2, ShieldCheck, ArrowLeft, Smartphone, KeyRound } from "lucide-react";
 
 export interface SuperAdminQRChallengeData {
     challengeId: string;
@@ -27,6 +27,7 @@ export default function SuperAdminDesktopQRLogin({
     const canvasRef = useRef<HTMLCanvasElement | null>(null);
     const pollIntervalRef = useRef<any>(null);
     const countdownIntervalRef = useRef<any>(null);
+    const resendTimerRef = useRef<any>(null);
 
     const [challengeId, setChallengeId] = useState<string | null>(challengeData?.challengeId || null);
     const [timeLeft, setTimeLeft] = useState<number>(challengeData?.expiresInSeconds || 90);
@@ -34,6 +35,15 @@ export default function SuperAdminDesktopQRLogin({
     const [isApproved, setIsApproved] = useState<boolean>(false);
     const [isExpired, setIsExpired] = useState<boolean>(false);
     const [error, setError] = useState<string | null>(null);
+
+    // 📲 OTP Login Fallback States
+    const [authMode, setAuthMode] = useState<"qr" | "otp">("qr");
+    const [otpCode, setOtpCode] = useState<string>("");
+    const [maskedPhone, setMaskedPhone] = useState<string>("");
+    const [isOtpLoading, setIsOtpLoading] = useState<boolean>(false);
+    const [isVerifyingOtp, setIsVerifyingOtp] = useState<boolean>(false);
+    const [otpError, setOtpError] = useState<string | null>(null);
+    const [otpResendCountdown, setOtpResendCountdown] = useState<number>(0);
 
     // Audio chime on desktop login success
     const playSuccessChime = () => {
@@ -65,6 +75,25 @@ export default function SuperAdminDesktopQRLogin({
             clearInterval(countdownIntervalRef.current);
             countdownIntervalRef.current = null;
         }
+        if (resendTimerRef.current) {
+            clearInterval(resendTimerRef.current);
+            resendTimerRef.current = null;
+        }
+    };
+
+    const startResendTimer = (seconds: number = 60) => {
+        if (resendTimerRef.current) clearInterval(resendTimerRef.current);
+        setOtpResendCountdown(seconds);
+        resendTimerRef.current = setInterval(() => {
+            setOtpResendCountdown((prev) => {
+                if (prev <= 1) {
+                    clearInterval(resendTimerRef.current);
+                    resendTimerRef.current = null;
+                    return 0;
+                }
+                return prev - 1;
+            });
+        }, 1000);
     };
 
     // Render payload to canvas and kick off timers & polling
@@ -174,6 +203,84 @@ export default function SuperAdminDesktopQRLogin({
         }
     };
 
+    // Request 6-digit OTP to registered Super Admin mobile
+    const handleRequestOtp = async () => {
+        setIsOtpLoading(true);
+        setOtpError(null);
+        try {
+            const res = await fetch("/api/super-admin/auth/otp-login", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    action: "request-otp",
+                    challengeId
+                })
+            });
+            const data = await res.json();
+            if (!res.ok || !data.success) {
+                throw new Error(data.error || "Failed to send OTP");
+            }
+            setMaskedPhone(data.maskedPhone || "registered mobile");
+            setAuthMode("otp");
+            setOtpCode("");
+            startResendTimer(60);
+        } catch (err: any) {
+            setOtpError(err.message || "Could not send OTP to registered mobile.");
+        } finally {
+            setIsOtpLoading(false);
+        }
+    };
+
+    // Verify OTP and complete login
+    const handleVerifyOtp = async (e?: React.FormEvent) => {
+        if (e) e.preventDefault();
+        const cleanOtp = otpCode.trim();
+        if (cleanOtp.length !== 6) {
+            setOtpError("Please enter the complete 6-digit OTP code.");
+            return;
+        }
+
+        setIsVerifyingOtp(true);
+        setOtpError(null);
+        try {
+            const res = await fetch("/api/super-admin/auth/otp-login", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    action: "verify-otp",
+                    otp: cleanOtp,
+                    challengeId
+                })
+            });
+            const data = await res.json();
+            if (!res.ok || !data.success) {
+                throw new Error(data.error || "Invalid OTP code");
+            }
+
+            clearTimers();
+            setIsApproved(true);
+            playSuccessChime();
+
+            if (typeof window !== "undefined") {
+                localStorage.setItem("userType", "superadmin");
+                document.cookie = "userType=superadmin; path=/; max-age=315360000; SameSite=Lax";
+                document.cookie = "tenant-expired=false; path=/; max-age=315360000; SameSite=Lax";
+            }
+
+            if (onSuccess) {
+                onSuccess();
+            } else {
+                setTimeout(() => {
+                    router.push("/");
+                }, 1100);
+            }
+        } catch (err: any) {
+            setOtpError(err.message || "Failed to verify OTP. Please try again.");
+        } finally {
+            setIsVerifyingOtp(false);
+        }
+    };
+
     useEffect(() => {
         if (challengeData?.challengeId && challengeData.qrPayload) {
             renderQRAndStartListening(
@@ -192,78 +299,214 @@ export default function SuperAdminDesktopQRLogin({
 
     return (
         <div className="w-full flex flex-col items-center animate-in fade-in zoom-in-95 duration-200">
-            {/* Security Badge Header */}
-            <div className="flex items-center gap-2 mb-2 px-3 py-1 bg-blue-50 border border-blue-200/80 rounded-full">
-                <ShieldCheck className="w-4 h-4 text-blue-600" />
-                <span className="text-[10px] font-black uppercase tracking-wider text-blue-800">
-                    Step 2: Scan with Super Admin Phone
-                </span>
-            </div>
+            {authMode === "qr" ? (
+                <>
+                    {/* Security Badge Header */}
+                    <div className="flex items-center gap-2 mb-2 px-3 py-1 bg-blue-50 border border-blue-200/80 rounded-full">
+                        <ShieldCheck className="w-4 h-4 text-blue-600" />
+                        <span className="text-[10px] font-black uppercase tracking-wider text-blue-800">
+                            Step 2: Scan with Super Admin Phone
+                        </span>
+                    </div>
 
-            <p className="text-[10.5px] text-slate-500 font-medium text-center mb-3 max-w-[260px] leading-snug">
-                Password confirmed. Point your mobile scanner at this QR code to unlock the dashboard.
-            </p>
+                    <p className="text-[10.5px] text-slate-500 font-medium text-center mb-3 max-w-[260px] leading-snug">
+                        Password confirmed. Point your mobile scanner at this QR code to unlock the dashboard.
+                    </p>
 
-            {/* QR Canvas Box */}
-            <div className="relative p-3 bg-slate-50 border border-slate-200/90 rounded-2xl shadow-sm flex flex-col items-center">
-                <div className="relative w-[175px] h-[175px] bg-white rounded-xl overflow-hidden border border-slate-200/80 flex items-center justify-center p-1.5 shadow-inner">
-                    <canvas
-                        ref={canvasRef}
-                        className={`transition-all duration-300 ${isLoading || isExpired || isApproved ? "opacity-10 blur-[2px]" : "opacity-100"}`}
-                    />
+                    {/* QR Canvas Box */}
+                    <div className="relative p-3 bg-slate-50 border border-slate-200/90 rounded-2xl shadow-sm flex flex-col items-center">
+                        <div className="relative w-[175px] h-[175px] bg-white rounded-xl overflow-hidden border border-slate-200/80 flex items-center justify-center p-1.5 shadow-inner">
+                            <canvas
+                                ref={canvasRef}
+                                className={`transition-all duration-300 ${isLoading || isExpired || isApproved ? "opacity-10 blur-[2px]" : "opacity-100"}`}
+                            />
 
-                    {/* Loading State */}
-                    {isLoading && (
-                        <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-white/90">
-                            <RefreshCw className="w-6 h-6 text-blue-500 animate-spin" />
-                            <span className="text-[9.5px] font-bold text-slate-500">Generating Secure QR...</span>
+                            {/* Loading State */}
+                            {isLoading && (
+                                <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-white/90">
+                                    <RefreshCw className="w-6 h-6 text-blue-500 animate-spin" />
+                                    <span className="text-[9.5px] font-bold text-slate-500">Generating Secure QR...</span>
+                                </div>
+                            )}
+
+                            {/* Expired State */}
+                            {isExpired && (
+                                <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-slate-900/95 text-white p-3 text-center rounded-xl">
+                                    <p className="text-[10px] font-bold text-slate-300">QR Code Expired</p>
+                                    <button
+                                        type="button"
+                                        onClick={generateChallenge}
+                                        className="px-3 py-1.5 bg-blue-600 hover:bg-blue-500 text-white text-[9.5px] font-black uppercase tracking-wider rounded-lg shadow-sm transition-all flex items-center gap-1 cursor-pointer"
+                                    >
+                                        <RefreshCw className="w-3.5 h-3.5" />
+                                        <span>Reload QR</span>
+                                    </button>
+                                </div>
+                            )}
+
+                            {/* Approved Success State */}
+                            {isApproved && (
+                                <div className="absolute inset-0 bg-emerald-950/95 text-white flex flex-col items-center justify-center gap-2 p-3 text-center rounded-xl animate-in zoom-in-95 duration-200">
+                                    <div className="w-11 h-11 rounded-full bg-emerald-500/20 border-2 border-emerald-400 flex items-center justify-center shadow-lg">
+                                        <CheckCircle2 className="w-7 h-7 text-emerald-400" />
+                                    </div>
+                                    <span className="text-[11px] font-black uppercase tracking-wider text-emerald-300">
+                                        Verified & Approved!
+                                    </span>
+                                    <span className="text-[8.5px] text-emerald-200/90 font-medium">
+                                        Entering Super Admin Dashboard...
+                                    </span>
+                                </div>
+                            )}
                         </div>
-                    )}
 
-                    {/* Expired State */}
-                    {isExpired && (
-                        <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-slate-900/95 text-white p-3 text-center rounded-xl">
-                            <p className="text-[10px] font-bold text-slate-300">QR Code Expired</p>
+                        {/* Status indicator */}
+                        <div className="mt-2 text-center">
+                            {!isExpired && !isApproved && (
+                                <div className="flex items-center justify-center gap-1.5 text-[9.5px] font-bold text-slate-600 mb-0.5">
+                                    <span className="w-2 h-2 rounded-full bg-emerald-500 animate-ping" />
+                                    <span>Auto-expires in {timeLeft}s</span>
+                                </div>
+                            )}
+                            <p className="text-[8.5px] text-slate-500 font-medium max-w-[200px] leading-tight">
+                                On your phone: <span className="font-bold text-slate-700">Settings → PASS → Scan Desktop QR</span>
+                            </p>
+                        </div>
+                    </div>
+
+                    {/* 📲 Fallback: Login with Mobile OTP */}
+                    {!isApproved && (
+                        <div className="w-full flex flex-col items-center mt-3">
                             <button
                                 type="button"
-                                onClick={generateChallenge}
-                                className="px-3 py-1.5 bg-blue-600 hover:bg-blue-500 text-white text-[9.5px] font-black uppercase tracking-wider rounded-lg shadow-sm transition-all flex items-center gap-1 cursor-pointer"
+                                onClick={handleRequestOtp}
+                                disabled={isOtpLoading}
+                                className="w-full max-w-[210px] py-2 px-3 bg-gradient-to-r from-blue-50 to-indigo-50 hover:from-blue-100 hover:to-indigo-100 text-blue-800 border border-blue-200/90 rounded-xl text-[10px] font-black uppercase tracking-wider flex items-center justify-center gap-1.5 shadow-sm active:scale-95 transition-all cursor-pointer disabled:opacity-50"
                             >
-                                <RefreshCw className="w-3.5 h-3.5" />
-                                <span>Reload QR</span>
+                                {isOtpLoading ? (
+                                    <>
+                                        <RefreshCw className="w-3.5 h-3.5 text-blue-600 animate-spin" />
+                                        <span>Sending OTP SMS...</span>
+                                    </>
+                                ) : (
+                                    <>
+                                        <Smartphone className="w-3.5 h-3.5 text-blue-600" />
+                                        <span>Login with Mobile OTP</span>
+                                    </>
+                                )}
                             </button>
+                            {otpError && (
+                                <p className="text-[9.5px] text-red-600 font-bold text-center mt-1.5 max-w-[220px]">
+                                    {otpError}
+                                </p>
+                            )}
                         </div>
                     )}
+                </>
+            ) : (
+                /* 📲 OTP Verification View */
+                <>
+                    {/* Header */}
+                    <div className="flex items-center gap-2 mb-2 px-3 py-1 bg-indigo-50 border border-indigo-200/80 rounded-full">
+                        <Smartphone className="w-4 h-4 text-indigo-600" />
+                        <span className="text-[10px] font-black uppercase tracking-wider text-indigo-800">
+                            Step 2: Verify Mobile OTP
+                        </span>
+                    </div>
 
-                    {/* Approved Success State */}
-                    {isApproved && (
-                        <div className="absolute inset-0 bg-emerald-950/95 text-white flex flex-col items-center justify-center gap-2 p-3 text-center rounded-xl animate-in zoom-in-95 duration-200">
-                            <div className="w-11 h-11 rounded-full bg-emerald-500/20 border-2 border-emerald-400 flex items-center justify-center shadow-lg">
-                                <CheckCircle2 className="w-7 h-7 text-emerald-400" />
-                            </div>
-                            <span className="text-[11px] font-black uppercase tracking-wider text-emerald-300">
-                                Verified & Approved!
-                            </span>
-                            <span className="text-[8.5px] text-emerald-200/90 font-medium">
-                                Entering Super Admin Dashboard...
-                            </span>
-                        </div>
-                    )}
-                </div>
-
-                {/* Status indicator */}
-                <div className="mt-2 text-center">
-                    {!isExpired && !isApproved && (
-                        <div className="flex items-center justify-center gap-1.5 text-[9.5px] font-bold text-slate-600 mb-0.5">
-                            <span className="w-2 h-2 rounded-full bg-emerald-500 animate-ping" />
-                            <span>Auto-expires in {timeLeft}s</span>
-                        </div>
-                    )}
-                    <p className="text-[8.5px] text-slate-500 font-medium max-w-[200px] leading-tight">
-                        On your phone: <span className="font-bold text-slate-700">Settings → PASS → Scan Desktop QR</span>
+                    <p className="text-[10.5px] text-slate-500 font-medium text-center mb-3 max-w-[260px] leading-snug">
+                        Enter the 6-digit OTP sent to your registered Super Admin mobile <span className="font-bold text-slate-700">{maskedPhone}</span>.
                     </p>
-                </div>
-            </div>
+
+                    <div className="relative p-4 w-full max-w-[270px] bg-slate-50 border border-slate-200/90 rounded-2xl shadow-sm flex flex-col items-center">
+                        {isApproved ? (
+                            <div className="w-full py-6 flex flex-col items-center justify-center gap-2 text-center animate-in zoom-in-95 duration-200">
+                                <div className="w-12 h-12 rounded-full bg-emerald-500/20 border-2 border-emerald-400 flex items-center justify-center shadow-lg">
+                                    <CheckCircle2 className="w-8 h-8 text-emerald-500" />
+                                </div>
+                                <span className="text-xs font-black uppercase tracking-wider text-emerald-600">
+                                    Verified & Approved!
+                                </span>
+                                <span className="text-[9px] text-slate-500 font-medium">
+                                    Entering Super Admin Dashboard...
+                                </span>
+                            </div>
+                        ) : (
+                            <form onSubmit={handleVerifyOtp} className="w-full flex flex-col items-center gap-3">
+                                <div className="w-full">
+                                    <input
+                                        type="text"
+                                        inputMode="numeric"
+                                        pattern="[0-9]*"
+                                        maxLength={6}
+                                        value={otpCode}
+                                        onChange={(e) => {
+                                            const val = e.target.value.replace(/\D/g, "").slice(0, 6);
+                                            setOtpCode(val);
+                                            setOtpError(null);
+                                        }}
+                                        autoFocus
+                                        placeholder="• • • • • •"
+                                        className="w-full text-center tracking-[0.45em] text-lg font-black text-slate-800 bg-white border border-slate-300 rounded-xl py-2.5 px-3 focus:outline-none focus:ring-2 focus:ring-indigo-500/40 focus:border-indigo-500 transition-all shadow-inner placeholder:tracking-[0.3em] placeholder:text-slate-300"
+                                    />
+                                </div>
+
+                                {otpError && (
+                                    <p className="text-[10px] text-red-600 font-bold text-center leading-tight">
+                                        {otpError}
+                                    </p>
+                                )}
+
+                                <button
+                                    type="submit"
+                                    disabled={isVerifyingOtp || otpCode.length !== 6}
+                                    className="w-full py-2.5 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white rounded-xl text-xs font-black uppercase tracking-wider flex items-center justify-center gap-1.5 shadow-md shadow-blue-500/25 active:scale-95 transition-all cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+                                >
+                                    {isVerifyingOtp ? (
+                                        <>
+                                            <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                                            <span>Verifying...</span>
+                                        </>
+                                    ) : (
+                                        <>
+                                            <KeyRound className="w-4 h-4" />
+                                            <span>Verify & Unlock</span>
+                                        </>
+                                    )}
+                                </button>
+
+                                <div className="flex items-center justify-between w-full pt-1 text-[9.5px]">
+                                    {otpResendCountdown > 0 ? (
+                                        <span className="text-slate-400 font-bold">
+                                            Resend OTP in {otpResendCountdown}s
+                                        </span>
+                                    ) : (
+                                        <button
+                                            type="button"
+                                            onClick={handleRequestOtp}
+                                            disabled={isOtpLoading}
+                                            className="text-indigo-600 hover:text-indigo-800 font-black uppercase tracking-wider cursor-pointer transition-colors"
+                                        >
+                                            Resend OTP
+                                        </button>
+                                    )}
+
+                                    <button
+                                        type="button"
+                                        onClick={() => {
+                                            setAuthMode("qr");
+                                            setOtpError(null);
+                                        }}
+                                        className="text-slate-500 hover:text-slate-700 font-bold cursor-pointer transition-colors"
+                                    >
+                                        ← Back to QR
+                                    </button>
+                                </div>
+                            </form>
+                        )}
+                    </div>
+                </>
+            )}
 
             {/* Back / Cancel Button */}
             {onCancel && (
