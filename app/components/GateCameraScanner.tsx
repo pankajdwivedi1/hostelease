@@ -982,10 +982,11 @@ export default function GateCameraScanner({
                 }
 
                 const currentScore = calculateScore(minDistance);
+                const marginGap = secondMinDistance - minDistance;
                 const isEligibleMatch = (
                     bestMatch !== null &&
                     currentScore >= 85 &&
-                    (secondMinDistance - minDistance) >= 0.015
+                    (marginGap >= 0.015 || minDistance <= 0.35)
                 );
 
                 if (isEligibleMatch && bestMatch) {
@@ -1018,7 +1019,7 @@ export default function GateCameraScanner({
                             consecutiveSpoofRef.current.count += 1;
                             consecutiveSpoofRef.current.reason = warnText;
                             consecutiveMatchRef.current = { studentId: null, count: 0 };
-                            if (consecutiveSpoofRef.current.count >= 3) {
+                            if (consecutiveSpoofRef.current.count >= 8) {
                                 setSpoofWarning(warnText);
                                 setScanStatus(`🛑 FRAUD DETECTED: ${warnText}`);
                             }
@@ -1034,7 +1035,7 @@ export default function GateCameraScanner({
                             consecutiveSpoofRef.current.count += 1;
                             consecutiveSpoofRef.current.reason = warnText;
                             consecutiveMatchRef.current = { studentId: null, count: 0 };
-                            if (consecutiveSpoofRef.current.count >= 3) {
+                            if (consecutiveSpoofRef.current.count >= 8) {
                                 setSpoofWarning(warnText);
                                 setScanStatus("🛑 FRAUD DETECTED: Secondary Phone Screen / Display Rejected!");
                             }
@@ -1057,10 +1058,11 @@ export default function GateCameraScanner({
                     consecutiveMatchRef.current = { studentId: null, count: 0 };
                 }
 
-                // ⚡ Instantaneous Lock: As soon as a verified, fraud-free match is confirmed, show results immediately:
+                // ⚡ Multi-frame confirmation: require 2 consecutive matching frames on the EXACT SAME student
+                // Real students match themselves consistently across frames, while stranger flickers reset and reject
                 const isVerified = (
                     bestMatch !== null &&
-                    consecutiveMatchRef.current.count >= 1
+                    consecutiveMatchRef.current.count >= 2
                 );
 
                 if (isVerified && bestMatch) {

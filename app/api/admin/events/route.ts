@@ -1,15 +1,33 @@
 import { NextRequest } from "next/server";
 import { gateEventEmitter, GateStatusEvent, HostelActivityEvent } from "@/lib/eventEmitter";
+import fs from "fs";
+import path from "path";
 
 export const dynamic = "force-dynamic";
+
+// Evaluated once per Railway server container boot/deployment
+function getBuildVersion(): string {
+    if (process.env.RAILWAY_DEPLOYMENT_ID) return process.env.RAILWAY_DEPLOYMENT_ID;
+    if (process.env.RAILWAY_GIT_COMMIT_SHA) return process.env.RAILWAY_GIT_COMMIT_SHA;
+    try {
+        const buildIdPath = path.join(process.cwd(), ".next", "BUILD_ID");
+        if (fs.existsSync(buildIdPath)) {
+            return fs.readFileSync(buildIdPath, "utf8").trim();
+        }
+    } catch (_) {}
+    return process.env.BUILD_ID || `deploy-${Date.now()}`;
+}
+
+const SERVER_INSTANCE_ID = getBuildVersion();
 
 export async function GET(request: NextRequest) {
     const encoder = new TextEncoder();
 
     const stream = new ReadableStream({
         start(controller) {
-            // Send initial connected message
+            // Send initial connected message & server deployment version
             controller.enqueue(encoder.encode(`event: connected\ndata: ${JSON.stringify({ connected: true, timestamp: Date.now() })}\n\n`));
+            controller.enqueue(encoder.encode(`event: system_version\ndata: ${JSON.stringify({ version: SERVER_INSTANCE_ID })}\n\n`));
 
             // Handler for real-time gate status changes
             const onGateStatusChange = (eventData: GateStatusEvent) => {

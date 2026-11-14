@@ -954,6 +954,36 @@ export default function GatepassView({
                     } catch (_) {}
                 });
 
+                // ⚡ Auto-refresh across all campus gates when new code is deployed to Railway
+                eventSource.addEventListener("system_version", (event: MessageEvent) => {
+                    try {
+                        const data = event.data ? JSON.parse(event.data) : null;
+                        const serverVersion = data?.version;
+                        if (!serverVersion) return;
+
+                        const cachedVersion = sessionStorage.getItem("hosteleaze_deploy_version");
+                        if (!cachedVersion) {
+                            // First load on this tab: store initial version without reloading
+                            sessionStorage.setItem("hosteleaze_deploy_version", serverVersion);
+                            return;
+                        }
+
+                        // Code was pushed to Railway! Refresh screen automatically to run the latest code
+                        if (cachedVersion !== serverVersion) {
+                            console.log("⚡ [DEPLOY_DETECTED] New code deployed to Railway (" + serverVersion + "). Refreshing gate screen...");
+                            sessionStorage.setItem("hosteleaze_deploy_version", serverVersion);
+
+                            // Jitter delay (1.5s - 3.5s) to prevent concurrent server load from multiple campuses
+                            const jitterMs = 1500 + Math.floor(Math.random() * 2000);
+                            setTimeout(() => {
+                                window.location.reload();
+                            }, jitterMs);
+                        }
+                    } catch (err) {
+                        console.warn("Error handling system_version event:", err);
+                    }
+                });
+
                 eventSource.onerror = () => {
                     console.warn("SSE connection error in GatepassView, will auto-reconnect...");
                     if (eventSource) {

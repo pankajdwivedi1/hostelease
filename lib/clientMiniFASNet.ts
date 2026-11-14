@@ -95,13 +95,15 @@ export async function checkLivenessClient(
   const by = Math.max(0, box.y);
 
   // Wide 3D Context Crop (Preserves shoulders, room background & prevents tight-crop false phone spoof)
-  const scale = 2.7;
+  // Adaptive 3D Context Crop: Calibrate scale based on face proximity to avoid mistaking background cables/doors for phone borders
+  const faceCoverage = Math.max(bw / sourceWidth, bh / sourceHeight);
+  const scale = faceCoverage > 0.40 ? 1.9 : faceCoverage > 0.28 ? 2.2 : 2.7;
   const center_x = bx + bw / 2;
   const center_y = by + bh / 2;
 
   const maxS_x = Math.max(1.0, (Math.min(center_x, sourceWidth - 1 - center_x) * 2) / bw);
   const maxS_y = Math.max(1.0, (Math.min(center_y, sourceHeight - 1 - center_y) * 2) / bh);
-  const s = Math.min(scale, Math.max(2.0, Math.min(maxS_x, maxS_y, (sourceWidth - 1) / bw, (sourceHeight - 1) / bh)));
+  const s = Math.min(scale, Math.max(1.5, Math.min(maxS_x, maxS_y, (sourceWidth - 1) / bw, (sourceHeight - 1) / bh)));
 
   const new_w = Math.round(bw * s);
   const new_h = Math.round(bh * s);
@@ -162,13 +164,13 @@ export async function checkLivenessClient(
       let isSpoof = false;
       let reason = "";
 
-      if (replayProb >= 0.70 && replayProb > realProb) {
+      if (replayProb >= 0.88 && replayProb > realProb * 1.5) {
         isSpoof = true;
         reason = `Mobile Phone Screen Detected (${replayScore}% confidence)! Please present your real physical face.`;
-      } else if (printProb >= 0.65 && printProb > realProb) {
+      } else if (printProb >= 0.85 && printProb > realProb * 1.5) {
         isSpoof = true;
         reason = `Printed Paper Photo Detected (${printScore}% confidence)! Please present your real physical face.`;
-      } else if (realProb < 0.28) {
+      } else if (realProb < 0.15 && (replayProb > 0.75 || printProb > 0.75)) {
         isSpoof = true;
         reason = `Electronic Screen / Synthetic Display Detected!`;
       }
