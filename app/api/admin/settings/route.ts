@@ -97,7 +97,7 @@ export async function GET(request: NextRequest) {
             })(),
             gatepassGates: (settings?.notificationSettings as any)?.gatepassGates || (settings as any)?.gatepassGates || [],
             enforceMandatoryPush
-        }, request, 86400);
+        }, request, 0);
     } catch (error: any) {
         console.error("Error fetching admin settings:", error);
         return NextResponse.json(
@@ -242,9 +242,16 @@ export async function POST(request: NextRequest) {
         const settings = await db.settings.update(updateData);
 
         // ⚡ INSTANT REALTIME BROADCAST: Notify all active gatepass screens across campus immediately on any change
+        const notif = (settings?.notificationSettings as any) || (updateData?.notificationSettings as any) || {};
+        const broadcastGates = notif.gatepassGates || body.gatepassGates || [];
+        const broadcastIsCam = notif.enableGateCameraScan !== undefined 
+            ? notif.enableGateCameraScan 
+            : (Array.isArray(broadcastGates) ? broadcastGates.some((g: any) => g.mode === 'camera') : false);
+
         broadcastGateSettingsUpdate({
-            gatepassGates: updateData.gatepassGates,
-            enableGateCameraScan: updateData.enableGateCameraScan,
+            gatepassGates: broadcastGates,
+            enableGateCameraScan: broadcastIsCam,
+            qrScanCooldownMinutes: settings?.qrScanCooldownMinutes ?? 3,
             timestamp: Date.now()
         });
 

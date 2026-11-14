@@ -302,7 +302,8 @@ export default function GatepassView({
     // Apply gatepass settings directly to state and local storage
     const applyGateSettings = useCallback((data: any) => {
         if (!data) return;
-        const gates: any[] = data.gatepassGates || [];
+        const notif = data.notificationSettings || data.settings?.notificationSettings || {};
+        const gates: any[] = data.gatepassGates || notif.gatepassGates || data.settings?.gatepassGates || [];
         const activeId = typeof window !== "undefined" ? localStorage.getItem("activeGateId") : null;
         const activeName = typeof window !== "undefined" ? localStorage.getItem("activeGateName") : null;
 
@@ -329,7 +330,7 @@ export default function GatepassView({
                 localStorage.setItem("activeGateStandbyMinutes", String(targetStandby));
                 localStorage.setItem("activeGateCooldownMinutes", String(targetCooldown));
             }
-        } else if (data.enableGateCameraScan) {
+        } else if (data.enableGateCameraScan || notif.enableGateCameraScan || data.settings?.enableGateCameraScan) {
             const targetCooldown: number = data.qrScanCooldownMinutes ?? 3;
             setCooldownMinutes(targetCooldown);
             setScannerMode("camera");
@@ -356,7 +357,7 @@ export default function GatepassView({
                     setGateName(activeName);
                 }
 
-                const res = await fetch("/api/admin/settings");
+                const res = await fetch(`/api/admin/settings?t=${Date.now()}`);
                 const data = await res.json();
                 if (!isMounted || !data?.success) return;
                 applyGateSettings(data);
