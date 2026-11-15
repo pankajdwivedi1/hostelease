@@ -9333,14 +9333,14 @@ export default function AdminDashboard({
               )}
 
               <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
-                <div className="flex justify-between items-start w-full md:w-auto">
-                  <div>
+                <div className="flex justify-between items-start w-full md:w-auto shrink-0">
+                  <div className="shrink-0">
                     <div className="flex items-center gap-1.5">
-                      <h1 className="text-lg md:text-xl font-bold text-foreground leading-tight tracking-tight">
+                      <h1 className="text-base sm:text-lg md:text-lg font-extrabold text-foreground leading-snug tracking-tight whitespace-nowrap">
                         {dashboardTitle.includes("Dashboard") ? (
                           <>
-                            <span>{dashboardTitle.replace(" Dashboard", "")} </span>
-                            <span className="text-slate-800">Dashboard</span>
+                            <span className="text-gray-900">{dashboardTitle.replace(" Dashboard", "")} </span>
+                            <span className="text-slate-700 font-bold">Dashboard</span>
                           </>
                         ) : (
                           <span>{dashboardTitle}</span>
@@ -9413,146 +9413,242 @@ export default function AdminDashboard({
 
                 <div className="w-full md:w-auto">
                   {title === "Super Admin Dashboard" ? (
-                    <div className="grid grid-cols-3 gap-1.5 w-full md:flex md:flex-wrap md:items-center md:gap-2 md:w-auto">
-                      {/* 1. System Settings */}
-                      <button
-                        onClick={() => setShowSystemSettingsModal(true)}
-                        className="w-full h-8 sm:h-9 md:w-auto flex items-center justify-center gap-1 sm:gap-1.5 px-1 sm:px-3 bg-indigo-50 text-indigo-700 border border-indigo-200 rounded-lg text-[9px] sm:text-[9.5px] md:text-[10px] font-bold uppercase tracking-tight hover:bg-indigo-100 transition-all whitespace-nowrap shadow-xs active:scale-95"
-                      >
-                        <span>🛠️</span>
-                        <span className="truncate">System Settings</span>
-                      </button>
+                    <>
+                      {/* 📱 MOBILE VIEW ONLY: 3x3 Uniform Grid (9 Buttons, Preserved 100%) */}
+                      <div className="grid grid-cols-3 gap-1.5 w-full md:hidden">
+                        {/* 1. System Settings */}
+                        <button
+                          onClick={() => setShowSystemSettingsModal(true)}
+                          className="w-full h-8 sm:h-9 flex items-center justify-center gap-1 px-1 bg-indigo-50 text-indigo-700 border border-indigo-200 rounded-lg text-[9px] font-bold uppercase tracking-tight hover:bg-indigo-100 transition-all whitespace-nowrap shadow-xs active:scale-95"
+                        >
+                          <span>🛠️</span>
+                          <span className="truncate">System Settings</span>
+                        </button>
+                        {/* 2. Identifier */}
+                        <button
+                          onClick={() => setShowIdentifierModal(true)}
+                          className="w-full h-8 sm:h-9 flex items-center justify-center gap-1 px-1 bg-purple-50 text-purple-700 border border-purple-200 rounded-lg text-[9px] font-bold uppercase tracking-tight hover:bg-purple-100 transition-all whitespace-nowrap shadow-xs active:scale-95"
+                        >
+                          <span>🔍</span>
+                          <span className="truncate">Identifier</span>
+                        </button>
+                        {/* 3. New Location */}
+                        <button
+                          onClick={handleFixCampusSettings}
+                          disabled={isUpdatingSettings}
+                          className="w-full h-8 sm:h-9 flex items-center justify-center gap-1 px-1 bg-amber-50 text-amber-700 border border-amber-200 rounded-lg text-[9px] font-bold uppercase tracking-tight hover:bg-amber-100 transition-all disabled:opacity-50 whitespace-nowrap shadow-xs active:scale-95"
+                        >
+                          <span>✨</span>
+                          <span className="truncate">{isUpdatingSettings ? "Updating..." : "New Location"}</span>
+                        </button>
+                        {/* 4. Attendance Time */}
+                        <button
+                          onClick={() => setShowAttendanceTimeModal(true)}
+                          className="w-full h-8 sm:h-9 flex items-center justify-center gap-1 px-1 bg-green-50 text-green-700 border border-green-200 rounded-lg text-[9px] font-bold uppercase tracking-tight hover:bg-green-100 transition-all whitespace-nowrap shadow-xs active:scale-95"
+                        >
+                          <span>⏰</span>
+                          <span className="truncate">Attendance Time</span>
+                        </button>
+                        {/* 5. Manage Hostels */}
+                        <button
+                          onClick={() => setShowHostelSettingsModal(true)}
+                          className="w-full h-8 sm:h-9 flex items-center justify-center gap-1 px-1 bg-indigo-50 text-indigo-700 border border-indigo-200 rounded-lg text-[9px] font-bold uppercase tracking-tight hover:bg-indigo-100 transition-all whitespace-nowrap shadow-xs active:scale-95"
+                        >
+                          <span>🏢</span>
+                          <span className="truncate">Manage Hostels</span>
+                        </button>
+                        {/* 6. Manage Gatepass */}
+                        <button
+                          onClick={() => setShowGatepassManagementModal(true)}
+                          className="w-full h-8 sm:h-9 flex items-center justify-center gap-1 px-1 bg-purple-50 text-purple-700 border border-purple-200 rounded-lg text-[9px] font-bold uppercase tracking-tight hover:bg-purple-100 transition-all whitespace-nowrap shadow-xs active:scale-95"
+                        >
+                          <span>🚪</span>
+                          <span className="truncate">Manage Gatepass</span>
+                        </button>
+                        {/* 7. Export DB */}
+                        <button
+                          onClick={() => setShowDBExportModal(true)}
+                          className="w-full h-8 sm:h-9 flex items-center justify-center gap-1 px-1 bg-emerald-50 text-emerald-700 border border-emerald-200 rounded-lg text-[9px] font-bold uppercase tracking-tight hover:bg-emerald-100 transition-all whitespace-nowrap shadow-xs active:scale-95"
+                        >
+                          <span>💾</span>
+                          <span className="truncate">Export DB</span>
+                        </button>
+                        {/* 8. Sync Data */}
+                        <button
+                          onClick={async () => {
+                            if (isSyncingData) return;
+                            setIsSyncingData(true);
+                            try {
+                              const results = await Promise.allSettled([
+                                fetchPermissions(undefined, true),
+                                fetchStudents(true),
+                                fetchHostels(true),
+                                fetchAttendanceSummary(),
+                                (currentTab === 'attendance' || currentTab === 'rooms') ? fetchAttendanceLogs() : Promise.resolve(),
+                                currentTab === 'messaging' ? fetchAdminNotifications() : Promise.resolve(),
+                                currentTab === 'payments' ? Promise.all([fetchAdminPayments(), fetchBankSettings()]) : Promise.resolve()
+                              ]);
+                              const permRes = results[0];
+                              if (permRes.status === 'fulfilled' && permRes.value === false) {
+                                showToast("Sync warning: Could not refresh permissions from server.", "warning");
+                              } else {
+                                localStorage.removeItem(CACHE_KEYS.TIMESTAMP);
+                                setLastUpdated(new Date());
+                                showToast("Data synced from server!", "success");
+                              }
+                            } catch (err) {
+                              console.error("Sync data error:", err);
+                              showToast("Sync failed. Please check network connection.", "error");
+                            } finally {
+                              setIsSyncingData(false);
+                            }
+                          }}
+                          disabled={isSyncingData}
+                          className="w-full h-8 sm:h-9 flex items-center justify-center gap-1 px-1 bg-gray-50 text-gray-700 border border-gray-200 rounded-lg text-[9px] font-bold uppercase tracking-tight hover:bg-gray-100 transition-all whitespace-nowrap active:scale-95 disabled:opacity-60 cursor-pointer shadow-xs"
+                        >
+                          <span className={`text-[10px] sm:text-xs ${isSyncingData ? 'animate-spin inline-block' : 'inline-block'}`}>🔄</span>
+                          <span className="truncate">{isSyncingData ? "Syncing..." : "Sync Data"}</span>
+                        </button>
+                        {/* 9. All Students */}
+                        <button
+                          onClick={() => {
+                              setShowAllStudents(true);
+                              if (students.length === 0) fetchStudents(true);
+                          }}
+                          className="w-full h-8 sm:h-9 flex items-center justify-center gap-1 px-1 rounded-lg bg-blue-600 text-white font-bold transition-colors hover:bg-blue-700 text-[9px] uppercase tracking-tight whitespace-nowrap active:scale-95 shadow-xs"
+                        >
+                          <span className="truncate">All Students</span>
+                        </button>
+                      </div>
 
-                      {/* 2. Identifier */}
-                      <button
-                        onClick={() => setShowIdentifierModal(true)}
-                        className="w-full h-8 sm:h-9 md:w-auto flex items-center justify-center gap-1 sm:gap-1.5 px-1 sm:px-3 bg-purple-50 text-purple-700 border border-purple-200 rounded-lg text-[9px] sm:text-[9.5px] md:text-[10px] font-bold uppercase tracking-tight hover:bg-purple-100 transition-all whitespace-nowrap shadow-xs active:scale-95"
-                      >
-                        <span>🔍</span>
-                        <span className="truncate">Identifier</span>
-                      </button>
+                      {/* 💻 DESKTOP VIEW ONLY: 2 Perfectly Justified Rows (Row 1 ends flush with Row 2 Logout) */}
+                      <div className="hidden md:flex md:flex-col md:gap-1.5 md:w-full md:min-w-[620px] lg:min-w-[760px]">
+                        {/* Row 1 (5 items justified across full width) */}
+                        <div className="flex items-center gap-1.5 w-full">
+                          <button
+                            onClick={() => setShowSystemSettingsModal(true)}
+                            className="flex-1 h-8 px-2 flex items-center justify-center gap-1.5 bg-indigo-50 text-indigo-700 border border-indigo-200 rounded-lg text-[10px] font-bold uppercase tracking-tight hover:bg-indigo-100 transition-all whitespace-nowrap shadow-xs active:scale-95"
+                          >
+                            <span>🛠️</span>
+                            <span>System Settings</span>
+                          </button>
+                          <button
+                            onClick={() => setShowIdentifierModal(true)}
+                            className="flex-1 h-8 px-2 flex items-center justify-center gap-1.5 bg-purple-50 text-purple-700 border border-purple-200 rounded-lg text-[10px] font-bold uppercase tracking-tight hover:bg-purple-100 transition-all whitespace-nowrap shadow-xs active:scale-95"
+                          >
+                            <span>🔍</span>
+                            <span>Identifier</span>
+                          </button>
+                          <button
+                            onClick={handleFixCampusSettings}
+                            disabled={isUpdatingSettings}
+                            className="flex-1 h-8 px-2 flex items-center justify-center gap-1.5 bg-amber-50 text-amber-700 border border-amber-200 rounded-lg text-[10px] font-bold uppercase tracking-tight hover:bg-amber-100 transition-all disabled:opacity-50 whitespace-nowrap shadow-xs active:scale-95"
+                          >
+                            <span>✨</span>
+                            <span>{isUpdatingSettings ? "Updating..." : "New Location"}</span>
+                          </button>
+                          <button
+                            onClick={() => setShowAttendanceTimeModal(true)}
+                            className="flex-1 h-8 px-2 flex items-center justify-center gap-1.5 bg-green-50 text-green-700 border border-green-200 rounded-lg text-[10px] font-bold uppercase tracking-tight hover:bg-green-100 transition-all whitespace-nowrap shadow-xs active:scale-95"
+                          >
+                            <span>⏰</span>
+                            <span>Attendance Time</span>
+                          </button>
+                          <button
+                            onClick={() => setShowHostelSettingsModal(true)}
+                            className="flex-1 h-8 px-2 flex items-center justify-center gap-1.5 bg-indigo-50 text-indigo-700 border border-indigo-200 rounded-lg text-[10px] font-bold uppercase tracking-tight hover:bg-indigo-100 transition-all whitespace-nowrap shadow-xs active:scale-95"
+                          >
+                            <span>🏢</span>
+                            <span>Manage Hostels</span>
+                          </button>
+                        </div>
 
-                      {/* 3. New Location (Removed "SET") */}
-                      <button
-                        onClick={handleFixCampusSettings}
-                        disabled={isUpdatingSettings}
-                        className="w-full h-8 sm:h-9 md:w-auto flex items-center justify-center gap-1 sm:gap-1.5 px-1 sm:px-3 bg-amber-50 text-amber-700 border border-amber-200 rounded-lg text-[9px] sm:text-[9.5px] md:text-[10px] font-bold uppercase tracking-tight hover:bg-amber-100 transition-all disabled:opacity-50 whitespace-nowrap shadow-xs active:scale-95"
-                      >
-                        <span>✨</span>
-                        <span className="truncate">{isUpdatingSettings ? "Updating..." : "New Location"}</span>
-                      </button>
-
-                      {/* 4. Attendance Time (Removed "SET") */}
-                      <button
-                        onClick={() => setShowAttendanceTimeModal(true)}
-                        className="w-full h-8 sm:h-9 md:w-auto flex items-center justify-center gap-1 sm:gap-1.5 px-1 sm:px-3 bg-green-50 text-green-700 border border-green-200 rounded-lg text-[9px] sm:text-[9.5px] md:text-[10px] font-bold uppercase tracking-tight hover:bg-green-100 transition-all whitespace-nowrap shadow-xs active:scale-95"
-                      >
-                        <span>⏰</span>
-                        <span className="truncate">Attendance Time</span>
-                      </button>
-
-                      {/* 5. Manage Hostels */}
-                      <button
-                        onClick={() => setShowHostelSettingsModal(true)}
-                        className="w-full h-8 sm:h-9 md:w-auto flex items-center justify-center gap-1 sm:gap-1.5 px-1 sm:px-3 bg-indigo-50 text-indigo-700 border border-indigo-200 rounded-lg text-[9px] sm:text-[9.5px] md:text-[10px] font-bold uppercase tracking-tight hover:bg-indigo-100 transition-all whitespace-nowrap shadow-xs active:scale-95"
-                      >
-                        <span>🏢</span>
-                        <span className="truncate">Manage Hostels</span>
-                      </button>
-
-                      {/* 6. Manage Gatepass */}
-                      <button
-                        onClick={() => setShowGatepassManagementModal(true)}
-                        className="w-full h-8 sm:h-9 md:w-auto flex items-center justify-center gap-1 sm:gap-1.5 px-1 sm:px-3 bg-purple-50 text-purple-700 border border-purple-200 rounded-lg text-[9px] sm:text-[9.5px] md:text-[10px] font-bold uppercase tracking-tight hover:bg-purple-100 transition-all whitespace-nowrap shadow-xs active:scale-95"
-                      >
-                        <span>🚪</span>
-                        <span className="truncate">Manage Gatepass</span>
-                      </button>
-
-                      {/* 7. Export DB */}
-                      <button
-                        onClick={() => setShowDBExportModal(true)}
-                        className="w-full h-8 sm:h-9 md:w-auto flex items-center justify-center gap-1 sm:gap-1.5 px-1 sm:px-3 bg-emerald-50 text-emerald-700 border border-emerald-200 rounded-lg text-[9px] sm:text-[9.5px] md:text-[10px] font-bold uppercase tracking-tight hover:bg-emerald-100 transition-all whitespace-nowrap shadow-xs active:scale-95"
-                      >
-                        <span>💾</span>
-                        <span className="truncate">Export DB</span>
-                      </button>
-
-                      {/* 8. Sync Data */}
-                      <button
-                      onClick={async () => {
-                        if (isSyncingData) return;
-                        setIsSyncingData(true);
-                        try {
-                          const results = await Promise.allSettled([
-                            fetchPermissions(undefined, true),
-                            fetchStudents(true),
-                            fetchHostels(true),
-                            fetchAttendanceSummary(),
-                            (currentTab === 'attendance' || currentTab === 'rooms') ? fetchAttendanceLogs() : Promise.resolve(),
-                            currentTab === 'messaging' ? fetchAdminNotifications() : Promise.resolve(),
-                            currentTab === 'payments' ? Promise.all([fetchAdminPayments(), fetchBankSettings()]) : Promise.resolve()
-                          ]);
-
-                          const permRes = results[0];
-                          if (permRes.status === 'fulfilled' && permRes.value === false) {
-                            showToast("Sync warning: Could not refresh permissions from server.", "warning");
-                          } else {
-                            localStorage.removeItem(CACHE_KEYS.TIMESTAMP);
-                            setLastUpdated(new Date());
-                            showToast("Data synced from server!", "success");
-                          }
-                        } catch (err) {
-                          console.error("Sync data error:", err);
-                          showToast("Sync failed. Please check network connection.", "error");
-                        } finally {
-                          setIsSyncingData(false);
-                        }
-                      }}
-                      disabled={isSyncingData}
-                      className="w-full h-8 sm:h-9 md:w-auto flex items-center justify-center gap-1 sm:gap-1.5 px-1 sm:px-3 bg-gray-50 text-gray-700 border border-gray-200 rounded-lg text-[9px] sm:text-[9.5px] md:text-[10px] font-bold uppercase tracking-tight hover:bg-gray-100 transition-all whitespace-nowrap active:scale-95 disabled:opacity-60 cursor-pointer shadow-xs"
-                    >
-                      <span className={`text-[10px] sm:text-xs ${isSyncingData ? 'animate-spin inline-block' : 'inline-block'}`}>🔄</span>
-                      <span className="truncate">{isSyncingData ? "Syncing..." : "Sync Data"}</span>
-                    </button>
-
-                      {/* 9. All Students */}
-                      <button
-                        onClick={() => {
-                            setShowAllStudents(true);
-                            if (students.length === 0) fetchStudents(true);
-                        }}
-                        className="w-full h-8 sm:h-9 md:w-auto flex items-center justify-center gap-1 sm:gap-1.5 px-1 sm:px-3 rounded-lg bg-blue-600 text-white font-bold transition-colors hover:bg-blue-700 text-[9px] sm:text-[9.5px] md:text-[10px] uppercase tracking-tight whitespace-nowrap active:scale-95 shadow-xs"
-                      >
-                        <span className="truncate">All Students</span>
-                      </button>
-
-                      {/* Desktop only: Setup Guide */}
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          setShowSetupWizard(!showSetupWizard);
-                          if (!guideDismissed) {
-                            localStorage.setItem("hosteleaze_setup_dismissed", "true");
-                            setGuideDismissed(true);
-                          }
-                        }}
-                        className={`hidden md:flex px-4 py-2 rounded-lg border border-solid ${!guideDismissed ? 'border-blue-400 bg-blue-100 animate-pulse shadow-[0_0_15px_rgba(59,130,246,0.5)]' : 'border-blue-100 bg-blue-50'} text-blue-700 text-[10px] font-black uppercase tracking-tight active:scale-95 transition-all items-center gap-2 hover:bg-blue-100`}
-                      >
-                        📋 Setup Guide
-                      </button>
-
-                      {/* Desktop only: LOGOUT (Right side of Setup Guide) */}
-                      <button
-                        onClick={handleLogout}
-                        className="hidden md:flex px-4 py-2 rounded-lg border border-solid border-gray-100 bg-white text-foreground text-[10px] font-black uppercase tracking-tight shadow-sm active:scale-95 transition-all items-center gap-2 hover:bg-gray-50"
-                      >
-                        LOGOUT
-                        <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
-                        </svg>
-                      </button>
-                    </div>
+                        {/* Row 2 (6 items justified across full width till LOGOUT) */}
+                        <div className="flex items-center gap-1.5 w-full">
+                          <button
+                            onClick={() => setShowGatepassManagementModal(true)}
+                            className="flex-1 h-8 px-2 flex items-center justify-center gap-1.5 bg-purple-50 text-purple-700 border border-purple-200 rounded-lg text-[10px] font-bold uppercase tracking-tight hover:bg-purple-100 transition-all whitespace-nowrap shadow-xs active:scale-95"
+                          >
+                            <span>🚪</span>
+                            <span>Manage Gatepass</span>
+                          </button>
+                          <button
+                            onClick={() => setShowDBExportModal(true)}
+                            className="flex-1 h-8 px-2 flex items-center justify-center gap-1.5 bg-emerald-50 text-emerald-700 border border-emerald-200 rounded-lg text-[10px] font-bold uppercase tracking-tight hover:bg-emerald-100 transition-all whitespace-nowrap shadow-xs active:scale-95"
+                          >
+                            <span>💾</span>
+                            <span>Export DB</span>
+                          </button>
+                          <button
+                            onClick={async () => {
+                              if (isSyncingData) return;
+                              setIsSyncingData(true);
+                              try {
+                                const results = await Promise.allSettled([
+                                  fetchPermissions(undefined, true),
+                                  fetchStudents(true),
+                                  fetchHostels(true),
+                                  fetchAttendanceSummary(),
+                                  (currentTab === 'attendance' || currentTab === 'rooms') ? fetchAttendanceLogs() : Promise.resolve(),
+                                  currentTab === 'messaging' ? fetchAdminNotifications() : Promise.resolve(),
+                                  currentTab === 'payments' ? Promise.all([fetchAdminPayments(), fetchBankSettings()]) : Promise.resolve()
+                                ]);
+                                const permRes = results[0];
+                                if (permRes.status === 'fulfilled' && permRes.value === false) {
+                                  showToast("Sync warning: Could not refresh permissions from server.", "warning");
+                                } else {
+                                  localStorage.removeItem(CACHE_KEYS.TIMESTAMP);
+                                  setLastUpdated(new Date());
+                                  showToast("Data synced from server!", "success");
+                                }
+                              } catch (err) {
+                                console.error("Sync data error:", err);
+                                showToast("Sync failed. Please check network connection.", "error");
+                              } finally {
+                                setIsSyncingData(false);
+                              }
+                            }}
+                            disabled={isSyncingData}
+                            className="flex-1 h-8 px-2 flex items-center justify-center gap-1.5 bg-gray-50 text-gray-700 border border-gray-200 rounded-lg text-[10px] font-bold uppercase tracking-tight hover:bg-gray-100 transition-all whitespace-nowrap active:scale-95 disabled:opacity-60 cursor-pointer shadow-xs"
+                          >
+                            <span className={`text-[10px] sm:text-xs ${isSyncingData ? 'animate-spin inline-block' : 'inline-block'}`}>🔄</span>
+                            <span>{isSyncingData ? "Syncing..." : "Sync Data"}</span>
+                          </button>
+                          <button
+                            onClick={() => {
+                                setShowAllStudents(true);
+                                if (students.length === 0) fetchStudents(true);
+                            }}
+                            className="flex-1 h-8 px-2 flex items-center justify-center gap-1.5 rounded-lg bg-blue-600 text-white font-bold transition-colors hover:bg-blue-700 text-[10px] uppercase tracking-tight whitespace-nowrap active:scale-95 shadow-xs"
+                          >
+                            <span>All Students</span>
+                          </button>
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setShowSetupWizard(!showSetupWizard);
+                              if (!guideDismissed) {
+                                localStorage.setItem("hosteleaze_setup_dismissed", "true");
+                                setGuideDismissed(true);
+                              }
+                            }}
+                            className={`flex-1 h-8 px-2 rounded-lg border border-solid ${!guideDismissed ? 'border-blue-400 bg-blue-100 animate-pulse shadow-[0_0_15px_rgba(59,130,246,0.5)]' : 'border-blue-100 bg-blue-50'} text-blue-700 text-[10px] font-black uppercase tracking-tight active:scale-95 transition-all flex items-center justify-center gap-1.5 hover:bg-blue-100`}
+                          >
+                            <span>📋</span>
+                            <span>Setup Guide</span>
+                          </button>
+                          <button
+                            onClick={handleLogout}
+                            className="flex-1 h-8 px-2 rounded-lg border border-solid border-gray-100 bg-white text-foreground text-[10px] font-black uppercase tracking-tight shadow-sm active:scale-95 transition-all flex items-center justify-center gap-1.5 hover:bg-gray-50"
+                          >
+                            <span>LOGOUT</span>
+                            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
+                            </svg>
+                          </button>
+                        </div>
+                      </div>
+                    </>
                   ) : (
                     <div className="flex items-center gap-2">
                       <button
