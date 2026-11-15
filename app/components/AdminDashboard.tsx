@@ -9339,8 +9339,12 @@ export default function AdminDashboard({
                       <h1 className="text-base sm:text-lg md:text-lg font-extrabold text-foreground leading-snug tracking-tight whitespace-nowrap">
                         {dashboardTitle.includes("Dashboard") ? (
                           <>
-                            <span className="text-gray-900">{dashboardTitle.replace(" Dashboard", "")} </span>
-                            <span className="text-slate-700 font-bold">Dashboard</span>
+                            <span className="text-gray-900 block md:hidden">
+                              {dashboardTitle.replace(" Dashboard", "")} <span className="text-slate-700 font-bold">Dashboard</span>
+                            </span>
+                            <span className="text-gray-900 hidden md:block">
+                              {dashboardTitle.replace(" Dashboard", "")}
+                            </span>
                           </>
                         ) : (
                           <span>{dashboardTitle}</span>
@@ -9364,6 +9368,11 @@ export default function AdminDashboard({
                         )}
                       </button>
                     </div>
+                    {dashboardTitle.includes("Dashboard") && (
+                      <div className="hidden md:block text-xs md:text-sm font-bold text-slate-700 tracking-tight -mt-0.5 mb-0.5">
+                        Dashboard
+                      </div>
+                    )}
                     <div className="flex items-center gap-2 mt-1">
                       {studentsLoading ? (
                         <span className="h-4 w-4 animate-spin rounded-full border-2 border-gray-300 border-t-blue-600"></span>
@@ -10629,8 +10638,8 @@ export default function AdminDashboard({
               </div>
 
               <div className={currentTab === 'attendance' ? 'block space-y-6' : 'hidden'}>
-                  {/* View Mode Toggle */}
-                  <div className="flex justify-center mb-6">
+                  {/* View Mode Toggle (Mobile only; on desktop it sits right next to the header) */}
+                  <div className="flex justify-center mb-6 sm:hidden">
                     <div className="bg-gray-100 p-1 rounded-xl inline-flex">
                       <button
                         onClick={() => setAttendanceViewMode("daily")}
@@ -10651,8 +10660,25 @@ export default function AdminDashboard({
                     <>
                       <div className="flex flex-wrap items-center justify-between gap-3 w-full">
                         <div className="w-full sm:w-auto">
-                          <h2 className="text-sm sm:text-lg font-bold text-foreground">Daily Attendance Monitoring</h2>
-                          <p className="text-[11px] sm:text-sm text-secondary">
+                          <div className="flex items-center gap-3">
+                            <h2 className="text-sm sm:text-lg font-bold text-foreground">Daily Attendance Monitoring</h2>
+                            {/* View Mode Toggle (Desktop: sits right side of Daily Attendance Monitoring) */}
+                            <div className="hidden sm:inline-flex bg-gray-100 p-1 rounded-xl">
+                              <button
+                                onClick={() => setAttendanceViewMode("daily")}
+                                className={`px-4 py-1.5 rounded-lg text-xs font-bold uppercase tracking-wider transition-all ${attendanceViewMode === "daily" ? "bg-white text-blue-600 shadow-sm" : "text-gray-500 hover:text-gray-900"}`}
+                              >
+                                Daily Monitor
+                              </button>
+                              <button
+                                onClick={() => setAttendanceViewMode("history")}
+                                className={`px-4 py-1.5 rounded-lg text-xs font-bold uppercase tracking-wider transition-all ${attendanceViewMode === "history" ? "bg-white text-blue-600 shadow-sm" : "text-gray-500 hover:text-gray-900"}`}
+                              >
+                                Student History
+                              </button>
+                            </div>
+                          </div>
+                          <p className="text-[11px] sm:text-sm text-secondary mt-0.5">
                             {selectedDate === selectedEndDate
                               ? `Student entries and absentees for ${selectedDate === new Date(new Date().getTime() + (5.5 * 60 * 60 * 1000)).toISOString().split('T')[0] ? 'today' : formatDateDDMMYYYY(selectedDate)}`
                               : `Date range report: ${formatDateDDMMYYYY(selectedDate)} to ${formatDateDDMMYYYY(selectedEndDate)}`}
@@ -11275,6 +11301,32 @@ export default function AdminDashboard({
                   ) : (
                     /* Student History View */
                     <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4">
+                      {/* Header on desktop with toggle right beside it */}
+                      <div className="flex flex-wrap items-center justify-between gap-3 w-full">
+                        <div className="w-full sm:w-auto">
+                          <div className="flex items-center gap-3">
+                            <h2 className="text-sm sm:text-lg font-bold text-foreground">Student Attendance History</h2>
+                            <div className="hidden sm:inline-flex bg-gray-100 p-1 rounded-xl">
+                              <button
+                                onClick={() => setAttendanceViewMode("daily")}
+                                className={`px-4 py-1.5 rounded-lg text-xs font-bold uppercase tracking-wider transition-all ${attendanceViewMode === "daily" ? "bg-white text-blue-600 shadow-sm" : "text-gray-500 hover:text-gray-900"}`}
+                              >
+                                Daily Monitor
+                              </button>
+                              <button
+                                onClick={() => setAttendanceViewMode("history")}
+                                className={`px-4 py-1.5 rounded-lg text-xs font-bold uppercase tracking-wider transition-all ${attendanceViewMode === "history" ? "bg-white text-blue-600 shadow-sm" : "text-gray-500 hover:text-gray-900"}`}
+                              >
+                                Student History
+                              </button>
+                            </div>
+                          </div>
+                          <p className="text-[11px] sm:text-sm text-secondary mt-0.5">
+                            Search and view complete attendance records for individual students
+                          </p>
+                        </div>
+                      </div>
+
                       <div className="bg-white p-3 md:p-5 rounded-2xl border border-gray-200 shadow-sm">
                         <div className="grid grid-cols-3 md:grid-cols-12 gap-2 md:gap-4 items-end">
                           {/* Student Search */}
