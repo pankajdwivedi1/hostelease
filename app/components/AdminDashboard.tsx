@@ -9411,64 +9411,72 @@ export default function AdminDashboard({
                   </div>
                 </div>
 
-                <div className="flex flex-wrap items-center gap-1.5 sm:gap-2 w-full md:w-auto">
-                  {title === "Super Admin Dashboard" && (
-                    <div className="grid grid-cols-3 gap-1.5 w-full md:contents">
+                <div className="w-full md:w-auto">
+                  {title === "Super Admin Dashboard" ? (
+                    <div className="grid grid-cols-3 gap-1.5 w-full md:flex md:flex-wrap md:items-center md:gap-2 md:w-auto">
+                      {/* 1. System Settings */}
                       <button
                         onClick={() => setShowSystemSettingsModal(true)}
-                        className="flex items-center justify-center gap-1 sm:gap-2 px-1.5 sm:px-3 py-2 bg-indigo-50 text-indigo-700 border border-indigo-200 rounded-lg text-[8.5px] sm:text-[10px] font-bold uppercase tracking-tight hover:bg-indigo-100 transition-all whitespace-nowrap shadow-xs active:scale-95"
+                        className="w-full h-8 sm:h-9 md:w-auto flex items-center justify-center gap-1 sm:gap-1.5 px-1 sm:px-3 bg-indigo-50 text-indigo-700 border border-indigo-200 rounded-lg text-[8px] sm:text-[9.5px] md:text-[10px] font-bold uppercase tracking-tight hover:bg-indigo-100 transition-all whitespace-nowrap shadow-xs active:scale-95"
                       >
-                        🛠️ System Settings
+                        <span>🛠️</span>
+                        <span className="truncate">System Settings</span>
                       </button>
+
+                      {/* 2. Identifier */}
                       <button
                         onClick={() => setShowIdentifierModal(true)}
-                        className="flex items-center justify-center gap-1 sm:gap-2 px-1.5 sm:px-3 py-2 bg-purple-50 text-purple-700 border border-purple-200 rounded-lg text-[8.5px] sm:text-[10px] font-bold uppercase tracking-tight hover:bg-purple-100 transition-all whitespace-nowrap shadow-xs active:scale-95"
+                        className="w-full h-8 sm:h-9 md:w-auto flex items-center justify-center gap-1 sm:gap-1.5 px-1 sm:px-3 bg-purple-50 text-purple-700 border border-purple-200 rounded-lg text-[8px] sm:text-[9.5px] md:text-[10px] font-bold uppercase tracking-tight hover:bg-purple-100 transition-all whitespace-nowrap shadow-xs active:scale-95"
                       >
-                        🔍 Identifier
+                        <span>🔍</span>
+                        <span className="truncate">Identifier</span>
                       </button>
+
+                      {/* 3. New Location (Removed "SET") */}
                       <button
                         onClick={handleFixCampusSettings}
                         disabled={isUpdatingSettings}
-                        className="flex items-center justify-center gap-1 sm:gap-2 px-1.5 sm:px-3 py-2 bg-amber-50 text-amber-700 border border-amber-200 rounded-lg text-[8.5px] sm:text-[10px] font-bold uppercase tracking-tight hover:bg-amber-100 transition-all disabled:opacity-50 whitespace-nowrap shadow-xs active:scale-95"
+                        className="w-full h-8 sm:h-9 md:w-auto flex items-center justify-center gap-1 sm:gap-1.5 px-1 sm:px-3 bg-amber-50 text-amber-700 border border-amber-200 rounded-lg text-[8px] sm:text-[9.5px] md:text-[10px] font-bold uppercase tracking-tight hover:bg-amber-100 transition-all disabled:opacity-50 whitespace-nowrap shadow-xs active:scale-95"
                       >
-                        {isUpdatingSettings ? "Updating..." : "✨ Set New Location"}
+                        <span>✨</span>
+                        <span className="truncate">{isUpdatingSettings ? "Updating..." : "New Location"}</span>
                       </button>
-                    </div>
-                  )}
-                  {title === "Super Admin Dashboard" && (
-                    <button
-                      onClick={() => setShowAttendanceTimeModal(true)}
-                      className="flex-1 md:flex-none flex items-center justify-center gap-1 sm:gap-2 px-1.5 sm:px-3 py-2 bg-green-50 text-green-700 border border-green-200 rounded-lg text-[8.5px] sm:text-[10px] font-bold uppercase tracking-tight hover:bg-green-100 transition-all whitespace-nowrap shadow-xs active:scale-95"
-                    >
-                      ⏰ Set Attendance Time
-                    </button>
-                  )}
-                  {title === "Super Admin Dashboard" && (
-                    <button
-                      onClick={() => setShowHostelSettingsModal(true)}
-                      className="flex-1 md:flex-none flex items-center justify-center gap-1 sm:gap-2 px-1.5 sm:px-3 py-2 bg-indigo-50 text-indigo-700 border border-indigo-200 rounded-lg text-[8.5px] sm:text-[10px] font-bold uppercase tracking-tight hover:bg-indigo-100 transition-all whitespace-nowrap shadow-xs active:scale-95"
-                    >
-                      🏢 Manage Hostels
-                    </button>
-                  )}
 
-                  {title === "Super Admin Dashboard" && (
-                    <button
-                      onClick={() => setShowGatepassManagementModal(true)}
-                      className="flex-1 md:flex-none flex items-center justify-center gap-1 sm:gap-2 px-1.5 sm:px-3 py-2 bg-purple-50 text-purple-700 border border-purple-200 rounded-lg text-[8.5px] sm:text-[10px] font-bold uppercase tracking-tight hover:bg-purple-100 transition-all whitespace-nowrap shadow-xs active:scale-95"
-                    >
-                      🚪 Manage Gatepass
-                    </button>
-                  )}
+                      {/* 4. Attendance Time (Removed "SET") */}
+                      <button
+                        onClick={() => setShowAttendanceTimeModal(true)}
+                        className="w-full h-8 sm:h-9 md:w-auto flex items-center justify-center gap-1 sm:gap-1.5 px-1 sm:px-3 bg-green-50 text-green-700 border border-green-200 rounded-lg text-[8px] sm:text-[9.5px] md:text-[10px] font-bold uppercase tracking-tight hover:bg-green-100 transition-all whitespace-nowrap shadow-xs active:scale-95"
+                      >
+                        <span>⏰</span>
+                        <span className="truncate">Attendance Time</span>
+                      </button>
 
-                  {title === "Super Admin Dashboard" && (
-                    <button
-                      onClick={() => setShowDBExportModal(true)}
-                      className="flex-1 md:flex-none flex items-center justify-center gap-1 sm:gap-2 px-1.5 sm:px-3 py-2 bg-emerald-50 text-emerald-700 border border-emerald-200 rounded-lg text-[8.5px] sm:text-[10px] font-bold uppercase tracking-tight hover:bg-emerald-100 transition-all whitespace-nowrap shadow-xs active:scale-95"
-                    >
-                      💾 Export DB
-                    </button>
-                  )}
+                      {/* 5. Manage Hostels */}
+                      <button
+                        onClick={() => setShowHostelSettingsModal(true)}
+                        className="w-full h-8 sm:h-9 md:w-auto flex items-center justify-center gap-1 sm:gap-1.5 px-1 sm:px-3 bg-indigo-50 text-indigo-700 border border-indigo-200 rounded-lg text-[8px] sm:text-[9.5px] md:text-[10px] font-bold uppercase tracking-tight hover:bg-indigo-100 transition-all whitespace-nowrap shadow-xs active:scale-95"
+                      >
+                        <span>🏢</span>
+                        <span className="truncate">Manage Hostels</span>
+                      </button>
+
+                      {/* 6. Manage Gatepass */}
+                      <button
+                        onClick={() => setShowGatepassManagementModal(true)}
+                        className="w-full h-8 sm:h-9 md:w-auto flex items-center justify-center gap-1 sm:gap-1.5 px-1 sm:px-3 bg-purple-50 text-purple-700 border border-purple-200 rounded-lg text-[8px] sm:text-[9.5px] md:text-[10px] font-bold uppercase tracking-tight hover:bg-purple-100 transition-all whitespace-nowrap shadow-xs active:scale-95"
+                      >
+                        <span>🚪</span>
+                        <span className="truncate">Manage Gatepass</span>
+                      </button>
+
+                      {/* 7. Export DB */}
+                      <button
+                        onClick={() => setShowDBExportModal(true)}
+                        className="w-full h-8 sm:h-9 md:w-auto flex items-center justify-center gap-1 sm:gap-1.5 px-1 sm:px-3 bg-emerald-50 text-emerald-700 border border-emerald-200 rounded-lg text-[8px] sm:text-[9.5px] md:text-[10px] font-bold uppercase tracking-tight hover:bg-emerald-100 transition-all whitespace-nowrap shadow-xs active:scale-95"
+                      >
+                        <span>💾</span>
+                        <span className="truncate">Export DB</span>
+                      </button>
 
 
 
@@ -9505,38 +9513,51 @@ export default function AdminDashboard({
                         }
                       }}
                       disabled={isSyncingData}
-                      className="flex-1 md:flex-none flex items-center justify-center gap-1 sm:gap-2 px-1.5 sm:px-3 py-2 bg-gray-50 text-gray-700 border border-gray-200 rounded-lg text-[8.5px] sm:text-[10px] font-bold uppercase tracking-tight hover:bg-gray-100 transition-all whitespace-nowrap active:scale-95 disabled:opacity-60 cursor-pointer shadow-xs"
+                      className="w-full h-8 sm:h-9 md:w-auto flex items-center justify-center gap-1 sm:gap-1.5 px-1 sm:px-3 bg-gray-50 text-gray-700 border border-gray-200 rounded-lg text-[8px] sm:text-[9.5px] md:text-[10px] font-bold uppercase tracking-tight hover:bg-gray-100 transition-all whitespace-nowrap active:scale-95 disabled:opacity-60 cursor-pointer shadow-xs"
                     >
                       <span className={`text-[10px] sm:text-xs ${isSyncingData ? 'animate-spin inline-block' : 'inline-block'}`}>🔄</span>
-                      <span>{isSyncingData ? "Syncing..." : "Sync Data"}</span>
+                      <span className="truncate">{isSyncingData ? "Syncing..." : "Sync Data"}</span>
                     </button>
-                  )}
 
+                      {/* 9. All Students */}
+                      <button
+                        onClick={() => {
+                            setShowAllStudents(true);
+                            if (students.length === 0) fetchStudents(true);
+                        }}
+                        className="w-full h-8 sm:h-9 md:w-auto flex items-center justify-center gap-1 sm:gap-1.5 px-1 sm:px-3 rounded-lg bg-blue-600 text-white font-bold transition-colors hover:bg-blue-700 text-[8px] sm:text-[9.5px] md:text-[10px] uppercase tracking-tight whitespace-nowrap active:scale-95 shadow-xs"
+                      >
+                        <span className="truncate">All Students</span>
+                      </button>
 
-                  {title === "Super Admin Dashboard" && (
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        setShowSetupWizard(!showSetupWizard);
-                        if (!guideDismissed) {
-                          localStorage.setItem("hosteleaze_setup_dismissed", "true");
-                          setGuideDismissed(true);
-                        }
-                      }}
-                      className={`hidden md:flex px-4 py-2 rounded-lg border border-solid ${!guideDismissed ? 'border-blue-400 bg-blue-100 animate-pulse shadow-[0_0_15px_rgba(59,130,246,0.5)]' : 'border-blue-100 bg-blue-50'} text-blue-700 text-[10px] font-black uppercase tracking-tight active:scale-95 transition-all items-center gap-2 hover:bg-blue-100`}
-                    >
-                      📋 Setup Guide
-                    </button>
+                      {/* Desktop only: Setup Guide */}
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setShowSetupWizard(!showSetupWizard);
+                          if (!guideDismissed) {
+                            localStorage.setItem("hosteleaze_setup_dismissed", "true");
+                            setGuideDismissed(true);
+                          }
+                        }}
+                        className={`hidden md:flex px-4 py-2 rounded-lg border border-solid ${!guideDismissed ? 'border-blue-400 bg-blue-100 animate-pulse shadow-[0_0_15px_rgba(59,130,246,0.5)]' : 'border-blue-100 bg-blue-50'} text-blue-700 text-[10px] font-black uppercase tracking-tight active:scale-95 transition-all items-center gap-2 hover:bg-blue-100`}
+                      >
+                        📋 Setup Guide
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="flex items-center gap-2">
+                      <button
+                        onClick={() => {
+                            setShowAllStudents(true);
+                            if (students.length === 0) fetchStudents(true);
+                        }}
+                        className="px-4 py-2 rounded-lg bg-blue-600 text-white font-bold transition-colors hover:bg-blue-700 text-[10px] uppercase tracking-tight whitespace-nowrap active:scale-95 shadow-xs"
+                      >
+                        All Students
+                      </button>
+                    </div>
                   )}
-                  <button
-                    onClick={() => {
-                        setShowAllStudents(true);
-                        if (students.length === 0) fetchStudents(true);
-                    }}
-                    className="flex-1 md:flex-none px-2 sm:px-4 py-2 rounded-lg bg-blue-600 text-white font-bold transition-colors hover:bg-blue-700 text-[8.5px] sm:text-[10px] uppercase tracking-tight whitespace-nowrap active:scale-95 shadow-xs"
-                  >
-                    All Students
-                  </button>
                   <button
                     onClick={handleLogout}
                     className="hidden md:flex px-4 py-2 rounded-lg border border-solid border-gray-100 bg-white text-foreground text-[10px] font-black uppercase tracking-tight shadow-sm active:scale-95 transition-all items-center gap-2 hover:bg-gray-50"
@@ -9587,7 +9608,7 @@ export default function AdminDashboard({
                     )}
                   </div>
 
-                  <div className="bg-white pl-3 pr-1 py-3 md:p-6 rounded-2xl border border-dashed border-gray-300 font-mono text-[10.5px] sm:text-[13px] md:text-sm shadow-sm">
+                  <div className="bg-white px-2.5 py-2.5 sm:px-4 sm:py-4 md:p-6 rounded-2xl border border-dashed border-gray-300 font-sans shadow-sm">
                     {/* Mobile: "YOU HAVE ADDED X LOCATIONS" with compact "🔍 Test Current Location Proximity" on its right side */}
                     <div className="sm:hidden flex items-center justify-between gap-1 pb-2 mb-2 border-b border-dashed border-gray-200">
                       <p className="font-bold text-gray-600 tracking-tight uppercase text-[8px] leading-tight whitespace-nowrap">
@@ -9630,50 +9651,53 @@ export default function AdminDashboard({
                       <p className="font-bold text-gray-500 tracking-wider uppercase text-xs md:text-sm">YOU HAVE ADDED {hostelLocations.length} LOCATION{hostelLocations.length !== 1 ? "S" : ""}</p>
                     </div>
 
-                    <div className="space-y-0.5 mb-3 text-gray-600">
+                    <div className="space-y-0.5 mb-2 text-gray-600">
                       {hostelLocations.length > 0 ? (
                         hostelLocations.map((loc, index) => {
                           const isExpanded = !!expandedLocations[index];
                           return (
-                            <div key={index} className="flex flex-col group relative gap-1 py-0.5 pl-1 pr-0 md:py-1 md:px-2 rounded hover:bg-gray-50 transition-colors">
-                              <div className="flex items-center justify-between gap-1.5 flex-nowrap w-full">
-                                <span className="truncate text-gray-700 leading-tight flex-1">
-                                  <span className="font-bold text-gray-800 mr-1">{index + 1}.</span>
-                                  Location name:{" "}
+                            <div key={index} className="flex flex-col group relative py-0.5 px-1 rounded hover:bg-gray-50 transition-colors">
+                              <div className="flex items-center justify-between gap-1 flex-nowrap w-full text-[8px] sm:text-[9.5px] md:text-xs font-bold uppercase tracking-tight leading-normal">
+                                <span className="truncate flex-1">
+                                  <span className="text-gray-900 mr-0.5">{index + 1}.</span>
+                                  <span className="text-gray-500 font-semibold lowercase tracking-normal">Location name: </span>
                                   <span
                                     onClick={() => setExpandedLocations(prev => ({ ...prev, [index]: !prev[index] }))}
-                                    className="cursor-pointer text-blue-600 hover:text-blue-800 font-semibold transition-colors"
+                                    className="cursor-pointer text-blue-600 hover:text-blue-800 font-bold uppercase transition-colors underline-offset-1 hover:underline"
                                   >
                                     {loc.name?.trim()}
                                   </span>
-                                  , Radius:{loc.radius}
+                                  <span className="text-gray-500 font-semibold lowercase tracking-normal">, Radius:</span>
+                                  <span className="text-gray-800 font-bold">{loc.radius}</span>
                                 </span>
-                                <div className="flex gap-1.5 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity flex-shrink-0">
+                                <div className="flex items-center gap-1 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity flex-shrink-0">
                                   <button
                                     onClick={() => handleEditLocation(index)}
-                                    className="p-1 text-blue-600 hover:bg-blue-100 rounded-md transition-colors"
+                                    className="p-0.5 text-blue-600 hover:bg-blue-100 rounded transition-colors"
+                                    title="Edit location"
                                   >
-                                    <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" /></svg>
+                                    <svg className="w-3 h-3 sm:w-3.5 sm:h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" /></svg>
                                   </button>
                                   <button
                                     onClick={() => handleDeleteLocation(index)}
-                                    className="p-1 text-red-600 hover:bg-red-100 rounded-md transition-colors"
+                                    className="p-0.5 text-red-600 hover:bg-red-100 rounded transition-colors"
+                                    title="Delete location"
                                   >
-                                    <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
+                                    <svg className="w-3 h-3 sm:w-3.5 sm:h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
                                   </button>
                                 </div>
                               </div>
                               {isExpanded && (
-                                <div className="pl-5 text-gray-500 text-[11px] md:text-sm">
-                                  Lat:{loc.lat}, Lng:{loc.lng}
+                                <div className="pl-4 text-gray-400 text-[7px] sm:text-[9px] font-medium lowercase">
+                                  lat: {loc.lat}, lng: {loc.lng}
                                 </div>
                               )}
                             </div>
                           );
                         })
                       ) : (
-                        <div className="text-center py-4 text-gray-400 italic">
-                          No locations configured. Click "Set New Location" to add one.
+                        <div className="text-center py-2 text-gray-400 italic text-[8px] sm:text-xs">
+                          No locations configured. Click "New Location" to add one.
                         </div>
                       )}
                     </div>
@@ -9740,7 +9764,7 @@ export default function AdminDashboard({
                         </div>
                       </>
                     ) : (
-                      <p className="text-center text-gray-400 italic py-2 border-b border-dashed border-gray-200 mb-2 text-[9.5px] sm:text-xs">Click the GPS test button above to verify proximity</p>
+                      <p className="text-center text-gray-400 italic py-1 border-b border-dashed border-gray-200 mb-1 text-[7.5px] sm:text-[9.5px]">Click the GPS test button above to verify proximity</p>
                     )}
                   </div>
                 </div>
