@@ -9541,6 +9541,17 @@ export default function AdminDashboard({
                       >
                         📋 Setup Guide
                       </button>
+
+                      {/* Desktop only: LOGOUT (Right side of Setup Guide) */}
+                      <button
+                        onClick={handleLogout}
+                        className="hidden md:flex px-4 py-2 rounded-lg border border-solid border-gray-100 bg-white text-foreground text-[10px] font-black uppercase tracking-tight shadow-sm active:scale-95 transition-all items-center gap-2 hover:bg-gray-50"
+                      >
+                        LOGOUT
+                        <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
+                        </svg>
+                      </button>
                     </div>
                   ) : (
                     <div className="flex items-center gap-2">
@@ -9553,17 +9564,17 @@ export default function AdminDashboard({
                       >
                         All Students
                       </button>
+                      <button
+                        onClick={handleLogout}
+                        className="hidden md:flex px-4 py-2 rounded-lg border border-solid border-gray-100 bg-white text-foreground text-[10px] font-black uppercase tracking-tight shadow-sm active:scale-95 transition-all items-center gap-2 hover:bg-gray-50"
+                      >
+                        LOGOUT
+                        <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
+                        </svg>
+                      </button>
                     </div>
                   )}
-                  <button
-                    onClick={handleLogout}
-                    className="hidden md:flex px-4 py-2 rounded-lg border border-solid border-gray-100 bg-white text-foreground text-[10px] font-black uppercase tracking-tight shadow-sm active:scale-95 transition-all items-center gap-2 hover:bg-gray-50"
-                  >
-                    LOGOUT
-                    <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
-                    </svg>
-                  </button>
                 </div>
               </div>
 
