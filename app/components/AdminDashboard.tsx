@@ -9417,7 +9417,7 @@ export default function AdminDashboard({
                       {/* 1. System Settings */}
                       <button
                         onClick={() => setShowSystemSettingsModal(true)}
-                        className="w-full h-8 sm:h-9 md:w-auto flex items-center justify-center gap-1 sm:gap-1.5 px-1 sm:px-3 bg-indigo-50 text-indigo-700 border border-indigo-200 rounded-lg text-[8px] sm:text-[9.5px] md:text-[10px] font-bold uppercase tracking-tight hover:bg-indigo-100 transition-all whitespace-nowrap shadow-xs active:scale-95"
+                        className="w-full h-8 sm:h-9 md:w-auto flex items-center justify-center gap-1 sm:gap-1.5 px-1 sm:px-3 bg-indigo-50 text-indigo-700 border border-indigo-200 rounded-lg text-[9px] sm:text-[9.5px] md:text-[10px] font-bold uppercase tracking-tight hover:bg-indigo-100 transition-all whitespace-nowrap shadow-xs active:scale-95"
                       >
                         <span>🛠️</span>
                         <span className="truncate">System Settings</span>
@@ -9426,7 +9426,7 @@ export default function AdminDashboard({
                       {/* 2. Identifier */}
                       <button
                         onClick={() => setShowIdentifierModal(true)}
-                        className="w-full h-8 sm:h-9 md:w-auto flex items-center justify-center gap-1 sm:gap-1.5 px-1 sm:px-3 bg-purple-50 text-purple-700 border border-purple-200 rounded-lg text-[8px] sm:text-[9.5px] md:text-[10px] font-bold uppercase tracking-tight hover:bg-purple-100 transition-all whitespace-nowrap shadow-xs active:scale-95"
+                        className="w-full h-8 sm:h-9 md:w-auto flex items-center justify-center gap-1 sm:gap-1.5 px-1 sm:px-3 bg-purple-50 text-purple-700 border border-purple-200 rounded-lg text-[9px] sm:text-[9.5px] md:text-[10px] font-bold uppercase tracking-tight hover:bg-purple-100 transition-all whitespace-nowrap shadow-xs active:scale-95"
                       >
                         <span>🔍</span>
                         <span className="truncate">Identifier</span>
@@ -9436,7 +9436,7 @@ export default function AdminDashboard({
                       <button
                         onClick={handleFixCampusSettings}
                         disabled={isUpdatingSettings}
-                        className="w-full h-8 sm:h-9 md:w-auto flex items-center justify-center gap-1 sm:gap-1.5 px-1 sm:px-3 bg-amber-50 text-amber-700 border border-amber-200 rounded-lg text-[8px] sm:text-[9.5px] md:text-[10px] font-bold uppercase tracking-tight hover:bg-amber-100 transition-all disabled:opacity-50 whitespace-nowrap shadow-xs active:scale-95"
+                        className="w-full h-8 sm:h-9 md:w-auto flex items-center justify-center gap-1 sm:gap-1.5 px-1 sm:px-3 bg-amber-50 text-amber-700 border border-amber-200 rounded-lg text-[9px] sm:text-[9.5px] md:text-[10px] font-bold uppercase tracking-tight hover:bg-amber-100 transition-all disabled:opacity-50 whitespace-nowrap shadow-xs active:scale-95"
                       >
                         <span>✨</span>
                         <span className="truncate">{isUpdatingSettings ? "Updating..." : "New Location"}</span>
@@ -9445,7 +9445,7 @@ export default function AdminDashboard({
                       {/* 4. Attendance Time (Removed "SET") */}
                       <button
                         onClick={() => setShowAttendanceTimeModal(true)}
-                        className="w-full h-8 sm:h-9 md:w-auto flex items-center justify-center gap-1 sm:gap-1.5 px-1 sm:px-3 bg-green-50 text-green-700 border border-green-200 rounded-lg text-[8px] sm:text-[9.5px] md:text-[10px] font-bold uppercase tracking-tight hover:bg-green-100 transition-all whitespace-nowrap shadow-xs active:scale-95"
+                        className="w-full h-8 sm:h-9 md:w-auto flex items-center justify-center gap-1 sm:gap-1.5 px-1 sm:px-3 bg-green-50 text-green-700 border border-green-200 rounded-lg text-[9px] sm:text-[9.5px] md:text-[10px] font-bold uppercase tracking-tight hover:bg-green-100 transition-all whitespace-nowrap shadow-xs active:scale-95"
                       >
                         <span>⏰</span>
                         <span className="truncate">Attendance Time</span>
@@ -9454,7 +9454,7 @@ export default function AdminDashboard({
                       {/* 5. Manage Hostels */}
                       <button
                         onClick={() => setShowHostelSettingsModal(true)}
-                        className="w-full h-8 sm:h-9 md:w-auto flex items-center justify-center gap-1 sm:gap-1.5 px-1 sm:px-3 bg-indigo-50 text-indigo-700 border border-indigo-200 rounded-lg text-[8px] sm:text-[9.5px] md:text-[10px] font-bold uppercase tracking-tight hover:bg-indigo-100 transition-all whitespace-nowrap shadow-xs active:scale-95"
+                        className="w-full h-8 sm:h-9 md:w-auto flex items-center justify-center gap-1 sm:gap-1.5 px-1 sm:px-3 bg-indigo-50 text-indigo-700 border border-indigo-200 rounded-lg text-[9px] sm:text-[9.5px] md:text-[10px] font-bold uppercase tracking-tight hover:bg-indigo-100 transition-all whitespace-nowrap shadow-xs active:scale-95"
                       >
                         <span>🏢</span>
                         <span className="truncate">Manage Hostels</span>
@@ -9463,7 +9463,7 @@ export default function AdminDashboard({
                       {/* 6. Manage Gatepass */}
                       <button
                         onClick={() => setShowGatepassManagementModal(true)}
-                        className="w-full h-8 sm:h-9 md:w-auto flex items-center justify-center gap-1 sm:gap-1.5 px-1 sm:px-3 bg-purple-50 text-purple-700 border border-purple-200 rounded-lg text-[8px] sm:text-[9.5px] md:text-[10px] font-bold uppercase tracking-tight hover:bg-purple-100 transition-all whitespace-nowrap shadow-xs active:scale-95"
+                        className="w-full h-8 sm:h-9 md:w-auto flex items-center justify-center gap-1 sm:gap-1.5 px-1 sm:px-3 bg-purple-50 text-purple-700 border border-purple-200 rounded-lg text-[9px] sm:text-[9.5px] md:text-[10px] font-bold uppercase tracking-tight hover:bg-purple-100 transition-all whitespace-nowrap shadow-xs active:scale-95"
                       >
                         <span>🚪</span>
                         <span className="truncate">Manage Gatepass</span>
@@ -9472,7 +9472,7 @@ export default function AdminDashboard({
                       {/* 7. Export DB */}
                       <button
                         onClick={() => setShowDBExportModal(true)}
-                        className="w-full h-8 sm:h-9 md:w-auto flex items-center justify-center gap-1 sm:gap-1.5 px-1 sm:px-3 bg-emerald-50 text-emerald-700 border border-emerald-200 rounded-lg text-[8px] sm:text-[9.5px] md:text-[10px] font-bold uppercase tracking-tight hover:bg-emerald-100 transition-all whitespace-nowrap shadow-xs active:scale-95"
+                        className="w-full h-8 sm:h-9 md:w-auto flex items-center justify-center gap-1 sm:gap-1.5 px-1 sm:px-3 bg-emerald-50 text-emerald-700 border border-emerald-200 rounded-lg text-[9px] sm:text-[9.5px] md:text-[10px] font-bold uppercase tracking-tight hover:bg-emerald-100 transition-all whitespace-nowrap shadow-xs active:scale-95"
                       >
                         <span>💾</span>
                         <span className="truncate">Export DB</span>
@@ -9510,7 +9510,7 @@ export default function AdminDashboard({
                         }
                       }}
                       disabled={isSyncingData}
-                      className="w-full h-8 sm:h-9 md:w-auto flex items-center justify-center gap-1 sm:gap-1.5 px-1 sm:px-3 bg-gray-50 text-gray-700 border border-gray-200 rounded-lg text-[8px] sm:text-[9.5px] md:text-[10px] font-bold uppercase tracking-tight hover:bg-gray-100 transition-all whitespace-nowrap active:scale-95 disabled:opacity-60 cursor-pointer shadow-xs"
+                      className="w-full h-8 sm:h-9 md:w-auto flex items-center justify-center gap-1 sm:gap-1.5 px-1 sm:px-3 bg-gray-50 text-gray-700 border border-gray-200 rounded-lg text-[9px] sm:text-[9.5px] md:text-[10px] font-bold uppercase tracking-tight hover:bg-gray-100 transition-all whitespace-nowrap active:scale-95 disabled:opacity-60 cursor-pointer shadow-xs"
                     >
                       <span className={`text-[10px] sm:text-xs ${isSyncingData ? 'animate-spin inline-block' : 'inline-block'}`}>🔄</span>
                       <span className="truncate">{isSyncingData ? "Syncing..." : "Sync Data"}</span>
@@ -9522,7 +9522,7 @@ export default function AdminDashboard({
                             setShowAllStudents(true);
                             if (students.length === 0) fetchStudents(true);
                         }}
-                        className="w-full h-8 sm:h-9 md:w-auto flex items-center justify-center gap-1 sm:gap-1.5 px-1 sm:px-3 rounded-lg bg-blue-600 text-white font-bold transition-colors hover:bg-blue-700 text-[8px] sm:text-[9.5px] md:text-[10px] uppercase tracking-tight whitespace-nowrap active:scale-95 shadow-xs"
+                        className="w-full h-8 sm:h-9 md:w-auto flex items-center justify-center gap-1 sm:gap-1.5 px-1 sm:px-3 rounded-lg bg-blue-600 text-white font-bold transition-colors hover:bg-blue-700 text-[9px] sm:text-[9.5px] md:text-[10px] uppercase tracking-tight whitespace-nowrap active:scale-95 shadow-xs"
                       >
                         <span className="truncate">All Students</span>
                       </button>
@@ -9654,7 +9654,7 @@ export default function AdminDashboard({
                           const isExpanded = !!expandedLocations[index];
                           return (
                             <div key={index} className="flex flex-col group relative py-0.5 px-1 rounded hover:bg-gray-50 transition-colors">
-                              <div className="flex items-center justify-between gap-1 flex-nowrap w-full text-[10px] sm:text-xs md:text-[13px] leading-normal font-sans">
+                              <div className="flex items-center justify-between gap-1 flex-nowrap w-full text-[9px] sm:text-xs md:text-[13px] leading-normal font-sans">
                                 <span className="truncate flex-1">
                                   <span className="font-bold text-gray-900 mr-1">{index + 1}.</span>
                                   <span className="font-medium text-gray-600">Location name: </span>
