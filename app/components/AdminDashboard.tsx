@@ -1824,21 +1824,33 @@ export default function AdminDashboard({
       });
 
       const leavePasses = gpRecords.filter((gp: any) => {
+        const outMs = new Date(gp.checkOutTime || gp.createdAt).getTime();
+        const gpPermId = String(gp.permissionId || gp.permission_id || '');
+        const matchedPerm = leavePerms.find((p: any) => String(p.id || p._id) === gpPermId);
+
+        // If explicitly linked to a permission, verify checkout didn't happen after the approved leave expired
+        if (matchedPerm) {
+          const pEnd = new Date(matchedPerm.toDateTime).getTime();
+          if (pEnd > 0 && outMs > pEnd) return false;
+          return true;
+        }
+
         const pType = String(gp.type || '').toLowerCase();
         const isExplicitLeave = pType === 'leave' || pType === 'home-leave' || pType === 'home' || pType === 'hleave' || pType === 'home_leave';
-        if (isExplicitLeave) return true;
-        // If linked to an approved leave permission, treat as leave pass
-        const gpPermId = String(gp.permissionId || gp.permission_id || '');
-        if (gpPermId && leavePerms.some((p: any) => String(p.id || p._id) === gpPermId)) return true;
+        if (isExplicitLeave) {
+          const expEnd = new Date(gp.toDateTime || gp.expectedReturnDate).getTime();
+          if (expEnd > 0 && outMs > expEnd) return false;
+          return true;
+        }
+
         // If student is currently OUT and checkout falls within leave window of an approved leave
         if (gp.status === 'out') {
-          const outMs = new Date(gp.checkOutTime || gp.createdAt).getTime();
           return leavePerms.some((p: any) => {
             const isApproved = p.status === 'allowed' || p.status === 'approved' || p.deanStatus === 'allowed' || p.deanStatus === 'approved';
             if (!isApproved) return false;
             const pStart = new Date(p.fromDateTime).getTime();
             const pEnd = new Date(p.toDateTime).getTime();
-            return (outMs >= (pStart - 18 * 60 * 60 * 1000)) && (outMs <= (pEnd + 24 * 60 * 60 * 1000));
+            return (outMs >= (pStart - 18 * 60 * 60 * 1000)) && (outMs <= pEnd);
           });
         }
         return false;
@@ -1854,7 +1866,12 @@ export default function AdminDashboard({
           const gpId = String(gp.id || gp._id);
           if (matchedGpIdSet.has(gpId)) return false;
           const gpPermId = gp.permissionId || gp.permission_id;
-          if (gpPermId && (String(gpPermId) === pIdStr)) return true;
+          if (gpPermId && (String(gpPermId) === pIdStr)) {
+            const pEnd = new Date(p.toDateTime).getTime();
+            const gpOut = new Date(gp.checkOutTime || gp.createdAt).getTime();
+            if (pEnd > 0 && gpOut > pEnd) return false;
+            return true;
+          }
           return false;
         }) || leavePasses.find((gp: any) => {
           const gpId = String(gp.id || gp._id);
@@ -1865,7 +1882,7 @@ export default function AdminDashboard({
           const pEnd = new Date(p.toDateTime).getTime();
           const gpOut = new Date(gp.checkOutTime || gp.createdAt).getTime();
           if (pStart > 0 && gpOut > 0) {
-            return (gpOut >= pStart - 18 * 60 * 60 * 1000) && (gpOut <= (pEnd || pStart) + 24 * 60 * 60 * 1000);
+            return (gpOut >= pStart - 18 * 60 * 60 * 1000) && (gpOut <= (pEnd || pStart));
           }
           return false;
         });

@@ -293,7 +293,7 @@ export async function POST(request: NextRequest) {
                     const rType = String(p.requestType || '').toLowerCase();
                     const isLeaveType = (rType === 'home-leave' || rType === 'leave' || rType === 'hleave');
                     const isApproved = (p.status === 'allowed' || p.wardenStatus === 'approved' || p.deanStatus === 'approved' || p.status === 'approved') && p.status !== 'completed' && p.status !== 'rejected' && p.status !== 'cancelled';
-                    const notExpired = !p.toDateTime || (new Date(p.toDateTime).getTime() >= (now.getTime() - 24 * 60 * 60 * 1000));
+                    const notExpired = !p.toDateTime || (new Date(p.toDateTime).getTime() >= now.getTime());
                     return isLeaveType && isApproved && notExpired;
                 });
 

@@ -208,17 +208,28 @@ export async function GET(request: NextRequest) {
                 const permEnd = new Date(perm.toDateTime).getTime();
                 if (isNaN(permStart) || isNaN(permEnd)) return false;
 
-                // Student checkout must be near departure (within 18 hours before fromDateTime) through the end date (plus 24h grace)
-                return (checkOutMs >= (permStart - 18 * 60 * 60 * 1000)) && (checkOutMs <= (permEnd + 24 * 60 * 60 * 1000));
+                // Student checkout must be near departure (within 18 hours before fromDateTime) through the exact end date (zero grace extension past toDateTime)
+                return (checkOutMs >= (permStart - 18 * 60 * 60 * 1000)) && (checkOutMs <= permEnd);
             });
 
-            const expectedReturn = matchedPerm?.toDateTime || record.expectedReturnDate || record.toDateTime || record.student?.dynamicFields?.leaveTo || record.student?.leaveTo || null;
-            const leaveFrom = matchedPerm?.fromDateTime || record.fromDateTime || record.leaveFrom || record.student?.dynamicFields?.leaveFrom || null;
-            const genuineReason = matchedPerm?.reason || record.reason || record.leaveReason || record.student?.dynamicFields?.leaveReason || null;
-            
+            // Find any permission linked to this record directly via permissionId
+            const linkedPerm = record.permissionId 
+                ? activePermsList.find((p: any) => (p._id || p.id)?.toString() === record.permissionId?.toString())
+                : null;
+            const effectivePerm = matchedPerm || linkedPerm;
+
+            const permEndMs = effectivePerm?.toDateTime ? new Date(effectivePerm.toDateTime).getTime() : (record.expectedReturnDate || record.toDateTime ? new Date(record.expectedReturnDate || record.toDateTime).getTime() : null);
+
             const rawType = String(record.type || '').toLowerCase().trim();
             const originallyLeave = rawType.includes('leave') || rawType === 'hleave';
-            const isLeave = originallyLeave || !!matchedPerm;
+
+            // ⚡ STRICT RULE: If the student checked out AFTER the approved leave deadline (permEndMs), this checkout is EXPIRED for leave! It is strictly a normal GATE-PASS.
+            const isLeaveExpired = permEndMs ? checkOutMs > permEndMs : false;
+            const isLeave = (originallyLeave || !!matchedPerm) && !isLeaveExpired;
+
+            const expectedReturn = isLeave ? (effectivePerm?.toDateTime || record.expectedReturnDate || record.toDateTime || record.student?.dynamicFields?.leaveTo || record.student?.leaveTo || null) : null;
+            const leaveFrom = isLeave ? (effectivePerm?.fromDateTime || record.fromDateTime || record.leaveFrom || record.student?.dynamicFields?.leaveFrom || null) : null;
+            const genuineReason = isLeave ? (effectivePerm?.reason || record.reason || record.leaveReason || record.student?.dynamicFields?.leaveReason || null) : (record.reason || "Gate Pass (Outing)");
             
             let isOverdue = false;
             if (isLeave) {
@@ -233,17 +244,31 @@ export async function GET(request: NextRequest) {
                 }
             }
 
-            const effectiveType = isLeave ? "HOME-LEAVE" : (record.type || "GATE-PASS");
-            const effectivePermId = matchedPerm?._id || matchedPerm?.id || record.permissionId || null;
+            const effectiveType = isLeave ? "HOME-LEAVE" : "GATE-PASS";
+            const effectivePermId = isLeave ? (effectivePerm?._id || effectivePerm?.id || record.permissionId || null) : null;
 
-            // Auto-heal DB ONLY if student has a genuinely active approved leave covering this date
+            // Auto-heal DB:
+            // Case A: Promoted to HOME-LEAVE if approved leave was found covering departure
             if (matchedPerm && (!rawType.includes('leave') || !record.permissionId)) {
                 const gpId = record._id || record.id;
                 if (gpId) {
                     passesToAutoSync.push({
                         id: gpId.toString(),
+                        type: "HOME-LEAVE",
                         permId: effectivePermId ? effectivePermId.toString() : undefined,
                         reason: genuineReason || undefined
+                    });
+                }
+            }
+            // Case B: Demoted to GATE-PASS if checkout occurred after the approved leave ended
+            else if (originallyLeave && isLeaveExpired) {
+                const gpId = record._id || record.id;
+                if (gpId) {
+                    passesToAutoSync.push({
+                        id: gpId.toString(),
+                        type: "GATE-PASS",
+                        permId: null,
+                        reason: "Gate Pass (Outing)"
                     });
                 }
             }
@@ -263,12 +288,12 @@ export async function GET(request: NextRequest) {
             };
         });
 
-        // ⚡ ASYNC AUTO-HEAL: Update the gate pass record in the database so history & subsequent calls retain HOME-LEAVE
+        // ⚡ ASYNC AUTO-HEAL: Update the gate pass record in the database so history & subsequent calls retain correct type
         if (passesToAutoSync.length > 0) {
             Promise.all(passesToAutoSync.map(item => 
                 db.gatePasses.update(item.id, {
-                    type: "HOME-LEAVE",
-                    ...(item.permId ? { permissionId: item.permId } : {}),
+                    type: (item as any).type || "HOME-LEAVE",
+                    ...((item as any).permId !== undefined ? { permissionId: (item as any).permId } : {}),
                     ...(item.reason ? { reason: item.reason } : {})
                 }).catch((e: any) => console.error("Auto-sync gatepass leave type error:", e))
             )).catch(() => {});

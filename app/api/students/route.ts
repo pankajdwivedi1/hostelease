@@ -846,17 +846,23 @@ export async function GET(request: NextRequest) {
           const toMs = perm.toDateTime ? new Date(perm.toDateTime).getTime() : 0;
           return fromMs > 0 && toMs > 0 && fromMs <= nowMs && nowMs <= toMs;
         });
+        const pCheckOutMs = new Date(p.checkOutTime || p.createdAt).getTime();
+        const matchedPermForPass = permissionId ? studentPermissions.find((perm: any) => String(perm.id) === String(permissionId)) : null;
+        const pLeaveEndMs = matchedPermForPass?.toDateTime ? new Date(matchedPermForPass.toDateTime).getTime() : (p.toDateTime || p.expectedReturnDate ? new Date(p.toDateTime || p.expectedReturnDate).getTime() : 0);
+        const isLeavePassExpired = pLeaveEndMs > 0 ? pCheckOutMs > pLeaveEndMs : false;
+        const effectiveOutingType = (!isLeavePassExpired && (hasApprovedPermission || normalizedType === 'leave')) ? 'leave' : 'outing';
+
         const passDetails = {
           id: p.id || p._id,
           status: p.status,
           permissionId: permissionId || null,
           hasApprovedPermission,
-          outingType: hasApprovedPermission ? 'leave' : normalizedType,
-          reason: p.reason || p.destination || null,
+          outingType: effectiveOutingType,
+          reason: effectiveOutingType === 'leave' ? (p.reason || p.destination || null) : (p.reason || 'Gate Pass (Outing)'),
           checkOutTime: p.checkOutTime || null,
           checkInTime: p.checkInTime || null,
-          fromDateTime: p.fromDateTime || (p.checkOutIstDate ? `${p.checkOutIstDate} ${p.checkOutIstTime || ''}` : p.checkOutTime),
-          toDateTime: p.toDateTime || p.expectedReturnDate || p.expectedReturnIstDate || null,
+          fromDateTime: effectiveOutingType === 'leave' ? (p.fromDateTime || (p.checkOutIstDate ? `${p.checkOutIstDate} ${p.checkOutIstTime || ''}` : p.checkOutTime)) : p.checkOutTime,
+          toDateTime: effectiveOutingType === 'leave' ? (p.toDateTime || p.expectedReturnDate || p.expectedReturnIstDate || null) : null,
           checkOutIstDate: p.checkOutIstDate,
           checkOutIstTime: p.checkOutIstTime,
         };
@@ -917,10 +923,13 @@ export async function GET(request: NextRequest) {
           const sId = (s.id || s._id)?.toString();
           const perm = sId ? permsById.get(sId) : null;
           if (perm) {
-            if (perm.fromDateTime) s.leaveFrom = perm.fromDateTime;
-            if (perm.toDateTime) s.leaveTo = perm.toDateTime;
-            if (perm.reason) s.leaveReason = perm.reason;
-            s.permissionStatus = perm.status;
+            const permEndMs = perm.toDateTime ? new Date(perm.toDateTime).getTime() : 0;
+            if (permEndMs >= nowMs || s.outingType === 'leave') {
+              if (perm.fromDateTime) s.leaveFrom = perm.fromDateTime;
+              if (perm.toDateTime) s.leaveTo = perm.toDateTime;
+              if (perm.reason) s.leaveReason = perm.reason;
+              s.permissionStatus = perm.status;
+            }
           }
         });
       } catch (permErr) {

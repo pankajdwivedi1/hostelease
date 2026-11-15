@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getAuthSession } from "@/lib/authSession";
+import { extractFaceDescriptorServer } from "@/lib/serverBossFaceAuth";
 import { PrismaClient } from "@prisma/client";
 
 const prisma = new PrismaClient();
@@ -7,9 +8,10 @@ const prisma = new PrismaClient();
 export const dynamic = "force-dynamic";
 
 /**
- * 🛡️ SUPERADMIN FACE ENROLLMENT ENDPOINT
+ * 🛡️ SUPERADMIN FACE ENROLLMENT ENDPOINT (SERVER-SIDE SUPPORTED)
  * 
  * Saves Dr. Pankaj Dwivedi's 128-D biometric vector into PlatformSetting (`boss_superadmin_auth`).
+ * If client only sends photoUrl (zero browser models), server extracts vector automatically.
  */
 export async function POST(req: NextRequest) {
   try {
@@ -17,11 +19,25 @@ export async function POST(req: NextRequest) {
     const body = await req.json();
     const { descriptor, photoUrl } = body;
 
-    if (!Array.isArray(descriptor) || descriptor.length !== 128) {
-      return NextResponse.json({
-        success: false,
-        error: "Valid 128-D biometric face vector is required"
-      }, { status: 400 });
+    let finalDescriptor = descriptor;
+
+    if (!Array.isArray(finalDescriptor) || finalDescriptor.length !== 128) {
+      if (!photoUrl || typeof photoUrl !== "string" || photoUrl.length < 50) {
+        return NextResponse.json({
+          success: false,
+          error: "Valid 128-D biometric face vector or face photo is required"
+        }, { status: 400 });
+      }
+
+      const extraction = await extractFaceDescriptorServer(photoUrl);
+      if (!extraction.success || !extraction.descriptor) {
+        return NextResponse.json({
+          success: false,
+          error: extraction.error || "Could not detect clear face for enrollment. Please ensure good lighting."
+        }, { status: 400 });
+      }
+
+      finalDescriptor = extraction.descriptor;
     }
 
     // Check existing auth setting
@@ -40,7 +56,7 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    authSettings.faceDescriptor = descriptor;
+    authSettings.faceDescriptor = finalDescriptor;
     authSettings.enrolledAt = new Date().toISOString();
     if (photoUrl && typeof photoUrl === "string") {
       authSettings.photoUrl = photoUrl;

@@ -63,11 +63,6 @@ export default function BossFaceModal({ isOpen, mode, onClose, onSuccess }: Boss
                 setIsCameraActive(true);
             }
             setIsConnecting(false);
-
-            // Preload models in background
-            const { loadFaceApiModels } = await import("@/lib/faceMatching");
-            loadFaceApiModels(true).catch(console.error);
-
         } catch (err: any) {
             console.error("Boss camera error:", err);
             setIsConnecting(false);
@@ -97,81 +92,31 @@ export default function BossFaceModal({ isOpen, mode, onClose, onSuccess }: Boss
         if (!videoRef.current || isProcessing) return;
         setIsProcessing(true);
         setErrorMessage(null);
-        setStatusMessage("📸 Analyzing face & biometric vector...");
+        setStatusMessage("📸 Capturing & analyzing biometrics on server...");
 
         try {
             const video = videoRef.current;
-            const faceMatching = await import("@/lib/faceMatching");
 
-            // 1. Draw frame to 520px neural net canvas
-            const maxDim = 520;
-            let vw = video.videoWidth || 640;
-            let vh = video.videoHeight || 480;
-            let cw = vw;
-            let ch = vh;
-            if (cw > maxDim || ch > maxDim) {
-                if (cw > ch) {
-                    ch = Math.round((ch / cw) * maxDim);
-                    cw = maxDim;
-                } else {
-                    cw = Math.round((cw / ch) * maxDim);
-                    ch = maxDim;
-                }
-            }
+            // 1. Draw live camera frame directly to canvas (Zero client-side model downloads)
+            const vw = video.videoWidth || 640;
+            const vh = video.videoHeight || 480;
 
             const aiCanvas = document.createElement("canvas");
-            aiCanvas.width = cw;
-            aiCanvas.height = ch;
+            aiCanvas.width = vw;
+            aiCanvas.height = vh;
             const ctx = aiCanvas.getContext("2d");
-            ctx?.drawImage(video, 0, 0, cw, ch);
+            ctx?.drawImage(video, 0, 0, vw, vh);
 
-            // 2. Detect face
-            await faceMatching.loadFaceApiModels(true);
-            const res = await faceMatching.detectFace(aiCanvas, true, true);
-
-            if (!res || !res.descriptor) {
-                setErrorMessage("No clear face detected! Please face the camera directly.");
-                setIsProcessing(false);
-                return;
-            }
-
-            // 3. Strict Background Lighting Check (Reject dark rooms)
-            if (res.detection?.box) {
-                const bgCheck = faceMatching.assessBackgroundLighting(aiCanvas, res.detection.box);
-                if (bgCheck.isDarkBackground) {
-                    setErrorMessage(bgCheck.reason || "Dark room or black background detected. Please turn on lights.");
-                    setIsProcessing(false);
-                    return;
-                }
-            }
-
-            // 4. Sharpness Check
-            const quality = faceMatching.assessPhotoQuality(aiCanvas);
-            if (quality.isPhotoOfPhoto) {
-                setErrorMessage("Phone screen or printed photo detected! Please present your live face.");
-                setIsProcessing(false);
-                return;
-            }
-
-            const dataUrl = aiCanvas.toDataURL("image/jpeg", 0.90);
-            setStatusMessage("🛡️ Verifying physical liveness...");
+            const dataUrl = aiCanvas.toDataURL("image/jpeg", 0.92);
+            setStatusMessage("🛡️ Verifying neural liveness & anti-spoof on server...");
 
             if (mode === "login") {
-                // VERIFY LOGIN
+                // 2. VERIFY LOGIN (100% Server-Side Biometrics & Anti-Spoof)
                 const response = await fetch("/api/super-admin/auth/face", {
                     method: "POST",
                     headers: { "Content-Type": "application/json" },
                     body: JSON.stringify({
-                        image: dataUrl,
-                        descriptor: Array.from(res.descriptor),
-                        box: res.detection?.box ? {
-                            x: res.detection.box.x,
-                            y: res.detection.box.y,
-                            width: res.detection.box.width,
-                            height: res.detection.box.height,
-                            canvasWidth: cw,
-                            canvasHeight: ch
-                        } : undefined
+                        image: dataUrl
                     })
                 });
 
@@ -189,12 +134,11 @@ export default function BossFaceModal({ isOpen, mode, onClose, onSuccess }: Boss
                 }, 800);
 
             } else {
-                // ENROLL FACE
+                // 3. ENROLL FACE (100% Server-Side Extraction & Registration)
                 const response = await fetch("/api/super-admin/auth/enroll-face", {
                     method: "POST",
                     headers: { "Content-Type": "application/json" },
                     body: JSON.stringify({
-                        descriptor: Array.from(res.descriptor),
                         photoUrl: dataUrl
                     })
                 });
