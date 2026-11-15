@@ -9,18 +9,35 @@ export function middleware(request: NextRequest) {
     // Instantly abort requests for WordPress, PHP, .env, or known exploit probes with zero server overhead
     const lowerPath = pathname.toLowerCase();
     const isVulnerabilityScan =
-        lowerPath.includes('wp-') ||
-        lowerPath.includes('/.env') ||
-        lowerPath.includes('/.git') ||
-        lowerPath.includes('phpmyadmin') ||
-        lowerPath.includes('xmlrpc') ||
-        lowerPath.includes('actuator') ||
-        lowerPath.includes('/eval-stdin') ||
-        lowerPath.includes('solr') ||
-        lowerPath.includes('telescope') ||
-        lowerPath.endsWith('.php') ||
-        lowerPath.endsWith('.asp') ||
-        lowerPath.endsWith('.aspx');
+        pathname !== '/robots.txt' &&
+        pathname !== '/sitemap.xml' &&
+        pathname !== '/.well-known/assetlinks.json' &&
+        (
+            lowerPath.includes('wp-') ||
+            lowerPath.includes('/.env') ||
+            lowerPath.includes('/env.') ||
+            lowerPath.includes('__env') ||
+            lowerPath.includes('/.git') ||
+            lowerPath.includes('phpmyadmin') ||
+            lowerPath.includes('xmlrpc') ||
+            lowerPath.includes('actuator') ||
+            lowerPath.includes('/eval-stdin') ||
+            lowerPath.includes('solr') ||
+            lowerPath.includes('telescope') ||
+            lowerPath.includes('.credentials') ||
+            lowerPath.includes('.htpasswd') ||
+            lowerPath.includes('.pgpass') ||
+            lowerPath.includes('.my.cnf') ||
+            lowerPath.includes('master.key') ||
+            lowerPath.includes('/_catalog') ||
+            lowerPath.includes('/metrics') ||
+            lowerPath.includes('/server-status') ||
+            lowerPath.includes('/namespaces/default/secrets') ||
+            lowerPath.includes('/elmah.axd') ||
+            lowerPath.endsWith('.php') ||
+            lowerPath.endsWith('.asp') ||
+            lowerPath.endsWith('.aspx')
+        );
 
     if (isVulnerabilityScan) {
         return new NextResponse('Not Found', { status: 404 });
@@ -202,8 +219,8 @@ export const config = {
          * - models/ (Face-API & TensorFlow AI model shards)
          * - icons/ (PWA icons)
          * - uploads/ (Static uploaded files)
-         * - Static file extensions: .svg, .png, .jpg, .jpeg, .gif, .webp, .ico, .woff, .woff2, .json, .txt, .xml
+         * - Static binary media & fonts: .svg, .png, .jpg, .jpeg, .gif, .webp, .ico, .woff, .woff2
          */
-        '/((?!_next/static|_next/image|favicon.ico|models/|icons/|uploads/|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico|woff|woff2|txt|xml)$).*)',
+        '/((?!_next/static|_next/image|favicon.ico|models/|icons/|uploads/|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico|woff|woff2)$).*)',
     ],
 };

@@ -1952,7 +1952,7 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
     const fetchSystemSettings = async () => {
         try {
             // ⚡ 1-HOUR CLIENT CACHE: Dramatically reduces redundant server pings
-            const CACHE_TTL = 60 * 60 * 1000;
+            const CACHE_TTL = 24 * 60 * 60 * 1000;
             if (typeof window !== 'undefined') {
                 try {
                     const localCached = localStorage.getItem("cached_sys_settings_v1");
@@ -1984,7 +1984,7 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
                 return;
             }
 
-            const res = await fetch(`/api/admin/settings${getTenantParam()}`, { cache: "no-store" });
+            const res = await fetch(`/api/admin/settings${getTenantParam()}`);
             if (!res.ok) return;
             const data = await res.json();
             if (data.success) {

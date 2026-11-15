@@ -357,9 +357,25 @@ export default function GatepassView({
                     setGateName(activeName);
                 }
 
-                const res = await fetch(`/api/admin/settings?t=${Date.now()}`);
+                // ⚡ 24-HOUR CLIENT CACHE: Check cached settings first (0 HTTP requests!)
+                const cacheKey = "cached_gate_settings_v2";
+                const cached = typeof window !== "undefined" ? localStorage.getItem(cacheKey) : null;
+                if (cached) {
+                    try {
+                        const { data, ts } = JSON.parse(cached);
+                        if (Date.now() - ts < 86400000 && data?.success) {
+                            if (isMounted) applyGateSettings(data);
+                            return;
+                        }
+                    } catch (_) {}
+                }
+
+                const res = await fetch("/api/admin/settings");
                 const data = await res.json();
                 if (!isMounted || !data?.success) return;
+                try {
+                    localStorage.setItem(cacheKey, JSON.stringify({ data, ts: Date.now() }));
+                } catch (_) {}
                 applyGateSettings(data);
             } catch (err) {
                 console.warn("Gate mode auto-sync error:", err);
@@ -950,6 +966,9 @@ export default function GatepassView({
                         const data = event.data ? JSON.parse(event.data) : null;
                         console.log("⚡ [GATEPASS_SSE] Remote gate mode change received in milliseconds:", data);
                         if (data) {
+                            try {
+                                localStorage.setItem("cached_gate_settings_v2", JSON.stringify({ data, ts: Date.now() }));
+                            } catch (_) {}
                             applyGateSettings(data);
                         }
                     } catch (_) {}

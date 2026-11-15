@@ -4073,13 +4073,36 @@ export default function AdminDashboard({
       // Fetch Registration Fields Config
       const targetSlug = isOgiTenantSession() ? "ogi" : (new URLSearchParams(window.location.search).get("tenant") || "ogi").toLowerCase();
       const userTypeHeader = (typeof window !== "undefined" ? localStorage.getItem("userType") : null) || "superadmin";
-      const settingsRes = await fetch(`/api/admin/settings?tenant=${targetSlug}`, {
-        cache: "no-store",
-        headers: { "x-user-type": userTypeHeader }
-      });
-      if (settingsRes.ok) {
-        const settingsData = await settingsRes.json();
-        if (settingsData.success) {
+
+      // ⚡ 24-HOUR CLIENT CACHE: Check cached system settings first (0 network calls!)
+      const cacheKey = `cached_admin_sys_settings_${targetSlug}`;
+      let settingsData: any = null;
+      if (typeof window !== "undefined") {
+        try {
+          const cached = localStorage.getItem(cacheKey);
+          if (cached) {
+            const { data, ts } = JSON.parse(cached);
+            if (Date.now() - ts < 86400000 && data?.success) {
+              settingsData = data;
+            }
+          }
+        } catch (_) {}
+      }
+
+      if (!settingsData) {
+        const settingsRes = await fetch(`/api/admin/settings?tenant=${targetSlug}`, {
+          headers: { "x-user-type": userTypeHeader }
+        });
+        if (settingsRes.ok) {
+          settingsData = await settingsRes.json();
+          if (settingsData?.success && typeof window !== "undefined") {
+            try {
+              localStorage.setItem(cacheKey, JSON.stringify({ data: settingsData, ts: Date.now() }));
+            } catch (_) {}
+          }
+        }
+      }
+        if (settingsData && settingsData.success) {
           const config = settingsData.registrationFieldsConfig || {};
           setRequireUndertaking(!!config.requireUndertaking);
           setUndertakingText(config.undertakingText || DEFAULT_UNDERTAKING_TEXT);
@@ -4153,7 +4176,6 @@ export default function AdminDashboard({
             setNotificationSettings(prev => ({ ...prev, ...settingsData.notificationSettings }));
           }
         }
-      }
 
       // Fetch Hostels (with warden/room info)
       try {
