@@ -9478,11 +9478,8 @@ export default function AdminDashboard({
                         <span className="truncate">Export DB</span>
                       </button>
 
-
-
-
-                  {title === "Super Admin Dashboard" && (
-                    <button
+                      {/* 8. Sync Data */}
+                      <button
                       onClick={async () => {
                         if (isSyncingData) return;
                         setIsSyncingData(true);
