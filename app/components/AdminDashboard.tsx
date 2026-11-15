@@ -9654,46 +9654,46 @@ export default function AdminDashboard({
                           const isExpanded = !!expandedLocations[index];
                           return (
                             <div key={index} className="flex flex-col group relative py-0.5 px-1 rounded hover:bg-gray-50 transition-colors">
-                              <div className="flex items-center justify-between gap-1 flex-nowrap w-full text-[8px] sm:text-[9.5px] md:text-xs font-bold uppercase tracking-tight leading-normal">
+                              <div className="flex items-center justify-between gap-1 flex-nowrap w-full text-[10px] sm:text-xs md:text-[13px] leading-normal font-sans">
                                 <span className="truncate flex-1">
-                                  <span className="text-gray-900 mr-0.5">{index + 1}.</span>
-                                  <span className="text-gray-500 font-semibold lowercase tracking-normal">Location name: </span>
+                                  <span className="font-bold text-gray-900 mr-1">{index + 1}.</span>
+                                  <span className="font-medium text-gray-600">Location name: </span>
                                   <span
                                     onClick={() => setExpandedLocations(prev => ({ ...prev, [index]: !prev[index] }))}
                                     className="cursor-pointer text-blue-600 hover:text-blue-800 font-bold uppercase transition-colors underline-offset-1 hover:underline"
                                   >
                                     {loc.name?.trim()}
                                   </span>
-                                  <span className="text-gray-500 font-semibold lowercase tracking-normal">, Radius:</span>
-                                  <span className="text-gray-800 font-bold">{loc.radius}</span>
+                                  <span className="font-medium text-gray-600">, Radius: </span>
+                                  <span className="font-bold text-gray-800">{loc.radius}</span>
                                 </span>
                                 <div className="flex items-center gap-1 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity flex-shrink-0">
                                   <button
                                     onClick={() => handleEditLocation(index)}
-                                    className="p-0.5 text-blue-600 hover:bg-blue-100 rounded transition-colors"
+                                    className="p-1 text-blue-600 hover:bg-blue-100 rounded transition-colors"
                                     title="Edit location"
                                   >
-                                    <svg className="w-3 h-3 sm:w-3.5 sm:h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" /></svg>
+                                    <svg className="w-3.5 h-3.5 sm:w-4 sm:h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" /></svg>
                                   </button>
                                   <button
                                     onClick={() => handleDeleteLocation(index)}
-                                    className="p-0.5 text-red-600 hover:bg-red-100 rounded transition-colors"
+                                    className="p-1 text-red-600 hover:bg-red-100 rounded transition-colors"
                                     title="Delete location"
                                   >
-                                    <svg className="w-3 h-3 sm:w-3.5 sm:h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
+                                    <svg className="w-3.5 h-3.5 sm:w-4 sm:h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
                                   </button>
                                 </div>
                               </div>
                               {isExpanded && (
-                                <div className="pl-4 text-gray-400 text-[7px] sm:text-[9px] font-medium lowercase">
-                                  lat: {loc.lat}, lng: {loc.lng}
+                                <div className="pl-4 text-gray-400 text-[8.5px] sm:text-[10px] md:text-xs font-medium">
+                                  Lat: {loc.lat}, Lng: {loc.lng}
                                 </div>
                               )}
                             </div>
                           );
                         })
                       ) : (
-                        <div className="text-center py-2 text-gray-400 italic text-[8px] sm:text-xs">
+                        <div className="text-center py-2 text-gray-400 italic text-[9.5px] sm:text-xs">
                           No locations configured. Click "New Location" to add one.
                         </div>
                       )}
