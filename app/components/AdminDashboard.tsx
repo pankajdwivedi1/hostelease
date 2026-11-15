@@ -2612,6 +2612,7 @@ export default function AdminDashboard({
   const [homeLeaveReason, setHomeLeaveReason] = useState("Going Home / Visiting Family");
   const [homeLeaveReasonCategory, setHomeLeaveReasonCategory] = useState("Going Home / Visiting Family");
   const [homeLeaveCustomReason, setHomeLeaveCustomReason] = useState("");
+  const [isLeaveReasonDropdownOpen, setIsLeaveReasonDropdownOpen] = useState(false);
   const [isSubmittingHomeLeave, setIsSubmittingHomeLeave] = useState(false);
   const [editLeaveModalData, setEditLeaveModalData] = useState<{
     permissionId?: string;
@@ -4318,6 +4319,7 @@ export default function AdminDashboard({
       setHomeLeaveReason("Going Home / Visiting Family");
       setHomeLeaveCustomReason("");
     }
+    setIsLeaveReasonDropdownOpen(false);
     setShowHomeLeaveModal(true);
   };
 
@@ -22632,33 +22634,68 @@ export default function AdminDashboard({
                 />
               </div>
 
-              <div>
+              <div className="relative">
                 <label className="block text-xs font-black uppercase tracking-wider text-slate-500 mb-1">Reason for Leave</label>
-                <div className="relative">
-                  <select
-                    value={homeLeaveReasonCategory}
-                    onChange={(e) => {
-                      const val = e.target.value;
-                      setHomeLeaveReasonCategory(val);
-                      if (val === "Other (Please Specify)") {
-                        setHomeLeaveReason(homeLeaveCustomReason || "");
-                      } else {
-                        setHomeLeaveReason(val);
-                      }
-                    }}
-                    className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-800 focus:outline-none focus:ring-2 focus:ring-amber-500 appearance-none pr-8 cursor-pointer"
+                {/* Custom compact dropdown trigger */}
+                <button
+                  type="button"
+                  onClick={() => setIsLeaveReasonDropdownOpen(prev => !prev)}
+                  className="w-full flex items-center justify-between px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-[11px] sm:text-xs font-bold text-slate-800 focus:outline-none focus:ring-2 focus:ring-amber-500 transition-all text-left shadow-2xs hover:bg-slate-100/70"
+                >
+                  <span className="truncate pr-2">
+                    {homeLeaveReasonCategory || "-- Select Reason for Leave --"}
+                  </span>
+                  <svg
+                    className={`w-3.5 h-3.5 text-slate-400 shrink-0 transition-transform duration-200 ${isLeaveReasonDropdownOpen ? "rotate-180 text-amber-500" : ""}`}
+                    fill="none"
+                    stroke="currentColor"
+                    viewBox="0 0 24 24"
                   >
-                    <option value="">-- Select Reason for Leave --</option>
-                    {HOME_LEAVE_REASONS.map((r, i) => (
-                      <option key={i} value={r}>{r}</option>
-                    ))}
-                  </select>
-                  <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2.5 text-slate-400">
-                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7" />
-                    </svg>
-                  </div>
-                </div>
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M19 9l-7 7-7-7" />
+                  </svg>
+                </button>
+
+                {/* Compact mobile-friendly dropdown menu with auto-close on selection */}
+                {isLeaveReasonDropdownOpen && (
+                  <>
+                    <div
+                      className="fixed inset-0 z-10"
+                      onClick={() => setIsLeaveReasonDropdownOpen(false)}
+                    />
+                    <div className="absolute left-0 right-0 top-full mt-1 z-20 max-h-48 overflow-y-auto bg-white border border-slate-200 rounded-xl shadow-xl py-1 divide-y divide-slate-100 animate-in fade-in zoom-in-95 duration-150">
+                      {HOME_LEAVE_REASONS.map((r, i) => {
+                        const isSelected = homeLeaveReasonCategory === r;
+                        return (
+                          <button
+                            key={i}
+                            type="button"
+                            onClick={() => {
+                              setHomeLeaveReasonCategory(r);
+                              if (r === "Other (Please Specify)") {
+                                setHomeLeaveReason(homeLeaveCustomReason || "");
+                              } else {
+                                setHomeLeaveReason(r);
+                              }
+                              setIsLeaveReasonDropdownOpen(false);
+                            }}
+                            className={`w-full flex items-center justify-between px-3 py-2 text-left text-[11px] sm:text-xs font-semibold transition-colors ${
+                              isSelected
+                                ? "bg-amber-50 text-amber-700 font-bold"
+                                : "text-slate-700 hover:bg-slate-50 active:bg-amber-50"
+                            }`}
+                          >
+                            <span className="leading-snug">{r}</span>
+                            {isSelected && (
+                              <svg className="w-3.5 h-3.5 text-amber-600 shrink-0 ml-1.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d="M5 13l4 4L19 7" />
+                              </svg>
+                            )}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </>
+                )}
               </div>
 
               {homeLeaveReasonCategory === "Other (Please Specify)" && (
