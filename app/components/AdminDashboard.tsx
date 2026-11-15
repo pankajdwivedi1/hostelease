@@ -10643,7 +10643,7 @@ export default function AdminDashboard({
                       <div className="flex flex-wrap items-center justify-between gap-3 w-full">
                         <div className="w-full sm:w-auto">
                           <div className="flex items-center justify-between sm:justify-start gap-1.5 sm:gap-3 w-full">
-                            <h2 className="text-xs sm:text-lg font-bold text-foreground truncate sm:whitespace-normal">Daily Attendance Monitoring</h2>
+                            <h2 className="text-xs sm:text-lg font-bold text-foreground truncate sm:whitespace-normal">Attendance Monitoring</h2>
                             {/* View Mode Toggle: sits right side of Daily Attendance Monitoring on both Mobile & Desktop */}
                             <div className="bg-gray-100 p-0.5 sm:p-1 rounded-lg sm:rounded-xl inline-flex shrink-0">
                               <button
