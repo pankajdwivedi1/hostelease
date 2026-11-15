@@ -171,7 +171,7 @@ export async function GET(request: NextRequest) {
         const uniqueStudentsOut = currentlyOut.length;
 
         // Track any passes that should be auto-healed to HOME-LEAVE in the database
-        const passesToAutoSync: { id: string; permId?: string; reason?: string }[] = [];
+        const passesToAutoSync: { id: string; type?: string; permId?: string | null; reason?: string }[] = [];
 
         // Use the deduplicated list for display (no extra healing needed as it's already mapped)
         const currentlyOutWithDuration = currentlyOut.map((record: any) => {

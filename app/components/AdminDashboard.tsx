@@ -53,6 +53,20 @@ import {
   useParentConsentVideoPrefetch,
 } from "@/lib/parentConsentVideo";
 
+const HOME_LEAVE_REASONS = [
+  "Going Home / Visiting Family",
+  "Festival Celebration / Holidays",
+  "Family Function / Marriage Ceremony",
+  "Medical Treatment / Health Issue",
+  "Academic / Competitive Examination",
+  "Internship / Job Interview / Placement Drive",
+  "Educational Seminar / Workshop / College Event",
+  "Urgent Family Emergency",
+  "Semester Break / Vacation Leave",
+  "Government Document / Official Work",
+  "Other (Please Specify)"
+];
+
 const SuperAdminQRAuthCard = dynamic(() => import("./SuperAdminQRAuthCard"), {
   ssr: false,
   loading: () => <div className="p-4 text-xs text-gray-400">Loading QR Scanner...</div>
@@ -2595,7 +2609,9 @@ export default function AdminDashboard({
   const [homeLeaveModalStudent, setHomeLeaveModalStudent] = useState<any>(null);
   const [homeLeaveFromDate, setHomeLeaveFromDate] = useState("");
   const [homeLeaveToDate, setHomeLeaveToDate] = useState("");
-  const [homeLeaveReason, setHomeLeaveReason] = useState("Home Leave (Manual Approval)");
+  const [homeLeaveReason, setHomeLeaveReason] = useState("Going Home / Visiting Family");
+  const [homeLeaveReasonCategory, setHomeLeaveReasonCategory] = useState("Going Home / Visiting Family");
+  const [homeLeaveCustomReason, setHomeLeaveCustomReason] = useState("");
   const [isSubmittingHomeLeave, setIsSubmittingHomeLeave] = useState(false);
   const [editLeaveModalData, setEditLeaveModalData] = useState<{
     permissionId?: string;
@@ -4274,18 +4290,33 @@ export default function AdminDashboard({
       return matches && (rType.includes('leave') || rType === 'hleave') && p.status !== 'rejected' && p.status !== 'cancelled';
     });
 
+    const rawExistingReason = matchingPerm?.reason || student?.leaveReason || "";
     if (matchingPerm) {
       if (matchingPerm.fromDateTime) setHomeLeaveFromDate(formatForInputIST(new Date(matchingPerm.fromDateTime)));
       else setHomeLeaveFromDate(localNowStr);
 
       if (matchingPerm.toDateTime) setHomeLeaveToDate(formatForInputIST(new Date(matchingPerm.toDateTime)));
       else setHomeLeaveToDate(sixDaysLaterStr);
-
-      setHomeLeaveReason(matchingPerm.reason || "Home Leave");
     } else {
       setHomeLeaveFromDate(localNowStr);
       setHomeLeaveToDate(sixDaysLaterStr);
-      setHomeLeaveReason(student?.leaveReason || "Home Leave");
+    }
+
+    // Auto-pick reason from active permission/student or default to first category
+    if (rawExistingReason) {
+      if (HOME_LEAVE_REASONS.includes(rawExistingReason) && rawExistingReason !== "Other (Please Specify)") {
+        setHomeLeaveReasonCategory(rawExistingReason);
+        setHomeLeaveReason(rawExistingReason);
+        setHomeLeaveCustomReason("");
+      } else {
+        setHomeLeaveReasonCategory("Other (Please Specify)");
+        setHomeLeaveReason(rawExistingReason);
+        setHomeLeaveCustomReason(rawExistingReason);
+      }
+    } else {
+      setHomeLeaveReasonCategory("Going Home / Visiting Family");
+      setHomeLeaveReason("Going Home / Visiting Family");
+      setHomeLeaveCustomReason("");
     }
     setShowHomeLeaveModal(true);
   };
@@ -22602,15 +22633,49 @@ export default function AdminDashboard({
               </div>
 
               <div>
-                <label className="block text-xs font-black uppercase tracking-wider text-slate-500 mb-1">Reason / Remarks</label>
-                <input
-                  type="text"
-                  value={homeLeaveReason}
-                  onChange={(e) => setHomeLeaveReason(e.target.value)}
-                  placeholder="e.g. Family Function / Medical / Festival"
-                  className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-800 focus:outline-none focus:ring-2 focus:ring-amber-500"
-                />
+                <label className="block text-xs font-black uppercase tracking-wider text-slate-500 mb-1">Reason for Leave</label>
+                <div className="relative">
+                  <select
+                    value={homeLeaveReasonCategory}
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      setHomeLeaveReasonCategory(val);
+                      if (val === "Other (Please Specify)") {
+                        setHomeLeaveReason(homeLeaveCustomReason || "");
+                      } else {
+                        setHomeLeaveReason(val);
+                      }
+                    }}
+                    className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-800 focus:outline-none focus:ring-2 focus:ring-amber-500 appearance-none pr-8 cursor-pointer"
+                  >
+                    <option value="">-- Select Reason for Leave --</option>
+                    {HOME_LEAVE_REASONS.map((r, i) => (
+                      <option key={i} value={r}>{r}</option>
+                    ))}
+                  </select>
+                  <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2.5 text-slate-400">
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7" />
+                    </svg>
+                  </div>
+                </div>
               </div>
+
+              {homeLeaveReasonCategory === "Other (Please Specify)" && (
+                <div className="animate-in fade-in slide-in-from-top-1 duration-200">
+                  <label className="block text-xs font-black uppercase tracking-wider text-slate-500 mb-1">Specify Reason / Remarks</label>
+                  <textarea
+                    rows={2}
+                    value={homeLeaveCustomReason}
+                    onChange={(e) => {
+                      setHomeLeaveCustomReason(e.target.value);
+                      setHomeLeaveReason(e.target.value);
+                    }}
+                    placeholder="Mention specific reason (e.g. Village visit, medical emergency, etc.)"
+                    className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-800 focus:outline-none focus:ring-2 focus:ring-amber-500 resize-none"
+                  />
+                </div>
+              )}
             </div>
 
             <div className="flex items-center gap-2 pt-2">
