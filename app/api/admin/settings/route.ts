@@ -255,6 +255,37 @@ export async function POST(request: NextRequest) {
             timestamp: Date.now()
         });
 
+        // ⚡ CAMPUS BROADCAST: If attendance time changed, broadcast push & in-app notification to all students
+        if (startTime || endTime) {
+            const newStart = settings?.attendanceStartTime || startTime;
+            const newEnd = settings?.attendanceEndTime || endTime;
+            try {
+                db.notifications.create({
+                    senderId: (session as any)?.user?.id || 'admin',
+                    senderRole: 'superadmin',
+                    targetType: 'all',
+                    message: `⏰ Attendance Time Updated: Students can mark attendance between ${newStart} and ${newEnd}.`,
+                    priority: 'urgent',
+                    expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000)
+                }).catch(() => {});
+                import('@/lib/pushNotification').then(({ sendPushNotification }) => {
+                    db.students.getAll().then((allStudents: any[]) => {
+                        (allStudents || []).forEach((st: any) => {
+                            if (st.pushSubscription) {
+                                sendPushNotification(st.pushSubscription, {
+                                    title: '⏰ Attendance Time Updated',
+                                    body: `Attendance is now ${newStart} to ${newEnd}.`,
+                                    url: '/student/dashboard'
+                                }).catch(() => {});
+                            }
+                        });
+                    }).catch(() => {});
+                }).catch(() => {});
+            } catch (err) {
+                console.warn('Silent notification broadcast error:', err);
+            }
+        }
+
         return NextResponse.json({
             success: true,
             settings,
