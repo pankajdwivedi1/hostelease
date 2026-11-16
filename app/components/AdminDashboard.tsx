@@ -1750,6 +1750,28 @@ export default function AdminDashboard({
     });
   }, []);
 
+  // ⚡ Helper to format gate name cleanly for display matching configured campus gate settings
+  const formatGateDisplayName = useCallback((gate?: string | null): string => {
+    if (typeof window !== 'undefined') {
+      const active = localStorage.getItem('activeGateName');
+      if (active && (!gate || gate === 'Not Checked Out Yet' || /oriental\s+group\s+of\s+institutes\s+bhopal/i.test(gate) || /^ogi\s+bhopal/i.test(gate) || /^main\s*gate$/i.test(gate))) {
+        return active;
+      }
+    }
+    if (!gate || gate === 'Not Checked Out Yet') return 'GATE-1';
+    const trimmed = gate.trim();
+    if (/oriental\s+group\s+of\s+institutes\s+bhopal/i.test(trimmed)) {
+      return 'GATE-1';
+    }
+    if (/^ogi\s+bhopal/i.test(trimmed)) {
+      return 'GATE-1';
+    }
+    if (/^main\s*gate$/i.test(trimmed)) {
+      return 'GATE-1';
+    }
+    return trimmed;
+  }, []);
+
   const fetchStudentProfileHistory = useCallback(async (student: StudentDetails) => {
     setIsLoadingStudentHistory(true);
     try {
@@ -1930,6 +1952,7 @@ export default function AdminDashboard({
             parentStatus: p.parentStatus,
             parentConsentUrl: p.parentConsentUrl || p.consentVideoUrl || p.videoUrl || p.parentVideoUrl || matchingGp.parentConsentUrl,
             gateName: matchingGp.gateName || 'Main Gate',
+            inGateName: matchingGp.inGateName || matchingGp.in_gate_name || matchingGp.gateName || 'Main Gate',
             durationMinutes: matchingGp.durationMinutes,
             hasGateMovement: true,
             createdAt: p.createdAt || matchingGp.createdAt,
@@ -1998,6 +2021,7 @@ export default function AdminDashboard({
             parentStatus: null,
             parentConsentUrl: gp.parentConsentUrl,
             gateName: gp.gateName || 'Main Gate',
+            inGateName: gp.inGateName || gp.in_gate_name || gp.gateName || 'Main Gate',
             durationMinutes: gp.durationMinutes,
             hasGateMovement: true,
             createdAt: gp.createdAt,
@@ -2035,6 +2059,7 @@ export default function AdminDashboard({
         destination: gp.destination,
         status: gp.status,
         gateName: gp.gateName || 'Main Gate',
+        inGateName: gp.inGateName || gp.in_gate_name || gp.gateName || 'Main Gate',
         durationMinutes: gp.durationMinutes,
         qrTokenUsedOut: gp.qrTokenUsedOut,
         createdAt: gp.createdAt,
@@ -3147,7 +3172,8 @@ export default function AdminDashboard({
   const executeMarkBulkAttendance = async (studentIds: string[]) => {
     setIsBulkMarking(true);
     try {
-      const storedUserName = typeof window !== 'undefined' ? (localStorage.getItem("userName") || localStorage.getItem("wardenUsername") || localStorage.getItem("userType") || "Admin") : "Admin";
+      const rawStoredUserName = typeof window !== 'undefined' ? (localStorage.getItem("userName") || localStorage.getItem("wardenUsername") || localStorage.getItem("userType") || "Admin") : "Admin";
+      const storedUserName = (rawStoredUserName && rawStoredUserName.includes("_")) ? rawStoredUserName.split("_")[0].trim() : rawStoredUserName;
       
       const now = new Date();
       const istDate = now.toLocaleDateString("en-IN", { timeZone: "Asia/Kolkata", day: "2-digit", month: "2-digit", year: "numeric" }).split('/').join('-');
@@ -3692,6 +3718,61 @@ export default function AdminDashboard({
   const formatDate = (dateString: string | undefined) => {
     if (!dateString) return "N/A";
     return formatDateDDMMYYYY(dateString);
+  };
+
+  // Helper to extract clean Warden Name dynamically connected with Hostel Management
+  const formatWardenDisplayName = (markedBy?: string, hostelName?: string, studentIdOrObj?: any): string => {
+    let rawHostel = (hostelName || "").trim();
+    if (!rawHostel && studentIdOrObj) {
+      const sId = typeof studentIdOrObj === 'string' ? studentIdOrObj : (studentIdOrObj?._id || studentIdOrObj?.id || studentIdOrObj?.student_id);
+      const student = students.find((s: any) => s.id === sId || s._id === sId || s.studentId === sId);
+      if (student?.hostelName) {
+        rawHostel = student.hostelName.trim();
+      }
+    }
+
+    const category = getHostelCategory(rawHostel) || rawHostel;
+    const targetHostel = (category || "").trim().toLowerCase();
+
+    // 1. FIRST: Connect dynamically to Manage Hostel (hostelsConfig / hostels / hostelLocations)
+    // Always prioritize the live/dynamic configured warden name for the student's hostel!
+    if (targetHostel) {
+      const list = (hostelsConfig && hostelsConfig.length > 0)
+        ? hostelsConfig
+        : ((hostels && hostels.length > 0) ? hostels : (hostelLocations || []));
+      
+      const matched = list.find((h: any) => {
+        const hName = (h.name || "").trim().toLowerCase();
+        return hName && (hName === targetHostel || targetHostel.includes(hName) || hName.includes(targetHostel));
+      });
+
+      if (matched?.wardenUsername) {
+        const rawWarden = String(matched.wardenUsername).trim();
+        const extracted = rawWarden.includes("_") ? rawWarden.split("_")[0].trim() : rawWarden;
+        if (extracted && !/^[\d,\s+]+$/.test(extracted) && extracted.toLowerCase() !== "warden") {
+          return extracted.toUpperCase();
+        }
+      }
+    }
+
+    // 2. SECOND: Fallback if hostel has no configured warden: extract from markedBy
+    const rawMarked = (markedBy || "").trim();
+    if (rawMarked.includes("_")) {
+      const parts = rawMarked.split("_");
+      const prefix = parts[0].trim();
+      if (prefix && !/^[\d,\s+]+$/.test(prefix) && prefix.toLowerCase() !== "warden") {
+        return prefix.toUpperCase();
+      }
+    }
+
+    // 3. THIRD: If markedBy is already a clean name (not pure numbers, not empty, not starting with generic warden_)
+    if (rawMarked) {
+      if (!/^[\d,\s+]+$/.test(rawMarked) && !rawMarked.toLowerCase().startsWith("warden_")) {
+        return rawMarked.toUpperCase();
+      }
+    }
+
+    return "WARDEN";
   };
 
   // Warden Filter Initialization
@@ -5464,9 +5545,21 @@ export default function AdminDashboard({
   const handleUpdateHostelConfig = async (hostel: any) => {
     try {
       setIsSavingSystemSettings(true);
-      setHostels((prev: any[]) =>
-        prev.map((h: any) => ((h._id === hostel._id || h._id === hostel.id || h.id === hostel._id || h.id === hostel.id) ? { ...h, ...hostel } : h))
-      );
+      const updateFn = (prev: any[]) =>
+        prev.map((h: any) => ((h._id === hostel._id || h._id === hostel.id || h.id === hostel._id || h.id === hostel.id) ? { ...h, ...hostel } : h));
+      setHostels(updateFn);
+      setHostelsConfig(updateFn);
+      try {
+        const cached = localStorage.getItem(CACHE_KEYS.HOSTELS);
+        if (cached) {
+          const parsed = JSON.parse(cached);
+          if (Array.isArray(parsed)) {
+            const updatedCache = parsed.map((h: any) => ((h._id === hostel._id || h._id === hostel.id || h.id === hostel._id || h.id === hostel.id) ? { ...h, ...hostel } : h));
+            localStorage.setItem(CACHE_KEYS.HOSTELS, JSON.stringify(updatedCache));
+          }
+        }
+      } catch (cErr) {}
+
       const res = await fetch("/api/admin/hostels", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -11178,11 +11271,11 @@ export default function AdminDashboard({
                                               {log.faceMatchPercentage}% {log.faceMatchStatus === 'flagged' && "🚩"}
                                             </button>
                                           ) : log.markedBy ? (
-                                            <span className="text-[9px] text-purple-600 font-black px-1.5 py-0.5 bg-purple-50 border border-purple-200 rounded tracking-widest whitespace-nowrap">{log.markedBy.toUpperCase()}</span>
+                                            <span className="text-[9px] text-purple-600 font-black px-1.5 py-0.5 bg-purple-50 border border-purple-200 rounded tracking-widest whitespace-nowrap">{formatWardenDisplayName(log.markedBy, log.hostelName || (typeof log.studentId === 'object' ? log.studentId?.hostelName : undefined), log.studentId)}</span>
                                           ) : (log.deviceId === 'marked-by-dean' || (log.deviceId === 'admin-override' && !isWarden)) ? (
                                             <span className="text-[9px] text-blue-600 font-black px-1.5 py-0.5 bg-blue-50 border border-blue-200 rounded tracking-widest whitespace-nowrap">DEAN</span>
                                           ) : (log.deviceId === 'marked-by-warden' || (log.deviceId === 'admin-override' && isWarden)) ? (
-                                            <span className="text-[9px] text-purple-600 font-black px-1.5 py-0.5 bg-purple-50 border border-purple-200 rounded tracking-widest whitespace-nowrap">WARDEN</span>
+                                            <span className="text-[9px] text-purple-600 font-black px-1.5 py-0.5 bg-purple-50 border border-purple-200 rounded tracking-widest whitespace-nowrap">{formatWardenDisplayName(undefined, log.hostelName || (typeof log.studentId === 'object' ? log.studentId?.hostelName : undefined), log.studentId)}</span>
                                           ) : (
                                             <span className="text-[9px] text-gray-300 font-black">---</span>
                                           )}
@@ -11206,7 +11299,7 @@ export default function AdminDashboard({
                                                   }`}
                                               >
                                                 {typeof log.faceMatchPercentage === 'number' && log.faceMatchPercentage !== null ? `${log.faceMatchPercentage}% Match ${log.faceMatchStatus === 'flagged' ? '🚩' : ''}` : ''}
-                                                {log.markedBy ? `${(typeof log.faceMatchPercentage === 'number' && log.faceMatchPercentage !== null) ? ' • ' : ''}Marked by ${log.markedBy}` : (typeof log.faceMatchPercentage !== 'number' || log.faceMatchPercentage === null) && (log.deviceId === 'marked-by-dean' || (log.deviceId === 'admin-override' && !isWarden)) ? `DEAN` : (typeof log.faceMatchPercentage !== 'number' || log.faceMatchPercentage === null) && (log.deviceId === 'marked-by-warden' || (log.deviceId === 'admin-override' && isWarden)) ? `WARDEN` : ''}
+                                                {log.markedBy ? `${(typeof log.faceMatchPercentage === 'number' && log.faceMatchPercentage !== null) ? ' • ' : ''}Marked by ${formatWardenDisplayName(log.markedBy, log.hostelName || (typeof log.studentId === 'object' ? log.studentId?.hostelName : undefined), log.studentId)}` : (typeof log.faceMatchPercentage !== 'number' || log.faceMatchPercentage === null) && (log.deviceId === 'marked-by-dean' || (log.deviceId === 'admin-override' && !isWarden)) ? `DEAN` : (typeof log.faceMatchPercentage !== 'number' || log.faceMatchPercentage === null) && (log.deviceId === 'marked-by-warden' || (log.deviceId === 'admin-override' && isWarden)) ? `Marked by ${formatWardenDisplayName(undefined, log.hostelName || (typeof log.studentId === 'object' ? log.studentId?.hostelName : undefined), log.studentId)}` : ''}
                                               </span>
                                             ) : null}
                                             <button
@@ -15387,84 +15480,95 @@ export default function AdminDashboard({
                                 : 'bg-white border-slate-200/80 hover:border-slate-300'
                             }`}
                           >
-                            {/* Header: Category, Date Badge & Status */}
-                            <div className="flex flex-wrap items-center justify-between gap-1.5 mb-2">
-                              <div className="flex items-center flex-wrap gap-1.5">
-                                <span className="text-[9px] font-black uppercase tracking-wider px-2 py-0.5 rounded-md bg-blue-50 text-blue-700 border border-blue-200/60">
-                                  {isMerged ? '📝 Official Leave • 🚪 Gate Verified' : isGatePassOuting ? '🚪 Gate Leave Log' : '📝 Official Leave Pass'}
-                                </span>
-                                <span className="text-[10px] font-bold text-slate-700 bg-slate-100 px-2 py-0.5 rounded-md border border-slate-200 flex items-center gap-1">
-                                  📅 {formattedOutDate}
-                                </span>
-                              </div>
+                            {/* Header: All tabs in a single line (Category | Date | Parent Video | Status) */}
+                            <div className="flex items-center gap-1 sm:gap-1.5 mb-2 overflow-x-auto no-scrollbar flex-nowrap py-0.5">
+                              {/* 1. Category Badge */}
+                              <span className="text-[7.5px] sm:text-[9px] font-black uppercase tracking-wider px-1 sm:px-2 py-0.5 rounded-md bg-blue-50 text-blue-700 border border-blue-200/60 whitespace-nowrap shrink-0">
+                                {isMerged ? '📝 Official Leave' : isGatePassOuting ? '🚪 Gate Leave Log' : '📝 Official Leave Pass'}
+                              </span>
 
-                              {/* Status Badge */}
-                              <div className="flex items-center gap-1.5 shrink-0">
-                                {item.parentConsentUrl && (
-                                  <button
-                                    onMouseEnter={() => prefetchVideo(item.parentConsentUrl!)}
-                                    onClick={(e) => {
-                                      e.preventDefault();
-                                      setActiveConsentVideoUrl(
-                                        resolveConsentVideoSrc(
-                                          item.parentConsentUrl!,
-                                          prefetchedVideoUrls
-                                        )
-                                      );
-                                    }}
-                                    className="text-[9px] font-black text-indigo-600 bg-indigo-50 border border-indigo-200 px-2 py-0.5 rounded-md uppercase tracking-wider hover:bg-indigo-100 transition-all flex items-center gap-1 cursor-pointer"
-                                    title="Play Parent Consent Video"
-                                  >
-                                    🎥 Parent Video
-                                  </button>
-                                )}
+                              {/* 2. Date Badge */}
+                              <span className="text-[7.5px] sm:text-[9.5px] font-bold text-slate-700 bg-slate-100 px-1 sm:px-2 py-0.5 rounded-md border border-slate-200 flex items-center gap-0.5 sm:gap-1 whitespace-nowrap shrink-0">
+                                📅 {formattedOutDate}
+                              </span>
 
+                              {/* 3. Parent Video (moved right side of date) */}
+                              {item.parentConsentUrl && (
+                                <button
+                                  onMouseEnter={() => prefetchVideo(item.parentConsentUrl!)}
+                                  onClick={(e) => {
+                                    e.preventDefault();
+                                    setActiveConsentVideoUrl(
+                                      resolveConsentVideoSrc(
+                                        item.parentConsentUrl!,
+                                        prefetchedVideoUrls
+                                      )
+                                    );
+                                  }}
+                                  className="text-[7.5px] sm:text-[9px] font-black text-indigo-600 bg-indigo-50 border border-indigo-200 px-1 sm:px-2 py-0.5 rounded-md uppercase tracking-wider hover:bg-indigo-100 transition-all flex items-center gap-0.5 sm:gap-1 cursor-pointer whitespace-nowrap shrink-0"
+                                  title="Play Parent Consent Video"
+                                >
+                                  🎥 Parent Video
+                                </button>
+                              )}
+
+                              {/* 4. Status Badge (right side of date & video in single line) */}
+                              <div className="shrink-0 whitespace-nowrap ml-auto sm:ml-0">
                                 {isCurrentlyOut ? (
-                                  <div className="px-2 py-0.5 rounded-md text-[9px] font-black bg-amber-100 text-amber-800 border border-amber-300 flex items-center gap-1 animate-pulse">
+                                  <div className="px-1 sm:px-2 py-0.5 rounded-md text-[7.5px] sm:text-[9px] font-black bg-amber-100 text-amber-800 border border-amber-300 flex items-center gap-1 animate-pulse">
                                     <span className="w-1.5 h-1.5 rounded-full bg-amber-600"></span>
                                     Currently At Home
                                   </div>
                                 ) : (item.hasGateMovement || item.checkInTime || item.status === 'in' || item.status === 'completed') ? (
-                                  <div className="px-2 py-0.5 rounded-md text-[9px] font-black bg-green-100 text-green-700 border border-green-200">
+                                  <div className="px-1 sm:px-2 py-0.5 rounded-md text-[7.5px] sm:text-[9px] font-black bg-green-100 text-green-700 border border-green-200">
                                     Approved (Used)
                                   </div>
                                 ) : (isAllowed && !item.hasGateMovement && !isLeaveExpired) ? (
-                                  <div className="px-2 py-0.5 rounded-md text-[9px] font-black bg-emerald-100 text-emerald-800 border border-emerald-300">
+                                  <div className="px-1 sm:px-2 py-0.5 rounded-md text-[7.5px] sm:text-[9px] font-black bg-emerald-100 text-emerald-800 border border-emerald-300">
                                     Approved (Awaiting Gate Exit)
                                   </div>
                                 ) : (isAllowed && !item.hasGateMovement && isLeaveExpired) ? (
-                                  <div className="px-2 py-0.5 rounded-md text-[9px] font-black bg-slate-100 text-slate-600 border border-slate-300">
+                                  <div className="px-1 sm:px-2 py-0.5 rounded-md text-[7.5px] sm:text-[9px] font-black bg-slate-100 text-slate-600 border border-slate-300">
                                     Approved (Unused)
                                   </div>
                                 ) : isRejected ? (
-                                  <div className="px-2 py-0.5 rounded-md text-[9px] font-black bg-red-100 text-red-700 border border-red-200">
+                                  <div className="px-1 sm:px-2 py-0.5 rounded-md text-[7.5px] sm:text-[9px] font-black bg-red-100 text-red-700 border border-red-200">
                                     Rejected
                                   </div>
                                 ) : isCancelled ? (
-                                  <div className="px-2 py-0.5 rounded-md text-[9px] font-black bg-slate-100 text-slate-600 border border-slate-300">
+                                  <div className="px-1 sm:px-2 py-0.5 rounded-md text-[7.5px] sm:text-[9px] font-black bg-slate-100 text-slate-600 border border-slate-300">
                                     Cancelled
                                   </div>
                                 ) : isExpired ? (
-                                  <div className="px-2 py-0.5 rounded-md text-[9px] font-black bg-rose-50 text-rose-700 border border-rose-200">
+                                  <div className="px-1 sm:px-2 py-0.5 rounded-md text-[7.5px] sm:text-[9px] font-black bg-rose-50 text-rose-700 border border-rose-200">
                                     Expired (Not Utilized)
                                   </div>
                                 ) : isPending ? (
-                                  <div className="px-2 py-0.5 rounded-md text-[9px] font-black bg-yellow-100 text-yellow-800 border border-yellow-200">
+                                  <div className="px-1 sm:px-2 py-0.5 rounded-md text-[7.5px] sm:text-[9px] font-black bg-yellow-100 text-yellow-800 border border-yellow-200">
                                     Pending
                                   </div>
                                 ) : (
-                                  <div className="px-2 py-0.5 rounded-md text-[9px] font-black bg-green-100 text-green-700 border border-green-200">
+                                  <div className="px-1 sm:px-2 py-0.5 rounded-md text-[7.5px] sm:text-[9px] font-black bg-green-100 text-green-700 border border-green-200">
                                     Approved (Used)
                                   </div>
                                 )}
                               </div>
                             </div>
 
-                            {/* 3-Column Time & Duration Grid */}
-                            <div className="grid grid-cols-3 gap-1.5 sm:gap-2 bg-slate-50/80 p-2 rounded-lg border border-slate-100 text-[11px] mb-2">
-                              <div>
-                                <p className="text-[9px] font-bold text-slate-400">{item.hasGateMovement ? "Gate Out" : "Leave From"}</p>
-                                <p className="font-extrabold text-slate-800 mt-0.5 leading-tight">
+                            {/* 3-Column Time & Duration Grid: Left (Gate Out) | Center (Gate In) | Right (Duration) */}
+                            <div className="grid grid-cols-3 gap-2 bg-slate-50/80 p-2 sm:p-2.5 rounded-lg border border-slate-100 text-[11px] mb-2 items-center">
+                              {/* Left Aligned: Gate Out */}
+                              <div className="text-left">
+                                <p className="text-[9px] font-bold text-slate-400 leading-tight">
+                                  {item.hasGateMovement ? (
+                                    <>
+                                      Gate Out <span className="font-extrabold text-indigo-700">({formatGateDisplayName(item.gateName)})</span>
+                                    </>
+                                  ) : (
+                                    "Leave From"
+                                  )}
+                                </p>
+                                <p className="font-extrabold text-slate-800 mt-0.5 leading-tight text-[11px] sm:text-xs">
                                   {formattedOutDate}
                                 </p>
                                 {formattedOutTime && (
@@ -15474,9 +15578,20 @@ export default function AdminDashboard({
                                 )}
                               </div>
 
-                              <div>
-                                <p className="text-[9px] font-bold text-slate-400">{item.hasGateMovement ? "Gate In" : "Expected Return"}</p>
-                                <p className={`font-extrabold mt-0.5 leading-tight ${isCurrentlyOut ? 'text-amber-700 italic' : 'text-slate-800'}`}>
+                              {/* Center Aligned: Gate In */}
+                              <div className="text-center flex flex-col items-center justify-center">
+                                <p className="text-[9px] font-bold text-slate-400 leading-tight">
+                                  {item.hasGateMovement ? (
+                                    <>
+                                      Gate In {(item.checkInTime || item.checkInIstTime || !isCurrentlyOut) && (
+                                        <span className="font-extrabold text-emerald-700">({formatGateDisplayName(item.inGateName || item.gateName)})</span>
+                                      )}
+                                    </>
+                                  ) : (
+                                    "Expected Return"
+                                  )}
+                                </p>
+                                <p className={`font-extrabold mt-0.5 leading-tight text-[11px] sm:text-xs ${isCurrentlyOut ? 'text-amber-700 italic' : 'text-slate-800'}`}>
                                   {formattedInDate}
                                 </p>
                                 {formattedInTime && formattedInDate !== "Completed" && (
@@ -15486,9 +15601,10 @@ export default function AdminDashboard({
                                 )}
                               </div>
 
-                              <div>
-                                <p className="text-[9px] font-bold text-slate-400">Duration</p>
-                                <p className="font-black text-indigo-700 bg-indigo-50/80 px-1.5 py-0.5 rounded border border-indigo-100 inline-block mt-0.5 text-[10px] sm:text-[11px]">
+                              {/* Right Aligned: Duration */}
+                              <div className="text-right flex flex-col items-end justify-center">
+                                <p className="text-[9px] font-bold text-slate-400 leading-tight">Duration</p>
+                                <p className="font-black text-indigo-700 bg-indigo-50/80 px-2 py-0.5 rounded border border-indigo-100 inline-block mt-0.5 text-[10px] sm:text-[11px]">
                                   {leaveDuration}
                                 </p>
                               </div>
@@ -15554,12 +15670,7 @@ export default function AdminDashboard({
                                   </strong>
                                 </span>
 
-                                {/* 4. Gate Scanned Badge */}
-                                {item.hasGateMovement && item.gateName && (
-                                  <span className="px-2 py-0.5 rounded-md bg-indigo-50 border border-indigo-200 text-indigo-700 text-[9.5px] sm:text-[10px] font-bold inline-flex items-center gap-1">
-                                    Gate: <strong className="font-extrabold">{item.gateName}</strong>
-                                  </span>
-                                )}
+
                               </div>
                             )}
                           </div>
@@ -15931,39 +16042,40 @@ export default function AdminDashboard({
                                 : 'bg-white border-slate-200/80 hover:border-slate-300'
                             }`}
                           >
-                            {/* Header: Gate Name, Date Badge & Status */}
-                            <div className="flex flex-wrap items-center justify-between gap-1.5 mb-2">
-                              <div className="flex items-center flex-wrap gap-1.5">
-                                <span className={`text-[9px] font-bold tracking-wider px-2 py-0.5 rounded-md border ${
-                                  isCurrentlyOut ? 'bg-rose-100/80 text-rose-800 border-rose-200' : 'bg-emerald-50 text-emerald-700 border-emerald-200'
-                                }`}>
-                                  🚪 {pass.gateName ? pass.gateName.replace(/_/g, ' ').replace(/\b\w/g, (c: string) => c.toUpperCase()) : 'Main Gate'}
-                                </span>
-                                {/* Prominent Date Display */}
-                                <span className="text-[10px] font-bold text-slate-700 bg-slate-100 px-2 py-0.5 rounded-md border border-slate-200 flex items-center gap-1">
-                                  📅 {formattedDate}
-                                </span>
-                              </div>
+                            {/* Header: Gate Name, Date Badge & Status in Single Line */}
+                            <div className="flex items-center gap-1 sm:gap-1.5 mb-2 overflow-x-auto no-scrollbar flex-nowrap py-0.5">
+                              <span className={`text-[7.5px] sm:text-[9px] font-bold tracking-wider px-1 sm:px-2 py-0.5 rounded-md border whitespace-nowrap shrink-0 ${
+                                isCurrentlyOut ? 'bg-rose-100/80 text-rose-800 border-rose-200' : 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                              }`}>
+                                🚪 {formatGateDisplayName(pass.gateName)}
+                              </span>
+                              {/* Prominent Date Display */}
+                              <span className="text-[7.5px] sm:text-[9.5px] font-bold text-slate-700 bg-slate-100 px-1 sm:px-2 py-0.5 rounded-md border border-slate-200 flex items-center gap-0.5 sm:gap-1 whitespace-nowrap shrink-0">
+                                📅 {formattedDate}
+                              </span>
 
                               {/* Status Badge */}
-                              <div className="flex items-center gap-1.5 shrink-0">
+                              <div className="shrink-0 whitespace-nowrap ml-auto sm:ml-0">
                                 {isCurrentlyOut ? (
-                                  <div className="px-2 py-0.5 rounded-md text-[9px] font-black bg-rose-100 text-rose-700 border border-rose-200 flex items-center gap-1 animate-pulse">
+                                  <div className="px-1 sm:px-2 py-0.5 rounded-md text-[7.5px] sm:text-[9px] font-black bg-rose-100 text-rose-700 border border-rose-200 flex items-center gap-1 animate-pulse">
                                     <span className="w-1.5 h-1.5 rounded-full bg-rose-600"></span>
                                     Currently Out
                                   </div>
                                 ) : (
-                                  <div className="px-2 py-0.5 rounded-md text-[9px] font-black bg-emerald-100 text-emerald-800 border border-emerald-200">
+                                  <div className="px-1 sm:px-2 py-0.5 rounded-md text-[7.5px] sm:text-[9px] font-black bg-emerald-100 text-emerald-800 border border-emerald-200">
                                     ✓ Returned (In)
                                   </div>
                                 )}
                               </div>
                             </div>
 
-                            {/* 3-Column Time & Duration Grid: CHECK OUT | CHECK IN | DURATION */}
-                            <div className="grid grid-cols-3 gap-1.5 sm:gap-2 bg-slate-50/80 p-2 sm:p-2.5 rounded-lg border border-slate-100 text-[11px] mb-2">
-                              <div>
-                                <p className="text-[9px] font-bold text-slate-400">Check Out</p>
+                            {/* 3-Column Time & Duration Grid: Left (Check Out) | Center (Check In) | Right (Duration) */}
+                            <div className="grid grid-cols-3 gap-2 bg-slate-50/80 p-2 sm:p-2.5 rounded-lg border border-slate-100 text-[11px] mb-2 items-center">
+                              {/* Left Aligned: Check Out */}
+                              <div className="text-left">
+                                <p className="text-[9px] font-bold text-slate-400 leading-tight">
+                                  Check Out <span className="font-extrabold text-indigo-700">({formatGateDisplayName(pass.gateName)})</span>
+                                </p>
                                 <p className="font-extrabold text-slate-800 mt-0.5 text-xs sm:text-[13px] leading-tight">
                                   {formattedOutTime}
                                 </p>
@@ -15972,8 +16084,13 @@ export default function AdminDashboard({
                                 </p>
                               </div>
 
-                              <div>
-                                <p className="text-[9px] font-bold text-slate-400">Check In</p>
+                              {/* Center Aligned: Check In */}
+                              <div className="text-center flex flex-col items-center justify-center">
+                                <p className="text-[9px] font-bold text-slate-400 leading-tight">
+                                  Check In {!isCurrentlyOut && (
+                                    <span className="font-extrabold text-emerald-700">({formatGateDisplayName(pass.inGateName || pass.gateName)})</span>
+                                  )}
+                                </p>
                                 <p className={`font-extrabold mt-0.5 text-xs sm:text-[13px] leading-tight ${isCurrentlyOut ? 'text-rose-600 italic font-bold' : 'text-slate-800'}`}>
                                   {formattedInTime}
                                 </p>
@@ -15982,9 +16099,10 @@ export default function AdminDashboard({
                                 </p>
                               </div>
 
-                              <div>
-                                <p className="text-[9px] font-bold text-slate-400">Duration</p>
-                                <p className="font-black text-indigo-700 bg-indigo-50/80 px-1.5 py-0.5 rounded border border-indigo-100 inline-block mt-0.5 text-[10px] sm:text-xs">
+                              {/* Right Aligned: Duration */}
+                              <div className="text-right flex flex-col items-end justify-center">
+                                <p className="text-[9px] font-bold text-slate-400 leading-tight">Duration</p>
+                                <p className="font-black text-indigo-700 bg-indigo-50/80 px-2 py-0.5 rounded border border-indigo-100 inline-block mt-0.5 text-[10px] sm:text-xs">
                                   ⏱️ {durationDisplay}
                                 </p>
                               </div>
@@ -16459,7 +16577,7 @@ export default function AdminDashboard({
                                 </span>
                                 {isAuthorityMarked ? (
                                   <span className="text-[9px] font-bold px-2 py-0.5 rounded-md bg-purple-50 text-purple-700 border border-purple-200 flex items-center gap-1">
-                                    👤 {att.markedBy ? `By: ${att.markedBy}` : "Manual Entry"}
+                                    👤 {att.markedBy ? `By: ${formatWardenDisplayName(att.markedBy, selectedStudent?.hostelName || att.hostelName)}` : "Manual Entry"}
                                   </span>
                                 ) : isGpsVerified ? (
                                   <span className="text-[9px] font-bold px-2 py-0.5 rounded-md bg-emerald-50 text-emerald-700 border border-emerald-200 flex items-center gap-1">

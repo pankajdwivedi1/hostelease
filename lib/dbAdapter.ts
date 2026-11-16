@@ -105,7 +105,7 @@ const filterGatePassForPrisma = (data: any) => {
         'id', 'studentId', 'firebaseUid', 'studentName', 'hostelName', 'roomNumber',
         'registrationId', 'checkOutTime', 'checkOutIstTime', 'checkOutIstDate',
         'checkInTime', 'checkInIstTime', 'checkInIstDate', 'status',
-        'durationMinutes', 'gateName', 'qrTokenUsedOut', 'qrTokenUsedIn',
+        'durationMinutes', 'gateName', 'inGateName', 'qrTokenUsedOut', 'qrTokenUsedIn',
         'type', 'reason', 'destination', 'parentMobile', 'permissionId',
         'phoneNumber', 'tenantId'
     ];
@@ -512,6 +512,7 @@ export const mapGatePassToCamelCase = (g: any) => {
         status: g.status,
         durationMinutes: g.duration_minutes !== undefined ? g.duration_minutes : g.durationMinutes,
         gateName: g.gate_name || g.gateName,
+        inGateName: g.in_gate_name || g.inGateName || null,
         qrTokenUsedOut: g.qr_token_used_out || g.qrTokenUsedOut,
         qrTokenUsedIn: g.qr_token_used_in || g.qrTokenUsedIn,
         type: g.type,
@@ -818,6 +819,15 @@ export const db = {
                 if (updateData.attendanceEndTime) syncData.attendanceEndTime = updateData.attendanceEndTime;
                 await prisma.adminSettings.updateMany({
                     data: syncData
+                });
+            }
+
+            // Sync notificationSettings (including gatepassGates) across all records to prevent tenant-id mismatch
+            if (updateData.notificationSettings) {
+                await prisma.adminSettings.updateMany({
+                    data: {
+                        notificationSettings: updateData.notificationSettings
+                    }
                 });
             }
 

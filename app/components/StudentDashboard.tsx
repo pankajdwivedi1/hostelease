@@ -199,6 +199,27 @@ const HOME_LEAVE_REASONS = [
     "Other (Please Specify)"
 ];
 
+const formatGateDisplayName = (gate?: string | null): string => {
+    if (typeof window !== 'undefined') {
+        const active = localStorage.getItem('activeGateName');
+        if (active && (!gate || gate === 'Not Checked Out Yet' || /oriental\s+group\s+of\s+institutes\s+bhopal/i.test(gate) || /^ogi\s+bhopal/i.test(gate) || /^main\s*gate$/i.test(gate))) {
+            return active;
+        }
+    }
+    if (!gate || gate === 'Not Checked Out Yet') return 'GATE-1';
+    const trimmed = gate.trim();
+    if (/oriental\s+group\s+of\s+institutes\s+bhopal/i.test(trimmed)) {
+        return 'GATE-1';
+    }
+    if (/^ogi\s+bhopal/i.test(trimmed)) {
+        return 'GATE-1';
+    }
+    if (/^main\s*gate$/i.test(trimmed)) {
+        return 'GATE-1';
+    }
+    return trimmed;
+};
+
 export default function StudentDashboard({ initialData, isParentView = false, hasMultipleSiblings = false }: { initialData?: any; isParentView?: boolean; hasMultipleSiblings?: boolean }) {
     const router = useRouter();
     const searchParams = useSearchParams();
@@ -1069,6 +1090,7 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
                         parentStatus: p.parentStatus,
                         parentConsentUrl: p.parentConsentUrl || p.consentVideoUrl || p.videoUrl || p.parentVideoUrl || matchingGp.parentConsentUrl,
                         gateName: matchingGp.gateName || 'Main Gate',
+                        inGateName: matchingGp.inGateName || matchingGp.in_gate_name || matchingGp.gateName || 'Main Gate',
                         durationMinutes: matchingGp.durationMinutes,
                         hasGateMovement: true,
                         createdAt: p.createdAt || matchingGp.createdAt,
@@ -1136,6 +1158,7 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
                         parentStatus: null,
                         parentConsentUrl: gp.parentConsentUrl,
                         gateName: gp.gateName || 'Main Gate',
+                        inGateName: gp.inGateName || gp.in_gate_name || gp.gateName || 'Main Gate',
                         durationMinutes: gp.durationMinutes,
                         hasGateMovement: true,
                         createdAt: gp.createdAt,
@@ -1171,6 +1194,7 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
                 destination: gp.destination,
                 status: gp.status,
                 gateName: gp.gateName || 'Main Gate',
+                inGateName: gp.inGateName || gp.in_gate_name || gp.gateName || 'Main Gate',
                 durationMinutes: gp.durationMinutes,
                 qrTokenUsedOut: gp.qrTokenUsedOut,
                 createdAt: gp.createdAt,
@@ -7512,73 +7536,79 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
                                                                                                 : 'bg-white border-slate-200/80 hover:border-slate-300'
                                                                                         }`}
                                                                                     >
-                                                                                        <div className="flex flex-wrap items-center justify-between gap-1.5 mb-2">
-                                                                                            <div className="flex items-center flex-wrap gap-1.5">
-                                                                                                <span className={`font-black tracking-wider px-2 py-0.5 rounded-md bg-blue-50 text-blue-700 border border-blue-200/60 ${isParentView ? "text-[8px]" : "text-[9px]"}`}>
-                                                                                                    {isGatePassOuting ? '🚪 Gate Leave Log' : '📝 Official Leave Pass'}
-                                                                                                </span>
-                                                                                                <span className={`font-bold text-slate-700 bg-slate-100 px-2 py-0.5 rounded-md border border-slate-200 flex items-center gap-1 ${isParentView ? "text-[9px]" : "text-[10px]"}`}>
-                                                                                                    📅 {formattedOutDate}
-                                                                                                </span>
-                                                                                            </div>
+                                                                                        <div className="flex items-center gap-1 sm:gap-1.5 mb-2 overflow-x-auto no-scrollbar flex-nowrap py-0.5">
+                                                                                            <span className={`font-black tracking-wider px-1.5 sm:px-2 py-0.5 rounded-md bg-blue-50 text-blue-700 border border-blue-200/60 whitespace-nowrap shrink-0 ${isParentView ? "text-[7.5px]" : "text-[8px] sm:text-[9px]"}`}>
+                                                                                                {isGatePassOuting ? '🚪 Gate Leave Log' : '📝 Official Leave Pass'}
+                                                                                            </span>
+                                                                                            <span className={`font-bold text-slate-700 bg-slate-100 px-1.5 sm:px-2 py-0.5 rounded-md border border-slate-200 flex items-center gap-0.5 sm:gap-1 whitespace-nowrap shrink-0 ${isParentView ? "text-[8px]" : "text-[8.5px] sm:text-[9.5px]"}`}>
+                                                                                                📅 {formattedOutDate}
+                                                                                            </span>
 
-                                                                                            <div className="flex items-center gap-1.5 shrink-0">
-                                                                                                {itemConsentVideo && (
-                                                                                                    <button
-                                                                                                        onMouseEnter={() => prefetchVideo(itemConsentVideo)}
-                                                                                                        onClick={(e) => {
-                                                                                                            e.preventDefault();
-                                                                                                            setActiveConsentVideoUrl(
-                                                                                                                resolveConsentVideoSrc(
-                                                                                                                    itemConsentVideo,
-                                                                                                                    prefetchedVideoUrls
-                                                                                                                )
-                                                                                                            );
-                                                                                                        }}
-                                                                                                        className="text-[9px] font-black text-indigo-600 bg-indigo-50 border border-indigo-200 px-2 py-0.5 rounded-md hover:bg-indigo-100 transition-all flex items-center gap-1 cursor-pointer"
-                                                                                                        title="Play Parent Consent Video"
-                                                                                                    >
-                                                                                                        🎥 Parent Video
-                                                                                                    </button>
-                                                                                                )}
+                                                                                            {itemConsentVideo && (
+                                                                                                <button
+                                                                                                    onMouseEnter={() => prefetchVideo(itemConsentVideo)}
+                                                                                                    onClick={(e) => {
+                                                                                                        e.preventDefault();
+                                                                                                        setActiveConsentVideoUrl(
+                                                                                                            resolveConsentVideoSrc(
+                                                                                                                itemConsentVideo,
+                                                                                                                prefetchedVideoUrls
+                                                                                                            )
+                                                                                                        );
+                                                                                                    }}
+                                                                                                    className="text-[8px] sm:text-[9px] font-black text-indigo-600 bg-indigo-50 border border-indigo-200 px-1.5 sm:px-2 py-0.5 rounded-md hover:bg-indigo-100 transition-all flex items-center gap-0.5 sm:gap-1 cursor-pointer whitespace-nowrap shrink-0"
+                                                                                                    title="Play Parent Consent Video"
+                                                                                                >
+                                                                                                    🎥 Parent Video
+                                                                                                </button>
+                                                                                            )}
 
+                                                                                            <div className="shrink-0 whitespace-nowrap ml-auto sm:ml-0">
                                                                                                 {isCurrentlyOut ? (
-                                                                                                    <div className={`px-2 py-0.5 rounded-md ${isParentView ? "text-[8px]" : "text-[9px]"} font-black bg-amber-100 text-amber-800 border border-amber-300 flex items-center gap-1 animate-pulse`}>
+                                                                                                    <div className={`px-1.5 sm:px-2 py-0.5 rounded-md ${isParentView ? "text-[7.5px]" : "text-[8px] sm:text-[9px]"} font-black bg-amber-100 text-amber-800 border border-amber-300 flex items-center gap-1 animate-pulse`}>
                                                                                                         <span className="w-1.5 h-1.5 rounded-full bg-amber-600"></span>
                                                                                                         Currently At Home
                                                                                                     </div>
                                                                                                 ) : isAllowed ? (
-                                                                                                    <div className={`px-2 py-0.5 rounded-md ${isParentView ? "text-[8px]" : "text-[9px]"} font-black bg-green-100 text-green-700 border border-green-200`}>
+                                                                                                    <div className={`px-1.5 sm:px-2 py-0.5 rounded-md ${isParentView ? "text-[7.5px]" : "text-[8px] sm:text-[9px]"} font-black bg-green-100 text-green-700 border border-green-200`}>
                                                                                                         Approved
                                                                                                     </div>
                                                                                                 ) : isRejected ? (
-                                                                                                    <div className={`px-2 py-0.5 rounded-md ${isParentView ? "text-[8px]" : "text-[9px]"} font-black bg-red-100 text-red-700 border border-red-200`}>
+                                                                                                    <div className={`px-1.5 sm:px-2 py-0.5 rounded-md ${isParentView ? "text-[7.5px]" : "text-[8px] sm:text-[9px]"} font-black bg-red-100 text-red-700 border border-red-200`}>
                                                                                                         Rejected
                                                                                                     </div>
                                                                                                 ) : isCancelled ? (
-                                                                                                    <div className={`px-2 py-0.5 rounded-md ${isParentView ? "text-[8px]" : "text-[9px]"} font-black bg-slate-100 text-slate-600 border border-slate-300`}>
+                                                                                                    <div className={`px-1.5 sm:px-2 py-0.5 rounded-md ${isParentView ? "text-[7.5px]" : "text-[8px] sm:text-[9px]"} font-black bg-slate-100 text-slate-600 border border-slate-300`}>
                                                                                                         Cancelled
                                                                                                     </div>
                                                                                                 ) : isExpired ? (
-                                                                                                    <div className={`px-2 py-0.5 rounded-md ${isParentView ? "text-[8px]" : "text-[9px]"} font-black bg-rose-50 text-rose-700 border border-rose-200`}>
+                                                                                                    <div className={`px-1.5 sm:px-2 py-0.5 rounded-md ${isParentView ? "text-[7.5px]" : "text-[8px] sm:text-[9px]"} font-black bg-rose-50 text-rose-700 border border-rose-200`}>
                                                                                                         Expired
                                                                                                     </div>
                                                                                                 ) : isPending ? (
-                                                                                                    <div className={`px-2 py-0.5 rounded-md ${isParentView ? "text-[8px]" : "text-[9px]"} font-black bg-yellow-100 text-yellow-800 border border-yellow-200`}>
+                                                                                                    <div className={`px-1.5 sm:px-2 py-0.5 rounded-md ${isParentView ? "text-[7.5px]" : "text-[8px] sm:text-[9px]"} font-black bg-yellow-100 text-yellow-800 border border-yellow-200`}>
                                                                                                         Pending
                                                                                                     </div>
                                                                                                 ) : (
-                                                                                                    <div className={`px-2 py-0.5 rounded-md ${isParentView ? "text-[8px]" : "text-[9px]"} font-black bg-slate-100 text-slate-700 border border-slate-200`}>
+                                                                                                    <div className={`px-1.5 sm:px-2 py-0.5 rounded-md ${isParentView ? "text-[7.5px]" : "text-[8px] sm:text-[9px]"} font-black bg-slate-100 text-slate-700 border border-slate-200`}>
                                                                                                         Completed
                                                                                                     </div>
                                                                                                 )}
                                                                                             </div>
                                                                                         </div>
 
-                                                                                        <div className={`grid grid-cols-3 gap-1.5 sm:gap-2 bg-slate-50/80 p-2 rounded-lg border border-slate-100 mb-2 ${isParentView ? "text-[10px]" : "text-[11px]"}`}>
-                                                                                            <div>
-                                                                                                <p className="text-[9px] font-bold text-slate-400">Leave From</p>
-                                                                                                <p className="font-extrabold text-slate-800 mt-0.5 leading-tight">
+                                                                                        <div className={`grid grid-cols-3 gap-2 bg-slate-50/80 p-2 sm:p-2.5 rounded-lg border border-slate-100 mb-2 items-center ${isParentView ? "text-[10px]" : "text-[11px]"}`}>
+                                                                                            <div className="text-left">
+                                                                                                <p className="text-[9px] font-bold text-slate-400 leading-tight">
+                                                                                                    {item.hasGateMovement ? (
+                                                                                                        <>
+                                                                                                            Gate Out <span className="font-extrabold text-indigo-700">({formatGateDisplayName(item.gateName)})</span>
+                                                                                                        </>
+                                                                                                    ) : (
+                                                                                                        "Leave From"
+                                                                                                    )}
+                                                                                                </p>
+                                                                                                <p className="font-extrabold text-slate-800 mt-0.5 leading-tight text-[11px] sm:text-xs">
                                                                                                     {formattedOutDate}
                                                                                                 </p>
                                                                                                 {formattedOutTime && (
@@ -7588,16 +7618,26 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
                                                                                                 )}
                                                                                             </div>
 
-                                                                                            <div>
-                                                                                                <p className="text-[9px] font-bold text-slate-400">Return (In)</p>
-                                                                                                <p className={`font-extrabold mt-0.5 leading-tight ${isCurrentlyOut ? 'text-amber-700 italic' : 'text-slate-800'}`}>
+                                                                                            <div className="text-center flex flex-col items-center justify-center">
+                                                                                                <p className="text-[9px] font-bold text-slate-400 leading-tight">
+                                                                                                    {item.hasGateMovement ? (
+                                                                                                        <>
+                                                                                                            Gate In {(item.checkInTime || item.checkInIstTime || !isCurrentlyOut) && (
+                                                                                                                <span className="font-extrabold text-emerald-700">({formatGateDisplayName(item.inGateName || item.gateName)})</span>
+                                                                                                            )}
+                                                                                                        </>
+                                                                                                    ) : (
+                                                                                                        "Return (In)"
+                                                                                                    )}
+                                                                                                </p>
+                                                                                                <p className={`font-extrabold mt-0.5 leading-tight text-[11px] sm:text-xs ${isCurrentlyOut ? 'text-amber-700 italic' : 'text-slate-800'}`}>
                                                                                                     {formattedInDate}
                                                                                                 </p>
                                                                                             </div>
 
-                                                                                            <div>
-                                                                                                <p className="text-[9px] font-bold text-slate-400">Duration</p>
-                                                                                                <p className={`font-black text-indigo-700 bg-indigo-50/80 px-1.5 py-0.5 rounded border border-indigo-100 inline-block mt-0.5 ${isParentView ? "text-[9px]" : "text-[10px]"} sm:text-[11px]`}>
+                                                                                            <div className="text-right flex flex-col items-end justify-center">
+                                                                                                <p className="text-[9px] font-bold text-slate-400 leading-tight">Duration</p>
+                                                                                                <p className={`font-black text-indigo-700 bg-indigo-50/80 px-2 py-0.5 rounded border border-indigo-100 inline-block mt-0.5 ${isParentView ? "text-[9px]" : "text-[10px]"} sm:text-[11px]`}>
                                                                                                     {leaveDuration}
                                                                                                 </p>
                                                                                             </div>
@@ -7742,7 +7782,9 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
 
                                                                                         <div className={`grid grid-cols-3 gap-1.5 sm:gap-2 bg-slate-50/80 p-2 sm:p-2.5 rounded-lg border border-slate-100 mb-2 ${isParentView ? "text-[10px]" : "text-[11px]"}`}>
                                                                                             <div>
-                                                                                                <p className={`font-bold text-slate-400 ${isParentView ? "text-[8px]" : "text-[9px]"}`}>Check Out</p>
+                                                                                                <p className={`font-bold text-slate-400 ${isParentView ? "text-[8px]" : "text-[9px]"} leading-tight`}>
+                                                                                                    Check Out <span className="font-extrabold text-indigo-700">({formatGateDisplayName(pass.gateName)})</span>
+                                                                                                </p>
                                                                                                 <p className={`font-extrabold text-slate-800 mt-0.5 ${isParentView ? "text-[11px]" : "text-xs"} sm:text-[13px] leading-tight`}>
                                                                                                     {formattedOutTime}
                                                                                                 </p>
@@ -7752,7 +7794,11 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
                                                                                             </div>
 
                                                                                             <div>
-                                                                                                <p className={`font-bold text-slate-400 ${isParentView ? "text-[8px]" : "text-[9px]"}`}>Check In</p>
+                                                                                                <p className={`font-bold text-slate-400 ${isParentView ? "text-[8px]" : "text-[9px]"} leading-tight`}>
+                                                                                                    Check In {!isCurrentlyOut && (
+                                                                                                        <span className="font-extrabold text-emerald-700">({formatGateDisplayName(pass.inGateName || pass.gateName)})</span>
+                                                                                                    )}
+                                                                                                </p>
                                                                                                 <p className={`font-extrabold mt-0.5 ${isParentView ? "text-[11px]" : "text-xs"} sm:text-[13px] leading-tight ${isCurrentlyOut ? 'text-rose-600 italic font-bold' : 'text-slate-800'}`}>
                                                                                                     {formattedInTime}
                                                                                                 </p>

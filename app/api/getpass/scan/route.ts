@@ -582,6 +582,7 @@ export async function POST(request: NextRequest) {
                     checkInISTDate: istDate,
                     status: isMainRecord ? "in" : "auto-resolved", // Only one "in" record
                     qrTokenUsedIn: token,
+                    inGateName: gateName || "Main Gate",
                     durationMinutes
                 });
 

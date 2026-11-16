@@ -200,6 +200,7 @@ model GatePass {
   status           String    @default("out") @map("status")
   durationMinutes  Int?      @map("duration_minutes")
   gateName         String    @default("Main Gate") @map("gate_name")
+  inGateName       String?   @map("in_gate_name")
   qrTokenUsedOut   String    @map("qr_token_used_out")
   qrTokenUsedIn    String?   @map("qr_token_used_in")
   type             String?

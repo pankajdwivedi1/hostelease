@@ -45,6 +45,7 @@ export default function GatepassManagementModal({
         const loadGates = async () => {
             try {
                 setIsLoading(true);
+                // ⚡ 24-HOUR CLIENT CACHE LOCK: Protects Railway server from repeated requests
                 const cachedGates = typeof window !== "undefined" ? localStorage.getItem("cached_gate_settings_v2") : null;
                 if (cachedGates) {
                     try {
@@ -54,11 +55,13 @@ export default function GatepassManagementModal({
                             if (loadedGates.length > 0) {
                                 setGates(loadedGates);
                                 setIsLoading(false);
-                                return;
+                                return; // ⚡ 0 server calls - served instantly from local 24-hour cache lock!
                             }
                         }
                     } catch (_) {}
                 }
+
+                // If cache expired or not present, fetch fresh settings from server
                 const res = await fetch("/api/admin/settings");
                 const data = await res.json();
 
@@ -80,6 +83,13 @@ export default function GatepassManagementModal({
                                   },
                               ];
                     setGates(loadedGates);
+                    // ⚡ Lock fresh cache for next 24 hours
+                    if (typeof window !== "undefined") {
+                        localStorage.setItem("cached_gate_settings_v2", JSON.stringify({ data: { success: true, gatepassGates: loadedGates }, ts: Date.now() }));
+                        if (loadedGates[0]?.name) {
+                            localStorage.setItem("activeGateName", loadedGates[0].name);
+                        }
+                    }
                 }
             } catch (err) {
                 console.error("Failed to load gates:", err);
@@ -113,6 +123,13 @@ export default function GatepassManagementModal({
             const data = await res.json();
             if (data.success) {
                 setGates(updatedGates);
+                if (typeof window !== "undefined") {
+                    localStorage.setItem("cached_gate_settings_v2", JSON.stringify({ data: { success: true, gatepassGates: updatedGates }, ts: Date.now() }));
+                    if (updatedGates.length > 0 && updatedGates[0].name) {
+                        localStorage.setItem("activeGateName", updatedGates[0].name);
+                    }
+                    window.dispatchEvent(new Event("storage"));
+                }
                 if (onGatesUpdated) onGatesUpdated(updatedGates);
                 if (successMsg) showToast(successMsg, "success");
             } else {

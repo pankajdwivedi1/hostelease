@@ -442,6 +442,7 @@ export async function POST(request: NextRequest) {
                             checkInISTDate: istDate,
                             status: "in",
                             qrTokenUsedIn: "MANUAL_BY_" + userType.toUpperCase(),
+                            inGateName: body.gateName || pass.gateName || "Main Gate",
                             durationMinutes: Math.round(diffMs / 60000)
                         });
 
