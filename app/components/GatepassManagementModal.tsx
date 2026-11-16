@@ -45,6 +45,20 @@ export default function GatepassManagementModal({
         const loadGates = async () => {
             try {
                 setIsLoading(true);
+                const cachedGates = typeof window !== "undefined" ? localStorage.getItem("cached_gate_settings_v2") : null;
+                if (cachedGates) {
+                    try {
+                        const { data, ts } = JSON.parse(cachedGates);
+                        if (Date.now() - ts < 86400000 && data?.success && isMounted) {
+                            const loadedGates: CampusGate[] = data.gatepassGates && data.gatepassGates.length > 0 ? data.gatepassGates : [];
+                            if (loadedGates.length > 0) {
+                                setGates(loadedGates);
+                                setIsLoading(false);
+                                return;
+                            }
+                        }
+                    } catch (_) {}
+                }
                 const res = await fetch("/api/admin/settings");
                 const data = await res.json();
 

@@ -23,7 +23,7 @@ export function createCachedResponse(
         const etag = `"${hash}"`;
 
         const cacheControl = maxAgeSeconds > 0
-            ? `private, max-age=${maxAgeSeconds}, stale-while-revalidate=${maxAgeSeconds * 2}`
+            ? `public, max-age=${maxAgeSeconds}, s-maxage=${maxAgeSeconds}, stale-while-revalidate=${maxAgeSeconds * 2}`
             : "private, no-cache, must-revalidate";
 
         if (req) {

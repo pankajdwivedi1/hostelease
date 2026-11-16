@@ -425,6 +425,16 @@ function LoginForm() {
           if (data.hostels && Array.isArray(data.hostels)) {
             setHostels(data.hostels);
           try {
+            const cachedGates = typeof window !== "undefined" ? localStorage.getItem("cached_gate_settings_v2") : null;
+            if (cachedGates) {
+              try {
+                const { data, ts } = JSON.parse(cachedGates);
+                if (Date.now() - ts < 86400000 && data?.success && Array.isArray(data.gatepassGates)) {
+                  setGates(data.gatepassGates);
+                  return;
+                }
+              } catch (_) {}
+            }
             const sRes = await fetch("/api/admin/settings");
             const sData = await sRes.json();
             if (sData?.success && Array.isArray(sData.gatepassGates) && sData.gatepassGates.length > 0) {

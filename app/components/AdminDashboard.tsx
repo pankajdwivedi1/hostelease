@@ -3848,8 +3848,21 @@ export default function AdminDashboard({
     try {
       const targetSlug = isOgiTenantSession() ? "ogi" : (new URLSearchParams(window.location.search).get("tenant") || "ogi").toLowerCase();
       const userTypeHeader = (typeof window !== "undefined" ? localStorage.getItem("userType") : null) || "superadmin";
+      const cacheKey = `cached_att_time_${targetSlug}`;
+      if (typeof window !== "undefined") {
+        try {
+          const cached = localStorage.getItem(cacheKey);
+          if (cached) {
+            const { data, ts } = JSON.parse(cached);
+            if (Date.now() - ts < 86400000 && data) {
+              setAttendanceTimeSettings(data);
+              return;
+            }
+          }
+        } catch (_) {}
+      }
+
       const response = await fetch(`/api/admin/settings?tenant=${targetSlug}`, {
-        cache: "no-store",
         headers: { "x-user-type": userTypeHeader }
       });
       if (!response.ok) return;
