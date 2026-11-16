@@ -97,7 +97,7 @@ export async function GET(request: NextRequest) {
             })(),
             gatepassGates: (settings?.notificationSettings as any)?.gatepassGates || (settings as any)?.gatepassGates || [],
             enforceMandatoryPush
-        }, request, 86400);
+        }, request, 0);
     } catch (error: any) {
         console.error("Error fetching admin settings:", error);
         return NextResponse.json(
@@ -257,7 +257,9 @@ export async function POST(request: NextRequest) {
 
         return NextResponse.json({
             success: true,
-            settings
+            settings,
+            startTime: settings?.attendanceStartTime || updateData.attendanceStartTime,
+            endTime: settings?.attendanceEndTime || updateData.attendanceEndTime
         });
     } catch (error: any) {
         console.error("Error updating admin settings:", error);

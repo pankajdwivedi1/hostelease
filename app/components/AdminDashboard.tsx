@@ -3844,12 +3844,12 @@ export default function AdminDashboard({
   };
 
   // Fetch Attendance Time Settings
-  const fetchAttendanceTimeSettings = async () => {
+  const fetchAttendanceTimeSettings = async (forceFresh = false) => {
     try {
       const targetSlug = isOgiTenantSession() ? "ogi" : (new URLSearchParams(window.location.search).get("tenant") || "ogi").toLowerCase();
       const userTypeHeader = (typeof window !== "undefined" ? localStorage.getItem("userType") : null) || "superadmin";
       const cacheKey = `cached_att_time_${targetSlug}`;
-      if (typeof window !== "undefined") {
+      if (!forceFresh && typeof window !== "undefined") {
         try {
           const cached = localStorage.getItem(cacheKey);
           if (cached) {
@@ -3863,15 +3863,22 @@ export default function AdminDashboard({
       }
 
       const response = await fetch(`/api/admin/settings?tenant=${targetSlug}`, {
+        cache: "no-store",
         headers: { "x-user-type": userTypeHeader }
       });
       if (!response.ok) return;
       const data = await response.json();
       if (data && data.success) {
-        setAttendanceTimeSettings({
+        const fresh = {
           startTime: data.startTime || "21:00",
           endTime: data.endTime || "22:00"
-        });
+        };
+        setAttendanceTimeSettings(fresh);
+        if (typeof window !== "undefined") {
+          try {
+            localStorage.setItem(cacheKey, JSON.stringify({ data: fresh, ts: Date.now() }));
+          } catch (_) {}
+        }
       }
     } catch (error) {
       console.warn("Silent fallback: Error fetching attendance settings:", error);
@@ -3885,25 +3892,45 @@ export default function AdminDashboard({
       return;
     }
 
+    const newStartTime = attendanceTimeSettings.startTime;
+    const newEndTime = attendanceTimeSettings.endTime;
+
     try {
       setIsUpdatingAttendanceTime(true);
       const response = await fetch("/api/admin/settings", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          startTime: attendanceTimeSettings.startTime,
-          endTime: attendanceTimeSettings.endTime
+          startTime: newStartTime,
+          endTime: newEndTime
         })
       });
 
       const data = await response.json();
       if (!response.ok || !data.success) {
-        throw new Error("Failed to update attendance time");
+        throw new Error(data.error || "Failed to update attendance time");
       }
 
-      alert("Attendance time updated successfully!");
+      const confirmedTimes = {
+        startTime: data.startTime || newStartTime,
+        endTime: data.endTime || newEndTime
+      };
+
+      // ⚡ Instantly update React state
+      setAttendanceTimeSettings(confirmedTimes);
+
+      // ⚡ Instantly sync and overwrite localStorage cache so it never reverts
+      if (typeof window !== "undefined") {
+        try {
+          const targetSlug = isOgiTenantSession() ? "ogi" : (new URLSearchParams(window.location.search).get("tenant") || "ogi").toLowerCase();
+          localStorage.setItem(`cached_att_time_${targetSlug}`, JSON.stringify({ data: confirmedTimes, ts: Date.now() }));
+          localStorage.removeItem(`cached_admin_sys_settings_${targetSlug}`);
+          localStorage.removeItem("cached_sys_settings_v1");
+        } catch (_) {}
+      }
+
       setShowAttendanceTimeModal(false);
-      await fetchAttendanceTimeSettings();
+      alert(`Attendance time updated successfully to ${confirmedTimes.startTime} - ${confirmedTimes.endTime}!`);
     } catch (error: any) {
       console.error("Error updating attendance time:", error);
       alert(error.message || "Failed to update attendance time");
