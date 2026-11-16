@@ -1705,6 +1705,10 @@ export default function AdminDashboard({
   const [studentGatePasses, setStudentGatePasses] = useState<any[]>([]);
   const [studentAttendances, setStudentAttendances] = useState<any[]>([]);
   const [isLoadingStudentHistory, setIsLoadingStudentHistory] = useState<boolean>(false);
+  const [homeLeaveCalendarMonth, setHomeLeaveCalendarMonth] = useState<Date>(new Date());
+  const [selectedHomeLeaveDate, setSelectedHomeLeaveDate] = useState<string>("");
+  const [homeLeaveViewMode, setHomeLeaveViewMode] = useState<"calendar" | "list">("calendar");
+  const [showMonthHomeLeaves, setShowMonthHomeLeaves] = useState<boolean>(false);
   const [gatePassCalendarMonth, setGatePassCalendarMonth] = useState<Date>(new Date());
   const [selectedGatePassDate, setSelectedGatePassDate] = useState<string>("");
   const [gatePassViewMode, setGatePassViewMode] = useState<"calendar" | "list">("calendar");
@@ -2110,6 +2114,35 @@ export default function AdminDashboard({
         setGatePassCalendarMonth(new Date());
       }
 
+      // ⚡ Auto-initialize Home-Leave Calendar to Latest Home-Leave Date & Month
+      if (combinedHomeLeaves.length > 0) {
+        const latestLeave: any = combinedHomeLeaves[0];
+        const rawDate = latestLeave.checkOutTime || latestLeave.fromDateTime || latestLeave.approvedFromDateTime || latestLeave.createdAt;
+        const d = parseFlexibleDate(rawDate);
+        let latestDateKey = "";
+        if (latestLeave.checkOutIstDate && typeof latestLeave.checkOutIstDate === "string") {
+          const match = latestLeave.checkOutIstDate.trim().match(/^(\d{1,2})[-/](\d{1,2})[-/](\d{4})$/);
+          if (match) {
+            latestDateKey = `${match[1].padStart(2, '0')}-${match[2].padStart(2, '0')}-${match[3]}`;
+          }
+        }
+        if (!latestDateKey && d && !isNaN(d.getTime())) {
+          latestDateKey = formatToDDMMYYYY(d, false);
+        }
+        if (latestDateKey) {
+          setSelectedHomeLeaveDate(latestDateKey);
+          const parts = latestDateKey.split("-");
+          if (parts.length === 3) {
+            setHomeLeaveCalendarMonth(new Date(parseInt(parts[2], 10), parseInt(parts[1], 10) - 1, 1));
+          }
+        } else if (d && !isNaN(d.getTime())) {
+          setHomeLeaveCalendarMonth(new Date(d.getFullYear(), d.getMonth(), 1));
+        }
+      } else {
+        setSelectedHomeLeaveDate("");
+        setHomeLeaveCalendarMonth(new Date());
+      }
+
       // ⚡ Auto-initialize Attendance Calendar to Latest Attendance Date & Month
       if (attRecords.length > 0) {
         const latestAtt: any = attRecords[0];
@@ -2162,6 +2195,10 @@ export default function AdminDashboard({
       setStudentGatePasses([]);
       setStudentAttendances([]);
       setStudentHistoryTab("permissions");
+      setSelectedHomeLeaveDate("");
+      setHomeLeaveCalendarMonth(new Date());
+      setHomeLeaveViewMode("calendar");
+      setShowMonthHomeLeaves(false);
       setSelectedGatePassDate("");
       setGatePassCalendarMonth(new Date());
       setGatePassViewMode("calendar");
@@ -15190,243 +15227,570 @@ export default function AdminDashboard({
                       </div>
                     )}
 
-                    {/* TAB 2: HOME-LEAVE HISTORY */}
-                    {studentHistoryTab === "home_leave" && (
-                      <div className="space-y-3">
-                        {studentHomeLeaves.length === 0 ? (
+                    {/* TAB 2: HOME-LEAVE HISTORY WITH MONTH CALENDAR VIEW */}
+                    {studentHistoryTab === "home_leave" && (() => {
+                      // Helper to extract DD-MM-YYYY date key from any home leave
+                      const normalizeLeaveDateKey = (leave: any): string => {
+                        if (leave.checkOutIstDate && typeof leave.checkOutIstDate === 'string') {
+                          const trimmed = leave.checkOutIstDate.trim();
+                          const match = trimmed.match(/^(\d{1,2})[-/](\d{1,2})[-/](\d{4})$/);
+                          if (match) {
+                            return `${match[1].padStart(2, '0')}-${match[2].padStart(2, '0')}-${match[3]}`;
+                          }
+                        }
+                        const rawDate = leave.checkOutTime || leave.fromDateTime || leave.approvedFromDateTime || leave.createdAt;
+                        if (rawDate) {
+                          const d = parseFlexibleDate(rawDate);
+                          if (d && !isNaN(d.getTime())) {
+                            return formatToDDMMYYYY(d, false);
+                          }
+                        }
+                        return "";
+                      };
+
+                      // Helper: Find leaves covering a specific date
+                      const getLeavesForDate = (dKey: string): any[] => {
+                        const parts = dKey.split("-");
+                        if (parts.length !== 3) return [];
+                        const dayStart = new Date(parseInt(parts[2], 10), parseInt(parts[1], 10) - 1, parseInt(parts[0], 10), 0, 0, 0).getTime();
+                        const dayEnd = new Date(parseInt(parts[2], 10), parseInt(parts[1], 10) - 1, parseInt(parts[0], 10), 23, 59, 59).getTime();
+
+                        return studentHomeLeaves.filter((leave: any) => {
+                          const startKey = normalizeLeaveDateKey(leave);
+                          if (startKey === dKey) return true;
+
+                          const fromRaw = leave.checkOutTime || leave.fromDateTime || leave.approvedFromDateTime || leave.createdAt;
+                          const toRaw = leave.checkInTime || leave.toDateTime || leave.approvedToDateTime;
+                          if (fromRaw && toRaw) {
+                            const startMs = new Date(fromRaw).getTime();
+                            const endMs = new Date(toRaw).getTime();
+                            if (!isNaN(startMs) && !isNaN(endMs) && endMs >= startMs) {
+                              return dayEnd >= startMs && dayStart <= endMs;
+                            }
+                          }
+                          return false;
+                        });
+                      };
+
+                      // 1. Identify Latest Leave Date
+                      const latestLeaveDateKey = studentHomeLeaves.length > 0 ? normalizeLeaveDateKey(studentHomeLeaves[0]) : "";
+                      const activeSelectedDate = selectedHomeLeaveDate || latestLeaveDateKey;
+
+                      // 2. Calendar Month Grid Calculation
+                      const calYear = homeLeaveCalendarMonth.getFullYear();
+                      const calMonth = homeLeaveCalendarMonth.getMonth(); // 0 to 11
+                      const daysInCalMonth = new Date(calYear, calMonth + 1, 0).getDate();
+                      const firstDayWeekday = new Date(calYear, calMonth, 1).getDay(); // 0 = Sun
+                      const daysInPrevCalMonth = new Date(calYear, calMonth, 0).getDate();
+
+                      const prevMonthDays: number[] = [];
+                      for (let i = firstDayWeekday - 1; i >= 0; i--) {
+                        prevMonthDays.push(daysInPrevCalMonth - i);
+                      }
+
+                      let calMonthLeavesCount = 0;
+                      const currentMonthDays: { day: number; dateKey: string; count: number; hasLeaves: boolean }[] = [];
+                      for (let d = 1; d <= daysInCalMonth; d++) {
+                        const dKey = `${String(d).padStart(2, '0')}-${String(calMonth + 1).padStart(2, '0')}-${calYear}`;
+                        const matchingLeaves = getLeavesForDate(dKey);
+                        const count = matchingLeaves.length;
+                        if (count > 0) calMonthLeavesCount += count;
+                        currentMonthDays.push({
+                          day: d,
+                          dateKey: dKey,
+                          count,
+                          hasLeaves: count > 0,
+                        });
+                      }
+
+                      const totalSlots = prevMonthDays.length + currentMonthDays.length;
+                      const trailingSlots = (7 - (totalSlots % 7)) % 7;
+                      const nextMonthDays: number[] = [];
+                      for (let d = 1; d <= trailingSlots; d++) {
+                        nextMonthDays.push(d);
+                      }
+
+                      const calMonthTitle = homeLeaveCalendarMonth.toLocaleDateString("en-US", { month: "long", year: "numeric" });
+                      const todayIST = formatDateDDMMYYYY(new Date());
+
+                      // 3. Quick Jump Handler
+                      const handleJumpToLatest = () => {
+                        if (latestLeaveDateKey) {
+                          setSelectedHomeLeaveDate(latestLeaveDateKey);
+                          setShowMonthHomeLeaves(false);
+                          const parts = latestLeaveDateKey.split("-");
+                          if (parts.length === 3) {
+                            setHomeLeaveCalendarMonth(new Date(parseInt(parts[2], 10), parseInt(parts[1], 10) - 1, 1));
+                          }
+                        }
+                      };
+
+                      // 4. Filter Leaves for View
+                      let displayLeaves: any[] = [];
+                      if (homeLeaveViewMode === "list") {
+                        displayLeaves = studentHomeLeaves;
+                      } else if (showMonthHomeLeaves) {
+                        displayLeaves = studentHomeLeaves.filter((leave: any) => {
+                          const k = normalizeLeaveDateKey(leave);
+                          if (!k) return false;
+                          const parts = k.split("-");
+                          return parseInt(parts[1], 10) === calMonth + 1 && parseInt(parts[2], 10) === calYear;
+                        });
+                      } else {
+                        displayLeaves = activeSelectedDate ? getLeavesForDate(activeSelectedDate) : [];
+                      }
+
+                      // 5. Individual Leave Card Renderer
+                      const renderLeaveCard = (item: any, idx: number) => {
+                        const isGatePassOuting = item.source === 'gate_pass';
+                        const isMerged = item.source === 'merged' || (item.hasGateMovement && (item.wardenStatus || item.deanStatus));
+                        const isCurrentlyOut = item.status === 'out';
+                        const isAllowed = item.status === 'allowed' || item.status === 'approved' || item.deanStatus === 'allowed' || item.deanStatus === 'approved';
+                        const isRejected = item.status === 'rejected' || item.deanStatus === 'rejected' || item.wardenStatus === 'rejected';
+                        const isCancelled = item.status === 'cancelled';
+                        const leaveEndDate = item.toDateTime || item.approvedToDateTime;
+                        const isLeaveExpired = leaveEndDate ? (new Date(leaveEndDate).getTime() < Date.now()) : false;
+                        const isExpired = item.status === 'expired' || (!isAllowed && !isCancelled && !isRejected && isLeaveExpired && !item.hasGateMovement);
+                        const isPending = !isAllowed && !isRejected && !isCancelled && !isExpired && !item.hasGateMovement;
+
+                        // Robust Date Resolution
+                        const fromRawDate = item.checkOutTime || item.fromDateTime || item.approvedFromDateTime || item.createdAt;
+                        const toRawDate = item.checkInTime || item.toDateTime || item.approvedToDateTime;
+                        
+                        const formattedOutDate = item.checkOutIstDate || (fromRawDate ? formatDateDDMMYYYY(fromRawDate) : "N/A");
+                        const formattedOutTime = item.checkOutIstTime || (fromRawDate ? new Date(fromRawDate).toLocaleTimeString("en-IN", { timeZone: "Asia/Kolkata", hour: "2-digit", minute: "2-digit", hour12: true }) : "");
+                        
+                        const formattedInDate = item.checkInIstDate || (toRawDate ? formatDateDDMMYYYY(toRawDate) : (isCurrentlyOut ? "Pending Return" : (!item.hasGateMovement ? "Scheduled Return" : "Completed")));
+                        const formattedInTime = item.checkInIstTime || (toRawDate ? new Date(toRawDate).toLocaleTimeString("en-IN", { timeZone: "Asia/Kolkata", hour: "2-digit", minute: "2-digit", hour12: true }) : "");
+
+                        // Calculate Duration in Days/Hours
+                        let leaveDuration = "—";
+                        if (fromRawDate && toRawDate) {
+                          const diffMs = new Date(toRawDate).getTime() - new Date(fromRawDate).getTime();
+                          if (diffMs > 0) {
+                            const days = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+                            const hours = Math.floor((diffMs % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
+                            leaveDuration = days > 0 ? `${days}d ${hours > 0 ? `${hours}h` : ''}` : `${hours} hrs`;
+                          }
+                        } else if (isCurrentlyOut && fromRawDate) {
+                          const diffMs = Date.now() - new Date(fromRawDate).getTime();
+                          const days = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+                          leaveDuration = days > 0 ? `${days}d (Out)` : `Active Out`;
+                        }
+
+                        return (
+                          <div
+                            key={item.id || idx}
+                            className={`rounded-xl p-3 sm:p-3.5 border transition-all shadow-2xs ${
+                              isCurrentlyOut
+                                ? 'bg-amber-50/50 border-amber-200/80'
+                                : 'bg-white border-slate-200/80 hover:border-slate-300'
+                            }`}
+                          >
+                            {/* Header: Category, Date Badge & Status */}
+                            <div className="flex flex-wrap items-center justify-between gap-1.5 mb-2">
+                              <div className="flex items-center flex-wrap gap-1.5">
+                                <span className="text-[9px] font-black uppercase tracking-wider px-2 py-0.5 rounded-md bg-blue-50 text-blue-700 border border-blue-200/60">
+                                  {isMerged ? '📝 Official Leave • 🚪 Gate Verified' : isGatePassOuting ? '🚪 Gate Leave Log' : '📝 Official Leave Pass'}
+                                </span>
+                                <span className="text-[10px] font-bold text-slate-700 bg-slate-100 px-2 py-0.5 rounded-md border border-slate-200 flex items-center gap-1">
+                                  📅 {formattedOutDate}
+                                </span>
+                              </div>
+
+                              {/* Status Badge */}
+                              <div className="flex items-center gap-1.5 shrink-0">
+                                {item.parentConsentUrl && (
+                                  <button
+                                    onMouseEnter={() => prefetchVideo(item.parentConsentUrl!)}
+                                    onClick={(e) => {
+                                      e.preventDefault();
+                                      setActiveConsentVideoUrl(
+                                        resolveConsentVideoSrc(
+                                          item.parentConsentUrl!,
+                                          prefetchedVideoUrls
+                                        )
+                                      );
+                                    }}
+                                    className="text-[9px] font-black text-indigo-600 bg-indigo-50 border border-indigo-200 px-2 py-0.5 rounded-md uppercase tracking-wider hover:bg-indigo-100 transition-all flex items-center gap-1 cursor-pointer"
+                                    title="Play Parent Consent Video"
+                                  >
+                                    🎥 Parent Video
+                                  </button>
+                                )}
+
+                                {isCurrentlyOut ? (
+                                  <div className="px-2 py-0.5 rounded-md text-[9px] font-black bg-amber-100 text-amber-800 border border-amber-300 flex items-center gap-1 animate-pulse">
+                                    <span className="w-1.5 h-1.5 rounded-full bg-amber-600"></span>
+                                    Currently At Home
+                                  </div>
+                                ) : (item.hasGateMovement || item.checkInTime || item.status === 'in' || item.status === 'completed') ? (
+                                  <div className="px-2 py-0.5 rounded-md text-[9px] font-black bg-green-100 text-green-700 border border-green-200">
+                                    Approved (Used)
+                                  </div>
+                                ) : (isAllowed && !item.hasGateMovement && !isLeaveExpired) ? (
+                                  <div className="px-2 py-0.5 rounded-md text-[9px] font-black bg-emerald-100 text-emerald-800 border border-emerald-300">
+                                    Approved (Awaiting Gate Exit)
+                                  </div>
+                                ) : (isAllowed && !item.hasGateMovement && isLeaveExpired) ? (
+                                  <div className="px-2 py-0.5 rounded-md text-[9px] font-black bg-slate-100 text-slate-600 border border-slate-300">
+                                    Approved (Unused)
+                                  </div>
+                                ) : isRejected ? (
+                                  <div className="px-2 py-0.5 rounded-md text-[9px] font-black bg-red-100 text-red-700 border border-red-200">
+                                    Rejected
+                                  </div>
+                                ) : isCancelled ? (
+                                  <div className="px-2 py-0.5 rounded-md text-[9px] font-black bg-slate-100 text-slate-600 border border-slate-300">
+                                    Cancelled
+                                  </div>
+                                ) : isExpired ? (
+                                  <div className="px-2 py-0.5 rounded-md text-[9px] font-black bg-rose-50 text-rose-700 border border-rose-200">
+                                    Expired (Not Utilized)
+                                  </div>
+                                ) : isPending ? (
+                                  <div className="px-2 py-0.5 rounded-md text-[9px] font-black bg-yellow-100 text-yellow-800 border border-yellow-200">
+                                    Pending
+                                  </div>
+                                ) : (
+                                  <div className="px-2 py-0.5 rounded-md text-[9px] font-black bg-green-100 text-green-700 border border-green-200">
+                                    Approved (Used)
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+
+                            {/* 3-Column Time & Duration Grid */}
+                            <div className="grid grid-cols-3 gap-1.5 sm:gap-2 bg-slate-50/80 p-2 rounded-lg border border-slate-100 text-[11px] mb-2">
+                              <div>
+                                <p className="text-[9px] font-bold text-slate-400">{item.hasGateMovement ? "Gate Out" : "Leave From"}</p>
+                                <p className="font-extrabold text-slate-800 mt-0.5 leading-tight">
+                                  {formattedOutDate}
+                                </p>
+                                {formattedOutTime && (
+                                  <p className="text-[10px] font-semibold text-blue-700">
+                                    {formattedOutTime}
+                                  </p>
+                                )}
+                              </div>
+
+                              <div>
+                                <p className="text-[9px] font-bold text-slate-400">{item.hasGateMovement ? "Gate In" : "Expected Return"}</p>
+                                <p className={`font-extrabold mt-0.5 leading-tight ${isCurrentlyOut ? 'text-amber-700 italic' : 'text-slate-800'}`}>
+                                  {formattedInDate}
+                                </p>
+                                {formattedInTime && formattedInDate !== "Completed" && (
+                                  <p className="text-[10px] font-semibold text-emerald-700">
+                                    {formattedInTime}
+                                  </p>
+                                )}
+                              </div>
+
+                              <div>
+                                <p className="text-[9px] font-bold text-slate-400">Duration</p>
+                                <p className="font-black text-indigo-700 bg-indigo-50/80 px-1.5 py-0.5 rounded border border-indigo-100 inline-block mt-0.5 text-[10px] sm:text-[11px]">
+                                  {leaveDuration}
+                                </p>
+                              </div>
+                            </div>
+
+                            {/* Reason & Destination */}
+                            <div className="text-[11px] text-slate-700 bg-slate-50/50 p-2 rounded-lg border border-slate-100/80">
+                              <span className="font-bold text-slate-900">Reason: </span>
+                              <span>{item.reason || "Home Leave"}</span>
+                              {item.destination && (
+                                <span className="block mt-0.5 text-[10px] text-slate-500 font-medium">
+                                  📍 Destination: {item.destination}
+                                </span>
+                              )}
+                            </div>
+
+                            {/* Approvals Footer (if official permission or gate pass) */}
+                            {(item.wardenStatus || item.deanStatus || item.parentStatus || item.parentConsentUrl || (item as any).consentVideoUrl || (item as any).videoUrl || (item as any).parentVideoUrl || item.gateName || true) && (
+                              <div className="mt-1.5 pt-1.5 border-t border-slate-100 flex flex-wrap items-center gap-1.5 text-[9.5px] sm:text-[10px] text-slate-600 font-bold">
+                                {/* 1. Parent Consent Badge (Before Warden) */}
+                                {(item.parentConsentUrl || (item as any).consentVideoUrl || (item as any).videoUrl || (item as any).parentVideoUrl) ? (
+                                  <button
+                                    type="button"
+                                    onMouseEnter={() => prefetchVideo((item.parentConsentUrl || (item as any).consentVideoUrl || (item as any).videoUrl || (item as any).parentVideoUrl)!)}
+                                    onClick={(e) => {
+                                      e.preventDefault();
+                                      const videoSrc = (item.parentConsentUrl || (item as any).consentVideoUrl || (item as any).videoUrl || (item as any).parentVideoUrl)!;
+                                      setActiveConsentVideoUrl(
+                                        resolveConsentVideoSrc(
+                                          videoSrc,
+                                          prefetchedVideoUrls
+                                        )
+                                      );
+                                    }}
+                                    className="px-2 py-0.5 rounded-md bg-green-50 text-green-700 border border-green-200 hover:bg-green-100 transition-all inline-flex items-center gap-1 cursor-pointer text-[9.5px] sm:text-[10px] font-bold"
+                                    title="Click to play Parent Consent Video"
+                                  >
+                                    Parent: <strong className="text-green-700 font-extrabold">Agree</strong>
+                                    <span className="text-green-600 text-[10.5px]">🎥</span>
+                                  </button>
+                                ) : (
+                                  <span className="px-2 py-0.5 rounded-md bg-slate-100 border border-slate-200/70 inline-flex items-center gap-1 text-[9.5px] sm:text-[10px] font-bold text-slate-600">
+                                    Parent: <strong className={`font-extrabold ${item.parentStatus === 'allowed' ? 'text-green-600' : item.parentStatus === 'rejected' ? 'text-red-600' : 'text-amber-600'}`}>
+                                      {(item.parentStatus === 'allowed' ? 'Agree' : item.parentStatus === 'rejected' ? 'Rejected' : 'Pending')}
+                                    </strong>
+                                    <span className="text-red-500 text-[10.5px]" title="Parent consent video not uploaded">
+                                      🎥
+                                    </span>
+                                  </span>
+                                )}
+
+                                {/* 2. Warden Badge */}
+                                <span className="px-2 py-0.5 rounded-md bg-slate-100 border border-slate-200/70 inline-flex items-center gap-1 text-[9.5px] sm:text-[10px] font-bold text-slate-600">
+                                  Warden: <strong className={`font-extrabold ${(item.wardenStatus === 'allowed' || item.wardenStatus === 'approved') ? 'text-green-600' : item.wardenStatus === 'rejected' ? 'text-red-600' : 'text-amber-600'}`}>
+                                    {(item.wardenStatus === 'allowed' || item.wardenStatus === 'approved' ? 'Approved' : item.wardenStatus === 'rejected' ? 'Rejected' : 'Pending')}
+                                  </strong>
+                                </span>
+
+                                {/* 3. Dean Badge */}
+                                <span className="px-1.5 py-0.5 rounded bg-slate-100 border border-slate-200/60">
+                                  Dean: <strong className={item.deanStatus === 'allowed' ? 'text-green-600' : item.deanStatus === 'rejected' ? 'text-red-600' : 'text-amber-600'}>
+                                    {(item.deanStatus || 'PENDING').toUpperCase()}
+                                  </strong>
+                                </span>
+
+                                {/* 4. Gate Scanned Badge */}
+                                {item.hasGateMovement && item.gateName && (
+                                  <span className="px-2 py-0.5 rounded-md bg-indigo-50 border border-indigo-200 text-indigo-700 text-[9.5px] sm:text-[10px] font-bold inline-flex items-center gap-1">
+                                    Gate: <strong className="font-extrabold">{item.gateName}</strong>
+                                  </span>
+                                )}
+                              </div>
+                            )}
+                          </div>
+                        );
+                      };
+
+                      if (studentHomeLeaves.length === 0) {
+                        return (
                           <div className="p-6 text-center bg-slate-50/70 border border-dashed border-slate-200 rounded-2xl">
                             <span className="text-2xl block mb-1.5">🏠</span>
                             <p className="text-xs font-bold text-slate-700">No Home-Leave records found</p>
                             <p className="text-[11px] text-slate-400 mt-0.5">This student has not requested or taken any home leaves yet.</p>
                           </div>
-                        ) : (
-                          studentHomeLeaves.map((item, idx) => {
-                            const isGatePassOuting = item.source === 'gate_pass';
-                            const isMerged = item.source === 'merged' || (item.hasGateMovement && (item.wardenStatus || item.deanStatus));
-                            const isCurrentlyOut = item.status === 'out';
-                            const isAllowed = item.status === 'allowed' || item.status === 'approved' || item.deanStatus === 'allowed' || item.deanStatus === 'approved';
-                            const isRejected = item.status === 'rejected' || item.deanStatus === 'rejected' || item.wardenStatus === 'rejected';
-                            const isCancelled = item.status === 'cancelled';
-                            const leaveEndDate = item.toDateTime || item.approvedToDateTime;
-                            const isLeaveExpired = leaveEndDate ? (new Date(leaveEndDate).getTime() < Date.now()) : false;
-                            const isExpired = item.status === 'expired' || (!isAllowed && !isCancelled && !isRejected && isLeaveExpired && !item.hasGateMovement);
-                            const isPending = !isAllowed && !isRejected && !isCancelled && !isExpired && !item.hasGateMovement;
+                        );
+                      }
 
-                            // Robust Date Resolution
-                            const fromRawDate = item.checkOutTime || item.fromDateTime || item.approvedFromDateTime || item.createdAt;
-                            const toRawDate = item.checkInTime || item.toDateTime || item.approvedToDateTime;
-                            
-                            const formattedOutDate = item.checkOutIstDate || (fromRawDate ? formatDateDDMMYYYY(fromRawDate) : "N/A");
-                            const formattedOutTime = item.checkOutIstTime || (fromRawDate ? new Date(fromRawDate).toLocaleTimeString("en-IN", { timeZone: "Asia/Kolkata", hour: "2-digit", minute: "2-digit", hour12: true }) : "");
-                            
-                            const formattedInDate = item.checkInIstDate || (toRawDate ? formatDateDDMMYYYY(toRawDate) : (isCurrentlyOut ? "Pending Return" : (!item.hasGateMovement ? "Scheduled Return" : "Completed")));
-                            const formattedInTime = item.checkInIstTime || (toRawDate ? new Date(toRawDate).toLocaleTimeString("en-IN", { timeZone: "Asia/Kolkata", hour: "2-digit", minute: "2-digit", hour12: true }) : "");
-
-                            // Calculate Duration in Days/Hours
-                            let leaveDuration = "—";
-                            if (fromRawDate && toRawDate) {
-                              const diffMs = new Date(toRawDate).getTime() - new Date(fromRawDate).getTime();
-                              if (diffMs > 0) {
-                                const days = Math.floor(diffMs / (1000 * 60 * 60 * 24));
-                                const hours = Math.floor((diffMs % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
-                                leaveDuration = days > 0 ? `${days}d ${hours > 0 ? `${hours}h` : ''}` : `${hours} hrs`;
-                              }
-                            } else if (isCurrentlyOut && fromRawDate) {
-                              const diffMs = Date.now() - new Date(fromRawDate).getTime();
-                              const days = Math.floor(diffMs / (1000 * 60 * 60 * 24));
-                              leaveDuration = days > 0 ? `${days}d (Out)` : `Active Out`;
-                            }
-
-                            return (
-                              <div
-                                key={item.id || idx}
-                                className={`rounded-xl p-3 sm:p-3.5 border transition-all shadow-2xs ${
-                                  isCurrentlyOut
-                                    ? 'bg-amber-50/50 border-amber-200/80'
-                                    : 'bg-white border-slate-200/80 hover:border-slate-300'
+                      return (
+                        <div className="space-y-3">
+                          {/* View Toggle Bar (Month Calendar vs List All) */}
+                          <div className="flex items-center justify-between pb-1 border-b border-slate-100">
+                            <div className="inline-flex items-center bg-slate-100 p-0.5 rounded-lg border border-slate-200">
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setHomeLeaveViewMode("calendar");
+                                  setShowMonthHomeLeaves(false);
+                                }}
+                                className={`px-2.5 py-1 rounded-md text-[10.5px] font-black transition-all flex items-center gap-1.5 cursor-pointer ${
+                                  homeLeaveViewMode === "calendar"
+                                    ? "bg-white text-amber-700 shadow-2xs border border-amber-100"
+                                    : "text-slate-500 hover:text-slate-800"
                                 }`}
                               >
-                                {/* Header: Category, Date Badge & Status */}
-                                <div className="flex flex-wrap items-center justify-between gap-1.5 mb-2">
-                                  <div className="flex items-center flex-wrap gap-1.5">
-                                    <span className="text-[9px] font-black uppercase tracking-wider px-2 py-0.5 rounded-md bg-blue-50 text-blue-700 border border-blue-200/60">
-                                      {isMerged ? '📝 Official Leave • 🚪 Gate Verified' : isGatePassOuting ? '🚪 Gate Leave Log' : '📝 Official Leave Pass'}
+                                <span>📅</span>
+                                <span>Month Calendar</span>
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => setHomeLeaveViewMode("list")}
+                                className={`px-2.5 py-1 rounded-md text-[10.5px] font-black transition-all flex items-center gap-1.5 cursor-pointer ${
+                                  homeLeaveViewMode === "list"
+                                    ? "bg-white text-amber-700 shadow-2xs border border-amber-100"
+                                    : "text-slate-500 hover:text-slate-800"
+                                }`}
+                              >
+                                <span>📋</span>
+                                <span>All Leaves ({studentHomeLeaves.length})</span>
+                              </button>
+                            </div>
+
+                            {latestLeaveDateKey && homeLeaveViewMode === "calendar" && (
+                              <button
+                                type="button"
+                                onClick={handleJumpToLatest}
+                                className="text-[10px] font-bold text-amber-900 bg-amber-50 hover:bg-amber-100 border border-amber-200 px-2 py-1 rounded-md transition-all cursor-pointer flex items-center gap-1"
+                                title="Jump to Latest Leave Date"
+                              >
+                                <span>⚡ Latest:</span>
+                                <span className="font-extrabold">{latestLeaveDateKey}</span>
+                              </button>
+                            )}
+                          </div>
+
+                          {/* 1. MONTH CALENDAR VIEW */}
+                          {homeLeaveViewMode === "calendar" && (
+                            <>
+                              <div className="bg-gradient-to-b from-slate-50/90 to-white border border-slate-200/90 rounded-2xl p-3 sm:p-3.5 shadow-2xs">
+                                {/* Month Navigation & Leaves Summary */}
+                                <div className="flex items-center justify-between gap-2 mb-2.5">
+                                  <div className="flex items-center gap-1">
+                                    <button
+                                      type="button"
+                                      onClick={() => setHomeLeaveCalendarMonth(prev => new Date(prev.getFullYear(), prev.getMonth() - 1, 1))}
+                                      className="w-7 h-7 flex items-center justify-center rounded-lg bg-white border border-slate-200 text-slate-700 hover:bg-slate-100 font-bold transition-all cursor-pointer shadow-2xs"
+                                      title="Previous Month"
+                                    >
+                                      ◀
+                                    </button>
+                                    <span className="text-xs sm:text-sm font-black text-slate-800 px-2 min-w-[130px] text-center select-none">
+                                      {calMonthTitle}
                                     </span>
-                                    <span className="text-[10px] font-bold text-slate-700 bg-slate-100 px-2 py-0.5 rounded-md border border-slate-200 flex items-center gap-1">
-                                      📅 {formattedOutDate}
-                                    </span>
+                                    <button
+                                      type="button"
+                                      onClick={() => setHomeLeaveCalendarMonth(prev => new Date(prev.getFullYear(), prev.getMonth() + 1, 1))}
+                                      className="w-7 h-7 flex items-center justify-center rounded-lg bg-white border border-slate-200 text-slate-700 hover:bg-slate-100 font-bold transition-all cursor-pointer shadow-2xs"
+                                      title="Next Month"
+                                    >
+                                      ▶
+                                    </button>
                                   </div>
 
-                                  {/* Status Badge */}
-                                  <div className="flex items-center gap-1.5 shrink-0">
-                                    {item.parentConsentUrl && (
+                                  {/* Month Leaves Count Badge */}
+                                  <div className="flex items-center gap-1.5">
+                                    <span className="text-[10px] sm:text-[11px] font-black px-2.5 py-0.5 rounded-full bg-amber-100 text-amber-900 border border-amber-300 flex items-center gap-1.5 shadow-2xs">
+                                      <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse"></span>
+                                      {calMonthLeavesCount} {calMonthLeavesCount === 1 ? 'leave' : 'leaves'} in month
+                                    </span>
+                                  </div>
+                                </div>
+
+                                {/* Weekday Row (Sun to Sat) */}
+                                <div className="grid grid-cols-7 gap-x-1 gap-y-0.5 sm:gap-1.5 text-center text-[9px] sm:text-[10px] font-black text-slate-400 mb-0.5 sm:mb-1">
+                                  {["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].map(day => (
+                                    <div key={day} className="py-0.5 tracking-wider uppercase">{day}</div>
+                                  ))}
+                                </div>
+
+                                {/* Month Days Grid: Yellow/Amber Highlighted Days for Leaves */}
+                                <div className="grid grid-cols-7 gap-x-1 gap-y-0.5 sm:gap-1.5">
+                                  {prevMonthDays.map(d => (
+                                    <div key={`prev-${d}`} className="h-6 sm:h-8.5 rounded-md sm:rounded-lg flex items-center justify-center text-[9.5px] sm:text-xs text-slate-300/80 font-medium select-none">
+                                      {d}
+                                    </div>
+                                  ))}
+                                  {currentMonthDays.map(({ day, dateKey, count, hasLeaves }) => {
+                                    const isSelected = activeSelectedDate === dateKey && !showMonthHomeLeaves;
+                                    const isToday = todayIST === dateKey;
+
+                                    return (
                                       <button
-                                        onMouseEnter={() => prefetchVideo(item.parentConsentUrl!)}
-                                        onClick={(e) => {
-                                          e.preventDefault();
-                                          setActiveConsentVideoUrl(
-                                            resolveConsentVideoSrc(
-                                              item.parentConsentUrl!,
-                                              prefetchedVideoUrls
-                                            )
-                                          );
+                                        key={dateKey}
+                                        type="button"
+                                        onClick={() => {
+                                          setSelectedHomeLeaveDate(dateKey);
+                                          setShowMonthHomeLeaves(false);
                                         }}
-                                        className="text-[9px] font-black text-indigo-600 bg-indigo-50 border border-indigo-200 px-2 py-0.5 rounded-md uppercase tracking-wider hover:bg-indigo-100 transition-all flex items-center gap-1 cursor-pointer"
-                                        title="Play Parent Consent Video"
+                                        className={`relative h-6 sm:h-8.5 rounded-md sm:rounded-lg flex flex-col items-center justify-center transition-all cursor-pointer select-none text-[9.5px] sm:text-xs ${
+                                          isSelected
+                                            ? hasLeaves
+                                              ? "bg-amber-400 text-amber-950 font-black ring-2 ring-indigo-600 ring-offset-1 shadow-md scale-[1.05]"
+                                              : "bg-indigo-600 text-white font-black ring-2 ring-indigo-400 ring-offset-1 shadow-md scale-[1.05]"
+                                            : hasLeaves
+                                            ? "bg-amber-100 hover:bg-amber-200 text-amber-950 font-bold border border-amber-300 shadow-2xs"
+                                            : "bg-slate-50/70 text-slate-600 hover:bg-slate-100 hover:text-slate-900 border border-transparent"
+                                        }`}
+                                        title={hasLeaves ? `${count} leave${count > 1 ? 's' : ''} on ${dateKey}` : `No leaves on ${dateKey}`}
                                       >
-                                        🎥 Parent Video
+                                        <span className="leading-none text-[11px] sm:text-xs">{day}</span>
+                                        {hasLeaves && (
+                                          <span className="flex items-center gap-0.5 mt-0.5">
+                                            <span className={`w-1.5 h-1.5 rounded-full ${isSelected ? "bg-amber-950" : "bg-amber-600"}`}></span>
+                                            {count > 1 && (
+                                              <span className={`text-[8.5px] font-black leading-none ${isSelected ? "text-amber-950" : "text-amber-800"}`}>
+                                                {count}
+                                              </span>
+                                            )}
+                                          </span>
+                                        )}
+                                        {isToday && !hasLeaves && (
+                                          <span className="absolute bottom-1 w-1 h-1 rounded-full bg-indigo-500"></span>
+                                        )}
                                       </button>
-                                    )}
-
-                                    {isCurrentlyOut ? (
-                                      <div className="px-2 py-0.5 rounded-md text-[9px] font-black bg-amber-100 text-amber-800 border border-amber-300 flex items-center gap-1 animate-pulse">
-                                        <span className="w-1.5 h-1.5 rounded-full bg-amber-600"></span>
-                                        Currently At Home
-                                      </div>
-                                    ) : (item.hasGateMovement || item.checkInTime || item.status === 'in' || item.status === 'completed') ? (
-                                      <div className="px-2 py-0.5 rounded-md text-[9px] font-black bg-green-100 text-green-700 border border-green-200">
-                                        Approved (Used)
-                                      </div>
-                                    ) : (isAllowed && !item.hasGateMovement && !isLeaveExpired) ? (
-                                      <div className="px-2 py-0.5 rounded-md text-[9px] font-black bg-emerald-100 text-emerald-800 border border-emerald-300">
-                                        Approved (Awaiting Gate Exit)
-                                      </div>
-                                    ) : (isAllowed && !item.hasGateMovement && isLeaveExpired) ? (
-                                      <div className="px-2 py-0.5 rounded-md text-[9px] font-black bg-slate-100 text-slate-600 border border-slate-300">
-                                        Approved (Unused)
-                                      </div>
-                                    ) : isRejected ? (
-                                      <div className="px-2 py-0.5 rounded-md text-[9px] font-black bg-red-100 text-red-700 border border-red-200">
-                                        Rejected
-                                      </div>
-                                    ) : isCancelled ? (
-                                      <div className="px-2 py-0.5 rounded-md text-[9px] font-black bg-slate-100 text-slate-600 border border-slate-300">
-                                        Cancelled
-                                      </div>
-                                    ) : isExpired ? (
-                                      <div className="px-2 py-0.5 rounded-md text-[9px] font-black bg-rose-50 text-rose-700 border border-rose-200">
-                                        Expired (Not Utilized)
-                                      </div>
-                                    ) : isPending ? (
-                                      <div className="px-2 py-0.5 rounded-md text-[9px] font-black bg-yellow-100 text-yellow-800 border border-yellow-200">
-                                        Pending
-                                      </div>
-                                    ) : (
-                                      <div className="px-2 py-0.5 rounded-md text-[9px] font-black bg-green-100 text-green-700 border border-green-200">
-                                        Approved (Used)
-                                      </div>
-                                    )}
-                                  </div>
+                                    );
+                                  })}
+                                  {nextMonthDays.map(d => (
+                                    <div key={`next-${d}`} className="h-6 sm:h-8.5 rounded-md sm:rounded-lg flex items-center justify-center text-[9.5px] sm:text-xs text-slate-300/80 font-medium select-none">
+                                      {d}
+                                    </div>
+                                  ))}
                                 </div>
 
-                                {/* 3-Column Time & Duration Grid */}
-                                <div className="grid grid-cols-3 gap-1.5 sm:gap-2 bg-slate-50/80 p-2 rounded-lg border border-slate-100 text-[11px] mb-2">
-                                  <div>
-                                    <p className="text-[9px] font-bold text-slate-400">{item.hasGateMovement ? "Gate Out" : "Leave From"}</p>
-                                    <p className="font-extrabold text-slate-800 mt-0.5 leading-tight">
-                                      {formattedOutDate}
-                                    </p>
-                                    {formattedOutTime && (
-                                      <p className="text-[10px] font-semibold text-blue-700">
-                                        {formattedOutTime}
-                                      </p>
-                                    )}
-                                  </div>
-
-                                  <div>
-                                    <p className="text-[9px] font-bold text-slate-400">{item.hasGateMovement ? "Gate In" : "Expected Return"}</p>
-                                    <p className={`font-extrabold mt-0.5 leading-tight ${isCurrentlyOut ? 'text-amber-700 italic' : 'text-slate-800'}`}>
-                                      {formattedInDate}
-                                    </p>
-                                    {formattedInTime && formattedInDate !== "Completed" && (
-                                      <p className="text-[10px] font-semibold text-emerald-700">
-                                        {formattedInTime}
-                                      </p>
-                                    )}
-                                  </div>
-
-                                  <div>
-                                    <p className="text-[9px] font-bold text-slate-400">Duration</p>
-                                    <p className="font-black text-indigo-700 bg-indigo-50/80 px-1.5 py-0.5 rounded border border-indigo-100 inline-block mt-0.5 text-[10px] sm:text-[11px]">
-                                      {leaveDuration}
-                                    </p>
-                                  </div>
-                                </div>
-
-                                {/* Reason & Destination */}
-                                <div className="text-[11px] text-slate-700 bg-slate-50/50 p-2 rounded-lg border border-slate-100/80">
-                                  <span className="font-bold text-slate-900">Reason: </span>
-                                  <span>{item.reason || "Home Leave"}</span>
-                                  {item.destination && (
-                                    <span className="block mt-0.5 text-[10px] text-slate-500 font-medium">
-                                      📍 Destination: {item.destination}
+                                {/* Calendar Legend & Footer */}
+                                <div className="flex items-center justify-between pt-2.5 mt-2.5 border-t border-slate-200/70 text-[10px] text-slate-500 font-medium flex-wrap gap-2">
+                                  <div className="flex items-center gap-3">
+                                    <span className="flex items-center gap-1.5">
+                                      <span className="w-3 h-3 rounded bg-amber-200 border border-amber-300"></span>
+                                      <span className="font-bold text-slate-700">Leave History (Yellow)</span>
                                     </span>
+                                    <span className="flex items-center gap-1.5">
+                                      <span className="w-3 h-3 rounded bg-amber-400 ring-2 ring-indigo-600"></span>
+                                      <span className="font-bold text-slate-700">Selected Date</span>
+                                    </span>
+                                  </div>
+                                  <span className="text-[9.5px] text-slate-400">
+                                    Click any date above to view details below
+                                  </span>
+                                </div>
+                              </div>
+
+                              {/* 2. LEAVE CARDS BELOW CALENDAR */}
+                              <div className="space-y-2.5 pt-1">
+                                <div className="flex items-center justify-between px-0.5 flex-wrap gap-1.5">
+                                  <div className="flex items-center gap-2">
+                                    <span className="text-xs font-black text-slate-800 flex items-center gap-1.5">
+                                      <span>📍 Home-Leave Details for</span>
+                                      <span className="px-2 py-0.5 rounded-md bg-amber-100 text-amber-950 border border-amber-300 font-extrabold">
+                                        📅 {showMonthHomeLeaves ? `${calMonthTitle} (All Month)` : (activeSelectedDate || "Selected Date")}
+                                      </span>
+                                    </span>
+                                    <span className="text-[11px] font-bold text-slate-500">
+                                      ({displayLeaves.length} {displayLeaves.length === 1 ? 'leave' : 'leaves'})
+                                    </span>
+                                  </div>
+
+                                  {calMonthLeavesCount > 0 && (
+                                    <button
+                                      type="button"
+                                      onClick={() => setShowMonthHomeLeaves(prev => !prev)}
+                                      className="text-[10.5px] font-bold text-amber-700 hover:text-amber-900 hover:underline cursor-pointer flex items-center gap-1"
+                                    >
+                                      {showMonthHomeLeaves ? "← Show Only Selected Date" : `View all ${calMonthLeavesCount} leaves in ${calMonthTitle} →`}
+                                    </button>
                                   )}
                                 </div>
 
-                                {/* Approvals Footer (if official permission or gate pass) */}
-                                {(item.wardenStatus || item.deanStatus || item.parentStatus || item.parentConsentUrl || (item as any).consentVideoUrl || (item as any).videoUrl || (item as any).parentVideoUrl || item.gateName || true) && (
-                                  <div className="mt-1.5 pt-1.5 border-t border-slate-100 flex flex-wrap items-center gap-1.5 text-[9.5px] sm:text-[10px] text-slate-600 font-bold">
-                                    {/* 1. Parent Consent Badge (Before Warden) */}
-                                    {(item.parentConsentUrl || (item as any).consentVideoUrl || (item as any).videoUrl || (item as any).parentVideoUrl) ? (
-                                      <button
-                                        type="button"
-                                        onMouseEnter={() => prefetchVideo((item.parentConsentUrl || (item as any).consentVideoUrl || (item as any).videoUrl || (item as any).parentVideoUrl)!)}
-                                        onClick={(e) => {
-                                          e.preventDefault();
-                                          const videoSrc = (item.parentConsentUrl || (item as any).consentVideoUrl || (item as any).videoUrl || (item as any).parentVideoUrl)!;
-                                          setActiveConsentVideoUrl(
-                                            resolveConsentVideoSrc(
-                                              videoSrc,
-                                              prefetchedVideoUrls
-                                            )
-                                          );
-                                        }}
-                                        className="px-2 py-0.5 rounded-md bg-green-50 text-green-700 border border-green-200 hover:bg-green-100 transition-all inline-flex items-center gap-1 cursor-pointer text-[9.5px] sm:text-[10px] font-bold"
-                                        title="Click to play Parent Consent Video"
-                                      >
-                                        Parent: <strong className="text-green-700 font-extrabold">Agree</strong>
-                                        <span className="text-green-600 text-[10.5px]">🎥</span>
-                                      </button>
-                                    ) : (
-                                      <span className="px-2 py-0.5 rounded-md bg-slate-100 border border-slate-200/70 inline-flex items-center gap-1 text-[9.5px] sm:text-[10px] font-bold text-slate-600">
-                                        Parent: <strong className={`font-extrabold ${item.parentStatus === 'allowed' ? 'text-green-600' : item.parentStatus === 'rejected' ? 'text-red-600' : 'text-amber-600'}`}>
-                                          {(item.parentStatus === 'allowed' ? 'Agree' : item.parentStatus === 'rejected' ? 'Rejected' : 'Pending')}
-                                        </strong>
-                                        <span className="text-red-500 text-[10.5px]" title="Parent consent video not uploaded">
-                                          🎥
-                                        </span>
-                                      </span>
-                                    )}
-
-                                    {/* 2. Warden Badge */}
-                                    <span className="px-2 py-0.5 rounded-md bg-slate-100 border border-slate-200/70 inline-flex items-center gap-1 text-[9.5px] sm:text-[10px] font-bold text-slate-600">
-                                      Warden: <strong className={`font-extrabold ${(item.wardenStatus === 'allowed' || item.wardenStatus === 'approved') ? 'text-green-600' : item.wardenStatus === 'rejected' ? 'text-red-600' : 'text-amber-600'}`}>
-                                        {(item.wardenStatus === 'allowed' || item.wardenStatus === 'approved' ? 'Approved' : item.wardenStatus === 'rejected' ? 'Rejected' : 'Pending')}
-                                      </strong>
-                                    </span>
-
-                                    {/* 3. Dean Badge */}
-                                    <span className="px-1.5 py-0.5 rounded bg-slate-100 border border-slate-200/60">
-                                      Dean: <strong className={item.deanStatus === 'allowed' ? 'text-green-600' : item.deanStatus === 'rejected' ? 'text-red-600' : 'text-amber-600'}>
-                                        {(item.deanStatus || 'PENDING').toUpperCase()}
-                                      </strong>
-                                    </span>
-
-                                    {/* 4. Gate Scanned Badge */}
-                                    {item.hasGateMovement && item.gateName && (
-                                      <span className="px-2 py-0.5 rounded-md bg-indigo-50 border border-indigo-200 text-indigo-700 text-[9.5px] sm:text-[10px] font-bold inline-flex items-center gap-1">
-                                        Gate: <strong className="font-extrabold">{item.gateName}</strong>
-                                      </span>
-                                    )}
+                                {displayLeaves.length === 0 ? (
+                                  <div className="p-6 text-center bg-slate-50/70 border border-dashed border-slate-200 rounded-2xl">
+                                    <span className="text-2xl block mb-1.5">📅</span>
+                                    <p className="text-xs font-bold text-slate-700">
+                                      No home-leave records on {activeSelectedDate || "this date"}
+                                    </p>
+                                    <p className="text-[11px] text-slate-400 mt-0.5">
+                                      Click any highlighted date above or switch to "All Leaves" to view all records.
+                                    </p>
                                   </div>
+                                ) : (
+                                  displayLeaves.map(renderLeaveCard)
                                 )}
                               </div>
-                            );
-                          })
-                        )}
-                      </div>
-                    )}
+                            </>
+                          )}
+
+                          {/* LIST ALL VIEW */}
+                          {homeLeaveViewMode === "list" && (
+                            <div className="space-y-3">
+                              {studentHomeLeaves.map(renderLeaveCard)}
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })()}
 
                     {/* TAB 3: GATE-PASS HISTORY WITH MONTH CALENDAR VIEW */}
                     {studentHistoryTab === "gate_pass" && (() => {
