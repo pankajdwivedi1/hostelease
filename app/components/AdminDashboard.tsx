@@ -4122,7 +4122,7 @@ export default function AdminDashboard({
           const cached = localStorage.getItem(cacheKey);
           if (cached) {
             const { data, ts } = JSON.parse(cached);
-            if (Date.now() - ts < 86400000 && data?.success) {
+            if (false && Date.now() - ts < 86400000 && data?.success) { // Always sync fresh with server
               settingsData = data;
             }
           }

@@ -1952,7 +1952,7 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
     const fetchSystemSettings = async () => {
         try {
             // ⚡ 1-HOUR CLIENT CACHE: Dramatically reduces redundant server pings
-            const CACHE_TTL = 24 * 60 * 60 * 1000;
+            const CACHE_TTL = 0; // ⚡ ZERO-DELAY REAL-TIME SYNC: Always validate fresh with server via HTTP 304 ETag
             if (typeof window !== 'undefined') {
                 try {
                     const localCached = localStorage.getItem("cached_sys_settings_v1");
