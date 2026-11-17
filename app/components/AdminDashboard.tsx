@@ -4241,7 +4241,7 @@ export default function AdminDashboard({
           const cached = localStorage.getItem(cacheKey);
           if (cached) {
             const { data, ts } = JSON.parse(cached);
-            if (false && Date.now() - ts < 86400000 && data?.success) { // Always sync fresh with server
+            if (Date.now() - ts < 86400000 && data?.success) {
               settingsData = data;
             }
           }
@@ -4252,7 +4252,17 @@ export default function AdminDashboard({
         const settingsRes = await fetch(`/api/admin/settings?tenant=${targetSlug}`, {
           headers: { "x-user-type": userTypeHeader }
         });
-        if (settingsRes.ok) {
+        if (settingsRes.status === 304) {
+          try {
+            const cached = localStorage.getItem(cacheKey);
+            if (cached) {
+              const parsed = JSON.parse(cached);
+              parsed.ts = Date.now();
+              localStorage.setItem(cacheKey, JSON.stringify(parsed));
+              settingsData = parsed.data;
+            }
+          } catch (_) {}
+        } else if (settingsRes.ok) {
           settingsData = await settingsRes.json();
           if (settingsData?.success && typeof window !== "undefined") {
             try {

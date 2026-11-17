@@ -2033,6 +2033,16 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
 
             if (res.status === 304) {
                 // ⚡ ZERO-DATA SYNC: Server confirmed no settings have changed!
+                if (typeof window !== 'undefined') {
+                    try {
+                        const localCached = localStorage.getItem("cached_sys_settings_v1");
+                        if (localCached) {
+                            const parsed = JSON.parse(localCached);
+                            parsed.ts = Date.now();
+                            localStorage.setItem("cached_sys_settings_v1", JSON.stringify(parsed));
+                        }
+                    } catch {}
+                }
                 return;
             }
             if (!res.ok) return;

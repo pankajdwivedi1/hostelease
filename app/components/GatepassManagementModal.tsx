@@ -63,6 +63,18 @@ export default function GatepassManagementModal({
 
                 // If cache expired or not present, fetch fresh settings from server
                 const res = await fetch("/api/admin/settings");
+                if (res.status === 304) {
+                    if (cachedGates) {
+                        try {
+                            const parsed = JSON.parse(cachedGates);
+                            parsed.ts = Date.now();
+                            localStorage.setItem("cached_gate_settings_v2", JSON.stringify(parsed));
+                        } catch (_) {}
+                    }
+                    setIsLoading(false);
+                    return;
+                }
+                if (!res.ok) { setIsLoading(false); return; }
                 const data = await res.json();
 
                 if (isMounted && data?.success) {

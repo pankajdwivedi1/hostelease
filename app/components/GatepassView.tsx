@@ -371,6 +371,18 @@ export default function GatepassView({
                 }
 
                 const res = await fetch("/api/admin/settings");
+                if (res.status === 304) {
+                    if (cached) {
+                        try {
+                            const parsed = JSON.parse(cached);
+                            parsed.ts = Date.now();
+                            localStorage.setItem(cacheKey, JSON.stringify(parsed));
+                            if (isMounted && parsed.data) applyGateSettings(parsed.data);
+                        } catch (_) {}
+                    }
+                    return;
+                }
+                if (!res.ok) return;
                 const data = await res.json();
                 if (!isMounted || !data?.success) return;
                 try {

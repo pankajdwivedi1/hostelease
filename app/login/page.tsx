@@ -436,6 +436,17 @@ function LoginForm() {
               } catch (_) {}
             }
             const sRes = await fetch("/api/admin/settings");
+            if (sRes.status === 304) {
+              if (cachedGates) {
+                try {
+                  const parsed = JSON.parse(cachedGates);
+                  parsed.ts = Date.now();
+                  localStorage.setItem("cached_gate_settings_v2", JSON.stringify(parsed));
+                } catch (_) {}
+              }
+              return;
+            }
+            if (!sRes.ok) return;
             const sData = await sRes.json();
             if (sData?.success && Array.isArray(sData.gatepassGates) && sData.gatepassGates.length > 0) {
               setGates(sData.gatepassGates);
