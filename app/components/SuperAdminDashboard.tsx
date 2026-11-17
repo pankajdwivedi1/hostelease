@@ -1,6 +1,7 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
+import { usePullToRefresh } from "./PullToRefresh";
 import { showToast, showConfirm, showPrompt } from "@/lib/toast";
 import {
     Building2,
@@ -1655,8 +1656,29 @@ export default function SuperAdminDashboard() {
         );
     }
 
+    // ⚡ Manual Mobile Pull-to-Refresh for Super Admin
+    const handleManualPullRefresh = useCallback(async () => {
+        try {
+            await Promise.allSettled([
+                fetchTenants(),
+                fetchAuditLogs(),
+                fetchPaymentSettings(),
+                fetchMaintenanceSettings(),
+                fetchBillingLedger()
+            ]);
+            showToast("Boss Control updated from server ✔️", "info", { duration: 2000 });
+        } catch (err) {
+            console.error("Super Admin pull refresh error:", err);
+        }
+    }, [fetchTenants, fetchAuditLogs, fetchPaymentSettings, fetchMaintenanceSettings, fetchBillingLedger]);
+
+    const { touchHandlers: superAdminTouchHandlers, PullIndicator: SuperAdminPullIndicator } = usePullToRefresh({
+        onRefresh: handleManualPullRefresh,
+    });
+
     return (
-        <div className="min-h-screen bg-[#fcfcfd] flex flex-col font-sans">
+        <div className="min-h-screen bg-[#fcfcfd] flex flex-col font-sans relative overflow-x-hidden" {...superAdminTouchHandlers}>
+            <SuperAdminPullIndicator />
             {/* Header */}
             <header className="bg-white/70 backdrop-blur-md border-b border-gray-100 flex flex-col sm:flex-row items-start sm:items-center justify-between px-3 sm:px-8 py-2.5 sm:py-5 sticky top-0 z-40 transition-shadow gap-2.5 sm:gap-0">
                 <div className="flex items-center gap-2.5 sm:gap-4 w-full sm:w-auto">

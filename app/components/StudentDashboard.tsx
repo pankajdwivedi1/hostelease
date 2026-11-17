@@ -983,8 +983,14 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
             };
 
             const [gpRes, permRes] = await Promise.allSettled([
-                fetch(`/api/getpass/history?${gpQuery.toString()}${getTenantParam(false)}`, { headers: studentAuthHeaders }).then(r => (r.ok ? r.json() : null)),
-                fetch(`/api/permissions?${permQuery.toString()}${getTenantParam(false)}`, { headers: studentAuthHeaders }).then(r => (r.ok ? r.json() : null)),
+                fetch(`/api/getpass/history?${gpQuery.toString()}${getTenantParam(false)}&_t=${Date.now()}`, { 
+                    cache: 'no-store',
+                    headers: { 'Cache-Control': 'no-cache, no-store', 'Pragma': 'no-cache', ...studentAuthHeaders } 
+                }).then(r => (r.ok ? r.json() : null)),
+                fetch(`/api/permissions?${permQuery.toString()}${getTenantParam(false)}&_t=${Date.now()}`, { 
+                    cache: 'no-store',
+                    headers: { 'Cache-Control': 'no-cache, no-store', 'Pragma': 'no-cache', ...studentAuthHeaders } 
+                }).then(r => (r.ok ? r.json() : null)),
             ]);
 
             const gpRecords: any[] = (gpRes.status === "fulfilled" && Array.isArray(gpRes.value?.records)) 
@@ -996,8 +1002,9 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
             const permRecords: any[] = Array.isArray(permData) ? permData : [];
 
             // 1. ALL OFFICIAL PERMISSION RECORDS (Tab 1)
+            // Fresh server records (permRecords) MUST override stale in-memory state (initialPerms)
             const initialPerms = Array.isArray(permissions) ? permissions : [];
-            const combinedAllPerms = [...permRecords, ...initialPerms];
+            const combinedAllPerms = [...initialPerms, ...permRecords];
             const uniquePermsMap = new Map();
             combinedAllPerms.forEach((p: any) => {
                 const pId = p.id || p._id;
@@ -1013,11 +1020,11 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
                         uniquePermsMap.set(pId, {
                             ...existing,
                             ...p,
-                            parentConsentUrl: consentVideo || existing.parentConsentUrl || p.parentConsentUrl,
-                            parentStatus: p.parentStatus || existing.parentStatus,
-                            wardenStatus: p.wardenStatus || existing.wardenStatus,
-                            deanStatus: p.deanStatus || existing.deanStatus,
-                            status: p.status || existing.status
+                            parentConsentUrl: consentVideo || p.parentConsentUrl || existing.parentConsentUrl,
+                            parentStatus: p.parentStatus !== undefined ? p.parentStatus : existing.parentStatus,
+                            wardenStatus: p.wardenStatus !== undefined ? p.wardenStatus : existing.wardenStatus,
+                            deanStatus: p.deanStatus !== undefined ? p.deanStatus : existing.deanStatus,
+                            status: p.status !== undefined ? p.status : existing.status
                         });
                     }
                 }
@@ -1973,11 +1980,12 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
         };
     }, [cameraActive, faceMatchStep]);
 
-    const fetchSystemSettings = async () => {
+    const fetchSystemSettings = async (isManualPull = false) => {
         try {
-            // ⚡ 1-HOUR CLIENT CACHE: Dramatically reduces redundant server pings
-            const CACHE_TTL = 24 * 60 * 60 * 1000; // ⚡ 24-HOUR CLIENT CACHE: Prevents 700+ students from pinging settings
-            if (typeof window !== 'undefined') {
+            // ⚡ 24-HOUR CLIENT CACHE: Kept intact for background & normal loads.
+            // On manual pull-to-refresh (isManualPull = true), bypasses cache and updates with latest from server.
+            const CACHE_TTL = 24 * 60 * 60 * 1000;
+            if (!isManualPull && typeof window !== 'undefined') {
                 try {
                     const localCached = localStorage.getItem("cached_sys_settings_v1");
                     if (localCached) {
@@ -1995,7 +2003,7 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
                     }
                 } catch {}
             }
-            if (settingsCacheRef.current && Date.now() - settingsCacheRef.current.ts < CACHE_TTL) {
+            if (!isManualPull && settingsCacheRef.current && Date.now() - settingsCacheRef.current.ts < CACHE_TTL) {
                 const data = settingsCacheRef.current.data;
                 setFormBuilderConfig(data.formBuilderConfig || []);
                 if (data.startTime && data.endTime) {
@@ -2008,8 +2016,30 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
                 return;
             }
 
-            const res = await fetch(`/api/admin/settings${getTenantParam()}`);
+            const cachedEtag = typeof window !== 'undefined' ? localStorage.getItem("cached_sys_settings_etag") : null;
+            const headers: Record<string, string> = {};
+            if (!isManualPull && cachedEtag) {
+                headers["if-none-match"] = cachedEtag;
+            }
+            if (isManualPull) {
+                headers["Cache-Control"] = "no-cache, no-store";
+                headers["Pragma"] = "no-cache";
+            }
+
+            const res = await fetch(`/api/admin/settings${getTenantParam()}${isManualPull ? `&_t=${Date.now()}` : ''}`, {
+                cache: isManualPull ? 'no-store' : 'default',
+                headers: Object.keys(headers).length > 0 ? headers : undefined
+            });
+
+            if (res.status === 304) {
+                // ⚡ ZERO-DATA SYNC: Server confirmed no settings have changed!
+                return;
+            }
             if (!res.ok) return;
+            const newEtag = res.headers.get("etag");
+            if (newEtag && typeof window !== 'undefined') {
+                try { localStorage.setItem("cached_sys_settings_etag", newEtag); } catch {}
+            }
             const data = await res.json();
             if (data.success) {
                 settingsCacheRef.current = { data, ts: Date.now() };
@@ -2032,7 +2062,8 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
     };
 
     const fetchStudentNotifications = useCallback(async () => {
-        if (!studentProfile?._id) return;
+        const studentId = studentProfile?._id || (studentProfile as any)?.id;
+        if (!studentId) return;
         try {
             const res = await fetch(`/api/student/notifications?studentId=${encodeURIComponent(studentProfile._id)}&hostelName=${encodeURIComponent(studentProfile.hostelName || '')}${getTenantParam(false)}`);
             if (!res.ok) return;
@@ -2112,18 +2143,22 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
         if (isManualPull) setIsRefreshing(true);
         try {
             const currentStudentId = studentProfile?._id || (studentProfile as any)?.id;
+            const regId = studentProfile?.registrationId;
+            const email = studentProfile?.email;
             const syncPromises: Promise<any>[] = [
-                fetchSystemSettings(),
+                fetchSystemSettings(isManualPull),
                 fetchStudentNotifications()
             ];
 
-            if (currentStudentId) {
+            if (currentStudentId || regId || email) {
                 // 1. Profile Sync (Instant full DB sync on manual pull; conditional Zero-KB sync on background resume)
                 const fbUid = studentProfile?.firebaseUID || (studentProfile as any)?.firebaseUid;
-                const email = studentProfile?.email;
-                const queryParam = fbUid 
-                    ? `firebaseUID=${encodeURIComponent(fbUid)}${email ? `&email=${encodeURIComponent(email)}` : ''}`
-                    : `studentId=${encodeURIComponent(currentStudentId)}${email ? `&email=${encodeURIComponent(email)}` : ''}`;
+                const queryParts: string[] = [];
+                if (fbUid) queryParts.push(`firebaseUID=${encodeURIComponent(fbUid)}`);
+                if (currentStudentId) queryParts.push(`studentId=${encodeURIComponent(currentStudentId)}`);
+                if (regId) queryParts.push(`registrationId=${encodeURIComponent(regId)}`);
+                if (email) queryParts.push(`email=${encodeURIComponent(email)}`);
+                const queryParam = queryParts.join("&");
                 const cachedUpdatedAt = studentProfile?.updatedAt || "";
                 const sDynCurrent = studentProfile?.dynamicFields;
                 const cachedFlag = Boolean(
@@ -2224,24 +2259,34 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
                         .catch(err => console.warn("Background permission sync error:", err))
                 );
 
-                // 3. History Sync
+                // 3. History Sync (Permissions history + Active Gatepass list)
+                if (fetchGatePassHistory) {
+                    syncPromises.push(fetchGatePassHistory(true));
+                }
                 if (fetchStudentHistoryData) {
                     syncPromises.push(fetchStudentHistoryData());
                 }
 
-                // 4. ⚡ Attendance Delta Sync (manual pull only — only fetches if status changed)
-                if (isManualPull) {
+                // 4. ⚡ Attendance Live Sync with zero-data conditional sync
+                if (currentStudentId) {
+                    const attParams = new URLSearchParams();
+                    attParams.set("studentId", String(currentStudentId));
+                    if (!isManualPull) {
+                        if (attendanceWindow?.start) attParams.set("cachedStartTime", attendanceWindow.start);
+                        if (attendanceWindow?.end) attParams.set("cachedEndTime", attendanceWindow.end);
+                        attParams.set("cachedMarked", String(isAttendanceMarked));
+                    }
                     syncPromises.push(
-                        fetch(`/api/students/attendance?studentId=${encodeURIComponent(currentStudentId)}${getTenantParam(false)}&_t=${Date.now()}`, {
+                        fetch(`/api/students/attendance?${attParams.toString()}${getTenantParam(false)}&_t=${Date.now()}`, {
                             cache: 'no-store',
                             headers: { 'Cache-Control': 'no-cache, no-store', 'Pragma': 'no-cache' }
                         })
                             .then(r => (r.ok ? r.json() : null))
                             .then(attData => {
-                                if (!attData) return;
-                                // Update attendance marked state (handles both marked→unmarked and unmarked→marked)
-                                setIsAttendanceMarked(!!attData.marked);
-                                // Update window times if changed
+                                if (!attData || attData.notModified) return;
+                                if (attData.marked !== undefined) {
+                                    setIsAttendanceMarked(!!attData.marked);
+                                }
                                 if (attData.startTime && attData.endTime) {
                                     setAttendanceWindow({ start: attData.startTime, end: attData.endTime });
                                 }
@@ -2920,13 +2965,27 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
                 checkFieldEnforcement(studentProfile);
             }
 
-            // Check attendance status
+            // Check attendance status with zero-data conditional sync
             const checkAttendance = async () => {
+                const sId = studentProfile?._id || (studentProfile as any)?.id;
+                if (!sId) return;
                 try {
-                    const res = await fetch(`/api/students/attendance?studentId=${studentProfile._id}${getTenantParam(false)}`);
+                    const params = new URLSearchParams();
+                    params.set("studentId", String(sId));
+                    if (attendanceWindow?.start) params.set("cachedStartTime", attendanceWindow.start);
+                    if (attendanceWindow?.end) params.set("cachedEndTime", attendanceWindow.end);
+                    params.set("cachedMarked", String(isAttendanceMarked));
+
+                    const res = await fetch(`/api/students/attendance?${params.toString()}${getTenantParam(false)}&_t=${Date.now()}`);
                     if (!res.ok) throw new Error(`Failed to check attendance: ${res.status}`);
                     const data = await res.json();
-                    setIsAttendanceMarked(Boolean(data.marked));
+                    if (data.notModified) {
+                        // ⚡ ZERO-DATA HANDSHAKE: Server confirmed timings and status are completely unchanged!
+                        return;
+                    }
+                    if (data.marked !== undefined) {
+                        setIsAttendanceMarked(Boolean(data.marked));
+                    }
                     if (data.startTime && data.endTime) {
                         setAttendanceWindow({ start: data.startTime, end: data.endTime });
                     }

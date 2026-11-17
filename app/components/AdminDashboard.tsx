@@ -48,6 +48,7 @@ import { formTemplates, collegeTemplate } from "@/lib/formTemplates";
 import HostelManagementModal from "./HostelManagementModal";
 import GatepassManagementModal from "./GatepassManagementModal";
 import ParentConsentVideoModal from "./ParentConsentVideoModal";
+import { usePullToRefresh } from "./PullToRefresh";
 import {
   resolveConsentVideoSrc,
   useParentConsentVideoPrefetch,
@@ -9231,8 +9232,40 @@ export default function AdminDashboard({
     ? impersonateConfig.role
     : (typeof window !== "undefined" ? localStorage.getItem("userType") : null);
 
+  // ⚡ Manual Mobile Pull-to-Refresh for Warden, Dean & Campus Super Admin
+  const handleManualPullRefresh = useCallback(async () => {
+    try {
+      const promises: Promise<any>[] = [
+        fetchStudents(true),
+        fetchPermissions(filter, true, true),
+        fetchAttendanceSummary(),
+        fetchAdminNotifications(),
+        fetchHostels(),
+        fetchBankSettings(),
+        fetchSystemSettings(),
+        fetchAttendanceTimeSettings()
+      ];
+      if (currentTab === "attendance" || currentTab === "rooms") {
+        promises.push(fetchAttendanceLogs());
+      }
+      if (title === "Super Admin Dashboard") {
+        promises.push(fetchHostelLocations());
+      }
+      await Promise.allSettled(promises);
+      setLastUpdated(new Date());
+      showToast("Dashboard updated from server ✔️", "info", { duration: 2000 });
+    } catch (err) {
+      console.error("Admin dashboard pull refresh error:", err);
+    }
+  }, [filter, currentTab, title]);
+
+  const { touchHandlers: adminTouchHandlers, PullIndicator: AdminPullIndicator } = usePullToRefresh({
+    onRefresh: handleManualPullRefresh,
+  });
+
   return (
-    <div className="min-h-screen bg-white">
+    <div className="min-h-screen bg-white relative flex flex-col justify-between overflow-x-hidden" {...adminTouchHandlers}>
+      <AdminPullIndicator />
       <main className="w-full max-w-4xl mx-auto">
         {/* ⚡ SUBSCRIPTION WARNING BANNER */}
         {subscriptionStatus && (subscriptionStatus.isWarning || subscriptionStatus.isExpired || (subscriptionStatus.daysRemaining !== null && subscriptionStatus.daysRemaining <= 7)) && (

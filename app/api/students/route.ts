@@ -457,6 +457,10 @@ export async function GET(request: NextRequest) {
     const supabaseId = rawSupabaseId ? rawSupabaseId.trim() : null;
     const rawEmail = searchParams.get("email");
     const email = rawEmail ? rawEmail.toLowerCase().trim() : null;
+    const rawStudentId = searchParams.get("studentId") || searchParams.get("id");
+    const studentIdParam = rawStudentId ? rawStudentId.trim() : null;
+    const rawRegistrationId = searchParams.get("registrationId");
+    const registrationIdParam = rawRegistrationId ? rawRegistrationId.trim() : null;
     const parentPhone = searchParams.get("parentPhone");
     const selectedStudentId = searchParams.get("selectedStudentId");
     const minimal = searchParams.get("minimal") === "true";
@@ -586,8 +590,17 @@ export async function GET(request: NextRequest) {
       }, { status: 200 });
     }
 
-    if (firebaseUID || email) {
-      let student = await (db.students as any).findOneFast({ firebaseUID: firebaseUID || undefined, email: email || undefined }, { minimal });
+    if (firebaseUID || email || studentIdParam || registrationIdParam) {
+      let student: any = null;
+      if (firebaseUID || email) {
+        student = await (db.students as any).findOneFast({ firebaseUID: firebaseUID || undefined, email: email || undefined }, { minimal });
+      }
+      if (!student && studentIdParam) {
+        student = await db.students.getById(studentIdParam);
+      }
+      if (!student && registrationIdParam) {
+        student = await db.students.findOne({ registrationId: registrationIdParam }, { minimal });
+      }
 
       // ⚡ AUTOMATIC REAL UID UPGRADE & LINKING (safe):
       // Only allow unauthenticated upgrade when existing UID is empty/placeholder.

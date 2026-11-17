@@ -642,10 +642,35 @@ export async function GET(request: NextRequest) {
             console.warn("GET attendance checkToday warning:", attErr?.message);
         }
 
+        const actualStartTime = adminSettings?.attendanceStartTime || "21:00";
+        const actualEndTime = adminSettings?.attendanceEndTime || "22:00";
+        const isMarked = !!attendance;
+
+        const cachedStartTime = searchParams.get("cachedStartTime");
+        const cachedEndTime = searchParams.get("cachedEndTime");
+        const cachedMarked = searchParams.get("cachedMarked");
+
+        // ⚡ CONDITIONAL DIFFERENTIAL SYNC:
+        // If client already holds the exact same status and exact same window times, send 0 new data!
+        if (
+            cachedStartTime === actualStartTime &&
+            cachedEndTime === actualEndTime &&
+            cachedMarked !== null &&
+            (cachedMarked === "true") === isMarked
+        ) {
+            return NextResponse.json({
+                notModified: true,
+                success: true
+            }, {
+                status: 200,
+                headers: { "Cache-Control": "no-cache, no-store", "Pragma": "no-cache" }
+            });
+        }
+
         return NextResponse.json({
-            marked: !!attendance,
-            startTime: adminSettings?.attendanceStartTime || "21:00",
-            endTime: adminSettings?.attendanceEndTime || "22:00"
+            marked: isMarked,
+            startTime: actualStartTime,
+            endTime: actualEndTime
         });
     } catch (e: any) {
         console.error("GET attendance endpoint error:", e?.message);
