@@ -13,7 +13,7 @@ global.__gateEventEmitter = gateEventEmitter;
 export interface GateStatusEvent {
     studentId: string;
     studentStatus: "in" | "out";
-    outingType?: "outing" | "leave" | null;
+    outingType?: "outing" | "leave" | "short_leave" | null;
     action?: "checkin" | "checkout" | "manual_in" | "manual_out";
     studentName?: string;
     hostelName?: string;

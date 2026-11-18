@@ -277,6 +277,7 @@ interface LiveData {
         studentsIn: number;
         studentsOut: number;
         leaveCount?: number;
+        shortLeaveCount?: number;
         gatePassCount?: number;
     };
     currentlyOut: OutingRecord[];
@@ -904,7 +905,10 @@ export default function GatepassView({
                     newCurrentlyOut.unshift(mapped);
                     newSummary.studentsOut = (newSummary.studentsOut || 0) + 1;
                     newSummary.studentsIn = Math.max(0, (newSummary.studentsIn || 0) - 1);
-                    if (mapped.type === "leave") {
+                    const lowerType = String(mapped.type || '').toLowerCase();
+                    if (lowerType.includes("short") || lowerType === "sleave") {
+                        newSummary.shortLeaveCount = (newSummary.shortLeaveCount || 0) + 1;
+                    } else if (lowerType.includes("leave") || lowerType === "hleave") {
                         newSummary.leaveCount = (newSummary.leaveCount || 0) + 1;
                     } else {
                         newSummary.gatePassCount = (newSummary.gatePassCount || 0) + 1;
@@ -1646,34 +1650,44 @@ export default function GatepassView({
                                     <div className="text-2xl font-extrabold text-[#00ff88] tabular-nums leading-tight">{liveData.summary.studentsIn}</div>
                                     <div className="text-[10px] text-[rgba(255,255,255,0.4)] uppercase tracking-widest">In Campus</div>
                                 </div>
-                                <div className="py-1 px-3 bg-[rgba(255,107,107,0.06)] rounded-2xl border border-[rgba(255,107,107,0.25)] flex flex-col justify-around lg:flex-1 relative overflow-hidden">
+                                <div className="py-1 px-2.5 bg-[rgba(255,107,107,0.06)] rounded-2xl border border-[rgba(255,107,107,0.25)] flex flex-col justify-between lg:flex-1 relative overflow-hidden">
                                     {/* Row 1: OUTSIDE */}
                                     <div className="flex items-center justify-between border-b border-[rgba(255,107,107,0.2)] pb-0.5">
-                                        <span className="text-[11px] font-black uppercase tracking-wider text-[#ff6b6b]">
+                                        <span className="text-[10px] sm:text-[11px] font-black uppercase tracking-wider text-[#ff6b6b]">
                                             OUTSIDE
                                         </span>
-                                        <span className="text-xl sm:text-2xl font-black text-[#ff6b6b] tabular-nums leading-tight">
+                                        <span className="text-base sm:text-xl font-black text-[#ff6b6b] tabular-nums leading-none">
                                             {liveData.summary.studentsOut}
                                         </span>
                                     </div>
 
                                     {/* Row 2: GATE-PASS */}
-                                    <div className="flex items-center justify-between border-b border-[rgba(255,107,107,0.15)] pb-0.5">
-                                        <span className="text-[10px] font-black uppercase tracking-wider text-slate-200">
+                                    <div className="flex items-center justify-between border-b border-[rgba(255,107,107,0.12)] pb-0.5">
+                                        <span className="text-[9px] sm:text-[10px] font-bold uppercase tracking-wider text-slate-200">
                                             GATE-PASS
                                         </span>
-                                        <span className="text-xl sm:text-2xl font-black text-white tabular-nums leading-tight">
+                                        <span className="text-sm sm:text-lg font-black text-white tabular-nums leading-none">
                                             {liveData.summary.gatePassCount || 0}
                                         </span>
                                     </div>
 
                                     {/* Row 3: HOME-LEAVE */}
-                                    <div className="flex items-center justify-between">
-                                        <span className="text-[10px] font-black uppercase tracking-wider text-slate-200">
+                                    <div className="flex items-center justify-between border-b border-[rgba(255,107,107,0.12)] pb-0.5">
+                                        <span className="text-[9px] sm:text-[10px] font-bold uppercase tracking-wider text-slate-200">
                                             HOME-LEAVE
                                         </span>
-                                        <span className="text-xl sm:text-2xl font-black text-white tabular-nums leading-tight">
+                                        <span className="text-sm sm:text-lg font-black text-white tabular-nums leading-none">
                                             {liveData.summary.leaveCount || 0}
+                                        </span>
+                                    </div>
+
+                                    {/* Row 4: SHORT-LEAVE */}
+                                    <div className="flex items-center justify-between">
+                                        <span className="text-[9px] sm:text-[10px] font-black uppercase tracking-wider text-amber-300">
+                                            SHORT-LEAVE
+                                        </span>
+                                        <span className="text-sm sm:text-lg font-black text-amber-300 tabular-nums leading-none">
+                                            {liveData.summary.shortLeaveCount || 0}
                                         </span>
                                     </div>
                                 </div>
@@ -1866,7 +1880,9 @@ export default function GatepassView({
                                                                 {record.studentName}
                                                             </h4>
                                                             {(() => {
-                                                                const isLeaveRecord = String(record.type || '').toLowerCase().includes('leave') || String(record.type || '').toLowerCase() === 'hleave';
+                                                                const recTypeLower = String(record.type || '').toLowerCase();
+                                                                const isShortLeave = recTypeLower.includes('short') || recTypeLower === 'sleave';
+                                                                const isLeaveRecord = isShortLeave || recTypeLower.includes('leave') || recTypeLower === 'hleave';
                                                                 const expReturn = record.expectedReturnDate || (record as any).toDateTime || (record as any).expectedReturnIstDate || (record as any).leaveTo;
                                                                 const isOverdue = record.isOverdue !== undefined
                                                                     ? Boolean(record.isOverdue)
@@ -1882,14 +1898,17 @@ export default function GatepassView({
                                                                                 <span className="relative inline-flex rounded-full h-2 w-2 bg-red-500 shadow-[0_0_8px_#ef4444] animate-rapid-blink"></span>
                                                                             </span>
                                                                         )}
-                                                                        <span className={`px-1.5 py-0.5 rounded-md text-[8px] font-black uppercase tracking-widest border transition-all flex items-center gap-1 shrink-0 ${isLeaveRecord
-                                                                            ? isOverdue
+                                                                        <span className={`px-1.5 py-0.5 rounded-md text-[8px] font-black uppercase tracking-widest border transition-all flex items-center gap-1 shrink-0 ${
+                                                                            isOverdue
                                                                                 ? "bg-red-500/20 text-red-400 border-red-500/40"
-                                                                                : "bg-amber-500/20 text-amber-400 border-amber-500/30"
-                                                                            : "bg-blue-500/20 text-blue-400 border-blue-500/30"
+                                                                                : isShortLeave
+                                                                                    ? "bg-amber-500/25 text-amber-300 border-amber-400/40"
+                                                                                    : isLeaveRecord
+                                                                                        ? "bg-amber-500/20 text-amber-400 border-amber-500/30"
+                                                                                        : "bg-blue-500/20 text-blue-400 border-blue-500/30"
                                                                             }`}>
-                                                                            <span className="text-[9px]">{isLeaveRecord ? "🏠" : "🎫"}</span>
-                                                                            <span>{isLeaveRecord ? "HOME-LEAVE" : "GATE-PASS"}</span>
+                                                                            <span className="text-[9px]">{isShortLeave ? "⏱️" : isLeaveRecord ? "🏠" : "🎫"}</span>
+                                                                            <span>{isShortLeave ? "SHORT-LEAVE" : isLeaveRecord ? "HOME-LEAVE" : "GATE-PASS"}</span>
                                                                         </span>
                                                                     </div>
                                                                 );

@@ -15,6 +15,7 @@ interface GlobalServerFaceState {
     initPromise: Promise<void> | null;
 
     lastUsedAt: number;
+    cleanupTimer?: any;
 
 }
 

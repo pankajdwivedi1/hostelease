@@ -86,10 +86,13 @@ export async function GET(request: NextRequest) {
             const uniqueStudentsOut = currentlyOut.length;
 
             let miniLeaveCount = 0;
+            let miniShortLeaveCount = 0;
             let miniGatePassCount = 0;
             currentlyOut.forEach((p) => {
                 const t = String(p.type || '').toLowerCase().trim();
-                if (t === 'leave' || t === 'home-leave' || t === 'hleave' || t.includes('leave')) {
+                if (t.includes('short') || t === 'sleave') {
+                    miniShortLeaveCount++;
+                } else if (t === 'leave' || t === 'home-leave' || t === 'hleave' || t.includes('leave')) {
                     miniLeaveCount++;
                 } else {
                     miniGatePassCount++;
@@ -106,6 +109,7 @@ export async function GET(request: NextRequest) {
                     studentsIn: ((totalStudents || 0) - uniqueStudentsOut) < 0 ? 0 : ((totalStudents || 0) - uniqueStudentsOut),
                     studentsOut: uniqueStudentsOut,
                     leaveCount: miniLeaveCount,
+                    shortLeaveCount: miniShortLeaveCount,
                     gatePassCount: miniGatePassCount,
                 },
                 currentlyOut: []
@@ -244,17 +248,21 @@ export async function GET(request: NextRequest) {
                 }
             }
 
-            const effectiveType = isLeave ? "HOME-LEAVE" : "GATE-PASS";
+            const isShortLeave = isLeave && (
+                String(effectivePerm?.requestType || '').toLowerCase().includes('short') ||
+                String(record.type || '').toLowerCase().includes('short')
+            );
+            const effectiveType = isShortLeave ? "SHORT-LEAVE" : (isLeave ? "HOME-LEAVE" : "GATE-PASS");
             const effectivePermId = isLeave ? (effectivePerm?._id || effectivePerm?.id || record.permissionId || null) : null;
 
             // Auto-heal DB:
-            // Case A: Promoted to HOME-LEAVE if approved leave was found covering departure
+            // Case A: Promoted to HOME-LEAVE or SHORT-LEAVE if approved leave was found covering departure
             if (matchedPerm && (!rawType.includes('leave') || !record.permissionId)) {
                 const gpId = record._id || record.id;
                 if (gpId) {
                     passesToAutoSync.push({
                         id: gpId.toString(),
-                        type: "HOME-LEAVE",
+                        type: effectiveType,
                         permId: effectivePermId ? effectivePermId.toString() : undefined,
                         reason: genuineReason || undefined
                     });
@@ -299,12 +307,15 @@ export async function GET(request: NextRequest) {
             )).catch(() => {});
         }
 
-        // ⚡ RECALCULATE LEAVE & GATEPASS COUNTS ACCURATELY:
+        // ⚡ RECALCULATE LEAVE, SHORT-LEAVE & GATEPASS COUNTS ACCURATELY:
         let leaveCount = 0;
+        let shortLeaveCount = 0;
         let gatePassCount = 0;
         currentlyOutWithDuration.forEach((p: any) => {
             const t = String(p.type || '').toLowerCase().trim();
-            if (t.includes('leave') || t === 'hleave') {
+            if (t.includes('short') || t === 'sleave') {
+                shortLeaveCount++;
+            } else if (t.includes('leave') || t === 'hleave') {
                 leaveCount++;
             } else {
                 gatePassCount++;
@@ -343,6 +354,7 @@ export async function GET(request: NextRequest) {
                 studentsIn: (totalStudents || 0) - uniqueStudentsOut,
                 studentsOut: uniqueStudentsOut,
                 leaveCount,
+                shortLeaveCount,
                 gatePassCount,
             },
             currentlyOut: currentlyOutWithDuration,

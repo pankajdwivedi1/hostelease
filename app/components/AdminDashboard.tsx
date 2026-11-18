@@ -10604,7 +10604,18 @@ export default function AdminDashboard({
                                         )}
                                       </button>
                                       <div className="flex-1 min-w-0">
-                                        <p className="text-[11px] md:text-[13px] font-semibold text-foreground uppercase tracking-tight leading-tight">{student.name}</p>
+                                        <div className="flex items-center gap-1.5 flex-wrap">
+                                          <p className="text-[11px] md:text-[13px] font-semibold text-foreground uppercase tracking-tight leading-tight">{student.name}</p>
+                                          {String(permission.requestType || '').toLowerCase().includes('short') ? (
+                                            <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-amber-50 text-amber-700 border border-amber-300 text-[8px] md:text-[9.5px] font-black uppercase tracking-wider">
+                                              <span>⏱️</span> SHORT-LEAVE
+                                            </span>
+                                          ) : (
+                                            <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-purple-50 text-purple-700 border border-purple-200 text-[8px] md:text-[9.5px] font-black uppercase tracking-wider">
+                                              <span>🏠</span> HOME-LEAVE
+                                            </span>
+                                          )}
+                                        </div>
                                         <div className="flex flex-col md:flex-row md:items-center gap-0.5 md:gap-1.5 mt-0.5 text-[8.5px] sm:text-[9.5px] md:text-[11px] lg:text-xs text-secondary font-medium md:whitespace-nowrap">
                                           <span className="whitespace-nowrap leading-tight">
                                             {formatToDDMMYYYY(permission.fromDateTime, true)} <span className="opacity-70">•</span> to
@@ -15287,6 +15298,17 @@ export default function AdminDashboard({
                               >
                                 <div className="flex justify-between items-start mb-2 gap-2">
                                   <div className="space-y-0.5">
+                                    <div className="flex items-center gap-1.5 mb-1">
+                                      {String(permission.requestType || '').toLowerCase().includes('short') ? (
+                                        <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-amber-50 text-amber-700 border border-amber-300 text-[8px] font-black uppercase tracking-wider">
+                                          <span>⏱️</span> SHORT-LEAVE
+                                        </span>
+                                      ) : (
+                                        <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-purple-50 text-purple-700 border border-purple-200 text-[8px] font-black uppercase tracking-wider">
+                                          <span>🏠</span> HOME-LEAVE
+                                        </span>
+                                      )}
+                                    </div>
                                     <p className="text-xs sm:text-[13px] font-black text-[#2D5A9E] leading-tight">
                                       {fromFormatted}
                                     </p>

@@ -415,6 +415,9 @@ export async function POST(request: NextRequest) {
             });
 
             // Create new gate pass (check-out)
+            const isShortLeave = Boolean(activeLeave && String(activeLeave.requestType || '').toLowerCase().includes('short'));
+            const passType = isShortLeave ? "SHORT-LEAVE" : (activeLeave ? "HOME-LEAVE" : "GATE-PASS");
+
             const gatePass = await db.gatePasses.create({
                 studentId: (student._id || student.id).toString(),
                 tenantId: student.tenantId || (student as any).tenant_id || "26739d24-0214-409b-aa81-42e628e88c2b",
@@ -430,9 +433,9 @@ export async function POST(request: NextRequest) {
                 fromDateTime: activeLeave?.fromDateTime ? new Date(activeLeave.fromDateTime) : now,
                 toDateTime: activeLeave?.toDateTime ? new Date(activeLeave.toDateTime) : undefined,
                 expectedReturnDate: activeLeave?.toDateTime ? new Date(activeLeave.toDateTime) : undefined,
-                reason: activeLeave?.reason || (activeLeave ? "Home Leave" : "Gate Pass (Outing)"),
+                reason: activeLeave?.reason || (isShortLeave ? "Short Leave" : (activeLeave ? "Home Leave" : "Gate Pass (Outing)")),
                 status: "out",
-                type: activeLeave ? "HOME-LEAVE" : "GATE-PASS",
+                type: passType,
                 permissionId: activeLeave?._id || activeLeave?.id || null,
                 gateName: gateName,
                 qrTokenUsedOut: token,
@@ -443,7 +446,7 @@ export async function POST(request: NextRequest) {
             try {
                 const updatedDynamicFields = {
                     ...((student as any).dynamicFields || {}),
-                    outingType: activeLeave ? "leave" : "outing",
+                    outingType: isShortLeave ? "short_leave" : (activeLeave ? "leave" : "outing"),
                     leaveFrom: activeLeave?.fromDateTime ? new Date(activeLeave.fromDateTime).toISOString() : null,
                     leaveTo: activeLeave?.toDateTime ? new Date(activeLeave.toDateTime).toISOString() : null,
                     leaveReason: activeLeave?.reason || null,
@@ -460,7 +463,7 @@ export async function POST(request: NextRequest) {
             broadcastGateEvent({
                 studentId: (student._id || student.id).toString(),
                 studentStatus: "out",
-                outingType: activeLeave ? "leave" : "outing",
+                outingType: isShortLeave ? "short_leave" : (activeLeave ? "leave" : "outing"),
                 action: "checkout",
                 studentName: student.name,
                 hostelName: student.hostelName,

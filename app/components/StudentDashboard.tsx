@@ -199,6 +199,17 @@ const HOME_LEAVE_REASONS = [
     "Other (Please Specify)"
 ];
 
+const SHORT_LEAVE_REASONS = [
+    "Market / Personal Shopping",
+    "Doctor / Clinic / Medical Checkup",
+    "Library / Study Material / Books",
+    "Coaching / Class / Project Work",
+    "Bank / ATM / Official Document Work",
+    "Family Meet (Local)",
+    "Emergency / Urgent Work",
+    "Other (Please Specify)"
+];
+
 const formatGateDisplayName = (gate?: string | null): string => {
     if (typeof window !== 'undefined') {
         const active = localStorage.getItem('activeGateName');
@@ -238,7 +249,7 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
     const [leaveReasonCategory, setLeaveReasonCategory] = useState("");
     const [customLeaveReason, setCustomLeaveReason] = useState("");
     const [highlightLocation, setHighlightLocation] = useState(false);
-    const [requestType, setRequestType] = useState<"outing" | "leave">("outing");
+    const [requestType, setRequestType] = useState<"outing" | "leave" | "short_leave">("leave");
     const [studentProfile, setStudentProfile] = useState<StudentProfile | null>(initialData || null);
     const studentProfileRef = useRef<StudentProfile | null>(studentProfile);
     studentProfileRef.current = studentProfile;
@@ -3748,14 +3759,15 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
     };
 
     const handleRequestPermission = async () => {
-        const effectiveReason = requestType === 'leave'
+        const isLeaveType = requestType === 'leave' || requestType === 'short_leave';
+        const effectiveReason = isLeaveType
             ? (leaveReasonCategory === "Other (Please Specify)" ? customLeaveReason.trim() : leaveReasonCategory.trim())
             : reason.trim();
 
         if (!fromDateTime || !toDateTime || !effectiveReason || !studentProfile) {
-            if (requestType === 'leave') {
+            if (isLeaveType) {
                 if (!leaveReasonCategory) {
-                    showToast("⚠️ Please select a reason for your leave from the dropdown.", "error");
+                    showToast("⚠️ Please select a reason from the dropdown.", "error");
                     return;
                 }
                 if (leaveReasonCategory === "Other (Please Specify)" && !customLeaveReason.trim()) {
@@ -5799,10 +5811,44 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
 
                             {showRequestForm && (
                                 <div className="p-3.5 sm:p-5 md:p-6 rounded-2xl sm:rounded-3xl border border-blue-100 bg-gradient-to-br from-white to-blue-50/30 shadow-xl shadow-blue-100/50 space-y-3 sm:space-y-4 md:space-y-6 mb-3 sm:mb-6 animate-in slide-in-from-top-4 duration-300">
-                                    <div className="flex items-center justify-between mb-1 sm:mb-2">
+                                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-1 sm:mb-2">
                                         <h3 className="text-xs sm:text-sm md:text-base font-black text-gray-900 uppercase tracking-tight">
-                                            {requestType === 'leave' ? '🏠 New Leave Request' : '🚶‍♂️ New Gatepass Request'}
+                                            {requestType === 'short_leave' ? '⏱️ New Short Leave Request' : requestType === 'leave' ? '🏠 New Home Leave Request' : '🚶‍♂️ New Gatepass Request'}
                                         </h3>
+                                        <div className="inline-flex p-1 bg-slate-100 rounded-xl border border-slate-200 self-start sm:self-auto">
+                                            <button
+                                                type="button"
+                                                onClick={() => {
+                                                    setRequestType("leave");
+                                                    setLeaveReasonCategory("");
+                                                    setReason("");
+                                                }}
+                                                className={`px-3 py-1 text-[10px] sm:text-xs font-black rounded-lg transition-all flex items-center gap-1.5 ${
+                                                    requestType === "leave"
+                                                        ? "bg-white text-blue-700 shadow-sm border border-blue-200/60"
+                                                        : "text-slate-600 hover:text-slate-900"
+                                                }`}
+                                            >
+                                                <span>🏠</span>
+                                                <span>Home Leave</span>
+                                            </button>
+                                            <button
+                                                type="button"
+                                                onClick={() => {
+                                                    setRequestType("short_leave");
+                                                    setLeaveReasonCategory("");
+                                                    setReason("");
+                                                }}
+                                                className={`px-3 py-1 text-[10px] sm:text-xs font-black rounded-lg transition-all flex items-center gap-1.5 ${
+                                                    requestType === "short_leave"
+                                                        ? "bg-amber-500 text-white shadow-sm"
+                                                        : "text-slate-600 hover:text-slate-900"
+                                                }`}
+                                            >
+                                                <span>⏱️</span>
+                                                <span>Short Leave</span>
+                                            </button>
+                                        </div>
                                     </div>
 
                                     <div className="grid grid-cols-2 gap-2 md:gap-4">
@@ -5830,11 +5876,11 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
                                         </div>
                                     </div>
 
-                                    {requestType === 'leave' ? (
+                                    {(requestType === 'leave' || requestType === 'short_leave') ? (
                                         <div className="space-y-2.5 sm:space-y-3">
                                             <div>
                                                 <label className="block text-[8.5px] sm:text-[9.5px] md:text-[11px] font-black text-gray-400 uppercase tracking-widest mb-1 sm:mb-2 px-1">
-                                                    Reason for Home Leave
+                                                    {requestType === 'short_leave' ? 'Reason for Short Leave' : 'Reason for Home Leave'}
                                                 </label>
                                                 <div className="relative">
                                                     <select
@@ -5850,8 +5896,8 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
                                                         }}
                                                         className="w-full h-9 sm:h-10 md:h-12 px-2.5 sm:px-3 md:px-4 rounded-xl border border-gray-200 bg-white text-[10px] sm:text-xs md:text-sm text-gray-800 font-bold focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 transition-all outline-none cursor-pointer appearance-none pr-8 sm:pr-10"
                                                     >
-                                                        <option value="">-- Select Reason for Leave --</option>
-                                                        {HOME_LEAVE_REASONS.map((r, i) => (
+                                                        <option value="">-- Select Reason for {requestType === 'short_leave' ? 'Short Leave' : 'Leave'} --</option>
+                                                        {(requestType === 'short_leave' ? SHORT_LEAVE_REASONS : HOME_LEAVE_REASONS).map((r, i) => (
                                                             <option key={i} value={r}>{r}</option>
                                                         ))}
                                                     </select>
@@ -5878,7 +5924,7 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
                                                                 setReason(val);
                                                             }
                                                         }}
-                                                        placeholder="Mention if going to home, village, etc."
+                                                        placeholder={requestType === 'short_leave' ? "Mention purpose (market, doctor, coaching, etc.)" : "Mention if going to home, village, etc."}
                                                         rows={2}
                                                         className="w-full px-2.5 md:px-4 py-2 sm:py-3 rounded-xl border border-gray-200 bg-white text-[10px] sm:text-xs md:text-sm text-gray-800 font-bold placeholder:text-gray-300 focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 transition-all outline-none resize-none tracking-tighter sm:tracking-normal"
                                                     />
@@ -5916,7 +5962,7 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
                                             disabled={submitting}
                                             className="flex-1 h-9 sm:h-10 md:h-12 rounded-xl bg-blue-600 text-white font-black text-[9.5px] sm:text-xs md:text-sm uppercase tracking-widest shadow-md sm:shadow-lg shadow-blue-200 hover:bg-blue-700 active:scale-[0.98] transition-all disabled:opacity-50"
                                         >
-                                            {submitting ? "Processing..." : `Request ${requestType === 'leave' ? 'Leave' : 'Outing'}`}
+                                            {submitting ? "Processing..." : requestType === 'short_leave' ? 'Request Short Leave' : requestType === 'leave' ? 'Request Home Leave' : 'Request Outing'}
                                         </button>
                                         <button
                                             onClick={() => {

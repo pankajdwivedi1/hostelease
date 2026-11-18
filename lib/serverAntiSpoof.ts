@@ -61,6 +61,7 @@ interface GlobalBiometricsState {
     modelLoadingPromise: Promise<void> | null;
 
     lastUsedAt: number;
+    cleanupTimer?: any;
 
 }
 
