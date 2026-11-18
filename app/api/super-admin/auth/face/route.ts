@@ -2,9 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { setAuthSessionCookie } from "@/lib/authSession";
 import { verifyFaceAndLivenessServer } from "@/lib/serverAntiSpoof";
 import { extractFaceDescriptorServer } from "@/lib/serverBossFaceAuth";
-import { PrismaClient } from "@prisma/client";
-
-const prisma = new PrismaClient();
+import { prisma } from "@/lib/prisma";
 
 export const dynamic = "force-dynamic";
 

@@ -1,9 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/dbAdapter";
 import { setAuthSessionCookie } from "@/lib/authSession";
-import { PrismaClient } from "@prisma/client";
-
-const prisma = new PrismaClient();
+import { prisma } from "@/lib/prisma";
 
 export const dynamic = "force-dynamic";
 
