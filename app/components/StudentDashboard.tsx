@@ -2438,6 +2438,49 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
         });
     }, [permissions]);
 
+    // ⚡ REAL-TIME PERMISSIONS SYNC: Instant updates from Warden & Dean approvals via SSE
+    useEffect(() => {
+        if (typeof window === "undefined") return;
+        let es: EventSource | null = null;
+        try {
+            es = new EventSource("/api/admin/events");
+            es.addEventListener("permission_update", (event: MessageEvent) => {
+                try {
+                    const data = JSON.parse(event.data);
+                    if (!data || !data.permissionId) return;
+                    const myId = studentProfileRef.current?._id || studentProfileRef.current?.id;
+                    if (myId && data.studentId && String(data.studentId) !== String(myId)) return;
+
+                    setPermissions(prev => {
+                        const updated = prev.map(p => {
+                            const pId = (p._id || p.id)?.toString();
+                            if (pId === String(data.permissionId)) {
+                                return {
+                                    ...p,
+                                    ...(data.status !== undefined ? { status: data.status } : {}),
+                                    ...(data.wardenStatus !== undefined ? { wardenStatus: data.wardenStatus } : {}),
+                                    ...(data.deanStatus !== undefined ? { deanStatus: data.deanStatus } : {}),
+                                    ...(data.parentStatus !== undefined ? { parentStatus: data.parentStatus } : {})
+                                };
+                            }
+                            return p;
+                        });
+                        try {
+                            localStorage.setItem("cachedStudentPermissions", JSON.stringify(updated));
+                        } catch (e) {}
+                        return updated;
+                    });
+                } catch (err) {}
+            });
+        } catch (err) {}
+
+        return () => {
+            if (es) {
+                try { es.close(); } catch (e) {}
+            }
+        };
+    }, []);
+
     // Payment System State
     const [showPaymentModal, setShowPaymentModal] = useState(false);
     useEffect(() => {
@@ -3250,6 +3293,32 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
 
         const handleFocusOrVisibility = () => {
             checkPushPermission();
+            if (typeof document !== 'undefined' && document.visibilityState === 'visible') {
+                const sId = studentProfileRef.current?._id || studentProfileRef.current?.id;
+                if (sId) {
+                    fetch(`/api/permissions?studentId=${encodeURIComponent(String(sId))}&light=true${getTenantParam(false)}&_t=${Date.now()}`, {
+                        cache: 'no-store',
+                        headers: {
+                            'Cache-Control': 'no-cache, no-store',
+                            'Pragma': 'no-cache',
+                            'x-user-type': 'student',
+                            ...(studentProfileRef.current?.email ? { 'x-student-email': studentProfileRef.current.email } : {}),
+                            'x-student-id': String(sId),
+                            ...(studentProfileRef.current?.registrationId ? { 'x-registration-id': String(studentProfileRef.current.registrationId) } : {})
+                        }
+                    })
+                    .then(r => r.ok ? r.json() : null)
+                    .then(permData => {
+                        if (permData && permData.permissions && Array.isArray(permData.permissions)) {
+                            setPermissions(permData.permissions);
+                            try {
+                                localStorage.setItem("cachedStudentPermissions", JSON.stringify(permData.permissions));
+                            } catch (e) {}
+                        }
+                    })
+                    .catch(() => {});
+                }
+            }
         };
 
         window.addEventListener("focus", handleFocusOrVisibility);
@@ -3565,7 +3634,7 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
                     }
                 };
 
-                // ⚡ STEP 3: Load permissions from cache first (skip server request if cached)
+                // ⚡ STEP 3: Load permissions from cache first (instant render), then always sync fresh from DB
                 const fetchPermissions = async () => {
                     try {
                         const cachedPerms = localStorage.getItem("cachedStudentPermissions");
@@ -3574,12 +3643,14 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
                                 const parsed = JSON.parse(cachedPerms);
                                 if (Array.isArray(parsed) && parsed.length > 0) {
                                     setPermissions(parsed);
-                                    return; // Zero server requests on startup!
                                 }
                             } catch (e) {}
                         }
-                        const permResponse = await fetch(`/api/permissions?studentId=${studentId}&light=true${getTenantParam(false)}`, {
+                        const permResponse = await fetch(`/api/permissions?studentId=${studentId}&light=true${getTenantParam(false)}&_t=${Date.now()}`, {
+                            cache: 'no-store',
                             headers: {
+                                'Cache-Control': 'no-cache, no-store',
+                                'Pragma': 'no-cache',
                                 'x-user-type': 'student',
                                 ...(currentStudent?.email ? { 'x-student-email': currentStudent.email } : {}),
                                 ...(studentId ? { 'x-student-id': String(studentId) } : {}),
@@ -3596,11 +3667,9 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
                             } catch (e) {}
                         } else if (!permResponse.ok && isMounted) {
                             console.warn(`Permissions fetch returned status ${permResponse.status}`);
-                            setPermissions([]);
                         }
                     } catch (error) {
                         console.error("Error fetching permissions:", error);
-                        setPermissions([]); // Set empty array on error
                     }
                 };
 

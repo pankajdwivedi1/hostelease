@@ -57,9 +57,18 @@ export async function GET(request: NextRequest) {
                 }
             };
 
+            const onPermissionUpdate = (data: any) => {
+                try {
+                    controller.enqueue(encoder.encode(`event: permission_update\ndata: ${JSON.stringify(data)}\n\n`));
+                } catch (e) {
+                    console.warn("⚠️ Error pushing SSE permission_update message:", e);
+                }
+            };
+
             gateEventEmitter.on("gate_status_change", onGateStatusChange);
             gateEventEmitter.on("hostel_activity", onHostelActivity);
             gateEventEmitter.on("gate_settings_update", onGateSettingsUpdate);
+            gateEventEmitter.on("permission_update", onPermissionUpdate);
 
             // Heartbeat ping every 20 seconds to keep connection alive
             const interval = setInterval(() => {
@@ -76,6 +85,7 @@ export async function GET(request: NextRequest) {
                 gateEventEmitter.off("gate_status_change", onGateStatusChange);
                 gateEventEmitter.off("hostel_activity", onHostelActivity);
                 gateEventEmitter.off("gate_settings_update", onGateSettingsUpdate);
+                gateEventEmitter.off("permission_update", onPermissionUpdate);
                 try {
                     controller.close();
                 } catch (e) {}

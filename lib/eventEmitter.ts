@@ -72,3 +72,25 @@ export function broadcastGateSettingsUpdate(settingsData?: any) {
         console.warn("⚠️ Failed to broadcast gate settings update:", err);
     }
 }
+
+export interface PermissionUpdateEvent {
+    permissionId: string;
+    studentId: string;
+    status: string;
+    wardenStatus?: string;
+    deanStatus?: string;
+    parentStatus?: string;
+    timestamp: number;
+}
+
+export function broadcastPermissionUpdate(eventData: Omit<PermissionUpdateEvent, "timestamp"> & { timestamp?: number }) {
+    try {
+        const payload: PermissionUpdateEvent = {
+            ...eventData,
+            timestamp: eventData.timestamp || Date.now()
+        };
+        gateEventEmitter.emit("permission_update", payload);
+    } catch (err) {
+        console.warn("⚠️ Failed to broadcast permission update event:", err);
+    }
+}

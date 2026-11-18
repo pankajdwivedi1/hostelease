@@ -587,6 +587,21 @@ export async function PATCH(request: NextRequest) {
 
     await db.permissions.update(permissionId, update);
 
+    // ⚡ REAL-TIME BROADCAST: Broadcast permission status decision to all connected clients & dashboards
+    try {
+      const { broadcastPermissionUpdate } = await import("@/lib/eventEmitter");
+      broadcastPermissionUpdate({
+        permissionId: permissionId.toString(),
+        studentId: (linkedStudentId || currentPermission.studentId || "").toString(),
+        status: update.status !== undefined ? update.status : currentPermission.status,
+        wardenStatus: update.wardenStatus !== undefined ? update.wardenStatus : currentPermission.wardenStatus,
+        deanStatus: update.deanStatus !== undefined ? update.deanStatus : currentPermission.deanStatus,
+        parentStatus: update.parentStatus !== undefined ? update.parentStatus : currentPermission.parentStatus,
+      });
+    } catch (broadcastErr) {
+      console.warn("⚠️ Failed to broadcast permission update:", broadcastErr);
+    }
+
     // ⚡ RETROACTIVE GATE PASS RECONCILIATION:
     // If authorities approve an official leave and the student is ALREADY OUT (or has an open gate pass),
     // immediately link that open pass to this approved leave, convert its type to HOME-LEAVE,
