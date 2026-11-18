@@ -119,7 +119,8 @@ export async function initServerFaceAuthModels(): Promise<void> {
 
 
 
-// Models load lazily on first Boss face auth request
+// Models load lazily on first Boss face auth request
+
 
 
 
@@ -158,6 +159,29 @@ export interface ExtractedFaceBiometrics {
  * Eliminates client-side model downloads (Zero MB downloaded by browser).
 
  */
+
+
+function scheduleBossFaceCleanup() {
+    const faceState = g.__serverFaceAuthState!;
+    if (faceState.cleanupTimer) {
+        clearTimeout(faceState.cleanupTimer);
+        faceState.cleanupTimer = null;
+    }
+    const TWO_HOURS = 2 * 60 * 60 * 1000;
+    faceState.cleanupTimer = setTimeout(() => {
+        if (faceState.isInitialized) {
+            console.log("[Server Boss Face Auth] 2 hours idle reached - auto-unloading face models from RAM to save memory.");
+            faceState.faceapi = null;
+            faceState.isInitialized = false;
+            faceState.initPromise = null;
+            faceState.lastUsedAt = 0;
+            faceState.cleanupTimer = null;
+        }
+    }, TWO_HOURS);
+    if (faceState.cleanupTimer && typeof faceState.cleanupTimer.unref === "function") {
+        faceState.cleanupTimer.unref();
+    }
+}
 
 export async function extractFaceDescriptorServer(
 

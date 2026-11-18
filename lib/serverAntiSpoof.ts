@@ -226,7 +226,8 @@ export async function initServerBiometricModels(): Promise<void> {
 
 
 
-// Models load lazily on first attendance request
+// Models load lazily on first attendance request
+
 
 
 
@@ -251,6 +252,29 @@ export interface ServerBiometricVerificationParams {
  * Runs MiniFASNetV2 ONNX neural liveness & multi-factor screen detection in <15ms.
 
  */
+
+
+function scheduleBiometricCleanup() {
+    const state = g.__serverBiometrics!;
+    if (state.cleanupTimer) {
+        clearTimeout(state.cleanupTimer);
+        state.cleanupTimer = null;
+    }
+    const TWO_HOURS = 2 * 60 * 60 * 1000;
+    state.cleanupTimer = setTimeout(() => {
+        if (state.modelsLoaded) {
+            console.log("[Server Biometrics] 2 hours idle reached - auto-unloading ONNX models from RAM to save memory.");
+            state.miniFASNetSession = null;
+            state.modelsLoaded = false;
+            state.modelLoadingPromise = null;
+            state.lastUsedAt = 0;
+            state.cleanupTimer = null;
+        }
+    }, TWO_HOURS);
+    if (state.cleanupTimer && typeof state.cleanupTimer.unref === "function") {
+        state.cleanupTimer.unref();
+    }
+}
 
 export async function verifyFaceAndLivenessServer(
 
