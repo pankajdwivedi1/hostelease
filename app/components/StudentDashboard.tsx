@@ -7167,11 +7167,22 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
                                                                                     </div>
                                                                                 ) : (
                                                                                     <>
-                                                                                        {dayPasses.map((pass: any) => (
+                                                                                        {dayPasses.map((pass: any) => {
+                                                                                            const passTypeLower = String(pass.type || pass.requestType || '').toLowerCase();
+                                                                                            const isPassShortLeave = passTypeLower.includes('short') || passTypeLower === 'sleave';
+                                                                                            const isPassHomeLeave = !isPassShortLeave && (passTypeLower.includes('leave') || passTypeLower === 'hleave');
+
+                                                                                            return (
                                                                                             <div key={pass._id} className="bg-white rounded-xl border border-gray-200/60 p-2.5 sm:p-3.5 shadow-sm space-y-2 sm:space-y-2.5">
                                                                                                 <div className="flex justify-between items-center">
-                                                                                                    <span className={`px-2 sm:px-2.5 py-0.5 rounded-full text-[8px] sm:text-[9px] font-black uppercase tracking-wider ${pass.type === 'leave' ? 'bg-purple-100 text-purple-700' : 'bg-purple-100 text-purple-700'}`}>
-                                                                                                        {pass.type === 'leave' ? '🏠 Home Leave' : '🚶 Short Outing'}
+                                                                                                    <span className={`px-2 sm:px-2.5 py-0.5 rounded-full text-[8px] sm:text-[9px] font-black uppercase tracking-wider ${
+                                                                                                        isPassShortLeave
+                                                                                                            ? 'bg-amber-100 text-amber-800 border border-amber-300'
+                                                                                                            : isPassHomeLeave
+                                                                                                            ? 'bg-blue-100 text-blue-700 border border-blue-200'
+                                                                                                            : 'bg-purple-100 text-purple-700 border border-purple-200'
+                                                                                                    }`}>
+                                                                                                        {isPassShortLeave ? '⏱️ Short Leave' : isPassHomeLeave ? '🏠 Home Leave' : '🚶 Short Outing'}
                                                                                                     </span>
                                                                                                     <span className={`px-2 sm:px-2.5 py-0.5 rounded-full text-[8px] sm:text-[9px] font-black uppercase tracking-wider ${pass.status === 'out' ? 'bg-rose-100 text-rose-700 border border-rose-200' : 'bg-emerald-100 text-emerald-700 border border-emerald-200'}`}>
                                                                                                         {pass.status === 'out' ? 'Still Outside' : 'Returned'}
@@ -7222,7 +7233,8 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
                                                                                                     </div>
                                                                                                 )}
                                                                                             </div>
-                                                                                        ))}
+                                                                                            );
+                                                                                        })}
                                                                                     </>
                                                                                 )}
                                                                             </div>

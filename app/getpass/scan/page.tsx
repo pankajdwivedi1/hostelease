@@ -40,7 +40,8 @@ interface OutingRecord {
     status: "out" | "in" | "auto-resolved" | string;
     durationMinutes?: number;
     gateName?: string;
-    type?: "outing" | "leave" | string;
+    type?: "outing" | "leave" | "SHORT-LEAVE" | string;
+    requestType?: string;
 }
 
 export default function StudentScannerPage() {
@@ -1124,7 +1125,14 @@ export default function StudentScannerPage() {
                                     const isToday = todayStr === dayStr;
                                     const dayRecords = outingsByDate.get(dayStr) || [];
                                     const hasOuting = dayRecords.length > 0;
-                                    const hasLeave = dayRecords.some(r => String(r.type || '').toLowerCase().includes('leave') || String(r.type || '').toLowerCase() === 'hleave');
+                                    const hasShortLeave = dayRecords.some(r => {
+                                        const t = String(r.type || r.requestType || '').toLowerCase();
+                                        return t.includes('short') || t === 'sleave';
+                                    });
+                                    const hasHomeLeave = dayRecords.some(r => {
+                                        const t = String(r.type || r.requestType || '').toLowerCase();
+                                        return !t.includes('short') && (t.includes('leave') || t === 'hleave');
+                                    });
 
                                     return (
                                         <button
@@ -1180,9 +1188,11 @@ export default function StudentScannerPage() {
                                                     borderRadius: "50%",
                                                     backgroundColor: isSelected
                                                         ? "#fbbf24"
-                                                        : hasLeave
+                                                        : hasHomeLeave
                                                         ? "#60a5fa"
-                                                        : "#f59e0b",
+                                                        : hasShortLeave
+                                                        ? "#f59e0b"
+                                                        : "#a855f7",
                                                     marginTop: "1px",
                                                     boxShadow: "0 0 3px rgba(245, 158, 11, 0.7)"
                                                 }} />
@@ -1204,12 +1214,16 @@ export default function StudentScannerPage() {
                                 fontWeight: "700",
                                 color: "#9ca3af"
                             }}>
-                                <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
-                                    <span style={{ display: "flex", alignItems: "center", gap: "4px" }}>
-                                        <span style={{ width: "5px", height: "5px", borderRadius: "50%", backgroundColor: "#f59e0b", display: "inline-block" }} />
+                                <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                                    <span style={{ display: "flex", alignItems: "center", gap: "3px" }}>
+                                        <span style={{ width: "5px", height: "5px", borderRadius: "50%", backgroundColor: "#a855f7", display: "inline-block" }} />
                                         Outing
                                     </span>
-                                    <span style={{ display: "flex", alignItems: "center", gap: "4px" }}>
+                                    <span style={{ display: "flex", alignItems: "center", gap: "3px" }}>
+                                        <span style={{ width: "5px", height: "5px", borderRadius: "50%", backgroundColor: "#f59e0b", display: "inline-block" }} />
+                                        Short Leave
+                                    </span>
+                                    <span style={{ display: "flex", alignItems: "center", gap: "3px" }}>
                                         <span style={{ width: "5px", height: "5px", borderRadius: "50%", backgroundColor: "#60a5fa", display: "inline-block" }} />
                                         Home Leave
                                     </span>
@@ -1283,7 +1297,9 @@ export default function StudentScannerPage() {
 
                                 {(() => {
                                     const record = activeRecord;
-                                    const isLeave = String(record.type || '').toLowerCase().includes('leave') || String(record.type || '').toLowerCase() === 'hleave';
+                                    const typeLower = String(record.type || record.requestType || '').toLowerCase();
+                                    const isShortLeave = typeLower.includes('short') || typeLower === 'sleave';
+                                    const isHomeLeave = !isShortLeave && (typeLower.includes('leave') || typeLower === 'hleave');
                                     const isOut = record.status === "out";
 
                                     return (
@@ -1309,10 +1325,11 @@ export default function StudentScannerPage() {
                                                     fontWeight: "800",
                                                     textTransform: "uppercase",
                                                     letterSpacing: "0.05em",
-                                                    backgroundColor: isLeave ? "#dbeafe" : "#f3e8ff",
-                                                    color: isLeave ? "#1d4ed8" : "#7e22ce"
+                                                    backgroundColor: isShortLeave ? "#fef3c7" : isHomeLeave ? "#dbeafe" : "#f3e8ff",
+                                                    color: isShortLeave ? "#b45309" : isHomeLeave ? "#1d4ed8" : "#7e22ce",
+                                                    border: isShortLeave ? "1px solid #fcd34d" : isHomeLeave ? "1px solid #bfdbfe" : "1px solid #e9d5ff"
                                                 }}>
-                                                    {isLeave ? "🏠 Home Leave" : "🚶 Short Outing"}
+                                                    {isShortLeave ? "⏱️ Short Leave" : isHomeLeave ? "🏠 Home Leave" : "🚶 Short Outing"}
                                                 </span>
 
                                                 <span style={{
