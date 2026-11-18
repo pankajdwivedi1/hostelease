@@ -2074,7 +2074,9 @@ export default function GatepassView({
                                             {/* Recent History — Side-by-Side OUT and IN/EXPECTED Timestamps */}
                                             {(() => {
                                                 const rawType = String((lastOuting as any)?.type || (lastOuting as any)?.requestType || selectedStudent?.outingType || selectedStudent?.requestType || '').toLowerCase();
-                                                const isHomeLeave = rawType.includes('leave') || rawType === 'hleave';
+                                                const isShortLeave = rawType.includes('short') || rawType === 'sleave';
+                                                const isHomeLeave = !isShortLeave && (rawType.includes('leave') || rawType === 'hleave');
+                                                const isAnyLeave = isShortLeave || isHomeLeave;
                                                 
                                                 // ⚡ Realtime Campus Status: Check if student is actively outside
                                                 const isCurrentlyOut = selectedStudent?.studentStatus === 'out' || (liveData?.currentlyOut || []).some((item: any) => {
@@ -2087,26 +2089,38 @@ export default function GatepassView({
                                                 const fromTimeVal = selectedStudent?.leaveFrom || (lastOuting as any)?.fromDateTime || lastOuting?.checkOutISTTime || lastOuting?.checkOutTime;
 
                                                 let expectedReturnVal = selectedStudent?.leaveTo || (lastOuting as any)?.toDateTime || (lastOuting as any)?.expectedReturnDate || (lastOuting as any)?.expectedReturnIstDate;
-                                                if (isHomeLeave && !expectedReturnVal && fromDateVal) {
+                                                if (isAnyLeave && !expectedReturnVal && fromDateVal) {
                                                     try {
                                                         const fromDateObj = new Date(fromDateVal);
                                                         if (!isNaN(fromDateObj.getTime())) {
-                                                            expectedReturnVal = new Date(fromDateObj.getTime() + 6 * 24 * 60 * 60 * 1000).toISOString();
+                                                            expectedReturnVal = new Date(fromDateObj.getTime() + (isShortLeave ? 4 * 60 * 60 * 1000 : 6 * 24 * 60 * 60 * 1000)).toISOString();
                                                         }
                                                     } catch (e) {}
                                                 }
                                                 const expectedReturnTimeVal = (lastOuting as any)?.expectedReturnIstTime || expectedReturnVal;
 
-                                                const isOverdue = isCurrentlyOut && isHomeLeave && expectedReturnVal && new Date(expectedReturnVal).getTime() < Date.now();
+                                                const isOverdue = isCurrentlyOut && isAnyLeave && expectedReturnVal && new Date(expectedReturnVal).getTime() < Date.now();
 
                                                 return (
                                                     <div className="flex flex-col items-start px-2 py-1 sm:px-2.5 sm:py-1.5 bg-slate-50/90 rounded-lg sm:rounded-xl border border-slate-200/80 shrink-0 shadow-sm">
                                                         <div className="flex items-center justify-between w-full gap-1.5 mb-0.5">
-                                                            <p className="text-[6.5px] sm:text-[8px] font-black text-gray-500 uppercase tracking-widest">
-                                                                {isHomeLeave ? "🏠 Home-Leave" : "Recent Outing"}
+                                                            <p className="text-[6.5px] sm:text-[8px] font-black uppercase tracking-widest">
+                                                                {isShortLeave ? (
+                                                                    <span className="text-amber-600 font-black">⏱️ Short-Leave</span>
+                                                                ) : isHomeLeave ? (
+                                                                    <span className="text-gray-500 font-black">🏠 Home-Leave</span>
+                                                                ) : (
+                                                                    <span className="text-gray-500 font-black">Recent Outing</span>
+                                                                )}
                                                             </p>
-                                                            {isHomeLeave && isCurrentlyOut && (
-                                                                <span className={`text-[6px] sm:text-[7.5px] font-black px-1.5 py-0.2 rounded uppercase tracking-wider ${isOverdue ? "bg-red-100 text-red-700 border border-red-200 animate-pulse" : "bg-blue-100 text-blue-700 border border-blue-200"}`}>
+                                                            {isAnyLeave && isCurrentlyOut && (
+                                                                <span className={`text-[6px] sm:text-[7.5px] font-black px-1.5 py-0.2 rounded uppercase tracking-wider ${
+                                                                    isOverdue 
+                                                                        ? "bg-red-100 text-red-700 border border-red-200 animate-pulse" 
+                                                                        : isShortLeave
+                                                                            ? "bg-amber-100 text-amber-800 border border-amber-300"
+                                                                            : "bg-blue-100 text-blue-700 border border-blue-200"
+                                                                }`}>
                                                                     {isOverdue ? "🚨 OVERDUE" : "ON LEAVE"}
                                                                 </span>
                                                             )}
@@ -2117,7 +2131,7 @@ export default function GatepassView({
                                                                 {/* OUT / LEAVE FROM TIMESTAMP */}
                                                                 <div className="flex flex-col px-1.5 py-0.5 sm:px-2 sm:py-1 bg-red-50/90 rounded-md sm:rounded-lg border border-red-100 min-w-[68px] sm:min-w-[80px]">
                                                                     <span className="text-[6.5px] sm:text-[7.5px] font-black text-red-500 uppercase tracking-tight">
-                                                                        {isHomeLeave ? "LEAVE FROM 🚪" : "OUT 🚪"}
+                                                                        {isAnyLeave ? "LEAVE FROM 🚪" : "OUT 🚪"}
                                                                     </span>
                                                                     <span className="text-red-700 font-extrabold text-[8px] sm:text-[10px] md:text-[11px] leading-tight">
                                                                         {formatDateDDMMYYYY(fromDateVal)}
@@ -2131,7 +2145,7 @@ export default function GatepassView({
                                                                 {isReturned ? (
                                                                     <div className="flex flex-col px-1.5 py-0.5 sm:px-2 sm:py-1 bg-green-50/90 rounded-md sm:rounded-lg border border-green-100 min-w-[68px] sm:min-w-[80px]">
                                                                         <span className="text-[6.5px] sm:text-[7.5px] font-black text-green-600 uppercase tracking-tight">
-                                                                            {isHomeLeave ? "RETURNED IN 🏠" : "IN 🏠"}
+                                                                            {isShortLeave ? "RETURNED IN ⏱️" : isHomeLeave ? "RETURNED IN 🏠" : "IN 🏠"}
                                                                         </span>
                                                                         <span className="text-green-700 font-extrabold text-[8px] sm:text-[10px] md:text-[11px] leading-tight">
                                                                             {formatDateDDMMYYYY(lastOuting.checkInISTDate || lastOuting.checkInTime || lastOuting.checkOutISTDate || lastOuting.checkOutTime)}
@@ -2140,16 +2154,16 @@ export default function GatepassView({
                                                                             {formatISTTimeAMPM(lastOuting.checkInISTTime || lastOuting.checkOutISTTime, lastOuting.checkInTime || lastOuting.checkOutTime)}
                                                                         </span>
                                                                     </div>
-                                                                ) : isHomeLeave ? (
+                                                                ) : isAnyLeave ? (
                                                                     /* EXPECTED COMING DATE (IF ON LEAVE) */
-                                                                    <div className={`flex flex-col px-1.5 py-0.5 sm:px-2 sm:py-1 rounded-md sm:rounded-lg border min-w-[68px] sm:min-w-[80px] ${isOverdue ? "bg-red-50/90 border-red-200" : "bg-blue-50/90 border-blue-200"}`}>
-                                                                        <span className={`text-[6.5px] sm:text-[7.5px] font-black uppercase tracking-tight ${isOverdue ? "text-red-600" : "text-blue-600"}`}>
-                                                                            COMING 🏠
+                                                                    <div className={`flex flex-col px-1.5 py-0.5 sm:px-2 sm:py-1 rounded-md sm:rounded-lg border min-w-[68px] sm:min-w-[80px] ${isOverdue ? "bg-red-50/90 border-red-200" : isShortLeave ? "bg-amber-50/90 border-amber-200" : "bg-blue-50/90 border-blue-200"}`}>
+                                                                        <span className={`text-[6.5px] sm:text-[7.5px] font-black uppercase tracking-tight ${isOverdue ? "text-red-600" : isShortLeave ? "text-amber-700" : "text-blue-600"}`}>
+                                                                            {isShortLeave ? "COMING ⏱️" : "COMING 🏠"}
                                                                         </span>
-                                                                        <span className={`font-extrabold text-[8px] sm:text-[10px] md:text-[11px] leading-tight ${isOverdue ? "text-red-700" : "text-blue-900"}`}>
+                                                                        <span className={`font-extrabold text-[8px] sm:text-[10px] md:text-[11px] leading-tight ${isOverdue ? "text-red-700" : isShortLeave ? "text-amber-900" : "text-blue-900"}`}>
                                                                             {expectedReturnVal ? formatDateDDMMYYYY(expectedReturnVal) : "Pending Return"}
                                                                         </span>
-                                                                        <span className={`font-bold text-[7px] sm:text-[8.5px] md:text-[9px] tabular-nums ${isOverdue ? "text-red-600" : "text-blue-600"}`}>
+                                                                        <span className={`font-bold text-[7px] sm:text-[8.5px] md:text-[9px] tabular-nums ${isOverdue ? "text-red-600" : isShortLeave ? "text-amber-700" : "text-blue-600"}`}>
                                                                             {expectedReturnVal ? formatISTTimeAMPM((lastOuting as any).expectedReturnIstTime, expectedReturnTimeVal) : "On Leave"}
                                                                         </span>
                                                                     </div>
@@ -2190,7 +2204,9 @@ export default function GatepassView({
                                 <div className="flex-1 px-4 sm:px-10 pb-6 sm:pb-8 grid grid-cols-2 lg:grid-cols-3 gap-2.5 sm:gap-x-12 sm:gap-y-8 bg-gray-50/50 pt-4 sm:pt-8 border-t border-gray-100">
                                     {(() => {
                                         const rawType = String((lastOuting as any)?.type || (lastOuting as any)?.requestType || selectedStudent?.outingType || selectedStudent?.requestType || '').toLowerCase();
-                                        const isHomeLeave = rawType.includes('leave') || rawType === 'hleave';
+                                        const isShortLeave = rawType.includes('short') || rawType === 'sleave';
+                                        const isHomeLeave = !isShortLeave && (rawType.includes('leave') || rawType === 'hleave');
+                                        const isAnyLeave = isShortLeave || isHomeLeave;
                                         
                                         // ⚡ Realtime Campus Status: Check if student is actively outside
                                         const isCurrentlyOut = selectedStudent?.studentStatus === 'out' || (liveData?.currentlyOut || []).some((item: any) => {
@@ -2199,7 +2215,7 @@ export default function GatepassView({
                                         });
 
                                         const leaveReasonVal = selectedStudent?.leaveReason || (lastOuting as any)?.reason || (selectedStudent as any)?.dynamicFields?.leaveReason;
-                                        const showLeaveReason = isHomeLeave && isCurrentlyOut && !!leaveReasonVal;
+                                        const showLeaveReason = isAnyLeave && isCurrentlyOut && !!leaveReasonVal;
 
                                         return [
                                             { label: "College Name", value: selectedStudent.collegeName || "N/A", icon: "🎓" },
@@ -2213,7 +2229,7 @@ export default function GatepassView({
                                             { label: "Mother Name", value: selectedStudent.motherName || "N/A", icon: "👩‍👦" },
                                             { label: "Mother Mobile", value: selectedStudent.motherNumber || "N/A", icon: "📱" },
                                             { label: "Permanent Address", value: `${selectedStudent.permanentAddress || "N/A"}${selectedStudent.homeState ? `, ${selectedStudent.homeState}` : ""}`, icon: "🏠", fullWidth: true },
-                                            ...(showLeaveReason ? [{ label: "Leave Reason", value: leaveReasonVal, icon: "📝", fullWidth: true, valueClass: "text-amber-800 font-bold" }] : []),
+                                            ...(showLeaveReason ? [{ label: isShortLeave ? "Short Leave Reason" : "Leave Reason", value: leaveReasonVal, icon: isShortLeave ? "⏱️" : "📝", fullWidth: true, valueClass: "text-amber-800 font-bold" }] : []),
                                         ];
                                     })().map((item: any, idx) => (
                                         <div key={idx} className={`flex gap-2 sm:gap-4 items-start bg-white p-2.5 sm:p-0 sm:bg-transparent rounded-xl sm:rounded-none border border-gray-100 sm:border-0 shadow-sm sm:shadow-none ${item.fullWidth ? 'col-span-2 lg:col-span-3' : ''}`}>
