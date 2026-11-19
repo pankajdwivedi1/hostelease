@@ -1050,12 +1050,12 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
             // 2. HOME-LEAVE RECORDS (Tab 2) - 1-to-1 Mapping between Permissions and Gate Movements
             const leavePerms = sortedPermsList.filter((p: any) => {
                 const rType = String(p.requestType || '').toLowerCase();
-                return rType === 'leave' || rType === 'home-leave' || rType === 'home' || rType === 'home_leave' || rType === 'hleave';
+                return rType === 'leave' || rType === 'home-leave' || rType === 'home' || rType === 'home_leave' || rType === 'hleave' || rType === 'short_leave' || rType === 'short-leave' || rType === 'short' || rType === 'sleave';
             });
 
             const leavePasses = gpRecords.filter((gp: any) => {
                 const pType = String(gp.type || '').toLowerCase();
-                return pType === 'leave' || pType === 'home-leave' || pType === 'home' || pType === 'hleave' || pType === 'home_leave';
+                return pType === 'leave' || pType === 'home-leave' || pType === 'home' || pType === 'hleave' || pType === 'home_leave' || pType === 'short-leave' || pType === 'short_leave' || pType.includes('short') || pType === 'sleave';
             });
 
             const matchedGpIdSet = new Set<string>();
@@ -1100,7 +1100,7 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
                         checkInIstTime: matchingGp.checkInIstTime,
                         checkOutTime: matchingGp.checkOutTime,
                         checkInTime: matchingGp.checkInTime,
-                        reason: p.reason || matchingGp.reason || 'Home Leave',
+                        reason: p.reason || matchingGp.reason || (String(p.requestType || matchingGp?.type || '').toLowerCase().includes('short') ? 'Short Leave' : 'Home Leave'),
                         destination: matchingGp.destination || p.destination,
                         status: matchingGp.status === 'out' ? 'out' : (matchingGp.checkInTime ? 'completed' : (p.status || 'approved')),
                         wardenStatus: p.wardenStatus,
@@ -1112,8 +1112,8 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
                         durationMinutes: matchingGp.durationMinutes,
                         hasGateMovement: true,
                         createdAt: p.createdAt || matchingGp.createdAt,
-                        type: 'leave',
-                        requestType: p.requestType || 'leave',
+                        type: String(p.requestType || matchingGp?.type || '').toLowerCase().includes('short') ? 'SHORT-LEAVE' : 'leave',
+                        requestType: p.requestType || (String(matchingGp?.type || '').toLowerCase().includes('short') ? 'short_leave' : 'leave'),
                         rawPermission: p,
                         rawGatePass: matchingGp
                     });
@@ -1133,7 +1133,7 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
                         checkInIstTime: null,
                         checkOutTime: null,
                         checkInTime: null,
-                        reason: p.reason || 'Home Leave',
+                        reason: p.reason || (String(p.requestType || '').toLowerCase().includes('short') ? 'Short Leave' : 'Home Leave'),
                         destination: p.destination,
                         status: p.status,
                         wardenStatus: p.wardenStatus,
@@ -1144,7 +1144,7 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
                         durationMinutes: null,
                         hasGateMovement: false,
                         createdAt: p.createdAt,
-                        type: 'leave',
+                        type: String(p.requestType || '').toLowerCase().includes('short') ? 'SHORT-LEAVE' : 'leave',
                         requestType: p.requestType || 'leave',
                         rawPermission: p
                     });
@@ -1168,7 +1168,7 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
                         checkInIstTime: gp.checkInIstTime,
                         checkOutTime: gp.checkOutTime,
                         checkInTime: gp.checkInTime,
-                        reason: gp.reason || 'Home Leave Movement',
+                        reason: gp.reason || (String(gp.type || gp.requestType || '').toLowerCase().includes('short') ? 'Short Leave Movement' : 'Home Leave Movement'),
                         destination: gp.destination,
                         status: gp.status,
                         wardenStatus: null,
@@ -1180,7 +1180,8 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
                         durationMinutes: gp.durationMinutes,
                         hasGateMovement: true,
                         createdAt: gp.createdAt,
-                        type: 'leave',
+                        type: String(gp.type || gp.requestType || '').toLowerCase().includes('short') ? 'SHORT-LEAVE' : 'leave',
+                        requestType: String(gp.type || gp.requestType || '').toLowerCase().includes('short') ? 'short_leave' : 'leave',
                         rawGatePass: gp
                     });
                 }
@@ -1196,7 +1197,7 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
             // 3. GATE-PASS RECORDS (Tab 3) - All Campus Outings & Gate Movements
             const outingPasses = gpRecords.filter((gp: any) => {
                 const pType = String(gp.type || '').toLowerCase();
-                return !(pType === 'leave' || pType === 'home-leave' || pType === 'home' || pType === 'hleave' || pType === 'home_leave');
+                return !(pType === 'leave' || pType === 'home-leave' || pType === 'home' || pType === 'hleave' || pType === 'home_leave' || pType === 'short-leave' || pType === 'short_leave' || pType.includes('short'));
             }).map((gp: any) => ({
                 source: 'gate_pass' as const,
                 id: gp.id || gp._id,

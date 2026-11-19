@@ -2153,7 +2153,11 @@ export const db = {
                 const rawT = String(filter.type).toLowerCase().trim();
                 if (rawT === 'leave' || rawT === 'home-leave' || rawT === 'hleave') {
                     whereClause.type = {
-                        in: ['leave', 'HOME-LEAVE', 'home-leave', 'hleave', 'LEAVE', 'Home-Leave', 'Home Leave', 'home']
+                        in: ['leave', 'HOME-LEAVE', 'home-leave', 'hleave', 'LEAVE', 'Home-Leave', 'Home Leave', 'home', 'SHORT-LEAVE', 'short-leave', 'short_leave', 'short', 'sleave']
+                    };
+                } else if (rawT === 'short_leave' || rawT === 'short-leave' || rawT === 'short' || rawT === 'sleave') {
+                    whereClause.type = {
+                        in: ['SHORT-LEAVE', 'short-leave', 'short_leave', 'short', 'sleave']
                     };
                 } else if (rawT === 'outing' || rawT === 'gate-pass' || rawT === 'gatepass') {
                     whereClause.type = {

@@ -178,7 +178,7 @@ export async function GET(request: NextRequest) {
         let passCount = 0;
         (typeCounts || []).forEach((tc: any) => {
             const rawT = String(tc.type || '').toLowerCase().trim();
-            if (rawT === 'leave' || rawT === 'home-leave' || rawT === 'hleave' || rawT === 'home') {
+            if (rawT === 'leave' || rawT === 'home-leave' || rawT === 'hleave' || rawT === 'home' || rawT.includes('short') || rawT === 'sleave') {
                 leaveCount += (tc._count?.id || 0);
             } else {
                 passCount += (tc._count?.id || 0);

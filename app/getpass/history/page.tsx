@@ -549,7 +549,11 @@ export default function OutingHistoryPage() {
                         case "inDate": return (r.status === 'in' || r.status === 'auto-resolved') ? formatDateDDMMYYYY(r.checkInISTDate || r.checkInTime) : "---";
                         case "inTime": return (r.status === 'in' || r.status === 'auto-resolved') ? formatISTTimeAMPM(r.checkInISTTime, r.checkInTime) : "Still Outside";
                         case "duration": return formatDuration(r.durationMinutes);
-                        case "type": return r.type === 'leave' ? 'LEAVE' : 'GATEPASS';
+                        case "type": {
+                            const isShort = String(r.type || r.requestType || '').toLowerCase().includes('short');
+                            const isLeave = !isShort && (String(r.type || '').toLowerCase().includes('leave') || String(r.type || '').toLowerCase() === 'hleave');
+                            return isShort ? 'SHORT-LEAVE' : isLeave ? 'HOME-LEAVE' : 'GATE-PASS';
+                        }
                         case "status": return r.status === 'out' ? "OUT" : "IN";
                         case "reason": return r.reason || r.leaveReason || "---";
                         case "fatherName": return r.fatherName || "";
@@ -1060,14 +1064,19 @@ export default function OutingHistoryPage() {
                                             {record.studentName}
                                         </p>
                                         {(() => {
-                                            const isLeaveRecord = String(record.type || '').toLowerCase().includes('leave') || String(record.type || '').toLowerCase() === 'hleave';
+                                            const rawType = String(record.type || record.requestType || '').toLowerCase();
+                                            const isShortLeave = rawType.includes('short') || rawType === 'sleave';
+                                            const isLeaveRecord = !isShortLeave && (rawType.includes('leave') || rawType === 'hleave');
                                             return (
-                                                <span className={`px-1.5 py-0.5 rounded-md text-[8px] font-black uppercase tracking-widest border transition-all flex items-center gap-1 shrink-0 ${isLeaveRecord
-                                                    ? "bg-amber-500/20 text-amber-400 border-amber-500/30"
-                                                    : "bg-blue-500/20 text-blue-400 border-blue-500/30"
+                                                <span className={`px-1.5 py-0.5 rounded-md text-[8px] font-black uppercase tracking-widest border transition-all flex items-center gap-1 shrink-0 ${
+                                                    isShortLeave
+                                                        ? "bg-amber-500/25 text-amber-300 border-amber-400/40"
+                                                        : isLeaveRecord
+                                                        ? "bg-amber-500/20 text-amber-400 border-amber-500/30"
+                                                        : "bg-blue-500/20 text-blue-400 border-blue-500/30"
                                                     }`}>
-                                                    <span className="text-[9px]">{isLeaveRecord ? "🏠" : "🎫"}</span>
-                                                    <span>{isLeaveRecord ? "HOME-LEAVE" : "GATE-PASS"}</span>
+                                                    <span className="text-[9px]">{isShortLeave ? "⏱️" : isLeaveRecord ? "🏠" : "🎫"}</span>
+                                                    <span>{isShortLeave ? "SHORT-LEAVE" : isLeaveRecord ? "HOME-LEAVE" : "GATE-PASS"}</span>
                                                 </span>
                                             );
                                         })()}
@@ -1247,7 +1256,8 @@ export default function OutingHistoryPage() {
                                             {/* Recent History — Side-by-Side OUT and IN/EXPECTED Timestamps */}
                                             {(() => {
                                                 const rawType = String((lastOuting as any)?.type || (lastOuting as any)?.requestType || selectedStudent?.outingType || selectedStudent?.requestType || '').toLowerCase();
-                                                const isHomeLeave = rawType.includes('leave') || rawType === 'hleave';
+                                                const isShortLeave = rawType.includes('short') || rawType === 'sleave';
+                                                const isHomeLeave = !isShortLeave && (rawType.includes('leave') || rawType === 'hleave');
                                                 const isReturned = lastOuting?.status === 'in' || !!lastOuting?.checkInISTTime || !!lastOuting?.checkInTime;
                                                 const isCurrentlyOut = !isReturned && (lastOuting?.status === 'out' || selectedStudent?.studentStatus === 'out');
 
@@ -1270,8 +1280,14 @@ export default function OutingHistoryPage() {
                                                 return (
                                                     <div className="flex flex-col items-start px-2 py-1 sm:px-2.5 sm:py-1.5 bg-slate-50/90 rounded-lg sm:rounded-xl border border-slate-200/80 shrink-0 shadow-sm">
                                                         <div className="flex items-center justify-between w-full gap-1.5 mb-0.5">
-                                                            <p className="text-[6.5px] sm:text-[8px] font-black text-gray-500 uppercase tracking-widest">
-                                                                {isHomeLeave ? "🏠 Home-Leave" : "Recent Outing"}
+                                                            <p className="text-[6.5px] sm:text-[8px] font-black uppercase tracking-widest">
+                                                                {isShortLeave ? (
+                                                                    <span className="text-amber-600 font-black">⏱️ Short-Leave</span>
+                                                                ) : isHomeLeave ? (
+                                                                    <span className="text-gray-500 font-black">🏠 Home-Leave</span>
+                                                                ) : (
+                                                                    <span className="text-blue-500 font-black">Recent Outing</span>
+                                                                )}
                                                             </p>
                                                             {isHomeLeave && isCurrentlyOut && (
                                                                 <span className={`text-[6px] sm:text-[7.5px] font-black px-1.5 py-0.2 rounded uppercase tracking-wider ${isOverdue ? "bg-red-100 text-red-700 border border-red-200 animate-pulse" : "bg-blue-100 text-blue-700 border border-blue-200"}`}>
@@ -1285,7 +1301,7 @@ export default function OutingHistoryPage() {
                                                                 {/* OUT / LEAVE FROM TIMESTAMP */}
                                                                 <div className="flex flex-col px-1.5 py-0.5 sm:px-2 sm:py-1 bg-red-50/90 rounded-md sm:rounded-lg border border-red-100 min-w-[68px] sm:min-w-[80px]">
                                                                     <span className="text-[6.5px] sm:text-[7.5px] font-black text-red-500 uppercase tracking-tight">
-                                                                        {isHomeLeave ? "LEAVE FROM 🚪" : "OUT 🚪"}
+                                                                        {isShortLeave ? "LEAVE FROM ⏱️" : isHomeLeave ? "LEAVE FROM 🚪" : "OUT 🚪"}
                                                                     </span>
                                                                     <span className="text-red-700 font-extrabold text-[8px] sm:text-[10px] md:text-[11px] leading-tight">
                                                                         {formatDateDDMMYYYY(fromDateVal)}
@@ -1299,7 +1315,7 @@ export default function OutingHistoryPage() {
                                                                 {isReturned ? (
                                                                     <div className="flex flex-col px-1.5 py-0.5 sm:px-2 sm:py-1 bg-green-50/90 rounded-md sm:rounded-lg border border-green-100 min-w-[68px] sm:min-w-[80px]">
                                                                         <span className="text-[6.5px] sm:text-[7.5px] font-black text-green-600 uppercase tracking-tight">
-                                                                            {isHomeLeave ? "RETURNED IN 🏠" : "IN 🏠"}
+                                                                            {isShortLeave ? "RETURNED IN ⏱️" : isHomeLeave ? "RETURNED IN 🏠" : "IN 🏠"}
                                                                         </span>
                                                                         <span className="text-green-700 font-extrabold text-[8px] sm:text-[10px] md:text-[11px] leading-tight">
                                                                             {formatDateDDMMYYYY(lastOuting.checkInISTDate || lastOuting.checkInTime || lastOuting.checkOutISTDate || lastOuting.checkOutTime)}

@@ -1861,7 +1861,7 @@ export default function AdminDashboard({
       // 2. HOME-LEAVE RECORDS (Tab 2) - 1-to-1 Mapping between Permissions and Gate Movements
       const leavePerms = sortedPermsList.filter((p: any) => {
         const rType = String(p.requestType || '').toLowerCase();
-        return rType === 'leave' || rType === 'home-leave' || rType === 'home' || rType === 'home_leave' || rType === 'hleave';
+        return rType === 'leave' || rType === 'home-leave' || rType === 'home' || rType === 'home_leave' || rType === 'hleave' || rType === 'short_leave' || rType === 'short-leave' || rType === 'short' || rType === 'sleave';
       });
 
       const leavePasses = gpRecords.filter((gp: any) => {
@@ -1877,7 +1877,7 @@ export default function AdminDashboard({
         }
 
         const pType = String(gp.type || '').toLowerCase();
-        const isExplicitLeave = pType === 'leave' || pType === 'home-leave' || pType === 'home' || pType === 'hleave' || pType === 'home_leave';
+        const isExplicitLeave = pType === 'leave' || pType === 'home-leave' || pType === 'home' || pType === 'hleave' || pType === 'home_leave' || pType === 'short-leave' || pType === 'short_leave' || pType.includes('short') || pType === 'sleave';
         if (isExplicitLeave) {
           const expEnd = new Date(gp.toDateTime || gp.expectedReturnDate).getTime();
           if (expEnd > 0 && outMs > expEnd) return false;
@@ -1945,7 +1945,7 @@ export default function AdminDashboard({
             checkInIstTime: matchingGp.checkInIstTime,
             checkOutTime: matchingGp.checkOutTime,
             checkInTime: matchingGp.checkInTime,
-            reason: p.reason || matchingGp.reason || 'Home Leave',
+            reason: p.reason || matchingGp.reason || (String(p.requestType || matchingGp?.type || '').toLowerCase().includes('short') ? 'Short Leave' : 'Home Leave'),
             destination: matchingGp.destination || p.destination,
             status: matchingGp.status === 'out' ? 'out' : (matchingGp.checkInTime ? 'completed' : (p.status || 'approved')),
             wardenStatus: p.wardenStatus,
@@ -1957,8 +1957,8 @@ export default function AdminDashboard({
             durationMinutes: matchingGp.durationMinutes,
             hasGateMovement: true,
             createdAt: p.createdAt || matchingGp.createdAt,
-            type: 'leave',
-            requestType: p.requestType || 'leave',
+            type: String(p.requestType || matchingGp?.type || '').toLowerCase().includes('short') ? 'SHORT-LEAVE' : 'leave',
+            requestType: p.requestType || (String(matchingGp?.type || '').toLowerCase().includes('short') ? 'short_leave' : 'leave'),
             rawPermission: p,
             rawGatePass: matchingGp
           });
@@ -1979,7 +1979,7 @@ export default function AdminDashboard({
             checkInIstTime: null,
             checkOutTime: null,
             checkInTime: null,
-            reason: p.reason || 'Home Leave',
+            reason: p.reason || (String(p.requestType || '').toLowerCase().includes('short') ? 'Short Leave' : 'Home Leave'),
             destination: p.destination,
             status: p.status,
             wardenStatus: p.wardenStatus,
@@ -1990,7 +1990,7 @@ export default function AdminDashboard({
             durationMinutes: null,
             hasGateMovement: false,
             createdAt: p.createdAt,
-            type: 'leave',
+            type: String(p.requestType || '').toLowerCase().includes('short') ? 'SHORT-LEAVE' : 'leave',
             requestType: p.requestType || 'leave',
             rawPermission: p
           });
@@ -2014,7 +2014,7 @@ export default function AdminDashboard({
             checkInIstTime: gp.checkInIstTime,
             checkOutTime: gp.checkOutTime,
             checkInTime: gp.checkInTime,
-            reason: gp.reason || 'Home Leave Movement',
+            reason: gp.reason || (String(gp.type || gp.requestType || '').toLowerCase().includes('short') ? 'Short Leave Movement' : 'Home Leave Movement'),
             destination: gp.destination,
             status: gp.status,
             wardenStatus: null,
@@ -2026,7 +2026,8 @@ export default function AdminDashboard({
             durationMinutes: gp.durationMinutes,
             hasGateMovement: true,
             createdAt: gp.createdAt,
-            type: 'leave',
+            type: String(gp.type || gp.requestType || '').toLowerCase().includes('short') ? 'SHORT-LEAVE' : 'leave',
+            requestType: String(gp.type || gp.requestType || '').toLowerCase().includes('short') ? 'short_leave' : 'leave',
             rawGatePass: gp
           });
         }
@@ -2044,7 +2045,7 @@ export default function AdminDashboard({
         const gpId = String(gp.id || gp._id);
         if (leavePassIdSet.has(gpId)) return false;
         const pType = String(gp.type || '').toLowerCase();
-        return !(pType === 'leave' || pType === 'home-leave' || pType === 'home' || pType === 'hleave' || pType === 'home_leave');
+        return !(pType === 'leave' || pType === 'home-leave' || pType === 'home' || pType === 'hleave' || pType === 'home_leave' || pType === 'short-leave' || pType === 'short_leave' || pType.includes('short'));
       }).map((gp: any) => ({
         source: 'gate_pass' as const,
         id: gp.id || gp._id,
@@ -15570,6 +15571,7 @@ export default function AdminDashboard({
                       const renderLeaveCard = (item: any, idx: number) => {
                         const isGatePassOuting = item.source === 'gate_pass';
                         const isMerged = item.source === 'merged' || (item.hasGateMovement && (item.wardenStatus || item.deanStatus));
+                        const isShortLeave = String(item.type || item.requestType || '').toLowerCase().includes('short') || String(item.reason || '').toLowerCase().includes('short');
                         const isCurrentlyOut = item.status === 'out';
                         const isAllowed = item.status === 'allowed' || item.status === 'approved' || item.deanStatus === 'allowed' || item.deanStatus === 'approved';
                         const isRejected = item.status === 'rejected' || item.deanStatus === 'rejected' || item.wardenStatus === 'rejected';
@@ -15616,8 +15618,14 @@ export default function AdminDashboard({
                             {/* Header: All tabs in a single line (Category | Date | Parent Video | Status) */}
                             <div className="flex items-center gap-1 sm:gap-1.5 mb-2 overflow-x-auto no-scrollbar flex-nowrap py-0.5">
                               {/* 1. Category Badge */}
-                              <span className="text-[7.5px] sm:text-[9px] font-black uppercase tracking-wider px-1 sm:px-2 py-0.5 rounded-md bg-blue-50 text-blue-700 border border-blue-200/60 whitespace-nowrap shrink-0">
-                                {isMerged ? '📝 Official Leave' : isGatePassOuting ? '🚪 Gate Leave Log' : '📝 Official Leave Pass'}
+                              <span className={`text-[7.5px] sm:text-[9px] font-black uppercase tracking-wider px-1 sm:px-2 py-0.5 rounded-md border whitespace-nowrap shrink-0 ${
+                                isShortLeave
+                                  ? 'bg-amber-50 text-amber-800 border-amber-300'
+                                  : 'bg-blue-50 text-blue-700 border-blue-200/60'
+                              }`}>
+                                {isShortLeave
+                                  ? (isMerged ? '⏱️ Official Short Leave' : isGatePassOuting ? '⏱️ Gate Short-Leave Log' : '⏱️ Short Leave Pass')
+                                  : (isMerged ? '📝 Official Leave' : isGatePassOuting ? '🚪 Gate Leave Log' : '📝 Official Leave Pass')}
                               </span>
 
                               {/* 2. Date Badge */}
@@ -15988,7 +15996,12 @@ export default function AdminDashboard({
                                 <div className="flex items-center justify-between px-0.5 flex-wrap gap-1.5">
                                   <div className="flex items-center gap-2">
                                     <span className="text-xs font-black text-slate-800 flex items-center gap-1.5">
-                                      <span>📍 Home-Leave Details for</span>
+                                      {(() => {
+                                        const hasShort = displayLeaves.length > 0 && displayLeaves.some((l: any) => String(l.type || l.requestType || '').toLowerCase().includes('short'));
+                                        const hasHome = displayLeaves.length > 0 && displayLeaves.some((l: any) => !String(l.type || l.requestType || '').toLowerCase().includes('short'));
+                                        const labelPrefix = (hasShort && !hasHome) ? '⏱️ Short-Leave Details for' : (hasHome && !hasShort) ? '🏠 Home-Leave Details for' : '📍 Leave Details for';
+                                        return <span>{labelPrefix}</span>;
+                                      })()}
                                       <span className="px-2 py-0.5 rounded-md bg-amber-100 text-amber-950 border border-amber-300 font-extrabold">
                                         📅 {showMonthHomeLeaves ? `${calMonthTitle} (All Month)` : (activeSelectedDate || "Selected Date")}
                                       </span>
