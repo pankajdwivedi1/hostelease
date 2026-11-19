@@ -1994,15 +1994,13 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
 
     const fetchSystemSettings = async (isManualPull = false) => {
         try {
-            // ⚡ 24-HOUR CLIENT CACHE: Kept intact for background & normal loads.
-            // On manual pull-to-refresh (isManualPull = true), bypasses cache and updates with latest from server.
-            const CACHE_TTL = 24 * 60 * 60 * 1000;
-            if (!isManualPull && typeof window !== 'undefined') {
+            // ⚡ FAST HYDRATION: Read from localStorage first for instant 0ms UI paint
+            if (typeof window !== 'undefined') {
                 try {
                     const localCached = localStorage.getItem("cached_sys_settings_v1");
                     if (localCached) {
                         const parsed = JSON.parse(localCached);
-                        if (parsed && (Date.now() - parsed.ts < CACHE_TTL)) {
+                        if (parsed && parsed.data) {
                             const data = parsed.data;
                             setFormBuilderConfig(data.formBuilderConfig || []);
                             if (data.startTime && data.endTime) setAttendanceWindow({ start: data.startTime, end: data.endTime });
@@ -2010,58 +2008,17 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
                             if (data.prioritizeAssignedHostel !== undefined) setPrioritizeAssignedHostel(data.prioritizeAssignedHostel);
                             if (data.enforceMandatoryPush !== undefined) setEnforceMandatoryPush(data.enforceMandatoryPush === true);
                             if (data.enableVideoVoiceCall !== undefined) setEnableVideoVoiceCall(data.enableVideoVoiceCall !== false);
-                            return;
                         }
                     }
                 } catch {}
             }
-            if (!isManualPull && settingsCacheRef.current && Date.now() - settingsCacheRef.current.ts < CACHE_TTL) {
-                const data = settingsCacheRef.current.data;
-                setFormBuilderConfig(data.formBuilderConfig || []);
-                if (data.startTime && data.endTime) {
-                    setAttendanceWindow({ start: data.startTime, end: data.endTime });
-                }
-                if (data.overlapRadius !== undefined) setOverlapRadius(data.overlapRadius);
-                if (data.prioritizeAssignedHostel !== undefined) setPrioritizeAssignedHostel(data.prioritizeAssignedHostel);
-                if (data.enforceMandatoryPush !== undefined) setEnforceMandatoryPush(data.enforceMandatoryPush === true);
-                if (data.enableVideoVoiceCall !== undefined) setEnableVideoVoiceCall(data.enableVideoVoiceCall !== false);
-                return;
-            }
 
-            const cachedEtag = typeof window !== 'undefined' ? localStorage.getItem("cached_sys_settings_etag") : null;
-            const headers: Record<string, string> = {};
-            if (!isManualPull && cachedEtag) {
-                headers["if-none-match"] = cachedEtag;
-            }
-            if (isManualPull) {
-                headers["Cache-Control"] = "no-cache, no-store";
-                headers["Pragma"] = "no-cache";
-            }
-
+            // ⚡ FRESH BACKGROUND NETWORK FETCH: Always sync latest settings from DB on refresh & startup
             const res = await fetch(`/api/admin/settings${getTenantParam()}${isManualPull ? `&_t=${Date.now()}` : ''}`, {
-                cache: isManualPull ? 'no-store' : 'default',
-                headers: Object.keys(headers).length > 0 ? headers : undefined
+                cache: 'no-store'
             });
 
-            if (res.status === 304) {
-                // ⚡ ZERO-DATA SYNC: Server confirmed no settings have changed!
-                if (typeof window !== 'undefined') {
-                    try {
-                        const localCached = localStorage.getItem("cached_sys_settings_v1");
-                        if (localCached) {
-                            const parsed = JSON.parse(localCached);
-                            parsed.ts = Date.now();
-                            localStorage.setItem("cached_sys_settings_v1", JSON.stringify(parsed));
-                        }
-                    } catch {}
-                }
-                return;
-            }
             if (!res.ok) return;
-            const newEtag = res.headers.get("etag");
-            if (newEtag && typeof window !== 'undefined') {
-                try { localStorage.setItem("cached_sys_settings_etag", newEtag); } catch {}
-            }
             const data = await res.json();
             if (data.success) {
                 settingsCacheRef.current = { data, ts: Date.now() };
@@ -2070,7 +2027,6 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
                 }
                 setFormBuilderConfig(data.formBuilderConfig || []);
                 if (data.startTime && data.endTime) {
-                    console.log(`🕒 Syncing Attendance Window: ${data.startTime} - ${data.endTime}`);
                     setAttendanceWindow({ start: data.startTime, end: data.endTime });
                 }
                 if (data.overlapRadius !== undefined) setOverlapRadius(data.overlapRadius);
@@ -2445,6 +2401,36 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
         let es: EventSource | null = null;
         try {
             es = new EventSource("/api/admin/events");
+            es.addEventListener("gate_settings", (event: MessageEvent) => {
+                try {
+                    const data = JSON.parse(event.data);
+                    if (!data) return;
+                    if (data.enableVideoVoiceCall !== undefined) {
+                        setEnableVideoVoiceCall(data.enableVideoVoiceCall !== false);
+                    }
+                    if (data.startTime && data.endTime) {
+                        setAttendanceWindow({ start: data.startTime, end: data.endTime });
+                    }
+                    if (typeof window !== "undefined") {
+                        try {
+                            const cached = localStorage.getItem("cached_sys_settings_v1");
+                            if (cached) {
+                                const parsed = JSON.parse(cached);
+                                if (parsed?.data) {
+                                    if (data.enableVideoVoiceCall !== undefined) parsed.data.enableVideoVoiceCall = (data.enableVideoVoiceCall !== false);
+                                    if (data.startTime && data.endTime) {
+                                        parsed.data.startTime = data.startTime;
+                                        parsed.data.endTime = data.endTime;
+                                    }
+                                    parsed.ts = Date.now();
+                                    localStorage.setItem("cached_sys_settings_v1", JSON.stringify(parsed));
+                                }
+                            }
+                        } catch (_) {}
+                    }
+                } catch (err) {}
+            });
+
             es.addEventListener("permission_update", (event: MessageEvent) => {
                 try {
                     const data = JSON.parse(event.data);
@@ -9358,7 +9344,7 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
                             </div>
 
                             {/* 📞 QUICK CONTACTS & 📜 UNDERTAKING STRIP */}
-                            <div className="grid grid-cols-3 gap-1.5 mt-1.5 sm:mt-3">
+                            <div className={`grid ${enableVideoVoiceCall ? 'grid-cols-4' : 'grid-cols-3'} gap-1.5 mt-1.5 sm:mt-3`}>
                                 <a
                                     href={`tel:${wardenContactPhone}`}
                                     className="flex items-center justify-center gap-1 py-1.5 px-1 sm:py-2 sm:px-2 rounded-xl bg-blue-50/90 hover:bg-blue-100 text-blue-800 border border-blue-200/90 shadow-xs transition-all active:scale-95 group text-center"
@@ -9386,6 +9372,10 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
                                     <span className="text-xs sm:text-sm group-hover:scale-110 transition-transform">📜</span>
                                     <span className="text-[9.5px] sm:text-xs font-black tracking-tight truncate">My Undertaking</span>
                                 </button>
+
+                                {enableVideoVoiceCall && (
+                                    <VideoCallButton currentStudent={studentProfile} compact={true} />
+                                )}
                             </div>
 
                             <div className="mt-1.5 sm:mt-4">

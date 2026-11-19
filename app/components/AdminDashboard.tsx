@@ -4234,45 +4234,9 @@ export default function AdminDashboard({
       const targetSlug = isOgiTenantSession() ? "ogi" : (new URLSearchParams(window.location.search).get("tenant") || "ogi").toLowerCase();
       const userTypeHeader = (typeof window !== "undefined" ? localStorage.getItem("userType") : null) || "superadmin";
 
-      // ⚡ 24-HOUR CLIENT CACHE: Check cached system settings first (0 network calls!)
-      const cacheKey = `cached_admin_sys_settings_${targetSlug}`;
-      let settingsData: any = null;
-      if (typeof window !== "undefined") {
-        try {
-          const cached = localStorage.getItem(cacheKey);
-          if (cached) {
-            const { data, ts } = JSON.parse(cached);
-            if (Date.now() - ts < 86400000 && data?.success) {
-              settingsData = data;
-            }
-          }
-        } catch (_) {}
-      }
+      const applySettings = (settingsData: any) => {
+        if (!settingsData || !settingsData.success) return;
 
-      if (!settingsData) {
-        const settingsRes = await fetch(`/api/admin/settings?tenant=${targetSlug}`, {
-          headers: { "x-user-type": userTypeHeader }
-        });
-        if (settingsRes.status === 304) {
-          try {
-            const cached = localStorage.getItem(cacheKey);
-            if (cached) {
-              const parsed = JSON.parse(cached);
-              parsed.ts = Date.now();
-              localStorage.setItem(cacheKey, JSON.stringify(parsed));
-              settingsData = parsed.data;
-            }
-          } catch (_) {}
-        } else if (settingsRes.ok) {
-          settingsData = await settingsRes.json();
-          if (settingsData?.success && typeof window !== "undefined") {
-            try {
-              localStorage.setItem(cacheKey, JSON.stringify({ data: settingsData, ts: Date.now() }));
-            } catch (_) {}
-          }
-        }
-      }
-        if (settingsData && settingsData.success) {
           const config = settingsData.registrationFieldsConfig || {};
           setRequireUndertaking(!!config.requireUndertaking);
           setUndertakingText(config.undertakingText || DEFAULT_UNDERTAKING_TEXT);
@@ -4342,11 +4306,46 @@ export default function AdminDashboard({
           if (settingsData.leaveApprovalMethod) setLeaveApprovalMethod(settingsData.leaveApprovalMethod);
           if (settingsData.wifiWhitelist) setWifiWhitelist(settingsData.wifiWhitelist);
           if (settingsData.enableManualAttendance !== undefined) setEnableManualAttendance(settingsData.enableManualAttendance);
-          if (settingsData.notificationSettings) {
-            setNotificationSettings(prev => ({ ...prev, ...settingsData.notificationSettings }));
-          }
-        }
-
+                  if (settingsData.notificationSettings) {
+          setNotificationSettings(prev => ({ ...prev, ...settingsData.notificationSettings }));
+        }
+      };
+
+      // ⚡ FAST HYDRATION: Read from localStorage first for instant 0ms initial render
+      const cacheKey = `cached_admin_sys_settings_${targetSlug}`;
+      if (typeof window !== "undefined") {
+        try {
+          const cached = localStorage.getItem(cacheKey);
+          if (cached) {
+            const { data } = JSON.parse(cached);
+            if (data?.success) {
+              applySettings(data);
+            }
+          }
+        } catch (_) {}
+      }
+
+      // ⚡ FRESH BACKGROUND NETWORK FETCH: Always sync latest settings from DB on refresh & startup
+      try {
+        const settingsRes = await fetch(`/api/admin/settings?tenant=${targetSlug}`, {
+          cache: "no-store",
+          headers: { "x-user-type": userTypeHeader }
+        });
+        if (settingsRes.ok) {
+          const freshData = await settingsRes.json();
+          if (freshData?.success) {
+            applySettings(freshData);
+            if (typeof window !== "undefined") {
+              try {
+                localStorage.setItem(cacheKey, JSON.stringify({ data: freshData, ts: Date.now() }));
+              } catch (_) {}
+            }
+          }
+        }
+      } catch (fErr) {
+        console.warn("Silent fallback: Error refreshing admin settings:", fErr);
+      }
+
       // Fetch Hostels (with warden/room info)
       try {
         const hostelsRes = await fetch(`/api/admin/hostels?tenant=${targetSlug}`, { 

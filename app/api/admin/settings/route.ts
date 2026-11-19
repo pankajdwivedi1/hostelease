@@ -86,7 +86,7 @@ export async function GET(request: NextRequest) {
             deanNotifications: settings?.deanNotifications !== false,
             parentNotifications: settings?.parentNotifications !== false,
             studentNotifications: settings?.studentNotifications !== false,
-            enableVideoVoiceCall: (settings?.notificationSettings as any)?.enableVideoVoiceCall !== false && (settings as any)?.enableVideoVoiceCall !== false,
+            enableVideoVoiceCall: ((settings?.notificationSettings as any)?.enableVideoVoiceCall ?? (settings as any)?.enableVideoVoiceCall) !== false,
             qrScanCooldownMinutes: settings?.qrScanCooldownMinutes !== undefined ? settings.qrScanCooldownMinutes : 5,
             allowEmergencyExitWithoutCooldown: settings?.allowEmergencyExitWithoutCooldown !== undefined ? settings.allowEmergencyExitWithoutCooldown : true,
             enableGateCameraScan: (() => {
@@ -248,13 +248,19 @@ export async function POST(request: NextRequest) {
             ? notif.enableGateCameraScan 
             : (Array.isArray(broadcastGates) ? broadcastGates.some((g: any) => g.mode === 'camera') : false);
 
-        broadcastGateSettingsUpdate({
-            gatepassGates: broadcastGates,
-            enableGateCameraScan: broadcastIsCam,
-            qrScanCooldownMinutes: settings?.qrScanCooldownMinutes ?? 3,
-            enableVideoVoiceCall: notif.enableVideoVoiceCall !== false,
-            notificationSettings: notif,
-            timestamp: Date.now()
+        broadcastGateSettingsUpdate({
+            gatepassGates: broadcastGates,
+            enableGateCameraScan: broadcastIsCam,
+            qrScanCooldownMinutes: settings?.qrScanCooldownMinutes ?? 3,
+            enableVideoVoiceCall: notif.enableVideoVoiceCall !== false,
+            notificationSettings: notif,
+            startTime: settings?.attendanceStartTime || updateData.attendanceStartTime,
+            endTime: settings?.attendanceEndTime || updateData.attendanceEndTime,
+            superAdminNotifications: settings?.superAdminNotifications !== false,
+            deanNotifications: settings?.deanNotifications !== false,
+            parentNotifications: settings?.parentNotifications !== false,
+            studentNotifications: settings?.studentNotifications !== false,
+            timestamp: Date.now()
         });
 
         // ⚡ CAMPUS BROADCAST: If attendance time changed, broadcast push & in-app notification to all students
