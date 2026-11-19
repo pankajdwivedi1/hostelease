@@ -14780,7 +14780,6 @@ export default function AdminDashboard({
                           });
                           setEditErrors({});
                           setShowEditStudentModal(true);
-                          import("@/lib/faceMatching").then(m => m.loadFaceApiModels(true)).catch(() => {});
                         }}
                         className="flex-1 py-1.5 rounded-lg border border-blue-600 text-blue-600 font-black uppercase tracking-wider hover:bg-blue-50 text-[10px] active:scale-95 transition-all flex items-center justify-center gap-1 bg-white shadow-2xs"
                       >
@@ -15115,7 +15114,6 @@ export default function AdminDashboard({
                       });
                       setEditErrors({});
                       setShowEditStudentModal(true);
-                      import("@/lib/faceMatching").then(m => m.loadFaceApiModels(true)).catch(() => {});
                     }}
                     className="w-full h-full flex flex-col sm:flex-row items-center justify-center text-center gap-0.5 sm:gap-2 px-1 sm:px-4 py-2 sm:py-2 rounded-lg sm:rounded-xl border sm:border-2 border-blue-600 text-blue-600 font-bold transition-all hover:bg-blue-50 text-[8px] sm:text-xs md:text-sm cursor-pointer"
                   >
@@ -17924,7 +17922,7 @@ export default function AdminDashboard({
 
       {
         showEditStudentModal && (
-          <div className="fixed inset-0 z-[70] bg-black/60 backdrop-blur-md flex items-center justify-center p-0 sm:p-4 overflow-hidden animate-in fade-in duration-300">
+          <div className="fixed inset-0 z-[70] bg-black/60 sm:backdrop-blur-sm flex items-center justify-center p-0 sm:p-4 overflow-hidden animate-in fade-in duration-200">
             <div className="bg-white w-full max-w-2xl h-full sm:h-auto sm:max-h-[90vh] sm:rounded-3xl shadow-2xl flex flex-col overflow-hidden animate-in zoom-in-95 duration-300">
               {/* Modal Header */}
               <div className="p-4 md:p-6 border-b flex items-center justify-between bg-white relative z-10">
