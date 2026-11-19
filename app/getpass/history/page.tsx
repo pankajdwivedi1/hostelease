@@ -31,6 +31,15 @@ const getInitialDateFilters = () => {
     };
 };
 
+const isShortLeaveRecord = (r: any) => {
+    if (!r) return false;
+    const t = String(r.type || r.requestType || '').toLowerCase();
+    if (t.includes('short') || t === 'sleave') return true;
+    const reason = String(r.reason || r.leaveReason || '').toLowerCase();
+    const shortKeywords = ['coaching', 'market', 'doctor', 'clinic', 'library', 'atm', 'family meet', 'project work', 'class', 'short'];
+    return shortKeywords.some(k => reason.includes(k));
+};
+
 export default function OutingHistoryPage() {
     const router = useRouter();
     const [isLoading, setIsLoading] = useState(true);
@@ -1064,9 +1073,8 @@ export default function OutingHistoryPage() {
                                             {record.studentName}
                                         </p>
                                         {(() => {
-                                            const rawType = String(record.type || record.requestType || '').toLowerCase();
-                                            const isShortLeave = rawType.includes('short') || rawType === 'sleave';
-                                            const isLeaveRecord = !isShortLeave && (rawType.includes('leave') || rawType === 'hleave');
+                                            const isShortLeave = isShortLeaveRecord(record);
+                                            const isLeaveRecord = !isShortLeave && (String(record.type || record.requestType || '').toLowerCase().includes('leave') || String(record.type || '').toLowerCase() === 'hleave');
                                             return (
                                                 <span className={`px-1.5 py-0.5 rounded-md text-[8px] font-black uppercase tracking-widest border transition-all flex items-center gap-1 shrink-0 ${
                                                     isShortLeave

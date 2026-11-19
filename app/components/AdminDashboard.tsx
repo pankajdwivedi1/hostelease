@@ -15571,8 +15571,14 @@ export default function AdminDashboard({
                       const renderLeaveCard = (item: any, idx: number) => {
                         const isGatePassOuting = item.source === 'gate_pass';
                         const isMerged = item.source === 'merged' || (item.hasGateMovement && (item.wardenStatus || item.deanStatus));
-                        const isShortLeave = String(item.type || item.requestType || '').toLowerCase().includes('short') || String(item.reason || '').toLowerCase().includes('short');
+                        const reasonStr = String(item.reason || item.leaveReason || '').toLowerCase();
+                        const isShortLeave = String(item.type || item.requestType || '').toLowerCase().includes('short') ||
+                          ['coaching', 'market', 'doctor', 'clinic', 'library', 'atm', 'family meet', 'project work', 'class', 'short'].some(k => reasonStr.includes(k));
                         const isCurrentlyOut = item.status === 'out';
+                        const effectiveWardenApproved = item.wardenStatus === 'allowed' || item.wardenStatus === 'approved' || item.hasGateMovement || item.checkInTime || item.status === 'in' || item.status === 'completed';
+                        const effectiveWardenStatus = effectiveWardenApproved ? 'Approved' : (item.wardenStatus === 'rejected' ? 'Rejected' : 'Pending');
+                        const effectiveDeanApproved = item.deanStatus === 'allowed' || item.deanStatus === 'approved' || item.hasGateMovement || item.checkInTime || item.status === 'in' || item.status === 'completed';
+                        const effectiveDeanStatus = effectiveDeanApproved ? 'APPROVED' : (item.deanStatus === 'rejected' ? 'REJECTED' : (item.deanStatus || 'PENDING').toUpperCase());
                         const isAllowed = item.status === 'allowed' || item.status === 'approved' || item.deanStatus === 'allowed' || item.deanStatus === 'approved';
                         const isRejected = item.status === 'rejected' || item.deanStatus === 'rejected' || item.wardenStatus === 'rejected';
                         const isCancelled = item.status === 'cancelled';
@@ -15799,15 +15805,15 @@ export default function AdminDashboard({
 
                                 {/* 2. Warden Badge */}
                                 <span className="px-2 py-0.5 rounded-md bg-slate-100 border border-slate-200/70 inline-flex items-center gap-1 text-[9.5px] sm:text-[10px] font-bold text-slate-600">
-                                  Warden: <strong className={`font-extrabold ${(item.wardenStatus === 'allowed' || item.wardenStatus === 'approved') ? 'text-green-600' : item.wardenStatus === 'rejected' ? 'text-red-600' : 'text-amber-600'}`}>
-                                    {(item.wardenStatus === 'allowed' || item.wardenStatus === 'approved' ? 'Approved' : item.wardenStatus === 'rejected' ? 'Rejected' : 'Pending')}
+                                  Warden: <strong className={`font-extrabold ${effectiveWardenApproved ? 'text-green-600' : item.wardenStatus === 'rejected' ? 'text-red-600' : 'text-amber-600'}`}>
+                                    {effectiveWardenStatus}
                                   </strong>
                                 </span>
 
                                 {/* 3. Dean Badge */}
                                 <span className="px-1.5 py-0.5 rounded bg-slate-100 border border-slate-200/60">
-                                  Dean: <strong className={item.deanStatus === 'allowed' ? 'text-green-600' : item.deanStatus === 'rejected' ? 'text-red-600' : 'text-amber-600'}>
-                                    {(item.deanStatus || 'PENDING').toUpperCase()}
+                                  Dean: <strong className={effectiveDeanApproved ? 'text-green-600' : item.deanStatus === 'rejected' ? 'text-red-600' : 'text-amber-600'}>
+                                    {effectiveDeanStatus}
                                   </strong>
                                 </span>
 
@@ -15997,7 +16003,11 @@ export default function AdminDashboard({
                                   <div className="flex items-center gap-2">
                                     <span className="text-xs font-black text-slate-800 flex items-center gap-1.5">
                                       {(() => {
-                                        const hasShort = displayLeaves.length > 0 && displayLeaves.some((l: any) => String(l.type || l.requestType || '').toLowerCase().includes('short'));
+                                        const hasShort = displayLeaves.length > 0 && displayLeaves.some((l: any) => {
+                                          const t = String(l.type || l.requestType || '').toLowerCase();
+                                          const r = String(l.reason || l.leaveReason || '').toLowerCase();
+                                          return t.includes('short') || ['coaching', 'market', 'doctor', 'clinic', 'library', 'atm', 'family meet', 'project work', 'class', 'short'].some(k => r.includes(k));
+                                        });
                                         const hasHome = displayLeaves.length > 0 && displayLeaves.some((l: any) => !String(l.type || l.requestType || '').toLowerCase().includes('short'));
                                         const labelPrefix = (hasShort && !hasHome) ? '⏱️ Short-Leave Details for' : (hasHome && !hasShort) ? '🏠 Home-Leave Details for' : '📍 Leave Details for';
                                         return <span>{labelPrefix}</span>;
