@@ -2395,76 +2395,124 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
         });
     }, [permissions]);
 
-    // ⚡ REAL-TIME PERMISSIONS SYNC: Instant updates from Warden & Dean approvals via SSE
+    // ⚡ REAL-TIME PERMISSIONS & SETTINGS SYNC (0-Request Tab Sleep & Instant Active Sync)
     useEffect(() => {
         if (typeof window === "undefined") return;
         let es: EventSource | null = null;
-        try {
-            es = new EventSource("/api/admin/events");
-            es.addEventListener("gate_settings", (event: MessageEvent) => {
-                try {
-                    const data = JSON.parse(event.data);
-                    if (!data) return;
-                    if (data.enableVideoVoiceCall !== undefined) {
-                        setEnableVideoVoiceCall(data.enableVideoVoiceCall !== false);
-                    }
-                    if (data.startTime && data.endTime) {
-                        setAttendanceWindow({ start: data.startTime, end: data.endTime });
-                    }
-                    if (typeof window !== "undefined") {
-                        try {
-                            const cached = localStorage.getItem("cached_sys_settings_v1");
-                            if (cached) {
-                                const parsed = JSON.parse(cached);
-                                if (parsed?.data) {
-                                    if (data.enableVideoVoiceCall !== undefined) parsed.data.enableVideoVoiceCall = (data.enableVideoVoiceCall !== false);
-                                    if (data.startTime && data.endTime) {
-                                        parsed.data.startTime = data.startTime;
-                                        parsed.data.endTime = data.endTime;
+        let reconnectTimeout: any = null;
+
+        const connectSSE = () => {
+            if (typeof window === 'undefined' || !('EventSource' in window)) return;
+            if (document.visibilityState === 'hidden') return; // Do not connect if tab/phone is asleep
+            if (es) return;
+
+            try {
+                es = new EventSource("/api/admin/events");
+
+                es.addEventListener("gate_settings", (event: MessageEvent) => {
+                    try {
+                        const data = JSON.parse(event.data);
+                        if (!data) return;
+                        if (data.enableVideoVoiceCall !== undefined) {
+                            setEnableVideoVoiceCall(data.enableVideoVoiceCall !== false);
+                        }
+                        if (data.startTime && data.endTime) {
+                            setAttendanceWindow({ start: data.startTime, end: data.endTime });
+                        }
+                        if (typeof window !== "undefined") {
+                            try {
+                                const cached = localStorage.getItem("cached_sys_settings_v1");
+                                if (cached) {
+                                    const parsed = JSON.parse(cached);
+                                    if (parsed?.data) {
+                                        if (data.enableVideoVoiceCall !== undefined) parsed.data.enableVideoVoiceCall = (data.enableVideoVoiceCall !== false);
+                                        if (data.startTime && data.endTime) {
+                                            parsed.data.startTime = data.startTime;
+                                            parsed.data.endTime = data.endTime;
+                                        }
+                                        parsed.ts = Date.now();
+                                        localStorage.setItem("cached_sys_settings_v1", JSON.stringify(parsed));
                                     }
-                                    parsed.ts = Date.now();
-                                    localStorage.setItem("cached_sys_settings_v1", JSON.stringify(parsed));
                                 }
-                            }
-                        } catch (_) {}
-                    }
-                } catch (err) {}
-            });
+                            } catch (_) {}
+                        }
+                    } catch (err) {}
+                });
 
-            es.addEventListener("permission_update", (event: MessageEvent) => {
-                try {
-                    const data = JSON.parse(event.data);
-                    if (!data || !data.permissionId) return;
-                    const myId = studentProfileRef.current?._id || studentProfileRef.current?.id;
-                    if (myId && data.studentId && String(data.studentId) !== String(myId)) return;
+                es.addEventListener("permission_update", (event: MessageEvent) => {
+                    try {
+                        const data = JSON.parse(event.data);
+                        if (!data || !data.permissionId) return;
+                        const myId = studentProfileRef.current?._id || studentProfileRef.current?.id;
+                        if (myId && data.studentId && String(data.studentId) !== String(myId)) return;
 
-                    setPermissions(prev => {
-                        const updated = prev.map(p => {
-                            const pId = (p._id || p.id)?.toString();
-                            if (pId === String(data.permissionId)) {
-                                return {
-                                    ...p,
-                                    ...(data.status !== undefined ? { status: data.status } : {}),
-                                    ...(data.wardenStatus !== undefined ? { wardenStatus: data.wardenStatus } : {}),
-                                    ...(data.deanStatus !== undefined ? { deanStatus: data.deanStatus } : {}),
-                                    ...(data.parentStatus !== undefined ? { parentStatus: data.parentStatus } : {})
-                                };
-                            }
-                            return p;
+                        setPermissions(prev => {
+                            const updated = prev.map(p => {
+                                const pId = (p._id || p.id)?.toString();
+                                if (pId === String(data.permissionId)) {
+                                    return {
+                                        ...p,
+                                        ...(data.status !== undefined ? { status: data.status } : {}),
+                                        ...(data.wardenStatus !== undefined ? { wardenStatus: data.wardenStatus } : {}),
+                                        ...(data.deanStatus !== undefined ? { deanStatus: data.deanStatus } : {}),
+                                        ...(data.parentStatus !== undefined ? { parentStatus: data.parentStatus } : {})
+                                    };
+                                }
+                                return p;
+                            });
+                            try {
+                                localStorage.setItem("cachedStudentPermissions", JSON.stringify(updated));
+                            } catch (e) {}
+                            return updated;
                         });
-                        try {
-                            localStorage.setItem("cachedStudentPermissions", JSON.stringify(updated));
-                        } catch (e) {}
-                        return updated;
-                    });
-                } catch (err) {}
-            });
-        } catch (err) {}
+                    } catch (err) {}
+                });
 
-        return () => {
+                es.onerror = () => {
+                    if (es) {
+                        try { es.close(); } catch (e) {}
+                        es = null;
+                    }
+                    if (document.visibilityState === "visible") {
+                        clearTimeout(reconnectTimeout);
+                        reconnectTimeout = setTimeout(connectSSE, 5000);
+                    }
+                };
+            } catch (err) {}
+        };
+
+        const disconnectSSE = () => {
             if (es) {
                 try { es.close(); } catch (e) {}
+                es = null;
             }
+            if (reconnectTimeout) {
+                clearTimeout(reconnectTimeout);
+                reconnectTimeout = null;
+            }
+        };
+
+        connectSSE();
+
+        // ⚡ TAB AUTO-SLEEP: Disconnect SSE the instant phone/tab sleeps; reconnect instantly on wakeup
+        const handleVisibilityChange = () => {
+            if (document.visibilityState === "visible") {
+                connectSSE();
+                fetchSystemSettings();
+            } else {
+                disconnectSSE();
+            }
+        };
+
+        document.addEventListener("visibilitychange", handleVisibilityChange);
+        window.addEventListener("focus", handleVisibilityChange);
+        window.addEventListener("pageshow", handleVisibilityChange);
+
+        return () => {
+            disconnectSSE();
+            document.removeEventListener("visibilitychange", handleVisibilityChange);
+            window.removeEventListener("focus", handleVisibilityChange);
+            window.removeEventListener("pageshow", handleVisibilityChange);
         };
     }, []);
 

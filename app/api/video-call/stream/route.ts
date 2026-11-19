@@ -114,14 +114,14 @@ export async function GET(request: NextRequest) {
         callEventEmitter.on(`call_${callId}`, callEventHandler);
       }
 
-      // Keepalive ping every 12s
+      // Keepalive ping every 45s (keeps WebRTC signaling alive with zero wasted requests)
       const pingInterval = setInterval(() => {
         if (isClosed) {
           clearInterval(pingInterval);
           return;
         }
         sendEvent('ping', { t: Date.now() });
-      }, 12000);
+      }, 45000);
 
       request.signal.addEventListener('abort', () => {
         isClosed = true;

@@ -70,14 +70,14 @@ export async function GET(request: NextRequest) {
             gateEventEmitter.on("gate_settings_update", onGateSettingsUpdate);
             gateEventEmitter.on("permission_update", onPermissionUpdate);
 
-            // Heartbeat ping every 20 seconds to keep connection alive
+            // Heartbeat ping every 45s (keeps connection alive with zero wasted requests)
             const interval = setInterval(() => {
                 try {
                     controller.enqueue(encoder.encode(`: ping\n\n`));
                 } catch (e) {
                     clearInterval(interval);
                 }
-            }, 20000);
+            }, 45000);
 
             // Cleanup when client disconnects
             request.signal.addEventListener("abort", () => {
