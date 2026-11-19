@@ -12300,23 +12300,23 @@ export default function AdminDashboard({
               <div className={currentTab === 'messaging' ? 'block space-y-6' : 'hidden'}>
                   <div className="flex items-center justify-between">
                     <div>
-                      <h2 className="text-base font-bold text-foreground">{isWarden ? "Warden Messaging System" : "Dean Messaging System"}</h2>
-                      <p className="text-sm text-secondary">Broadcast messages to students or individuals</p>
+                      <h2 className="text-sm sm:text-base font-bold text-foreground">{isWarden ? "Warden Messaging System" : "Dean Messaging System"}</h2>
+                      <p className="text-[11px] sm:text-sm text-secondary">Broadcast messages to students or individuals</p>
                     </div>
                     <button
                       onClick={() => handleCleanup("notifications")}
-                      className="px-4 py-2 text-xs font-semibold text-red-600 bg-red-50 rounded-lg hover:bg-red-100 transition-colors"
+                      className="px-2.5 py-1.5 sm:px-4 sm:py-2 text-[10px] sm:text-xs font-semibold text-red-600 bg-red-50 rounded-lg hover:bg-red-100 transition-colors whitespace-nowrap shrink-0"
                     >
                       Clear History (30+ Days)
                     </button>
                   </div>
 
-                  <div className="bg-filler p-5 rounded-2xl border border-blue-100 shadow-sm">
+                  <div className="bg-filler p-3.5 sm:p-5 rounded-xl sm:rounded-2xl border border-blue-100 shadow-sm">
                     <div className="space-y-4">
                       <div>
                         <div className="flex items-center justify-between mb-2">
-                          <label className="block text-xs font-bold text-secondary uppercase">Message Content</label>
-                          <label className="cursor-pointer bg-blue-50 text-blue-600 px-3 py-1 rounded-lg text-[10px] font-bold hover:bg-blue-100 transition-colors flex items-center gap-1">
+                          <label className="block text-[10px] sm:text-xs font-bold text-secondary uppercase">Message Content</label>
+                          <label className="cursor-pointer bg-blue-50 text-blue-600 px-2 sm:px-3 py-0.5 sm:py-1 rounded-md sm:rounded-lg text-[9px] sm:text-[10px] font-bold hover:bg-blue-100 transition-colors flex items-center gap-1">
                             <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" /></svg>
                             {newMessage.image ? "Change Image" : "Add Image (Paste/Upload)"}
                             <input type="file" className="hidden" accept="image/*" onChange={handleImageUpload} />
@@ -12340,7 +12340,7 @@ export default function AdminDashboard({
                               }
                             }}
                             placeholder="Type your message here... You can also paste an image directly."
-                            className="w-full p-4 rounded-xl border border-gray-200 focus:outline-none focus:border-blue-500 min-h-[120px] text-sm"
+                            className="w-full p-2.5 sm:p-4 rounded-lg sm:rounded-xl border border-gray-200 focus:outline-none focus:border-blue-500 min-h-[90px] sm:min-h-[120px] text-xs sm:text-sm placeholder:text-[11px] sm:placeholder:text-sm"
                           />
                           {newMessage.image && (
                             <div className="mt-3 relative inline-block">
@@ -12459,7 +12459,7 @@ export default function AdminDashboard({
                       <button
                         onClick={handleSendMessage}
                         disabled={sendingMessage || !newMessage.message}
-                        className={`w-full py-3.5 ${editingNotificationId ? 'bg-amber-600 hover:bg-amber-700 shadow-amber-200' : 'bg-blue-600 hover:bg-blue-700 shadow-blue-200'} text-white rounded-xl font-bold transition-all shadow-lg disabled:bg-gray-300 disabled:shadow-none`}
+                        className={`w-full py-2.5 sm:py-3.5 text-xs sm:text-sm ${editingNotificationId ? 'bg-amber-600 hover:bg-amber-700 shadow-amber-200' : 'bg-blue-600 hover:bg-blue-700 shadow-blue-200'} text-white rounded-lg sm:rounded-xl font-bold transition-all shadow-md sm:shadow-lg disabled:bg-gray-300 disabled:shadow-none`}
                       >
                         {sendingMessage ? "Processing..." : editingNotificationId ? "Update Broadcast" : "Send Notification"}
                       </button>
@@ -12486,9 +12486,9 @@ export default function AdminDashboard({
                   </div>
 
                   <div className="space-y-3">
-                    <h3 className="text-sm font-bold text-secondary uppercase">Recent Broadcasts</h3>
+                    <h3 className="text-xs sm:text-sm font-bold text-secondary uppercase">Recent Broadcasts</h3>
                     {adminNotifications.filter(n => !n.message?.includes("Attendance Time Updated")).length === 0 ? (
-                      <p className="text-secondary text-sm italic">No recent messages sent</p>
+                      <p className="text-secondary text-xs sm:text-sm italic">No recent messages sent</p>
                     ) : (
                       adminNotifications.filter(n => !n.message?.includes("Attendance Time Updated")).map((notif, idx) => (
                         <div key={notif._id || notif.id || `admin-notif-${idx}`} className="bg-white p-4 rounded-xl border border-gray-200 flex items-start gap-4">
