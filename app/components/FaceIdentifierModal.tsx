@@ -1276,23 +1276,23 @@ export default function FaceIdentifierModal({
                 </div>
               </div>
 
-              {/* Quick Actions (Call Father / Call Mother / Open Profile) */}
-              <div className="pt-2 border-t border-slate-700 flex items-center gap-2">
+              {/* Quick Actions (Call Father / Call Mother / View Profile / New Scan) */}
+              <div className="pt-2 border-t border-slate-700 flex items-center gap-1 sm:gap-2">
                 {matchedStudent.fatherNumber && (
                   <a
                     href={`tel:${matchedStudent.fatherNumber}`}
-                    className="flex-1 py-1.5 px-2 bg-slate-700 hover:bg-slate-600 text-white rounded-lg text-[10px] font-bold flex items-center justify-center gap-1 transition-colors"
+                    className="flex-1 py-1.5 px-1 sm:px-2 bg-slate-700 hover:bg-slate-600 text-white rounded-lg text-[9px] min-[360px]:text-[10px] font-bold flex items-center justify-center gap-0.5 sm:gap-1 transition-colors whitespace-nowrap"
                   >
-                    <Phone className="w-3 h-3 text-green-400" />
+                    <Phone className="w-2.5 h-2.5 sm:w-3 sm:h-3 text-green-400 shrink-0" />
                     Call Father
                   </a>
                 )}
                 {matchedStudent.motherNumber && (
                   <a
                     href={`tel:${matchedStudent.motherNumber}`}
-                    className="flex-1 py-1.5 px-2 bg-slate-700 hover:bg-slate-600 text-white rounded-lg text-[10px] font-bold flex items-center justify-center gap-1 transition-colors"
+                    className="flex-1 py-1.5 px-1 sm:px-2 bg-slate-700 hover:bg-slate-600 text-white rounded-lg text-[9px] min-[360px]:text-[10px] font-bold flex items-center justify-center gap-0.5 sm:gap-1 transition-colors whitespace-nowrap"
                   >
-                    <Phone className="w-3 h-3 text-green-400" />
+                    <Phone className="w-2.5 h-2.5 sm:w-3 sm:h-3 text-green-400 shrink-0" />
                     Call Mother
                   </a>
                 )}
@@ -1302,17 +1302,27 @@ export default function FaceIdentifierModal({
                       onSelectStudent(matchedStudent);
                       onClose();
                     }}
-                    className="py-1.5 px-3 bg-purple-600 hover:bg-purple-500 text-white rounded-lg text-[10px] font-bold transition-colors cursor-pointer"
+                    className="py-1.5 px-2 sm:px-3 bg-purple-600 hover:bg-purple-500 text-white rounded-lg text-[9px] min-[360px]:text-[10px] font-bold transition-colors cursor-pointer whitespace-nowrap shrink-0"
                   >
                     View Profile
                   </button>
                 )}
+                {/* 📱 MOBILE ONLY: "New Scan" tab placed immediately to the right of View Profile */}
+                <button
+                  type="button"
+                  onClick={handleResetScan}
+                  className="sm:hidden py-1.5 px-2 bg-slate-700/80 hover:bg-slate-700 text-slate-200 hover:text-white rounded-lg text-[9px] min-[360px]:text-[10px] font-bold flex items-center justify-center gap-1 transition-colors cursor-pointer whitespace-nowrap shrink-0 border border-slate-600/50"
+                  title="New Scan"
+                >
+                  <RefreshCw className="w-2.5 h-2.5 shrink-0" />
+                  New Scan
+                </button>
               </div>
 
-              {/* Reset button to scan next student */}
+              {/* 💻 DESKTOP ONLY: Full-width button */}
               <button
                 onClick={handleResetScan}
-                className="w-full py-2 bg-slate-700/60 hover:bg-slate-700 text-slate-300 hover:text-white rounded-lg text-xs font-bold uppercase tracking-wider flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
+                className="hidden sm:flex w-full py-2 bg-slate-700/60 hover:bg-slate-700 text-slate-300 hover:text-white rounded-lg text-xs font-bold uppercase tracking-wider items-center justify-center gap-1.5 transition-colors cursor-pointer"
               >
                 <RefreshCw className="w-3.5 h-3.5" />
                 Scan Another Student
