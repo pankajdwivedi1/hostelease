@@ -17,6 +17,7 @@ import dynamic from "next/dynamic";
 import QRCode from "qrcode";
 
 const GateCameraScanner = dynamic(() => import("./GateCameraScanner"), { ssr: false });
+const AiModelSyncModal = dynamic(() => import("./AiModelSyncModal"), { ssr: false });
 
 function QRCodeCanvas({ data, size = 550 }: { data: string; size?: number }) {
     const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -471,6 +472,7 @@ export default function GatepassView({
     });
     const [isFullscreen, setIsFullscreen] = useState(false);
     const [mounted, setMounted] = useState(false);
+    const [showAiSyncModal, setShowAiSyncModal] = useState(false);
     const [isManualModalOpen, setIsManualModalOpen] = useState(false);
     const [manualSearchId, setManualSearchId] = useState("");
     const [isProcessingManual, setIsProcessingManual] = useState(false);
@@ -1433,6 +1435,13 @@ export default function GatepassView({
                         {/* Mobile: Top Right Mode Badge & Logout */}
                         <div className="flex flex-col items-end sm:hidden shrink-0">
                             <div className="flex items-center gap-1.5">
+                                <button
+                                    onClick={() => setShowAiSyncModal(true)}
+                                    className="inline-flex items-center justify-center h-5 px-1.5 bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 rounded-[5px] gap-1 font-bold text-[8px] tracking-wider uppercase leading-none transition-all hover:bg-emerald-500/20 active:scale-95 shadow-sm cursor-pointer"
+                                    title="Sync AI Models & Biometrics"
+                                >
+                                    <span>⚡ Sync</span>
+                                </button>
                                 <span className={`inline-flex items-center justify-center h-5 px-2 rounded-[5px] text-[8.5px] font-bold border tracking-wider uppercase leading-none ${
                                     scannerMode === "camera"
                                         ? "bg-purple-500/10 border-purple-500/30 text-purple-400"
@@ -1619,6 +1628,14 @@ export default function GatepassView({
                                 <span className="text-[10px] uppercase tracking-wider">Back Dashboard</span>
                             </button>
                         )}
+                        <button
+                            onClick={() => setShowAiSyncModal(true)}
+                            className="bg-[rgba(16,185,129,0.15)] border border-[rgba(16,185,129,0.35)] text-[#34d399] hover:bg-[rgba(16,185,129,0.25)] px-2.5 sm:px-3 py-1 sm:py-1.5 rounded-[5px] sm:rounded-xl flex items-center gap-1 sm:gap-1.5 font-bold transition-all active:scale-95 shadow-sm cursor-pointer"
+                            title="Sync AI Models & Student Biometrics to this PC"
+                        >
+                            <span className="text-xs sm:text-sm">⚡</span>
+                            <span className="text-[8.5px] sm:text-[10px] uppercase tracking-wider font-extrabold">Sync AI & Data</span>
+                        </button>
                         <button
                             onClick={handleLogout}
                             className="hidden sm:flex bg-[rgba(255,68,68,0.1)] border border-[rgba(255,68,68,0.2)] text-[#ff6b6b] px-3 py-1.5 rounded-xl items-center gap-1.5 font-bold transition-all hover:bg-[rgba(255,68,68,0.2)] active:scale-95"
@@ -2272,6 +2289,13 @@ export default function GatepassView({
             )}
 
 
+
+
+            {/* ⚡ Campus Offline AI & Biometric Sync Modal */}
+            <AiModelSyncModal 
+                isOpen={showAiSyncModal} 
+                onClose={() => setShowAiSyncModal(false)} 
+            />
 
             <style jsx global>{`
                 @keyframes continuousBlink {

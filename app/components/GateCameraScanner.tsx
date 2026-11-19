@@ -627,6 +627,15 @@ export default function GateCameraScanner({
             }
         });
 
+        // Listen for biometric gallery sync event from AiModelSyncModal
+        const handleSyncEvent = (e: any) => {
+            const students = e?.detail;
+            if (isMounted && Array.isArray(students) && students.length > 0) {
+                setGallery(students);
+            }
+        };
+        window.addEventListener("hosteleaze:gallery_synced", handleSyncEvent);
+
         const initAI = async () => {
             try {
                 await Promise.allSettled([
@@ -641,6 +650,7 @@ export default function GateCameraScanner({
         initAI();
         return () => {
             isMounted = false;
+            window.removeEventListener("hosteleaze:gallery_synced", handleSyncEvent);
         };
     }, []);
 
@@ -1266,6 +1276,11 @@ export default function GateCameraScanner({
                     ) : activeFaceBox ? (
                         <span className="text-emerald-400 flex items-center gap-1 font-bold truncate">
                             <Sparkles className="w-3.5 h-3.5 animate-spin shrink-0" /> Face Locked • Identifying...
+                        </span>
+                    ) : gallery.length === 0 ? (
+                        <span className="text-amber-300 truncate flex items-center gap-1.5 font-bold">
+                            <span className="w-2 h-2 rounded-full bg-amber-400 animate-ping shrink-0" />
+                            Biometrics not loaded • Click "Sync AI & Data" above
                         </span>
                     ) : (
                         <span className="text-slate-200 truncate flex items-center gap-1.5">
