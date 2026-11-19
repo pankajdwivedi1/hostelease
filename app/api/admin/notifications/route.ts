@@ -2,6 +2,7 @@ export const dynamic = "force-dynamic";
 
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/dbAdapter";
+import prisma from "@/lib/prisma";
 
 export async function POST(request: NextRequest) {
     try {
@@ -105,7 +106,13 @@ export async function GET(request: NextRequest) {
         }
 
         try {
-            const notifications = await db.notifications.list({}, { limit: 50 });
+            // Purge legacy automatic attendance time notifications from database
+            prisma.notification.deleteMany({
+                where: { message: { contains: "Attendance Time Updated" } }
+            }).catch(() => {});
+
+            const rawNotifications = await db.notifications.list({}, { limit: 50 });
+            const notifications = (rawNotifications || []).filter((n) => !n.message?.includes("Attendance Time Updated"));
             return NextResponse.json({ success: true, notifications: notifications || [] });
         } catch (err: any) {
             console.error("Warning fetching notifications, returning empty array fallback:", err?.message || err);

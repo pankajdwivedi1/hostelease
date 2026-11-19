@@ -2051,6 +2051,7 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
                 const showCounts = JSON.parse(localStorage.getItem("notif_show_counts") || "{}");
 
                 const active = data.notifications.filter((n: any) => {
+                    if (n.message?.includes("Attendance Time Updated")) return false;
                     if (currentDismissed.includes(n._id)) return false;
                     const ackList = n.acknowledgedBy || [];
                     const isAcked = ackList.some((ack: any) => { const ackId = typeof ack === "string" ? ack : (ack?.studentId || ack?.id); return ackId === studentProfile?._id || ackId === studentProfile?.id; });
@@ -3105,8 +3106,13 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
                     if (cachedNotifsStr) {
                         const cached = JSON.parse(cachedNotifsStr);
                         if (Array.isArray(cached) && cached.length > 0) {
-                            setNotifications(cached);
-                            hasCachedNotifs = true;
+                            const validCached = cached.filter((n: any) => !n.message?.includes("Attendance Time Updated"));
+                            if (validCached.length > 0) {
+                                setNotifications(validCached);
+                                hasCachedNotifs = true;
+                            } else {
+                                localStorage.removeItem(`cached_notifs_${studentProfile._id}`);
+                            }
                         }
                     }
                 } catch (e) {}

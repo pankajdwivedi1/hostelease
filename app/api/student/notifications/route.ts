@@ -34,6 +34,9 @@ export async function GET(request: NextRequest) {
         // Filter out expired and already acknowledged notifications
         const now = new Date();
         const activeNotifications = (notifications || []).filter((n: any) => {
+            if (n.message && n.message.includes("Attendance Time Updated")) {
+                return false;
+            }
             if (n.expiresAt && new Date(n.expiresAt) < now) {
                 return false;
             }

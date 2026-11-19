@@ -12300,7 +12300,7 @@ export default function AdminDashboard({
               <div className={currentTab === 'messaging' ? 'block space-y-6' : 'hidden'}>
                   <div className="flex items-center justify-between">
                     <div>
-                      <h2 className="text-lg font-bold text-foreground">{isWarden ? "Warden Messaging System" : "Dean Messaging System"}</h2>
+                      <h2 className="text-base font-bold text-foreground">{isWarden ? "Warden Messaging System" : "Dean Messaging System"}</h2>
                       <p className="text-sm text-secondary">Broadcast messages to students or individuals</p>
                     </div>
                     <button
@@ -12487,10 +12487,10 @@ export default function AdminDashboard({
 
                   <div className="space-y-3">
                     <h3 className="text-sm font-bold text-secondary uppercase">Recent Broadcasts</h3>
-                    {adminNotifications.length === 0 ? (
+                    {adminNotifications.filter(n => !n.message?.includes("Attendance Time Updated")).length === 0 ? (
                       <p className="text-secondary text-sm italic">No recent messages sent</p>
                     ) : (
-                      adminNotifications.map((notif, idx) => (
+                      adminNotifications.filter(n => !n.message?.includes("Attendance Time Updated")).map((notif, idx) => (
                         <div key={notif._id || notif.id || `admin-notif-${idx}`} className="bg-white p-4 rounded-xl border border-gray-200 flex items-start gap-4">
                           <div
                             className={`w-2 h-2 rounded-full mt-2 flex-shrink-0 ${notif.priority === "critical"
