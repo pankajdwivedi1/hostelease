@@ -12301,7 +12301,7 @@ export default function AdminDashboard({
                   <div className="flex items-center justify-between">
                     <div>
                       <h2 className="text-sm sm:text-base font-bold text-foreground">{isWarden ? "Warden Messaging System" : "Dean Messaging System"}</h2>
-                      <p className="text-[11px] sm:text-sm text-secondary">Broadcast messages to students or individuals</p>
+                      <p className="hidden sm:block text-sm text-secondary">Broadcast messages to students or individuals</p>
                     </div>
                     <button
                       onClick={() => handleCleanup("notifications")}
@@ -12356,7 +12356,7 @@ export default function AdminDashboard({
                         </div>
                       </div>
 
-                      <div className="grid grid-cols-3 gap-2">
+                      <div className="grid grid-cols-4 sm:grid-cols-3 gap-1.5 sm:gap-2">
                         <div>
                           <label className="block text-[8px] md:text-xs font-bold text-secondary uppercase mb-1.5 md:mb-2">Target</label>
                           <select
@@ -12422,6 +12422,21 @@ export default function AdminDashboard({
                             <option value="never">∞ </option>
                           </select>
                         </div>
+
+                        {/* 📱 Mobile View Only: Send Notification Button right beside Duration */}
+                        <div className="sm:hidden flex flex-col justify-end">
+                          <label className="block text-[8px] font-bold text-transparent uppercase mb-1.5 select-none">&nbsp;</label>
+                          <button
+                            onClick={handleSendMessage}
+                            disabled={sendingMessage || !newMessage.message}
+                            className={`w-full h-9 px-0.5 ${editingNotificationId ? 'bg-amber-600 hover:bg-amber-700' : 'bg-blue-600 hover:bg-blue-700'} text-white rounded-lg font-bold text-[8px] leading-tight transition-all shadow-sm flex items-center justify-center text-center disabled:bg-gray-300 disabled:shadow-none`}
+                            title={editingNotificationId ? "Update Broadcast" : "Send Notification"}
+                          >
+                            <span className="line-clamp-2">
+                              {sendingMessage ? "Sending..." : editingNotificationId ? "Update" : "Send Notification"}
+                            </span>
+                          </button>
+                        </div>
                       </div>
 
                       {(newMessage.targetType === "hostel" || newMessage.targetType === "specific_hostel") && (
@@ -12456,12 +12471,13 @@ export default function AdminDashboard({
                         </div>
                       )}
 
-                      <button
-                        onClick={handleSendMessage}
-                        disabled={sendingMessage || !newMessage.message}
-                        className={`w-full py-2.5 sm:py-3.5 text-xs sm:text-sm ${editingNotificationId ? 'bg-amber-600 hover:bg-amber-700 shadow-amber-200' : 'bg-blue-600 hover:bg-blue-700 shadow-blue-200'} text-white rounded-lg sm:rounded-xl font-bold transition-all shadow-md sm:shadow-lg disabled:bg-gray-300 disabled:shadow-none`}
-                      >
-                        {sendingMessage ? "Processing..." : editingNotificationId ? "Update Broadcast" : "Send Notification"}
+                      {/* 💻 Desktop View: Full-width button below */}
+                      <button
+                        onClick={handleSendMessage}
+                        disabled={sendingMessage || !newMessage.message}
+                        className={`hidden sm:block w-full py-3.5 text-sm ${editingNotificationId ? 'bg-amber-600 hover:bg-amber-700 shadow-amber-200' : 'bg-blue-600 hover:bg-blue-700 shadow-blue-200'} text-white rounded-xl font-bold transition-all shadow-lg disabled:bg-gray-300 disabled:shadow-none`}
+                      >
+                        {sendingMessage ? "Processing..." : editingNotificationId ? "Update Broadcast" : "Send Notification"}
                       </button>
                       {editingNotificationId && (
                         <button
