@@ -14,7 +14,14 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from config import FACE_MATCH_THRESHOLD, OFFLINE_DB_PATH
 
 
-DB_PATH = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), OFFLINE_DB_PATH)
+if getattr(sys, 'frozen', False):
+    # Running inside PyInstaller standalone executable
+    app_data_dir = os.path.join(os.environ.get("LOCALAPPDATA", os.path.expanduser("~")), "HostelEaze")
+else:
+    app_data_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+
+os.makedirs(app_data_dir, exist_ok=True)
+DB_PATH = os.path.join(app_data_dir, OFFLINE_DB_PATH)
 
 
 # ─────────────────────────── DATABASE ───────────────────────────

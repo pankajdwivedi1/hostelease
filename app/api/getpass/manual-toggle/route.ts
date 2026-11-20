@@ -293,8 +293,8 @@ export async function POST(request: NextRequest) {
                     const rType = String(p.requestType || '').toLowerCase();
                     const isLeaveType = (rType === 'home-leave' || rType === 'leave' || rType === 'hleave');
                     const isApproved = (p.status === 'allowed' || p.wardenStatus === 'approved' || p.deanStatus === 'approved' || p.status === 'approved') && p.status !== 'completed' && p.status !== 'rejected' && p.status !== 'cancelled';
-                    const notExpired = !p.toDateTime || (new Date(p.toDateTime).getTime() >= now.getTime());
-                    return isLeaveType && isApproved && notExpired;
+                    const isOngoing = (new Date(p.fromDateTime).getTime() <= now.getTime()) && (!p.toDateTime || (new Date(p.toDateTime).getTime() >= now.getTime()));
+                    return isLeaveType && isApproved && isOngoing;
                 });
 
                 if (approvedHomeLeave) {

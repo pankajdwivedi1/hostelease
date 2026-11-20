@@ -27,17 +27,12 @@ export async function GET(request: NextRequest) {
                 { _id: "1", id: "1", name: "GANGOTRI HOSTEL", totalRooms: 0, attendanceMode: "strict" },
                 { _id: "2", id: "2", name: "GAYTRI HOSTEL", totalRooms: 0, attendanceMode: "strict" },
                 { _id: "3", id: "3", name: "BOYS HOSTEL", totalRooms: 0, attendanceMode: "strict" },
-                { _id: "4", id: "4", name: "GHB HOSTEL", totalRooms: 0, attendanceMode: "strict" },
             ];
         }
 
         console.log("=== API GET HOSTELS ===", hostels.length);
         const mappedHostels = hostels.map((h: any) => {
-            const n = (h.name || '').toUpperCase();
-            const normalized = (n.includes("GUEST") || n.includes("GHB"))
-                ? { ...h, name: "GHB Hostel" }
-                : h;
-            return redactHostelSecrets(normalized, revealSecrets);
+            return redactHostelSecrets(h, revealSecrets);
         });
         return createCachedResponse({ success: true, hostels: mappedHostels }, request, 60);
     } catch (error: any) {
@@ -46,7 +41,6 @@ export async function GET(request: NextRequest) {
             { _id: "1", id: "1", name: "GANGOTRI HOSTEL", totalRooms: 0, attendanceMode: "strict" },
             { _id: "2", id: "2", name: "GAYTRI HOSTEL", totalRooms: 0, attendanceMode: "strict" },
             { _id: "3", id: "3", name: "BOYS HOSTEL", totalRooms: 0, attendanceMode: "strict" },
-            { _id: "4", id: "4", name: "GHB HOSTEL", totalRooms: 0, attendanceMode: "strict" },
         ];
         return createCachedResponse({ success: true, hostels: fallbackHostels }, request, 60);
     }

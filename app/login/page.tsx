@@ -3796,82 +3796,55 @@ router.push("/getpass");
               HostelEaze for Windows
             </h3>
 
-            <p className="text-xs text-slate-500 mt-1 mb-4 leading-relaxed">
-              Install as a native application with <b>Zero Warnings</b> and
-              permanent desktop access:
+            <p className="text-xs text-slate-500 mt-1 mb-4 leading-relaxed text-center">
+              100% Native Windows Application &mdash; <b>Zero Browser & Zero WebGL needed</b>. Works on all Windows versions (Windows 7, 8, 10, 11):
             </p>
 
-            <div className="w-full space-y-2.5 text-left mb-5">
-              <div className="flex items-start gap-3 p-2.5 rounded-xl bg-slate-50 border border-slate-100">
-                <span className="w-6 h-6 rounded-full bg-blue-600 text-white font-bold text-xs flex items-center justify-center shrink-0 mt-0.5">
-                  1
-                </span>
-
-                <p className="text-xs text-slate-700 leading-snug">
-                  In <b>Edge</b> or <b>Chrome</b>, look at the top address bar
-                </p>
+            <div className="w-full space-y-2 text-left mb-4">
+              <div className="flex items-center gap-2.5 p-2 rounded-xl bg-emerald-50/70 border border-emerald-100 text-[11px] text-emerald-800 font-medium">
+                <span className="text-sm">📷</span>
+                <span>Direct USB Webcam Hardware Access (DirectShow)</span>
               </div>
-
-              <div className="flex items-start gap-3 p-2.5 rounded-xl bg-slate-50 border border-slate-100">
-                <span className="w-6 h-6 rounded-full bg-blue-600 text-white font-bold text-xs flex items-center justify-center shrink-0 mt-0.5">
-                  2
-                </span>
-
-                <p className="text-xs text-slate-700 leading-snug">
-                  Click the <b>Install App icon (⊕ or 💻)</b> on the right
-                </p>
+              <div className="flex items-center gap-2.5 p-2 rounded-xl bg-blue-50/70 border border-blue-100 text-[11px] text-blue-800 font-medium">
+                <span className="text-sm">⚡</span>
+                <span>CPU-Native Face AI & QR Matching (Zero Shader Lag)</span>
               </div>
-
-              <div className="flex items-start gap-3 p-2.5 rounded-xl bg-slate-50 border border-slate-100">
-                <span className="w-6 h-6 rounded-full bg-blue-600 text-white font-bold text-xs flex items-center justify-center shrink-0 mt-0.5">
-                  3
-                </span>
-
-                <p className="text-xs text-slate-700 leading-snug">
-                  Click <b>Install</b> &mdash; desktop shortcut is created with
-                  0 warnings!
-                </p>
+              <div className="flex items-center gap-2.5 p-2 rounded-xl bg-slate-50 border border-slate-100 text-[11px] text-slate-700 font-medium">
+                <span className="text-sm">💾</span>
+                <span>Offline SQLite Database & Auto Gate Sync</span>
               </div>
             </div>
 
             <div className="w-full flex flex-col gap-2">
+              <a
+                href="/api/download/windows"
+                download="HostelEaze-Setup.exe"
+                className="w-full py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs flex items-center justify-center gap-2 shadow-md transition-all active:scale-[0.98]"
+              >
+                <span>📥</span>
+                <span>Download Standalone App (.exe)</span>
+              </a>
+
               <button
                 type="button"
-
                 onClick={() => {
                   try {
                     window.dispatchEvent(new CustomEvent("open-pwa-install"));
                   } catch (e) {}
-
                   setShowWindowsGuideModal(false);
                 }}
-
-                className="w-full py-2.5 rounded-xl bg-blue-600 font-bold text-xs text-white hover:bg-blue-700 transition-all cursor-pointer shadow-md"
+                className="w-full py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold text-[11px] transition-all cursor-pointer"
               >
-                Install Native App Now
+                Or Install as Web App in Browser (PWA)
               </button>
 
-              <div className="flex items-center justify-between pt-1">
-                <a
-                  href="/api/download/windows"
-
-                  download="HostelEaze-Setup.exe"
-
-                  className="text-[10px] font-bold text-slate-400 hover:text-slate-600 underline"
-
-                  title="Download standalone installer file"
-                >
-                  Download .exe setup file instead
-                </a>
-
+              <div className="flex items-center justify-center pt-1">
                 <button
                   type="button"
-
                   onClick={() => setShowWindowsGuideModal(false)}
-
-                  className="text-[10px] font-bold text-slate-400 hover:text-slate-600"
+                  className="text-[10px] font-bold text-slate-400 hover:text-slate-600 cursor-pointer"
                 >
-                  Dismiss
+                  Close
                 </button>
               </div>
             </div>

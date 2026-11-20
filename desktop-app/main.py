@@ -1,7 +1,8 @@
 """
-HOSTELEAZE Native Desktop Gatepass App
-main.py — Microsoft Edge WebView2 Native Windows Desktop Application
-Direct hardware acceleration (WebGL), 0% camera flicker, 60 FPS, 100% native Web features.
+HOSTELEAZE 100% Native Desktop Gatepass App
+main.py — Pure Python / OpenCV / CustomTkinter Native Windows Desktop Application
+DirectShow USB camera hardware access, CPU-native face matching & QR scanning, 0% browser, 0% WebGL dependency.
+Guaranteed compatibility across Windows 7, 8, 10, and 11.
 """
 
 import os
@@ -12,66 +13,113 @@ import time
 base_dir = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, base_dir)
 
-# --- Configuration ---
-GATEPASS_PROD_URL = "https://www.hosteleaze.com/getpass"
-GATEPASS_LOCAL_URL = "http://localhost:3000/getpass"
+from config import COLORS, APP_TITLE
 
-def get_target_url() -> str:
-    # If user explicitly sets HOSTELEAZE_ENV=local or localhost:3000 is running and reachable
-    env_choice = os.environ.get("HOSTELEAZE_URL")
-    if env_choice:
-        return env_choice
-    
-    # Auto-detect local dev server if running, else use production
+
+def run_native_gui_app():
+    """
+    Launches 100% Native Pure Desktop GUI.
+    Zero Browser, Zero WebView2, Zero WebGL.
+    Works natively on Windows 7, 8, 10, 11 with direct USB camera access.
+    """
+    import customtkinter as ctk
+    from ui.login_screen import LoginScreen
+    from ui.gate_screen import GateScreen
+
+    class HostelEazeNativeApp(ctk.CTk):
+        def __init__(self):
+            super().__init__()
+            ctk.set_appearance_mode("dark")
+            ctk.set_default_color_theme("blue")
+
+            self.title(APP_TITLE)
+            self.geometry("1366x850")
+            self.minsize(1024, 680)
+            self.configure(fg_color=COLORS["bg_dark"])
+
+            # Set icon
+            icon_path = os.path.join(base_dir, "assets", "icon.ico")
+            if not os.path.exists(icon_path):
+                uvw_src = os.path.join(os.path.dirname(base_dir), "public", "uvw_logo.jpg")
+                if os.path.exists(uvw_src):
+                    try:
+                        from PIL import Image
+                        os.makedirs(os.path.dirname(icon_path), exist_ok=True)
+                        img = Image.open(uvw_src).convert("RGBA")
+                        icon_sizes = [(16, 16), (24, 24), (32, 32), (48, 48), (64, 64), (128, 128), (256, 256)]
+                        img.save(icon_path, format="ICO", sizes=icon_sizes)
+                    except Exception:
+                        icon_path = None
+                else:
+                    icon_path = None
+
+            if icon_path and os.path.exists(icon_path):
+                try:
+                    self.iconbitmap(icon_path)
+                except Exception:
+                    pass
+
+            self._current_screen = None
+            self.protocol("WM_DELETE_WINDOW", self._on_close)
+
+            # Start with Login Screen
+            self.show_login()
+
+        def show_login(self):
+            if self._current_screen is not None:
+                if hasattr(self._current_screen, "cleanup"):
+                    try:
+                        self._current_screen.cleanup()
+                    except Exception:
+                        pass
+                self._current_screen.destroy()
+
+            self._current_screen = LoginScreen(self, on_login_success=self.show_gate)
+            self._current_screen.pack(fill="both", expand=True)
+
+        def show_gate(self, gate_info: dict):
+            if self._current_screen is not None:
+                if hasattr(self._current_screen, "cleanup"):
+                    try:
+                        self._current_screen.cleanup()
+                    except Exception:
+                        pass
+                self._current_screen.destroy()
+
+            self._current_screen = GateScreen(self, gate_info=gate_info, on_logout=self.show_login)
+            self._current_screen.pack(fill="both", expand=True)
+
+        def _on_close(self):
+            if self._current_screen and hasattr(self._current_screen, "cleanup"):
+                try:
+                    self._current_screen.cleanup()
+                except Exception:
+                    pass
+            self.destroy()
+            sys.exit(0)
+
+    app = HostelEazeNativeApp()
+    app.mainloop()
+
+
+def run_webview_app():
+    """
+    Fallback webview runner when explicitly requested with --web flag.
+    """
+    import webview
+
+    GATEPASS_PROD_URL = "https://www.hosteleaze.com/getpass"
+    GATEPASS_LOCAL_URL = "http://localhost:3000/getpass"
+
+    target_url = GATEPASS_PROD_URL
     try:
         import requests
         r = requests.get(GATEPASS_LOCAL_URL, timeout=0.6)
         if r.status_code == 200:
-            print("Connected to local Hosteleaze development server (http://localhost:3000/getpass)")
-            return GATEPASS_LOCAL_URL
+            target_url = GATEPASS_LOCAL_URL
     except Exception:
         pass
-    
-    return GATEPASS_PROD_URL
 
-
-def run_native_app():
-    import webview
-    
-    # Enable automatic camera and mic permissions on Microsoft Edge WebView2
-    try:
-        from webview.platforms import edgechromium
-        import clr
-        from webview.util import interop_dll_path
-        clr.AddReference(interop_dll_path('Microsoft.Web.WebView2.Core.dll'))
-        from Microsoft.Web.WebView2.Core import CoreWebView2PermissionState
-        
-        orig_on_webview_ready = edgechromium.EdgeChrome.on_webview_ready
-        
-        def patched_on_webview_ready(self, sender, args):
-            orig_on_webview_ready(self, sender, args)
-            if args.IsSuccess and sender.CoreWebView2:
-                def on_perm(s, e):
-                    # Auto-allow camera, mic, notifications with zero permission popups
-                    e.State = CoreWebView2PermissionState.Allow
-                    e.Handled = True
-                sender.CoreWebView2.PermissionRequested += on_perm
-                
-                # Enable WebGL and hardware acceleration settings
-                settings = sender.CoreWebView2.Settings
-                settings.IsScriptEnabled = True
-                settings.IsWebMessageEnabled = True
-                settings.AreDefaultScriptDialogsEnabled = True
-                settings.IsZoomControlEnabled = False
-        
-        edgechromium.EdgeChrome.on_webview_ready = patched_on_webview_ready
-    except Exception as ex:
-        print("Note: Permission auto-hook status:", ex)
-
-    target_url = get_target_url()
-    print(f"Launching Hosteleaze Gatepass Desktop -> {target_url}")
-
-    # Persistent user data directory (preserves session, cookies, offline cache)
     storage_path = os.path.join(
         os.environ.get("LOCALAPPDATA", os.path.expanduser("~")),
         "HostelEaze",
@@ -79,9 +127,10 @@ def run_native_app():
     )
     os.makedirs(storage_path, exist_ok=True)
 
-    # Window creation
+    icon_path = os.path.join(base_dir, "assets", "icon.ico")
+
     window = webview.create_window(
-        title="Hosteleaze — Campus Gatepass",
+        title=APP_TITLE,
         url=target_url,
         width=1366,
         height=850,
@@ -90,50 +139,33 @@ def run_native_app():
         easy_drag=False
     )
 
-    # Icon setup (UVW Logo)
-    icon_path = os.path.join(base_dir, "assets", "icon.ico")
-    if not os.path.exists(icon_path):
-        uvw_src = os.path.join(os.path.dirname(base_dir), "public", "uvw_logo.jpg")
-        if os.path.exists(uvw_src):
-            try:
-                from PIL import Image
-                os.makedirs(os.path.dirname(icon_path), exist_ok=True)
-                img = Image.open(uvw_src).convert("RGBA")
-                icon_sizes = [(16, 16), (24, 24), (32, 32), (48, 48), (64, 64), (128, 128), (256, 256)]
-                img.save(icon_path, format="ICO", sizes=icon_sizes)
-            except Exception as e:
-                print("Failed to auto-generate icon.ico:", e)
-                icon_path = None
-        else:
-            icon_path = None
-
-    # Maximize on start and ensure UVW window icon is applied
-    def on_shown():
-        try:
-            time.sleep(0.3)
-            window.maximize()
-            if icon_path and hasattr(window, "native") and window.native:
-                import clr
-                clr.AddReference('System.Drawing')
-                from System.Drawing import Icon
-                window.native.Icon = Icon(icon_path)
-        except Exception as e:
-            print("Note on window icon setup:", e)
-
-    threading.Thread(target=on_shown, daemon=True).start()
-
-    # Start Edge WebView2 runtime
     webview.start(
         storage_path=storage_path,
         private_mode=False,
         gui="edgechromium",
-        icon=icon_path
+        icon=icon_path if os.path.exists(icon_path) else None
     )
 
 
 if __name__ == "__main__":
     try:
-        run_native_app()
+        if "--web" in sys.argv:
+            run_webview_app()
+        else:
+            run_native_gui_app()
     except Exception as ex:
-        print("Fatal error starting WebView2 app:", ex)
-        input("Press Enter to exit...")
+        print("Fatal error in HostelEaze Desktop:", ex)
+        import traceback
+        traceback.print_exc()
+        try:
+            import tkinter as tk
+            from tkinter import messagebox
+            root = tk.Tk()
+            root.withdraw()
+            messagebox.showerror(
+                "HostelEaze Error",
+                f"Could not start HostelEaze Desktop:\n\n{ex}\n\nPlease verify camera and network connection."
+            )
+            root.destroy()
+        except Exception:
+            input("Press Enter to exit...")

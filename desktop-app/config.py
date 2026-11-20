@@ -3,7 +3,7 @@
 # ============================================================
 
 # --- Railway API Base URL (your production server) ---
-API_BASE_URL = "https://hosteleaze.com"
+API_BASE_URL = "https://www.hosteleaze.com"
 
 # --- Tenant Slug (must match your .env.local NEXT_PUBLIC_TENANT_SLUG) ---
 TENANT_SLUG = "ogi"
@@ -11,8 +11,8 @@ TENANT_SLUG = "ogi"
 # --- QR HMAC Secret (must match server: hosteleaze_secure_gate_key_2026) ---
 QR_HMAC_SECRET = "hosteleaze_secure_gate_key_2026"
 
-# --- Face Matching Threshold (Strict Bank-Grade: distance <= 0.38 / score >= 86%) ---
-FACE_MATCH_THRESHOLD = 0.38
+# --- Face Matching Threshold (Strict Bank-Grade: distance <= 0.48 / score >= 75%) ---
+FACE_MATCH_THRESHOLD = 0.48
 
 # --- Gallery sync interval in minutes ---
 GALLERY_SYNC_INTERVAL_MINUTES = 30

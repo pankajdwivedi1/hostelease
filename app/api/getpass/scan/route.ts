@@ -396,9 +396,8 @@ export async function POST(request: NextRequest) {
                 const start = new Date(p.fromDateTime).getTime();
                 const end = new Date(p.toDateTime).getTime();
                 const currentTime = now.getTime();
-                // Allow student to scan out during their approved leave window (through the end date toDateTime)
-                // AFTER the approved leave end date has passed, this leave expires and will NOT match!
-                const isWithinLeaveWindow = currentTime >= (start - 12 * 60 * 60 * 1000) && currentTime <= end;
+                // Strict exact-time leave activation: A leave can ONLY be activated on or after its exact approved start date and time
+                const isWithinLeaveWindow = currentTime >= start && currentTime <= end;
                 if (!isWithinLeaveWindow) return false;
 
                 // Check for all leave request types (leave, home-leave, home, home_leave)

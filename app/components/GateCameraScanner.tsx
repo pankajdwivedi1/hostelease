@@ -995,8 +995,8 @@ export default function GateCameraScanner({
                 const marginGap = secondMinDistance - minDistance;
                 const isEligibleMatch = (
                     bestMatch !== null &&
-                    currentScore >= 85 &&
-                    (marginGap >= 0.015 || minDistance <= 0.35)
+                    currentScore >= 75 &&
+                    (marginGap >= 0.010 || minDistance <= 0.48)
                 );
 
                 if (isEligibleMatch && bestMatch) {

@@ -212,8 +212,8 @@ export async function GET(request: NextRequest) {
                 const permEnd = new Date(perm.toDateTime).getTime();
                 if (isNaN(permStart) || isNaN(permEnd)) return false;
 
-                // Student checkout must be near departure (within 18 hours before fromDateTime) through the exact end date (zero grace extension past toDateTime)
-                return (checkOutMs >= (permStart - 18 * 60 * 60 * 1000)) && (checkOutMs <= permEnd);
+                // Student checkout must be on or after the exact approved leave start time (fromDateTime) through the end date (toDateTime)
+                return (checkOutMs >= permStart) && (checkOutMs <= permEnd);
             });
 
             // Find any permission linked to this record directly via permissionId

@@ -203,7 +203,7 @@ function RectangleTimer({ timeLeft, maxTime = 10 }: { timeLeft: number; maxTime?
 }
 
 // ===================== Student Avatar with Blue Frame =====================
-function StudentGateAvatar({
+const StudentGateAvatar = React.memo(function StudentGateAvatar({
     record,
     onClick,
     fallbackGradient = "from-[#ff6b6b] to-[#ee5253]"
@@ -214,20 +214,20 @@ function StudentGateAvatar({
 }) {
     const [imgFailed, setImgFailed] = useState(false);
     const photoUrl = !imgFailed
-        ? (record.profilePicture || record.photo || record.student?.profilePicture || record.student?.photo || null)
+        ? (record?.profilePicture || record?.photo || record?.student?.profilePicture || record?.student?.photo || null)
         : null;
-    const initial = (record.studentName?.trim()?.charAt(0) || "?").toUpperCase();
+    const initial = (record?.studentName?.trim()?.charAt(0) || record?.name?.trim()?.charAt(0) || "?").toUpperCase();
 
     return (
         <div
             onClick={onClick}
             className="w-6 h-6 sm:w-[26px] sm:h-[26px] rounded-md border border-blue-500 bg-[#161b2e] flex items-center justify-center text-white cursor-pointer shadow-sm hover:scale-105 transition-transform shrink-0 overflow-hidden relative group"
-            title={`View profile for ${record.studentName || "Student"}`}
+            title={`View profile for ${record?.studentName || record?.name || "Student"}`}
         >
             {photoUrl ? (
                 <img
                     src={photoUrl}
-                    alt={record.studentName || "Student"}
+                    alt={record?.studentName || record?.name || "Student"}
                     className="w-full h-full object-cover rounded-[inherit]"
                     loading="lazy"
                     decoding="async"
@@ -240,7 +240,7 @@ function StudentGateAvatar({
             )}
         </div>
     );
-}
+});
 
 // ===================== Types =====================
 interface OutingRecord {
@@ -714,25 +714,25 @@ export default function GatepassView({
             const data = await res.json();
 
             if (data.success) {
-                // ⚡ SMART MERGE: If it's a minimal update, keep the old summary/currentlyOut
-                // to prevent the UI from "emptying" while background updates happen.
+                // ⚡ SMART MERGE: Keep old currentlyOut to prevent UI from emptying/flickering
                 setLiveData(prev => {
+                    const incomingOut = Array.isArray(data.currentlyOut) ? data.currentlyOut : [];
+                    const prevOut = prev?.currentlyOut || [];
+                    const effectiveOut = (incomingOut.length > 0 || !prevOut.length) ? incomingOut : prevOut;
+
                     if (data.minimal && prev) {
-                        const serverOutCount = data.summary?.studentsOut ?? 0;
-                        const localOutCount = prev.currentlyOut?.length ?? 0;
-
-                        // 🔄 SELF-HEALING: If the list is out of sync with the database counts,
-                        // trigger a full query in the background to sync the list correctly.
-                        // Self-healing fetch loop removed
-
                         return {
                             ...prev,
-                            summary: data.summary || prev.summary, // ⚡ Merge updated counts
-                            recentActivity: data.recentActivity || prev.recentActivity
+                            summary: data.summary || prev.summary,
+                            recentActivity: data.recentActivity || prev.recentActivity,
+                            currentlyOut: effectiveOut
                         };
                     }
                     profileCache.current.clear();
-                    return data;
+                    return {
+                        ...data,
+                        currentlyOut: effectiveOut
+                    };
                 });
                 setLoading(false);
             }
@@ -901,10 +901,13 @@ export default function GatepassView({
                        (targetName && rName && rName === targetName);
             };
 
+            let finalCurrentlyOut = newCurrentlyOut;
+            let finalRecent = newRecent;
+
             if (isCheckOut) {
                 // Add to Outside list immediately if not already there
                 if (!newCurrentlyOut.some(isSameStudent)) {
-                    newCurrentlyOut.unshift(mapped);
+                    finalCurrentlyOut = [mapped, ...newCurrentlyOut];
                     newSummary.studentsOut = (newSummary.studentsOut || 0) + 1;
                     newSummary.studentsIn = Math.max(0, (newSummary.studentsIn || 0) - 1);
                     const lowerType = String(mapped.type || '').toLowerCase();
@@ -916,10 +919,8 @@ export default function GatepassView({
                         newSummary.gatePassCount = (newSummary.gatePassCount || 0) + 1;
                     }
                 }
-                // ⚡ Student is now OUTSIDE: completely remove from Returns Today list
-                const cleanRecent = newRecent.filter(r => !isSameStudent(r));
-                newRecent.length = 0;
-                newRecent.push(...cleanRecent);
+                // ⚡ Student is now OUTSIDE: remove from Returns Today list
+                finalRecent = newRecent.filter(r => !isSameStudent(r));
             } else {
                 // ⚡ Check in (RETURNED): completely remove from Outside list immediately
                 const cleanOut = newCurrentlyOut.filter(r => !isSameStudent(r));
@@ -927,24 +928,18 @@ export default function GatepassView({
                     newSummary.studentsOut = Math.max(0, (newSummary.studentsOut || 0) - (newCurrentlyOut.length - cleanOut.length));
                     newSummary.studentsIn = (newSummary.studentsIn || 0) + (newCurrentlyOut.length - cleanOut.length);
                 }
-                newCurrentlyOut.length = 0;
-                newCurrentlyOut.push(...cleanOut);
+                finalCurrentlyOut = cleanOut;
 
                 // Student has returned: Add to Returns Today list immediately
                 const cleanRecent = newRecent.filter(r => !isSameStudent(r));
-                cleanRecent.unshift(mapped);
-                if (cleanRecent.length > 20) cleanRecent.pop();
-                newRecent.length = 0;
-                newRecent.push(...cleanRecent);
+                finalRecent = [mapped, ...cleanRecent].slice(0, 20);
             }
-
-            if (newRecent.length > 20) newRecent.pop();
 
             return {
                 ...prev,
                 summary: newSummary,
-                currentlyOut: newCurrentlyOut,
-                recentActivity: newRecent
+                currentlyOut: finalCurrentlyOut,
+                recentActivity: finalRecent
             };
         });
 
@@ -1881,7 +1876,7 @@ export default function GatepassView({
                                     {liveData.currentlyOut.map((record, index) => {
                                         const targetId = record.studentId || (record as any).student_id || record._id || record.id;
                                         return (
-                                            <div key={record._id || (record as any).id || `out-${record.studentId || index}`} className="flex justify-between items-center py-2 px-2.5 sm:px-3 bg-[#161b2e] rounded-xl border border-[#ff6b6b15] transition-all hover:border-[#ff6b6b30] group w-full">
+                                            <div key={record._id || (record as any).id || `out-${record.studentId || index}`} style={{ contentVisibility: "auto", containIntrinsicSize: "52px" }} className="flex justify-between items-center py-2 px-2.5 sm:px-3 bg-[#161b2e] rounded-xl border border-[#ff6b6b15] transition-all hover:border-[#ff6b6b30] group w-full">
                                                 <div className="flex items-center gap-2.5 min-w-0 flex-1">
                                                     <StudentGateAvatar
                                                         record={record}
@@ -1974,7 +1969,7 @@ export default function GatepassView({
                                     {liveData.recentActivity.map((record, index) => {
                                         const targetId = record.studentId || (record as any).student_id || record._id || record.id;
                                         return (
-                                            <div key={record._id || (record as any).id || `recent-${record.studentId || index}`} className="flex justify-between items-center py-2 px-2.5 sm:px-3 bg-[#161b2e] rounded-xl border border-[#00ff8815] transition-all hover:border-[#00ff8830] group w-full">
+                                            <div key={record._id || (record as any).id || `recent-${record.studentId || index}`} style={{ contentVisibility: "auto", containIntrinsicSize: "52px" }} className="flex justify-between items-center py-2 px-2.5 sm:px-3 bg-[#161b2e] rounded-xl border border-[#00ff8815] transition-all hover:border-[#00ff8830] group w-full">
                                                 <div className="flex items-center gap-2.5 min-w-0 flex-1">
                                                     <StudentGateAvatar
                                                         record={record}
