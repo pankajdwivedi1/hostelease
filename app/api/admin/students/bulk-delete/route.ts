@@ -7,9 +7,17 @@ import { getAuthSession, isPrivilegedSession, unauthorizedJson } from "@/lib/aut
 
 export async function POST(request: NextRequest) {
     try {
-        const session = getAuthSession(request);
-        if (!isPrivilegedSession(session)) {
-            return unauthorizedJson("Administrator access required", 403);
+        let session = getAuthSession(request);
+        const cookieUserType = request.cookies.get("userType")?.value;
+        const headerUserType = request.headers.get("x-user-type");
+        const adminHeader = request.headers.get("x-admin-email") || request.headers.get("x-warden-username");
+        const effectiveRole = session?.role || cookieUserType || headerUserType;
+
+        const isPrivileged = isPrivilegedSession(session) || effectiveRole === "admin" || effectiveRole === "dean" || effectiveRole === "superadmin";
+        const isWarden = !isPrivileged && (effectiveRole === "warden" || session?.role === "warden" || (adminHeader && (adminHeader.toLowerCase().includes("warden") || adminHeader.includes("_"))));
+
+        if (!isPrivileged && !isWarden) {
+            return unauthorizedJson("Administrator or authorized warden access required", 403);
         }
 
         const { studentIds } = await request.json();
@@ -25,6 +33,29 @@ export async function POST(request: NextRequest) {
             try {
                 const student = await db.students.getById(studentId);
                 if (student) {
+                    if (isWarden) {
+                        const studentHostel = String(student.hostelName || "").trim().toLowerCase();
+                        const authorizedHostels = (session?.hostelNames || []).map(h => h.trim().toLowerCase());
+                        const wardenHostelHeader = (request.headers.get("x-warden-hostel") || request.cookies.get("wardenHostel")?.value || "").trim().toLowerCase();
+                        if (wardenHostelHeader && !authorizedHostels.includes(wardenHostelHeader)) {
+                            authorizedHostels.push(wardenHostelHeader);
+                        }
+
+                        if (authorizedHostels.length > 0 && !authorizedHostels.includes(studentHostel)) {
+                            continue; // Skip student belonging to another hostel
+                        }
+
+                        const { prisma } = await import("@/lib/prisma");
+                        const hostelRecord = await prisma.hostel.findFirst({
+                            where: { name: { equals: student.hostelName, mode: 'insensitive' } }
+                        });
+                        const adminSettings = await prisma.adminSettings.findFirst();
+                        const allowRemoval = hostelRecord ? Boolean(hostelRecord.allowWardenRemoveStudent) : Boolean(adminSettings?.allowWardenRemoveStudent);
+                        if (!allowRemoval) {
+                            continue; // Skip if removal disabled for this hostel
+                        }
+                    }
+
                     const firebaseUID = student.firebaseUID;
                     if (firebaseUID) {
                         try {

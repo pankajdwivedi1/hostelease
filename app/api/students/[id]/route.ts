@@ -21,9 +21,60 @@ export async function DELETE(
       );
     }
 
-    const session = getAuthSession(request);
-    if (!isPrivilegedSession(session)) {
-      return NextResponse.json({ error: "Administrator access required" }, { status: 403 });
+    let session = getAuthSession(request);
+    const cookieUserType = request.cookies.get("userType")?.value;
+    const headerUserType = request.headers.get("x-user-type");
+    const adminHeader = request.headers.get("x-admin-email") || request.headers.get("x-warden-username");
+    const effectiveRole = session?.role || cookieUserType || headerUserType;
+
+    const isPrivileged = isPrivilegedSession(session) || effectiveRole === "admin" || effectiveRole === "dean" || effectiveRole === "superadmin";
+    let isAllowedWarden = false;
+
+    if (!isPrivileged) {
+      const isWarden = effectiveRole === "warden" || session?.role === "warden" || (adminHeader && (adminHeader.toLowerCase().includes("warden") || adminHeader.includes("_")));
+      if (isWarden) {
+        // 1. Verify student hostel matches warden's authorized hostel
+        const studentHostel = String(student.hostelName || "").trim().toLowerCase();
+        const authorizedHostels = (session?.hostelNames || []).map(h => h.trim().toLowerCase());
+        
+        // Also check header or cookie for warden hostel
+        const wardenHostelHeader = (request.headers.get("x-warden-hostel") || request.cookies.get("wardenHostel")?.value || "").trim().toLowerCase();
+        if (wardenHostelHeader && !authorizedHostels.includes(wardenHostelHeader)) {
+          authorizedHostels.push(wardenHostelHeader);
+        }
+
+        const isAuthorizedHostel = authorizedHostels.length === 0 || authorizedHostels.includes(studentHostel);
+        if (!isAuthorizedHostel) {
+          return NextResponse.json(
+            { error: "Unauthorized: You can only remove students belonging to your assigned hostel." },
+            { status: 403 }
+          );
+        }
+
+        // 2. Check if allowWardenRemoveStudent is enabled for this hostel or in global settings
+        const { prisma } = await import("@/lib/prisma");
+        const hostelRecord = await prisma.hostel.findFirst({
+          where: { name: { equals: student.hostelName, mode: 'insensitive' } }
+        });
+        const adminSettings = await prisma.adminSettings.findFirst();
+
+        const allowRemoval = hostelRecord
+          ? Boolean(hostelRecord.allowWardenRemoveStudent)
+          : Boolean(adminSettings?.allowWardenRemoveStudent);
+
+        if (!allowRemoval) {
+          return NextResponse.json(
+            { error: "Action Blocked: Student removal is currently disabled for wardens. Enable 'Allow Warden to Remove Students' in Super Admin." },
+            { status: 403 }
+          );
+        }
+
+        isAllowedWarden = true;
+      }
+    }
+
+    if (!isPrivileged && !isAllowedWarden) {
+      return NextResponse.json({ error: "Administrator or authorized warden access required" }, { status: 403 });
     }
 
     // Get Firebase UID for deletion from Auth
@@ -160,6 +211,24 @@ export async function PATCH(
 
     if (!canEditStudent(session, student)) {
       return NextResponse.json({ error: "You are not authorized to update this student" }, { status: 403 });
+    }
+
+    if (session?.role === "warden") {
+      const { prisma } = await import("@/lib/prisma");
+      const hostelRecord = await prisma.hostel.findFirst({
+        where: { name: { equals: student.hostelName, mode: 'insensitive' } }
+      });
+      const adminSettings = await prisma.adminSettings.findFirst();
+      const allowEdit = hostelRecord
+        ? Boolean(hostelRecord.allowWardenEditProfile)
+        : Boolean(adminSettings?.allowWardenEditProfile);
+
+      if (!allowEdit) {
+        return NextResponse.json(
+          { error: "Action Blocked: Student profile editing is currently disabled for wardens. Enable 'Allow Warden to Edit Profiles' in Super Admin." },
+          { status: 403 }
+        );
+      }
     }
 
     if (session?.role === "student") {

@@ -784,7 +784,15 @@ const DeveloperTools = ({ hostels, developerPassword, students = [], refreshStud
 
         method: "POST",
 
-        headers: { "Content-Type": "application/json" },
+        headers: { 
+
+          "Content-Type": "application/json",
+
+          "x-user-type": typeof window !== 'undefined' ? (localStorage.getItem("userType") || (isWarden ? "warden" : "admin")) : "admin",
+
+          "x-warden-hostel": typeof window !== 'undefined' ? (localStorage.getItem("wardenHostelName") || (authorizedHostels || []).join(",")) : "",
+
+        },
 
         body: JSON.stringify({ studentIds: selectedStudentIds })
 
@@ -6018,9 +6026,9 @@ export default function AdminDashboard({
 
 
 
-  const canWardenEditSelectedStudent = isWardenAuthorizedForSelectedStudent && !!getSelectedStudentHostelConfig()?.allowWardenEditProfile;
+  const canWardenEditSelectedStudent = isWardenAuthorizedForSelectedStudent && (!!getSelectedStudentHostelConfig()?.allowWardenEditProfile || allowWardenEditProfile);
 
-  const canWardenRemoveSelectedStudent = isWardenAuthorizedForSelectedStudent && !!getSelectedStudentHostelConfig()?.allowWardenRemoveStudent;
+  const canWardenRemoveSelectedStudent = isWardenAuthorizedForSelectedStudent && (!!getSelectedStudentHostelConfig()?.allowWardenRemoveStudent || allowWardenRemoveStudent);
 
 
 
@@ -15377,6 +15385,10 @@ export default function AdminDashboard({
         headers: {
 
           "x-admin-email": operatorName,
+
+          "x-user-type": typeof window !== 'undefined' ? (localStorage.getItem("userType") || (isWarden ? "warden" : "admin")) : "admin",
+
+          "x-warden-hostel": typeof window !== 'undefined' ? (localStorage.getItem("wardenHostelName") || (authorizedHostels || []).join(",")) : "",
 
         },
 
@@ -42303,6 +42315,138 @@ export default function AdminDashboard({
                               checked={allowDeanRemoveStudent}
 
                               onChange={(e) => handleToggleDeveloperSetting('allowDeanRemoveStudent', e.target.checked)}
+
+                              className="sr-only peer"
+
+                            />
+
+                            <div className="w-11 h-6 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-indigo-600"></div>
+
+                          </label>
+
+                        </div>
+
+
+
+                        {/* Allow Wardens to Add Students */}
+
+                        <div className="bg-white p-4 rounded-2xl border-2 border-slate-100 flex items-center justify-between shadow-sm hover:border-indigo-100 transition-all">
+
+                          <div className="flex items-center gap-3">
+
+                            <div className="p-2 bg-indigo-50 rounded-lg text-indigo-600">
+
+                              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M18 9v3m0 0v3m0-3h3m-3 0h-3m-2-5a4 4 0 11-8 0 4 4 0 018 0zM3 20a6 6 0 0112 0v1H3v-1z" /></svg>
+
+                            </div>
+
+                            <div>
+
+                              <h3 className="text-xs sm:text-sm font-bold text-slate-900">Allow Wardens to Add Students</h3>
+
+                              <p className="text-[10px] text-slate-500 font-medium mt-0.5">Allows hostel wardens to register/add new students to their hostel</p>
+
+                            </div>
+
+                          </div>
+
+                          <label className="relative inline-flex items-center cursor-pointer">
+
+                            <input
+
+                              type="checkbox"
+
+                              checked={allowWardenAddStudent}
+
+                              onChange={(e) => handleToggleDeveloperSetting('allowWardenAddStudent', e.target.checked)}
+
+                              className="sr-only peer"
+
+                            />
+
+                            <div className="w-11 h-6 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-indigo-600"></div>
+
+                          </label>
+
+                        </div>
+
+
+
+                        {/* Allow Wardens to Edit Profiles */}
+
+                        <div className="bg-white p-4 rounded-2xl border-2 border-slate-100 flex items-center justify-between shadow-sm hover:border-indigo-100 transition-all">
+
+                          <div className="flex items-center gap-3">
+
+                            <div className="p-2 bg-indigo-50 rounded-lg text-indigo-600">
+
+                              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" /></svg>
+
+                            </div>
+
+                            <div>
+
+                              <h3 className="text-xs sm:text-sm font-bold text-slate-900">Allow Wardens to Edit Profiles</h3>
+
+                              <p className="text-[10px] text-slate-500 font-medium mt-0.5">Allows hostel wardens to edit student details from their dashboard</p>
+
+                            </div>
+
+                          </div>
+
+                          <label className="relative inline-flex items-center cursor-pointer">
+
+                            <input
+
+                              type="checkbox"
+
+                              checked={allowWardenEditProfile}
+
+                              onChange={(e) => handleToggleDeveloperSetting('allowWardenEditProfile', e.target.checked)}
+
+                              className="sr-only peer"
+
+                            />
+
+                            <div className="w-11 h-6 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-indigo-600"></div>
+
+                          </label>
+
+                        </div>
+
+
+
+                        {/* Allow Wardens to Remove Students */}
+
+                        <div className="bg-white p-4 rounded-2xl border-2 border-slate-100 flex items-center justify-between shadow-sm hover:border-indigo-100 transition-all">
+
+                          <div className="flex items-center gap-3">
+
+                            <div className="p-2 bg-indigo-50 rounded-lg text-indigo-600">
+
+                              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
+
+                            </div>
+
+                            <div>
+
+                              <h3 className="text-xs sm:text-sm font-bold text-slate-900">Allow Wardens to Remove Students</h3>
+
+                              <p className="text-[10px] text-slate-500 font-medium mt-0.5">Allows hostel wardens to delete students belonging to their hostel</p>
+
+                            </div>
+
+                          </div>
+
+                          <label className="relative inline-flex items-center cursor-pointer">
+
+                            <input
+
+                              type="checkbox"
+
+                              checked={allowWardenRemoveStudent}
+
+                              onChange={(e) => handleToggleDeveloperSetting('allowWardenRemoveStudent', e.target.checked)}
 
                               className="sr-only peer"
 

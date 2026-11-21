@@ -832,8 +832,8 @@ export default function FaceIdentifierModal({
         const marginGap = secondMinDistance - minDistance;
         const isEligibleMatch = (
           bestMatch !== null &&
-          currentScore >= 75 &&
-          (marginGap >= 0.010 || minDistance <= 0.48)
+          currentScore >= 85 &&
+          (marginGap >= 0.010 || minDistance <= 0.40)
         );
 
         if (isEligibleMatch && bestMatch) {
@@ -1002,7 +1002,7 @@ export default function FaceIdentifierModal({
                 <span className="px-1.5 py-0.5 rounded text-[8px] font-black uppercase tracking-wider bg-purple-500/20 text-purple-300 border border-purple-500/30">
                   1:N Biometric
                 </span>
-                <span className={`px-1.5 py-0.5 rounded text-[8px] font-black uppercase tracking-wider ${
+                <span className={`hidden sm:inline-flex items-center px-1.5 py-0.5 rounded text-[8px] font-black uppercase tracking-wider ${
                   gallery.length > 0 
                     ? "bg-emerald-500/20 text-emerald-300 border border-emerald-500/30" 
                     : "bg-amber-500/20 text-amber-300 border border-amber-500/30 animate-pulse"

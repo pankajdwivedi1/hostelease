@@ -26,7 +26,7 @@
     1. Specular glass glare reflection hotspot detection (rejects phone / tablet screens).
     2. High-frequency Moiré lattice grid detection (rejects LCD / OLED displays).
     3. Device casing / phone border detection (rejects secondary phones held up).
-    4. Biometric matching with a calibrated Euclidean threshold (minimum 75% match against registered face descriptor).
+    4. Biometric matching with a calibrated Euclidean threshold (minimum 85% match against registered face descriptor, rejecting any match below 85%).
 - **Passive Liveness Only**:
   - Maintain passive liveness (holding steady for 1 second).
   - **NEVER use active gesture challenges (eye-blinking, head-turning, smiling)**; they are vulnerable to video replays and rejected by users.
