@@ -9888,7 +9888,11 @@ export default function AdminDashboard({
 
       await loadFaceApiModels(true);
 
-      const res = await detectFace(processingTarget, true, true);
+      let res = await detectFace(processingTarget, true, true);
+      // ⚡ Dual-Engine Fallback: If heavy desktop SSD misses, immediately retry with fast multi-angle TinyFace
+      if (!res || !res.descriptor) {
+        res = await detectFace(processingTarget, false, true);
+      }
 
       if (!res || !res.descriptor) {
 
@@ -23814,7 +23818,7 @@ export default function AdminDashboard({
 
                     <div>
 
-                      <h2 className="text-lg font-black text-gray-900 tracking-tight">📶 Campus WiFi Network Verification</h2>
+                      <h2 className="text-xs sm:text-sm md:text-sm font-bold text-gray-900 tracking-tight leading-snug">📶 Campus WiFi Network Verification</h2>
 
                       <p className="text-xs text-gray-500 mt-1 font-medium">
 
@@ -23834,11 +23838,11 @@ export default function AdminDashboard({
 
                     <div className="flex items-start gap-4 mb-4">
 
-                      <div className="w-10 h-10 bg-green-500 rounded-xl flex items-center justify-center text-white text-xl shrink-0">📡</div>
+                      <div className="w-7 h-7 sm:w-8 sm:h-8 bg-green-500 rounded-lg flex items-center justify-center text-white text-sm shrink-0">📡</div>
 
                       <div>
 
-                        <h3 className="font-black text-green-900 text-base">Step 1: Detect Your Hostel IP</h3>
+                        <h3 className="font-bold text-green-900 text-xs sm:text-sm">Step 1: Detect Your Hostel IP</h3>
 
                         <p className="text-xs text-green-700 font-medium mt-0.5">Make sure you are connected to your <strong>hostel's WiFi</strong>, then click the button below.</p>
 
@@ -27136,9 +27140,9 @@ export default function AdminDashboard({
 
                   <div>
 
-                    <h2 className="text-lg font-black text-foreground uppercase tracking-wide">Manual Student Registration</h2>
+                    <h2 className="text-xs sm:text-sm md:text-sm font-bold text-foreground tracking-tight leading-snug">Manual Student Registration</h2>
 
-                    <p className="text-xs text-secondary font-bold uppercase tracking-tight">Pre-register a student directly in the database. They can link their credentials later by logging in with their email.</p>
+                    <p className="text-[10px] sm:text-xs text-secondary font-medium tracking-tight mt-0.5">Pre-register a student directly in the database. They can link their credentials later by logging in with their email.</p>
 
                   </div>
 
@@ -27208,7 +27212,7 @@ export default function AdminDashboard({
 
                               <div key={sec} className="space-y-4 text-left">
 
-                                <h3 className="text-xs font-black text-blue-600 uppercase tracking-widest border-b border-slate-100 pb-2">{sec} Details</h3>
+                                <h3 className="text-[10.5px] sm:text-xs font-bold text-blue-600 uppercase tracking-wider border-b border-slate-100 pb-1.5">{sec} Details</h3>
 
                                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
 

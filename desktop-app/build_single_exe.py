@@ -58,6 +58,7 @@ def build_single():
         "--hidden-import=qrcode",
         "--hidden-import=numpy",
         "--hidden-import=requests",
+        "--exclude-module=multiprocessing",
         "--hidden-import=sqlite3",
         os.path.join(base_dir, "main.py")
     ]
@@ -85,6 +86,16 @@ def build_single():
         print("File location:", exe_path)
         if os.path.exists(exe_path):
             print(f"File size: {os.path.getsize(exe_path) / (1024*1024):.2f} MB")
+            # Sign executable with Authenticode certificate
+            try:
+                ps_cmd = (
+                    f"$cert = Get-ChildItem Cert:\\CurrentUser\\My | Where-Object {{ $_.Subject -like '*HostelEaze*' }} | Select-Object -First 1; "
+                    f"if ($cert) {{ Set-AuthenticodeSignature -FilePath '{exe_path}' -Certificate $cert -HashAlgorithm SHA256; 'Signed successfully' }}"
+                )
+                sign_res = subprocess.run(["powershell", "-Command", ps_cmd], capture_output=True, text=True)
+                print("Code Signing:", sign_res.stdout.strip())
+            except Exception as se:
+                print("Code Signing Note:", se)
         print("=" * 60)
         return exe_path
     else:

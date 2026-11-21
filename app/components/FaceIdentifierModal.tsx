@@ -745,10 +745,10 @@ export default function FaceIdentifierModal({
         const rawBox = detection.detection?.box || (detection as any).box;
         const detectionScore = detection.detection?.score ?? (detection as any).score ?? 0;
 
-        // 🛡️ CHECK 1: Detection Confidence Score (Must be high confidence human face >= 0.60)
-        if (detectionScore < 0.60 || !rawBox || rawBox.width < 50 || rawBox.height < 50) {
+        // 🛡️ CHECK 1: Detection Confidence Score (Accept valid human face >= 0.35)
+        if (detectionScore < 0.35 || !rawBox || rawBox.width < 40 || rawBox.height < 40) {
           setDistanceStatus(null);
-          setScanStatus("Looking for student face...");
+          setScanStatus(gallery.length === 0 ? "Syncing biometric database..." : "Looking for student face...");
           setActiveFaceBox(null);
           consecutiveMatchRef.current = { studentId: null, count: 0 };
           isDetecting = false;
@@ -759,9 +759,9 @@ export default function FaceIdentifierModal({
         // 📏 Point 3: Real-Time Distance Guidance (Enforce 1.5 to 2.5 feet / 0.5m – 0.8m)
         const frameHeight = video.videoHeight || 480;
         const faceHeightRatio = rawBox.height / frameHeight;
-        if (faceHeightRatio > 0.55) {
+        if (faceHeightRatio > 0.68) {
           setDistanceStatus("Step back slightly (optimal: 1.5–2.5 ft / 0.5–0.8m)");
-        } else if (faceHeightRatio < 0.22) {
+        } else if (faceHeightRatio < 0.16) {
           setDistanceStatus("Step closer (optimal: 1.5–2.5 ft / 0.5–0.8m)");
         } else {
           setDistanceStatus(null);
@@ -1001,6 +1001,13 @@ export default function FaceIdentifierModal({
                 Face Identifier
                 <span className="px-1.5 py-0.5 rounded text-[8px] font-black uppercase tracking-wider bg-purple-500/20 text-purple-300 border border-purple-500/30">
                   1:N Biometric
+                </span>
+                <span className={`px-1.5 py-0.5 rounded text-[8px] font-black uppercase tracking-wider ${
+                  gallery.length > 0 
+                    ? "bg-emerald-500/20 text-emerald-300 border border-emerald-500/30" 
+                    : "bg-amber-500/20 text-amber-300 border border-amber-500/30 animate-pulse"
+                }`}>
+                  {gallery.length > 0 ? `🟢 ${gallery.length} SYNCED` : "⏳ SYNCING..."}
                 </span>
               </h3>
             </div>

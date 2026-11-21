@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import { showToast, showConfirm } from "@/lib/toast";
 
 export interface CampusGate {
@@ -36,6 +36,57 @@ export default function GatepassManagementModal({
     const [visiblePasswords, setVisiblePasswords] = useState<Record<string, boolean>>({});
     const [editingGateId, setEditingGateId] = useState<string | null>(null);
     const [editingGateName, setEditingGateName] = useState<string>("");
+    const [gateStatuses, setGateStatuses] = useState<Record<string, { 
+        online: boolean; 
+        checking: boolean; 
+        lastActiveAgo?: string;
+        deviceId?: string | null;
+        deviceName?: string | null;
+    }>>({});
+
+    // ⚡ Real-Time On-Demand Gate Status Sync (Server checks campus terminal signal on-demand with zero infinite loops)
+    const syncGateStatus = useCallback(async (gateId: string) => {
+        if (!gateId) return;
+        setGateStatuses(prev => ({
+            ...prev,
+            [gateId]: { ...(prev[gateId] || { online: false }), checking: true }
+        }));
+        try {
+            const res = await fetch(`/api/getpass/heartbeat?gateId=${encodeURIComponent(gateId)}`);
+            const data = await res.json();
+            if (data && data.success) {
+                setGateStatuses(prev => ({
+                    ...prev,
+                    [gateId]: {
+                        online: !!data.online,
+                        checking: false,
+                        lastActiveAgo: data.lastActiveAgo || (data.online ? "Active now" : "Offline"),
+                        deviceId: data.deviceId || null,
+                        deviceName: data.deviceName || null
+                    }
+                }));
+            } else {
+                setGateStatuses(prev => ({
+                    ...prev,
+                    [gateId]: { online: false, checking: false, lastActiveAgo: "Offline", deviceId: null, deviceName: null }
+                }));
+            }
+        } catch {
+            setGateStatuses(prev => ({
+                ...prev,
+                [gateId]: { online: false, checking: false, lastActiveAgo: "Offline", deviceId: null, deviceName: null }
+            }));
+        }
+    }, []);
+
+    // Initial check for loaded gates when modal opens (runs once on mount, no background polling spam)
+    useEffect(() => {
+        if (isOpen && gates.length > 0) {
+            gates.forEach(g => {
+                if (g?.id) syncGateStatus(g.id);
+            });
+        }
+    }, [isOpen, gates.length, syncGateStatus]);
 
     // Fetch gates configuration from settings
     useEffect(() => {
@@ -455,13 +506,14 @@ export default function GatepassManagementModal({
                                         key={gate.id}
                                         className="p-2 sm:p-5 rounded-xl sm:rounded-3xl border border-slate-200 sm:border-2 sm:border-slate-100 bg-white shadow-2xs hover:border-indigo-100 transition-all space-y-2 sm:space-y-3.5"
                                     >
-                                        {/* Gate Card Header */}
-                                        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1.5 sm:gap-3">
-                                            <div className="flex items-center gap-2 sm:gap-3">
+                                        {/* Gate Card Header: On both Mobile and Desktop, controls sit on the right filling the space beside Gate info */}
+                                        <div className="flex items-center justify-between gap-1.5 sm:gap-4">
+                                            {/* Gate Number, Name, Delete Button, and Prominent ID */}
+                                            <div className="flex items-center gap-2 sm:gap-3 min-w-0 shrink">
                                                 <div className="w-7 h-7 sm:w-10 sm:h-10 rounded-lg sm:rounded-2xl bg-indigo-50 text-indigo-600 border border-indigo-100 flex items-center justify-center font-black text-xs sm:text-base shadow-2xs shrink-0">
                                                     {index + 1}
                                                 </div>
-                                                <div>
+                                                <div className="min-w-0">
                                                     {editingGateId === gate.id ? (
                                                         <div className="flex items-center gap-1">
                                                             <input
@@ -491,78 +543,94 @@ export default function GatepassManagementModal({
                                                             </button>
                                                         </div>
                                                     ) : (
-                                                        <h3 className="text-xs sm:text-sm font-black text-slate-900 tracking-tight uppercase leading-snug">
-                                                            {gate.name}
-                                                        </h3>
+                                                        <div className="flex items-center gap-1.5">
+                                                            <h3 className="text-xs sm:text-sm font-black text-slate-900 tracking-tight uppercase leading-snug truncate">
+                                                                {gate.name}
+                                                            </h3>
+                                                            {gates.length > 1 && (
+                                                                <button
+                                                                    type="button"
+                                                                    onClick={() => handleDeleteGate(gate)}
+                                                                    className="w-4 h-4 sm:w-5 sm:h-5 rounded bg-red-50 hover:bg-red-100 text-red-500 flex items-center justify-center text-[9px] sm:text-[10px] transition-colors shrink-0 cursor-pointer"
+                                                                    title="Delete Gate"
+                                                                >
+                                                                    🗑️
+                                                                </button>
+                                                            )}
+                                                        </div>
                                                     )}
-                                                    <p className="text-[8.5px] sm:text-[10px] text-slate-400 font-mono">
-                                                        ID: {gate.id}
+                                                    {/* Prominent, crystal-clear Desktop Terminal ID */}
+                                                    <p 
+                                                        className="text-[9px] sm:text-[11px] font-mono font-bold text-slate-700 flex items-center gap-1 mt-0.5 truncate"
+                                                        title={gateStatuses[gate.id]?.deviceId ? `Active Hardware Desktop: ${gateStatuses[gate.id]?.deviceId} (Database ID: ${gate.id})` : `Gate Database ID: ${gate.id}`}
+                                                    >
+                                                        <span className="text-slate-400 font-semibold shrink-0">ID:</span>
+                                                        <span className="shrink-0">🖥️</span>
+                                                        <span className="text-indigo-600 font-extrabold tracking-wide truncate">
+                                                            {gateStatuses[gate.id]?.deviceId || gate.id}
+                                                        </span>
                                                     </p>
                                                 </div>
                                             </div>
 
-                                            {/* 2x2 Grid Layout for Controls (Red marked layout) */}
-                                            <div className="grid grid-cols-2 gap-1 sm:gap-2 shrink-0 items-center">
-                                                {/* Row 1, Col 1: Edit Gate Name button */}
+                                            {/* 2-Column Compact Controls Grid (Fits on the right side in the red marked area on both Mobile and Desktop) */}
+                                            <div className="grid grid-cols-2 gap-1 sm:gap-1.5 w-[165px] sm:w-[220px] md:w-[240px] shrink-0 items-center">
+                                                {/* Col 1, Row 1 (Left): Online/Offline Status Badge */}
+                                                <div className="w-full flex items-center justify-center">
+                                                    {gateStatuses[gate.id]?.checking ? (
+                                                        <span className="w-full text-center inline-flex items-center justify-center gap-0.5 sm:gap-1 px-1 py-0.5 sm:px-2 sm:py-0.5 rounded-md sm:rounded-lg text-[7.5px] sm:text-[9px] font-black uppercase tracking-wider bg-amber-50 text-amber-700 border border-amber-200 shadow-2xs whitespace-nowrap">
+                                                            <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-ping shrink-0" />
+                                                            <span>CHECKING...</span>
+                                                        </span>
+                                                    ) : gateStatuses[gate.id]?.online ? (
+                                                        <span 
+                                                            title={gateStatuses[gate.id]?.lastActiveAgo ? `Terminal active (${gateStatuses[gate.id]?.lastActiveAgo})` : "Campus gate terminal is active"}
+                                                            className="w-full text-center inline-flex items-center justify-center gap-0.5 sm:gap-1 px-1 py-0.5 sm:px-2 sm:py-0.5 rounded-md sm:rounded-lg text-[7.5px] sm:text-[9px] font-black uppercase tracking-wider bg-emerald-50 text-emerald-700 border border-emerald-300 shadow-2xs whitespace-nowrap"
+                                                        >
+                                                            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse shrink-0" />
+                                                            <span>ONLINE</span>
+                                                        </span>
+                                                    ) : (
+                                                        <span 
+                                                            title={gateStatuses[gate.id]?.lastActiveAgo || "Terminal offline"}
+                                                            className="w-full text-center inline-flex items-center justify-center gap-0.5 sm:gap-1 px-1 py-0.5 sm:px-2 sm:py-0.5 rounded-md sm:rounded-lg text-[7.5px] sm:text-[9px] font-black uppercase tracking-wider bg-rose-50 text-rose-700 border border-rose-300 shadow-2xs whitespace-nowrap"
+                                                        >
+                                                            <span className="w-1.5 h-1.5 rounded-full bg-rose-500 shrink-0" />
+                                                            <span>OFFLINE</span>
+                                                        </span>
+                                                    )}
+                                                </div>
+
+                                                {/* Col 2, Row 1 (Right): Edit Gate Name button */}
                                                 <button
                                                     type="button"
                                                     onClick={() => {
                                                         setEditingGateId(gate.id);
                                                         setEditingGateName(gate.name);
                                                     }}
-                                                    className="w-full flex items-center justify-center gap-1 px-2 py-0.5 sm:px-2.5 sm:py-1 bg-slate-100 hover:bg-indigo-50 hover:text-indigo-600 text-slate-700 rounded-md sm:rounded-xl text-[8.5px] sm:text-[10px] font-black uppercase tracking-wider border border-slate-200 transition-all shadow-2xs whitespace-nowrap"
+                                                    className="w-full flex items-center justify-center gap-0.5 sm:gap-1 px-1 py-0.5 sm:px-2 sm:py-0.5 bg-slate-100 hover:bg-indigo-50 hover:text-indigo-600 text-slate-700 rounded-md sm:rounded-lg text-[7.5px] sm:text-[9px] font-black uppercase tracking-wider border border-slate-200 transition-all shadow-2xs whitespace-nowrap"
                                                     title="Edit Gate Name"
                                                 >
-                                                    <span className="text-[10px]">✏️</span>
+                                                    <span className="text-[8.5px] sm:text-[9px]">✏️</span>
                                                     <span>EDIT NAME</span>
                                                 </button>
 
-                                                {/* Row 1, Col 2: QR Duration / Seconds setting */}
-                                                <div className="w-full flex items-center justify-between gap-1 px-2 py-0.5 sm:px-2.5 sm:py-1 bg-slate-100 hover:bg-slate-200/80 rounded-md sm:rounded-xl border border-slate-200 text-slate-700 shadow-2xs transition-all">
-                                                    <div className="flex items-center gap-1">
-                                                        <span className="text-[10px]">⏱️</span>
-                                                        <span className="text-[8.5px] sm:text-[10px] uppercase font-black text-slate-500">QR:</span>
-                                                    </div>
-                                                    <select
-                                                        value={gate.qrSeconds || 15}
-                                                        onChange={(e) => handleUpdateQrSeconds(gate.id, Number(e.target.value))}
-                                                        className="bg-transparent font-black text-indigo-700 text-[9.5px] sm:text-[11px] focus:outline-none cursor-pointer py-0"
-                                                        title="Configure QR Rotation Interval"
-                                                    >
-                                                        <option value={5}>5s</option>
-                                                        <option value={10}>10s</option>
-                                                        <option value={15}>15s</option>
-                                                        <option value={20}>20s</option>
-                                                        <option value={30}>30s</option>
-                                                        <option value={45}>45s</option>
-                                                        <option value={60}>60s</option>
-                                                    </select>
-                                                </div>
+                                                {/* Col 1, Row 2 (Left): SYNC Button */}
+                                                <button
+                                                    type="button"
+                                                    onClick={() => syncGateStatus(gate.id)}
+                                                    disabled={gateStatuses[gate.id]?.checking}
+                                                    className="w-full inline-flex items-center justify-center gap-0.5 sm:gap-1 px-1 py-0.5 sm:px-2 sm:py-0.5 rounded-md sm:rounded-lg text-[7.5px] sm:text-[9px] font-black uppercase tracking-wider bg-slate-100 hover:bg-indigo-50 hover:text-indigo-600 text-slate-700 border border-slate-200 transition-all shadow-2xs cursor-pointer disabled:opacity-50 whitespace-nowrap"
+                                                    title="Ask server in real-time if campus gate is ONLINE or OFFLINE"
+                                                >
+                                                    <span className={gateStatuses[gate.id]?.checking ? "animate-spin inline-block text-[8.5px] sm:text-[9px]" : "inline-block text-[8.5px] sm:text-[9px]"}>🔄</span>
+                                                    <span>{gateStatuses[gate.id]?.checking ? "SYNCING" : "SYNC"}</span>
+                                                </button>
 
-                                                {/* Row 2, Col 1: Camera Standby / Sleep Mode Timeout (1 to 10 min) */}
-                                                <div className="w-full flex items-center justify-between gap-1 px-2 py-0.5 sm:px-2.5 sm:py-1 bg-slate-100 hover:bg-slate-200/80 rounded-md sm:rounded-xl border border-slate-200 text-slate-700 shadow-2xs transition-all">
-                                                    <div className="flex items-center gap-1">
-                                                        <span className="text-[10px]">💤</span>
-                                                        <span className="text-[8.5px] sm:text-[10px] uppercase font-black text-slate-500">STANDBY:</span>
-                                                    </div>
-                                                    <select
-                                                        value={gate.standbyMinutes || 3}
-                                                        onChange={(e) => handleUpdateStandbyMinutes(gate.id, Number(e.target.value))}
-                                                        className="bg-transparent font-black text-indigo-700 text-[9.5px] sm:text-[11px] focus:outline-none cursor-pointer py-0"
-                                                        title="Camera Standby / Sleep Mode timeout when idle (1 to 10 minutes)"
-                                                    >
-                                                        {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map((m) => (
-                                                            <option key={m} value={m}>
-                                                                {m} {m === 1 ? "Min" : "Mins"}
-                                                            </option>
-                                                        ))}
-                                                    </select>
-                                                </div>
-
-                                                {/* Row 2, Col 2: Mode Status Badge & Delete button */}
-                                                <div className="flex items-center gap-1 w-full justify-end">
+                                                {/* Col 2, Row 2 (Right): Mode Status Badge */}
+                                                <div className="flex items-center w-full">
                                                     <span
-                                                        className={`w-full text-center px-1.5 py-0.5 sm:px-2.5 sm:py-1 rounded-md sm:rounded-full text-[8px] sm:text-[10px] font-black uppercase tracking-wider border truncate ${
+                                                        className={`w-full text-center px-1 py-0.5 sm:px-2 sm:py-0.5 rounded-md sm:rounded-lg text-[7.5px] sm:text-[9px] font-black uppercase tracking-wider border truncate ${
                                                             gate.mode === "camera"
                                                                 ? "bg-purple-100 text-purple-700 border-purple-200"
                                                                 : "bg-emerald-100 text-emerald-700 border-emerald-200"
@@ -570,77 +638,100 @@ export default function GatepassManagementModal({
                                                     >
                                                         {gate.mode === "camera" ? "📸 CAMERA" : "📱 QR MODE"}
                                                     </span>
-
-                                                    {gates.length > 1 && (
-                                                        <button
-                                                            type="button"
-                                                            onClick={() => handleDeleteGate(gate)}
-                                                            className="w-5 h-5 sm:w-7 sm:h-7 rounded-md sm:rounded-lg bg-red-50 hover:bg-red-100 text-red-500 flex items-center justify-center text-[10px] sm:text-xs transition-colors shrink-0"
-                                                            title="Delete Gate"
-                                                        >
-                                                            🗑️
-                                                        </button>
-                                                    )}
                                                 </div>
                                             </div>
                                         </div>
 
-                                        {/* Gate Mode Switcher */}
-                                        <div className="p-1.5 sm:p-3 bg-slate-50/80 rounded-lg sm:rounded-2xl border border-slate-100 flex flex-row items-center justify-between gap-1.5 sm:gap-2.5">
-                                            <div>
-                                                <span className="block text-[8.5px] sm:text-[10px] font-black uppercase tracking-wider text-slate-500 leading-none">
+                                        {/* Unified Single Container: Operating Mode (Left) + Credentials (Right) */}
+                                        <div className="p-2 sm:p-3 rounded-lg sm:rounded-2xl border border-slate-200/90 bg-slate-50/70 grid grid-cols-2 gap-2 sm:gap-3 items-stretch">
+                                            {/* Left Column: Operating Gate Mode with QR Timing beside QR button & Sleep Timing beside Face Camera button */}
+                                            <div className="flex flex-col justify-between gap-1 sm:gap-1.5 min-w-0">
+                                                <span className="text-[8px] sm:text-[9.5px] font-black uppercase tracking-wider text-slate-600 truncate">
                                                     OPERATING GATE MODE
                                                 </span>
-                                                <span className="hidden sm:block text-[11px] text-slate-700 font-medium mt-0.5">
-                                                    Select how this gate terminal verifies students
-                                                </span>
-                                            </div>
-                                            <div className="flex items-center gap-1 p-0.5 sm:p-1 bg-white rounded-md sm:rounded-xl border border-slate-200 shadow-2xs shrink-0">
-                                                <button
-                                                    type="button"
-                                                    onClick={() => handleToggleMode(gate.id, "qr")}
-                                                    className={`px-2 py-0.5 sm:px-3 sm:py-1.5 rounded-md sm:rounded-lg text-[9px] sm:text-xs font-bold transition-all flex items-center gap-1 ${
-                                                        gate.mode === "qr"
-                                                            ? "bg-indigo-600 text-white shadow-2xs font-black"
-                                                            : "text-slate-600 hover:text-slate-900"
-                                                    }`}
-                                                >
-                                                    <span>📱</span>
-                                                    <span>QR CODE</span>
-                                                </button>
-                                                <button
-                                                    type="button"
-                                                    onClick={() => handleToggleMode(gate.id, "camera")}
-                                                    className={`px-2 py-0.5 sm:px-3 sm:py-1.5 rounded-md sm:rounded-lg text-[9px] sm:text-xs font-bold transition-all flex items-center gap-1 ${
-                                                        gate.mode === "camera"
-                                                            ? "bg-indigo-600 text-white shadow-2xs font-black"
-                                                            : "text-slate-600 hover:text-slate-900"
-                                                    }`}
-                                                >
-                                                    <span>📸</span>
-                                                    <span>FACE CAMERA</span>
-                                                </button>
-                                            </div>
-                                        </div>
 
-                                        {/* Gatepass Credentials */}
-                                        <div className="p-1.5 sm:p-4 rounded-lg sm:rounded-2xl border border-emerald-100 bg-emerald-50/30 space-y-1 sm:space-y-2">
-                                            <div className="flex items-baseline flex-wrap gap-1">
-                                                <h4 className="font-black text-slate-900 uppercase tracking-tight text-[8.5px] sm:text-xs">
-                                                    GATEPASS CREDENTIALS :
-                                                </h4>
-                                                <span className="hidden sm:inline text-[10.5px] text-slate-500 font-medium font-sans">
-                                                    Set an independent access password for {gate.name}
-                                                </span>
+                                                {/* QR Mode Row: QR Button + QR Timing Dropdown */}
+                                                <div className="flex items-center gap-1 sm:gap-1.5 w-full">
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => handleToggleMode(gate.id, "qr")}
+                                                        className={`flex-1 px-1.5 py-1 sm:px-2 sm:py-1.5 rounded sm:rounded-md text-[7.5px] sm:text-[9.5px] font-black uppercase transition-all flex items-center justify-center gap-1 border min-w-0 ${
+                                                            gate.mode === "qr"
+                                                                ? "bg-indigo-600 text-white border-indigo-600 shadow-2xs"
+                                                                : "bg-white text-slate-700 hover:text-slate-900 border-slate-200"
+                                                        }`}
+                                                    >
+                                                        <span>📱</span>
+                                                        <span className="truncate">QR CODE</span>
+                                                    </button>
+                                                    <div 
+                                                        className="shrink-0 flex items-center justify-between gap-0.5 px-1 py-1 sm:px-1.5 sm:py-1.5 bg-white hover:bg-slate-100 rounded sm:rounded-md border border-slate-200 text-slate-700 shadow-2xs transition-all"
+                                                        title="Configure QR Rotation Interval"
+                                                    >
+                                                        <span className="text-[9px]">⏱️</span>
+                                                        <span className="hidden sm:inline text-[7.5px] sm:text-[8.5px] uppercase font-black text-slate-500">QR:</span>
+                                                        <select
+                                                            value={gate.qrSeconds || 15}
+                                                            onChange={(e) => handleUpdateQrSeconds(gate.id, Number(e.target.value))}
+                                                            className="bg-transparent font-black text-indigo-700 text-[8px] sm:text-[9px] focus:outline-none cursor-pointer py-0"
+                                                        >
+                                                            <option value={5}>5s</option>
+                                                            <option value={10}>10s</option>
+                                                            <option value={15}>15s</option>
+                                                            <option value={20}>20s</option>
+                                                            <option value={30}>30s</option>
+                                                            <option value={45}>45s</option>
+                                                            <option value={60}>60s</option>
+                                                        </select>
+                                                    </div>
+                                                </div>
+
+                                                {/* Camera Mode Row: Camera Button + Standby / Sleep Timing Dropdown */}
+                                                <div className="flex items-center gap-1 sm:gap-1.5 w-full">
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => handleToggleMode(gate.id, "camera")}
+                                                        className={`flex-1 px-1.5 py-1 sm:px-2 sm:py-1.5 rounded sm:rounded-md text-[7.5px] sm:text-[9.5px] font-black uppercase transition-all flex items-center justify-center gap-1 border min-w-0 ${
+                                                            gate.mode === "camera"
+                                                                ? "bg-indigo-600 text-white border-indigo-600 shadow-2xs"
+                                                                : "bg-white text-slate-700 hover:text-slate-900 border-slate-200"
+                                                        }`}
+                                                    >
+                                                        <span>📸</span>
+                                                        <span className="truncate">FACE CAMERA</span>
+                                                    </button>
+                                                    <div 
+                                                        className="shrink-0 flex items-center justify-between gap-0.5 px-1 py-1 sm:px-1.5 sm:py-1.5 bg-white hover:bg-slate-100 rounded sm:rounded-md border border-slate-200 text-slate-700 shadow-2xs transition-all"
+                                                        title="Camera Standby / Sleep Mode timeout when idle (1 to 10 minutes)"
+                                                    >
+                                                        <span className="text-[9px]">💤</span>
+                                                        <span className="hidden sm:inline text-[7.5px] sm:text-[8.5px] uppercase font-black text-slate-500">SLEEP:</span>
+                                                        <select
+                                                            value={gate.standbyMinutes || 3}
+                                                            onChange={(e) => handleUpdateStandbyMinutes(gate.id, Number(e.target.value))}
+                                                            className="bg-transparent font-black text-indigo-700 text-[8px] sm:text-[9px] focus:outline-none cursor-pointer py-0"
+                                                        >
+                                                            {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map((m) => (
+                                                                <option key={m} value={m}>
+                                                                    {m}m
+                                                                </option>
+                                                            ))}
+                                                        </select>
+                                                    </div>
+                                                </div>
                                             </div>
 
-                                            <div className="flex flex-row items-center gap-1.5 sm:gap-2">
-                                                <div className="flex-1 relative">
+                                            {/* Right Column: Gatepass Credentials & Password Update */}
+                                            <div className="flex flex-col justify-between gap-1 sm:gap-1.5 min-w-0">
+                                                <span className="text-[8px] sm:text-[9.5px] font-black uppercase tracking-wider text-slate-600 truncate">
+                                                    GATEPASS CREDENTIALS
+                                                </span>
+                                                <div className="relative w-full">
                                                     <input
                                                         type={isPasswordVisible ? "text" : "password"}
                                                         defaultValue={gate.password}
                                                         id={`gate-pwd-${gate.id}`}
-                                                        className="w-full px-2.5 py-1 sm:px-3 sm:py-2 bg-white border border-slate-200 rounded-md sm:rounded-xl text-[11px] sm:text-sm font-mono font-bold text-slate-900 focus:outline-none focus:ring-2 focus:ring-emerald-500 pr-8"
+                                                        className="w-full px-2 py-0.5 sm:py-1 bg-white border border-slate-200 rounded sm:rounded-md text-[10px] sm:text-xs font-mono font-bold text-slate-900 focus:outline-none focus:ring-1 focus:ring-emerald-500 pr-7"
                                                     />
                                                     <button
                                                         type="button"
@@ -650,7 +741,7 @@ export default function GatepassManagementModal({
                                                                 [gate.id]: !prev[gate.id],
                                                             }))
                                                         }
-                                                        className="absolute inset-y-0 right-0 pr-2.5 flex items-center text-slate-400 hover:text-slate-600 text-[10px] sm:text-xs"
+                                                        className="absolute inset-y-0 right-0 pr-2 flex items-center text-slate-400 hover:text-slate-600 text-[10px]"
                                                     >
                                                         {isPasswordVisible ? "🙈" : "👁️"}
                                                     </button>
@@ -666,9 +757,9 @@ export default function GatepassManagementModal({
                                                         }
                                                     }}
                                                     disabled={isSaving}
-                                                    className="px-2.5 py-1 sm:px-3.5 sm:py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-md sm:rounded-xl text-[8.5px] sm:text-xs font-black uppercase tracking-wider shadow-2xs active:scale-95 transition-all shrink-0"
+                                                    className="w-full px-2 py-1 sm:py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded sm:rounded-md text-[8px] sm:text-[9.5px] font-black uppercase tracking-wider shadow-2xs active:scale-95 transition-all flex items-center justify-center whitespace-nowrap"
                                                 >
-                                                    Update Password
+                                                    UPDATE PASSWORD
                                                 </button>
                                             </div>
                                         </div>

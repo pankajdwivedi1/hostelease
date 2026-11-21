@@ -7,6 +7,19 @@ Guaranteed compatibility across Windows 7, 8, 10, and 11.
 
 import os
 import sys
+
+# ── Windows 7 & Legacy CPU Compatibility ──
+# 1. Force OpenBLAS to use SSE2 (prevents AVX/AVX2 illegal instruction crashes on Intel Core 2 Duo)
+os.environ["OPENBLAS_CORETYPE"] = "SSE2"
+os.environ["PYTHONLEGACYWINDOWSSTDIO"] = "1"
+
+# 2. Deactivate shcore.dll automatic DPI awareness (shcore.dll does NOT exist on Windows 7)
+try:
+    import customtkinter as ctk
+    ctk.deactivate_automatic_dpi_awareness()
+except Exception:
+    pass
+
 import threading
 import time
 
@@ -154,18 +167,33 @@ if __name__ == "__main__":
         else:
             run_native_gui_app()
     except Exception as ex:
-        print("Fatal error in HostelEaze Desktop:", ex)
+        err_msg = str(ex)
         import traceback
-        traceback.print_exc()
+        tb_msg = traceback.format_exc()
         try:
-            import tkinter as tk
-            from tkinter import messagebox
-            root = tk.Tk()
-            root.withdraw()
-            messagebox.showerror(
-                "HostelEaze Error",
-                f"Could not start HostelEaze Desktop:\n\n{ex}\n\nPlease verify camera and network connection."
-            )
-            root.destroy()
+            log_path = os.path.join(os.environ.get("TEMP", os.path.expanduser("~")), "hosteleaze_error.log")
+            with open(log_path, "w", encoding="utf-8") as f:
+                f.write(tb_msg)
         except Exception:
-            input("Press Enter to exit...")
+            pass
+        try:
+            import ctypes
+            ctypes.windll.user32.MessageBoxW(
+                0,
+                f"Could not start HostelEaze Desktop:\n\n{err_msg}\n\nSee log in %TEMP%\\hosteleaze_error.log",
+                "HostelEaze Error",
+                0x10
+            )
+        except Exception:
+            try:
+                import tkinter as tk
+                from tkinter import messagebox
+                root = tk.Tk()
+                root.withdraw()
+                messagebox.showerror(
+                    "HostelEaze Error",
+                    f"Could not start HostelEaze Desktop:\n\n{err_msg}"
+                )
+                root.destroy()
+            except Exception:
+                pass

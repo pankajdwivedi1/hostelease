@@ -1036,12 +1036,26 @@ export async function detectFace(
         // ⚡ MOBILE SPEED: SSD is a 5MB heavy MobileNet that blocks mobile CPU for 1-3 seconds.
         // On mobile (accurate=false) we NEVER fall through to SSD. TinyFace at 224 is sufficient.
         if (accurate && (!detections || detections.length === 0) && fa.nets.ssdMobilenetv1?.isLoaded) {
-            detections = await runDetectorPass(new fa.SsdMobilenetv1Options({ minConfidence: 0.20 }));
+            detections = await runDetectorPass(new fa.SsdMobilenetv1Options({ minConfidence: 0.18 }));
         }
 
         // Tier 3: Sensitive multi-scale fallback — DESKTOP ONLY when accurate mode
-        // ⚡ MOBILE SPEED: Skip on mobile. Retry at 416px is heavy and rarely needed for close-up faces.
-        if (accurate && (!detections || detections.length === 0)) {
+        // ⚡ Multi-scale TinyFace fallback: 320px -> 224px -> 416px (guarantees detection across all angles & legacy GPUs)
+        if (accurate && (!detections || detections.length === 0) && fa.nets.tinyFaceDetector?.isLoaded) {
+            detections = await runDetectorPass(new fa.TinyFaceDetectorOptions({
+                inputSize: 320,
+                scoreThreshold: 0.08
+            }));
+        }
+
+        if (accurate && (!detections || detections.length === 0) && fa.nets.tinyFaceDetector?.isLoaded) {
+            detections = await runDetectorPass(new fa.TinyFaceDetectorOptions({
+                inputSize: 224,
+                scoreThreshold: 0.06
+            }));
+        }
+
+        if (accurate && (!detections || detections.length === 0) && fa.nets.tinyFaceDetector?.isLoaded) {
             detections = await runDetectorPass(new fa.TinyFaceDetectorOptions({
                 inputSize: 416,
                 scoreThreshold: 0.08

@@ -301,6 +301,28 @@ export default function GatepassView({
         return initialScannerMode;
     });
 
+    // 🖥️ Permanent Hardware Terminal Device ID (Persists forever across sessions on this campus desktop)
+    const [terminalDeviceId] = useState<string>(() => {
+        if (typeof window !== "undefined") {
+            let saved = localStorage.getItem("hosteleaze_terminal_device_id");
+            if (!saved) {
+                const screenRes = `${window.screen.width}x${window.screen.height}`;
+                const cores = navigator.hardwareConcurrency || 4;
+                const seed = `${screenRes}_${cores}_${Date.now()}`;
+                let hash = 0;
+                for (let i = 0; i < seed.length; i++) {
+                    hash = ((hash << 5) - hash) + seed.charCodeAt(i);
+                    hash |= 0;
+                }
+                const hex = Math.abs(hash).toString(16).toUpperCase().padStart(8, "0").slice(0, 8);
+                saved = `DESKTOP-${hex}`;
+                localStorage.setItem("hosteleaze_terminal_device_id", saved);
+            }
+            return saved;
+        }
+        return "DESKTOP-TERMINAL";
+    });
+
     // Apply gatepass settings directly to state and local storage
     const applyGateSettings = useCallback((data: any) => {
         if (!data) return;
@@ -488,6 +510,19 @@ export default function GatepassView({
 
     // ===================== Logout =====================
     const handleLogout = () => {
+        try {
+            const storedGateId = typeof window !== "undefined" ? localStorage.getItem("activeGateId") : null;
+            fetch("/api/getpass/heartbeat", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    gateId: storedGateId || "main-gate",
+                    status: "offline",
+                    action: "logout",
+                    timestamp: Date.now()
+                })
+            }).catch(() => {});
+        } catch (_) {}
         localStorage.clear();
         router.push("/login?logout=success");
     };
@@ -742,7 +777,33 @@ export default function GatepassView({
         }
     }, []);
 
-    // ⚡ CLEANUP: fetchActivityHeartbeat removed. Realtime is now used.
+    // ===================== Gatepass Terminal Online Heartbeat =====================
+    useEffect(() => {
+        const sendHeartbeat = () => {
+            try {
+                const storedGateId = typeof window !== "undefined" ? localStorage.getItem("activeGateId") : null;
+                const storedGateName = typeof window !== "undefined" ? localStorage.getItem("activeGateName") : null;
+                const effectiveGateId = storedGateId || "main-gate";
+                const effectiveGateName = storedGateName || gateName || "Main Gate";
+
+                fetch("/api/getpass/heartbeat", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({
+                        gateId: effectiveGateId,
+                        gateName: effectiveGateName,
+                        mode: scannerMode,
+                        deviceId: terminalDeviceId,
+                        deviceName: typeof window !== "undefined" ? (localStorage.getItem("hosteleaze_terminal_device_name") || "Campus PC") : "Campus PC",
+                        timestamp: Date.now()
+                    })
+                }).catch(() => {});
+            } catch (_) {}
+        };
+
+        // ⚡ Pure On-Demand: Sent only once on initial sign-in / terminal mount. Zero background interval timer!
+        sendHeartbeat();
+    }, [gateName, scannerMode]);
 
     // ===================== Timer: Rotate QR every X seconds (Stopped in Camera Mode) =====================
     useEffect(() => {
@@ -1513,12 +1574,20 @@ export default function GatepassView({
                         <p className="text-[10px] md:text-[11px] text-[rgba(255,255,255,0.45)] tracking-widest uppercase m-0 leading-none whitespace-nowrap shrink-0">
                             Campus Outing System
                         </p>
+                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-lg bg-slate-800/80 border border-slate-700/80 text-[8.5px] md:text-[10px] font-mono text-cyan-300 font-bold tracking-normal whitespace-nowrap shrink-0 shadow-xs" title={`Unique Hardware Terminal ID: ${terminalDeviceId}`}>
+                            <span>🖥️</span>
+                            <span>{terminalDeviceId}</span>
+                        </span>
                     </div>
 
                     {/* Mobile: Full-width clean single-line Campus Gate Pill right under GATEPASS */}
                     <div className="flex sm:hidden items-center gap-1.5 mt-1.5 w-full overflow-hidden">
                         <span className="inline-block px-2 py-0.5 bg-[rgba(0,255,136,0.1)] border border-[rgba(0,255,136,0.3)] rounded-[5px] text-[8px] text-[#00ff88] font-bold truncate max-w-full">
                             📍 {gateName}
+                        </span>
+                        <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 bg-slate-800/80 border border-slate-700/80 rounded-[5px] text-[7.5px] font-mono text-cyan-300 font-bold truncate">
+                            <span>🖥️</span>
+                            <span>{terminalDeviceId}</span>
                         </span>
                     </div>
                 </div>
